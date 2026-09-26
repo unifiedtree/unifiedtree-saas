@@ -4,6 +4,9 @@ import { apiJson } from '@/core/api/client'
 export interface ShiftRequest {
   id: string
   employeeId: string
+  /** The requester, straight from their employee record. */
+  employeeName?: string | null
+  employeeCode?: string | null
   currentShiftPolicyId?: string
   currentShiftName?: string
   requestedShiftPolicyId: string

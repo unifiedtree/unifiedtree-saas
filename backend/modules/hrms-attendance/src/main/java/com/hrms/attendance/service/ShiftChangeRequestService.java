@@ -77,6 +77,8 @@ public class ShiftChangeRequestService {
     private static final RowMapper<ShiftChangeRequestResponse> MAPPER = (rs, n) -> new ShiftChangeRequestResponse(
             rs.getObject("id", UUID.class),
             rs.getObject("employee_id", UUID.class),
+            rs.getString("employee_name"),
+            rs.getString("employee_code"),
             rs.getObject("current_shift_policy_id", UUID.class),
             rs.getString("current_shift_name"),
             rs.getObject("requested_shift_policy_id", UUID.class),
@@ -93,6 +95,8 @@ public class ShiftChangeRequestService {
 
     private static final String SELECT = """
             SELECT scr.id, scr.employee_id, scr.current_shift_policy_id,
+                   COALESCE(NULLIF(concat_ws(' ', em.first_name, em.last_name), ''), emu.display_name, emu.email) AS employee_name,
+                   em.employee_code AS employee_code,
                    cur.name AS current_shift_name,
                    scr.requested_shift_policy_id, req.name AS requested_shift_name,
                    scr.reason, scr.status, scr.approver_id, scr.decision_note,
@@ -102,6 +106,8 @@ public class ShiftChangeRequestService {
               FROM attendance.shift_change_requests scr
               LEFT JOIN attendance.shift_policies cur ON cur.id = scr.current_shift_policy_id
               LEFT JOIN attendance.shift_policies req ON req.id = scr.requested_shift_policy_id
+              LEFT JOIN hrms.employees em ON em.id = scr.employee_id AND em.tenant_id = scr.tenant_id
+              LEFT JOIN auth.user_credentials emu ON emu.employee_id = scr.employee_id AND emu.tenant_id = scr.tenant_id
               LEFT JOIN hrms.employees ap ON ap.id = scr.approver_id AND ap.tenant_id = scr.tenant_id
               LEFT JOIN auth.user_credentials apu ON apu.id = scr.approver_id AND apu.tenant_id = scr.tenant_id
             """;

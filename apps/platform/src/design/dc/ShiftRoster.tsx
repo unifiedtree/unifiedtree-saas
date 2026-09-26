@@ -6,10 +6,13 @@ import { ShiftRosterView } from './ShiftRoster.view'
 import { HrButton } from '@/shared/components/hr'
 import { dashIcon, dashIconComponent } from './icons'
 import { tones as T, FALLBACK_TONE as FT, fmt, overnight, dayLabel } from './shift-util'
-import { istToday, addDays } from './dates'
+import { istToday } from './dates'
 
 export class ShiftRoster extends DCLogic {
-  state: any = { filter: null, q: '', open: null, busy: false, f: { shift: '', date: addDays(istToday(), 1), note: '' } }
+  // The start date defaults to today, so an assignment shows on the roster as
+  // soon as it's made. Defaulting to tomorrow left the person reading
+  // "No shift yet" for the rest of the day, which read as a failed save.
+  state: any = { filter: null, q: '', open: null, busy: false, f: { shift: '', date: istToday(), note: '' } }
   renderVals() {
     const p = this.props, st = p.state || 'live', mobile = !!p.mobile, canEdit = p.canEdit ?? true
     const shifts: any[] = p.shifts || [], roster: any[] = p.roster || [], byId: Record<string, any> = {}
@@ -24,7 +27,7 @@ export class ShiftRoster extends DCLogic {
     const f0 = this.state.filter || p.initialFilter || 'all', filter = chipList.some((c) => c.key === f0) ? f0 : 'all'
     const chips = chipList.map((c) => ({ ...c, active: c.key === filter, onClick: () => this.setState({ filter: c.key }) }))
     const q = this.state.q.trim().toLowerCase()
-    const tomorrow = addDays(istToday(), 1)
+    const defaultStart = istToday()
     const rows = (st === 'live' ? roster : [])
       .filter((r) => { const has = !!byId[r.shift]; return (filter === 'all' || (filter === 'none' ? !has : r.shift === filter)) && (!q || `${r.name} ${r.code} ${r.dept}`.toLowerCase().includes(q)) })
       .map((r) => {
@@ -33,7 +36,7 @@ export class ShiftRoster extends DCLogic {
           ...r, hasShift: !!s, noShift: !s, shiftName: s ? s.name : '', range: s ? `${fmt(s.start)} – ${fmt(s.end)}` : '',
           iconEl: dashIcon(t.icon, 16, { color: t.fg }), tint: t.bg, edge: t.border, rowBg: s ? '#ffffff' : '#fffdf5',
           tip: s ? 'Opens Change shift' : 'Opens Assign shift',
-          onChange: () => canEdit && this.setState({ open: r.id, f: { shift: '', date: tomorrow, note: '' } }),
+          onChange: () => canEdit && this.setState({ open: r.id, f: { shift: '', date: defaultStart, note: '' } }),
         }
       })
     const fc = (chipList.find((c) => c.key === filter) || chipList[0]).count
@@ -70,7 +73,8 @@ export class ShiftRoster extends DCLogic {
         ? { name: emp0.name, sub: `${emp0.code} · ${emp0.dept}`, nowText: cur ? `Right now: ${cur.name}, ${fmt(cur.start)} – ${fmt(cur.end)}${emp0.since ? ` (since ${emp0.since})` : ''}` : `Right now: no shift yet${emp0.since ? ' · ' + emp0.since : ''}` }
         : {},
       dateHelp: pick && emp0 ? `${emp0.name.split(' ')[0]} starts ${pick.name} on ${dayLabel(f.date)}.` : 'Pick a shift above first.',
-      tomorrowMin: tomorrow,
+      // The view's `min` for the date input. Today, so a shift can start now.
+      tomorrowMin: defaultStart,
       setDate: (e: any) => this.setState({ f: { ...f, date: e.target.value } }), setNote: (e: any) => this.setState({ f: { ...f, note: e.target.value } }),
       icSearch: dashIcon('search', 15), icSwap: dashIcon('swap', 14), icPlus: dashIcon('plus', 14), icAlert: dashIcon('alert', 14), icCheck: dashIcon('check', 13),
       sk: { style: { height: 420, width: '100%', borderRadius: 18 } }, emptyIcon: dashIconComponent('users'), retry: () => p.onRetry && p.onRetry(),

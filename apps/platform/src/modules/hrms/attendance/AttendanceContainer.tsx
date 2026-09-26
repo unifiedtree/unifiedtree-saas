@@ -289,7 +289,7 @@ export function AttendanceContainer() {
 
     // Regularization.
     const corrRow = (r: CorrectionRequestResponse) => {
-      const p = who(r.employeeId, r.employeeName)
+      const p = who(r.employeeId, r.employeeName ?? undefined)
       return {
         id: r.id, empId: r.employeeId, name: r.employeeName || p.name, emp: r.employeeCode || p.code, dept: r.departmentName || p.dept,
         date: fmtShort(r.requestedDate), in: clock(r.requestedCheckInAt), out: clock(r.requestedCheckOutAt), reason: r.reason,
@@ -325,7 +325,7 @@ export function AttendanceContainer() {
     })
     const idByName = new Map(shiftList.map((s) => [s.name, s.id]))
     const roster = (schedule.data ?? []).map((r) => {
-      const p = who(r.employeeId, r.employeeName)
+      const p = who(r.employeeId, r.employeeName ?? undefined)
       // Matched by id (two shifts may share a name); older servers only send the name.
       const shift = r.shiftPolicyId || (r.shiftName ? idByName.get(r.shiftName) || null : null)
       // Since: the day the current assignment started; with no shift yet, the joining date.
@@ -361,10 +361,13 @@ export function AttendanceContainer() {
     }
     const pendingIds = new Set((sreq.data ?? []).map((r) => r.id))
     const sreqRows = [...(sreq.data ?? []), ...(sreqDone.data ?? []).filter((r) => !pendingIds.has(r.id))].map((r) => {
-      const p = who(r.employeeId)
+      // The request carries the requester's own name and code. Falling back to
+      // today's team list alone printed a bare "Employee" whenever they weren't
+      // in it — on their weekly off, for instance.
+      const p = who(r.employeeId, r.employeeName ?? undefined)
       const startIso = r.status === 'PENDING' ? r.requestedEffectiveDate : r.appliedEffectiveDate || r.requestedEffectiveDate
       return {
-        id: r.id, emp: p.code, name: p.name, dept: p.dept, from: r.currentShiftPolicyId || '', fromName: r.currentShiftName || 'No shift yet', to: r.requestedShiftPolicyId, toName: r.requestedShiftName,
+        id: r.id, emp: r.employeeCode || p.code, name: r.employeeName || p.name, dept: p.dept, from: r.currentShiftPolicyId || '', fromName: r.currentShiftName || 'No shift yet', to: r.requestedShiftPolicyId, toName: r.requestedShiftName,
         starts: startIso ? fmtShort(startIso) : 'the day it’s approved', submitted: fmtShort(istToday(new Date(r.createdAt))),
         reason: r.reason || '', status: r.status, note: r.status === 'PENDING' ? r.decisionNote || '' : decidedLine(r),
       }

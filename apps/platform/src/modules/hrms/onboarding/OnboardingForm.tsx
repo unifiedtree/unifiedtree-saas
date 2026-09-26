@@ -21,6 +21,10 @@ import {
   type CreateWorkforceEmployeePayload, type WorkforceEmployee,
 } from '../api/useWorkforce'
 import { useNextEmployeeCode } from '../api/useSettings'
+import { useSalaryComponents } from '../api/usePayroll'
+import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
+import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
+import { readDraft, writeDraft, clearDraft, draftHasContent } from './onboardingDraft'
 import { useTemplates, useCreateInstance } from './api/useOnboarding'
 import { usePolicies } from '../api/usePolicy'
 import { saveOnboardingRecord } from './OnboardingRecord'
@@ -378,9 +382,18 @@ export const OnboardingForm: React.FC = () => {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const [step, setStep] = useState<StepKey>('basic')
-  const [reached, setReached] = useState(0)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  // A reload used to throw away everything typed so far. The draft below keeps
+  // it in this browser for a day; see onboardingDraft.ts for what is left out.
+  const draftUserId = useSdkStore((s) => s.user?.id)
+  const draftTenantId = useLocalAuthStore((s) => s.tenant?.id)
+  const restored = useRef(readDraft<FormState>(draftTenantId, draftUserId))
+  const initial = draftHasContent(restored.current) ? restored.current : null
+
+  const [step, setStep] = useState<StepKey>((initial?.step as StepKey) ?? 'basic')
+  const [reached, setReached] = useState(initial?.reached ?? 0)
+  const [form, setForm] = useState<FormState>(
+    initial ? { ...EMPTY_FORM, ...initial.form } : EMPTY_FORM,
+  )
   const [errors, setErrors] = useState<Errors>({})
   const [photoUrl, setPhotoUrl] = useState('')
   const [docs, setDocs] = useState<Record<string, DocEntry>>({})
@@ -391,9 +404,9 @@ export const OnboardingForm: React.FC = () => {
     setPhotoUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [docs.photo?.file])
-  const [assets, setAssets] = useState<AssetRow[]>([])
-  const [policyPack, setPolicyPack] = useState<Record<string, boolean>>({})
-  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+  const [assets, setAssets] = useState<AssetRow[]>((initial?.assets as AssetRow[]) ?? [])
+  const [policyPack, setPolicyPack] = useState<Record<string, boolean>>(initial?.policyPack ?? {})
+  const [checklist, setChecklist] = useState<Record<string, boolean>>(initial?.checklist ?? {})
   const [created, setCreated] = useState<WorkforceEmployee | null>(null)
   const [recordSaving, setRecordSaving] = useState(false)
   const [recordError, setRecordError] = useState('')
@@ -409,6 +422,13 @@ export const OnboardingForm: React.FC = () => {
   // Tracked separately so the success card can tell the truth about each.
   const [instanceStarted, setInstanceStarted] = useState(false)
   const [instanceError, setInstanceError] = useState('')
+
+  // Keep the draft in step with what's on screen. Once the hire is created the
+  // wizard is done with it, so stop saving and drop what's stored.
+  useEffect(() => {
+    if (created) { clearDraft(draftTenantId, draftUserId); return }
+    writeDraft(draftTenantId, draftUserId, { step, reached, form, assets, policyPack, checklist })
+  }, [created, draftTenantId, draftUserId, step, reached, form, assets, policyPack, checklist])
 
   // Access step: roles and single permissions, only for people who can give them.
   const qc = useQueryClient()
@@ -574,10 +594,33 @@ export const OnboardingForm: React.FC = () => {
   }, [form.departmentId])
 
   // ── Salary breakdown ───────────────────────────────────────────────────────
-  // Annual CTC drives the monthly split (50 / 20 / 20 / 10) until the admin
-  // edits a component by hand; after that their figures are left alone and
-  // only the total is recomputed.
+  // Annual CTC drives the monthly split. The percentages come from the
+  // workspace's own salary components (Payroll → Salary Components), so a
+  // company that sets HRA to 40% of Basic gets 40% here too.
+  const { data: salaryComponents = [] } = useSalaryComponents()
+
+  // Editing a component by hand keeps that figure. Changing the Annual CTC
+  // starts over — otherwise the first manual edit would freeze the split for
+  // good and later CTC changes would be silently ignored.
   const breakdownTouched = useRef(false)
+  const lastCtc = useRef(form.ctcAnnual)
+  if (lastCtc.current !== form.ctcAnnual) {
+    lastCtc.current = form.ctcAnnual
+    breakdownTouched.current = false
+  }
+
+  const split = useMemo(() => {
+    const pct = (code: string, type: string) => {
+      const c = salaryComponents.find((x) => x.code === code && x.isActive)
+      return c && c.computationType === type && c.percentValue != null ? Number(c.percentValue) : null
+    }
+    // Basic has no configured anchor by default (it ships as FORMULA), so fall
+    // back to half of gross — the split every seeded workspace already uses.
+    return {
+      basicOfGross: pct('BASIC', 'PERCENT_OF_GROSS') ?? 50,
+      hraOfBasic: pct('HRA', 'PERCENT_OF_BASIC') ?? 40,
+    }
+  }, [salaryComponents])
 
   useEffect(() => {
     if (breakdownTouched.current) return
@@ -587,14 +630,18 @@ export const OnboardingForm: React.FC = () => {
       return
     }
     const monthly = ctc / 12
+    const basic = Math.round((monthly * split.basicOfGross) / 100)
+    const hra = Math.round((basic * split.hraOfBasic) / 100)
+    // Special absorbs the remainder so the components always add up to gross.
+    const special = Math.max(0, Math.round(monthly - basic - hra))
     setForm((f) => ({
       ...f,
-      basicSalary: String(Math.round(monthly * 0.5)),
-      hra: String(Math.round(monthly * 0.2)),
-      specialAllowance: String(Math.round(monthly * 0.2)),
-      otherAllowance: String(Math.round(monthly * 0.1)),
+      basicSalary: String(basic),
+      hra: String(hra),
+      specialAllowance: String(special),
+      otherAllowance: '0',
     }))
-  }, [form.ctcAnnual])
+  }, [form.ctcAnnual, split.basicOfGross, split.hraOfBasic])
 
   const setComponent = (key: 'basicSalary' | 'hra' | 'specialAllowance' | 'otherAllowance', value: string) => {
     breakdownTouched.current = true

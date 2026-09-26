@@ -84,7 +84,8 @@ class ShiftHistoryAccessTest {
     }
 
     private ShiftChangeRequestResponse decided(UUID employee) {
-        return new ShiftChangeRequestResponse(UUID.randomUUID(), employee, null, "General", UUID.randomUUID(), "Night",
+        return new ShiftChangeRequestResponse(UUID.randomUUID(), employee, "Team Member", "EMP-0001",
+                null, "General", UUID.randomUUID(), "Night",
                 "Evening classes", "APPROVED", me, "Fine", Instant.now(), Instant.now(), LocalDate.now(), LocalDate.now(), "HR Manager");
     }
 

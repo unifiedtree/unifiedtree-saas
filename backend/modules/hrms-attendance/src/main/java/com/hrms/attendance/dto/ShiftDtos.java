@@ -173,16 +173,20 @@ public final class ShiftDtos {
             String comment) {}
 
     /**
-     * A shift-change request row (employeeName resolved client-side, like
-     * leave/WFH). {@code requestedEffectiveDate} is what the employee asked
-     * for (null on old requests); {@code appliedEffectiveDate} is when the new
-     * shift actually starts (set on approval). {@code approverName} is who
-     * decided it (null while pending, and for requests that expired on their
-     * own).
+     * A shift-change request row. {@code employeeName} and {@code employeeCode}
+     * come from the employee record: resolving them client-side used to print a
+     * bare "Employee" whenever the requester was missing from the caller's
+     * team-today list (for instance on their weekly off).
+     * {@code requestedEffectiveDate} is what the employee asked for (null on old
+     * requests); {@code appliedEffectiveDate} is when the new shift actually
+     * starts (set on approval). {@code approverName} is who decided it (null
+     * while pending, and for requests that expired on their own).
      */
     public record ShiftChangeRequestResponse(
             UUID id,
             UUID employeeId,
+            String employeeName,
+            String employeeCode,
             UUID currentShiftPolicyId,
             String currentShiftName,
             UUID requestedShiftPolicyId,

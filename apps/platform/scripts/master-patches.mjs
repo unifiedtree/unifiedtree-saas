@@ -147,6 +147,11 @@ export const PATCHES = {
     ["hm(s.start)+'–'+hm(s.end)}))}]}];", "hm(s.start)+'–'+hm(s.end)}))},{k:'agency',label:'Staffing agency',type:'select',span2:true,when:v=>v.type==='Contract'&&act.showAgency,disabled:!act.canAgency,hint:act.canAgency?'The agency that supplies this contract worker. Its worker count on Contractor Master is counted from these links.':'You don’t have access to change the agency',options:v=>[{v:'',l:'No agency'}].concat(db.agencies.filter(a=>a.co===v.co&&(a.status==='Active'||a.id===v.agency)).map(a=>({v:a.id,l:a.name,sub:a.service||undefined})))}]}];"],
     ["status:isEdit?emp.status:'Probation'});", "status:isEdit?emp.status:'Probation',agency:v.type==='Contract'?(v.agency||''):''});"],
     // Classification Rules are the employment types: probation and notice are company-wide, PF/ESI per employee.
+    // The prototype's subtitle promised per-classification rules. Probation and
+    // notice are one company-wide value and PF/ESI sit on each salary
+    // structure, so say what the page actually does.
+    ['sub="How each kind of worker is treated — probation, notice period and statutory eligibility follow from their classification."',
+      'sub="The kinds of worker you employ. Probation and notice come from HR configuration; PF and ESI are set on each person\'s salary structure."'],
     ['<span className="code" style={{marginLeft:8}}>{c.id}</span></span><span className="t2">{c.desc}</span>', '<span className="code" style={{marginLeft:8}}>{c.code}</span></span><span className="t2">{c.desc||c.sub}</span>'],
     ["<td>{c.notice?c.notice+' days':'Per agency'}</td>", "<td>{c.notice?c.notice+' days':'—'}</td>"],
     ['<td><div className="chips"><Ben l="PF" v={c.pf}/><Ben l="ESI" v={c.esi}/><Ben l="Gratuity" v={c.gratuity}/></div></td>', '<td>{c.pf==null?<span className="no">Set per employee</span>:<div className="chips"><Ben l="PF" v={c.pf}/><Ben l="ESI" v={c.esi}/><Ben l="Gratuity" v={c.gratuity}/></div>}</td>'],

@@ -352,7 +352,7 @@ const hc=c=>c.id==='CT'?db.agencies.filter(a=>a.status==='Active').reduce((s,a)=
 const rows=db.classes.map(c=>Object.assign({},c,{hc:hc(c)}));const total=rows.reduce((s,r)=>s+r.hc,0);
 const Ben=({l,v})=>v===true?<span className="pill" style={tone('green')}><Icon name="check" size={13} stroke={2.6}/>{l}</span>:v==='agency'?<span className="pill" style={tone('amber')}>{l} · via agency</span>:<span className="chip" style={{textDecoration:'line-through',opacity:.65}}>{l}</span>;
 return <>
-<Hero title="Classification Rules" sub="How each kind of worker is treated — probation, notice period and statutory eligibility follow from their classification." actions={<button className="btn pri" onClick={()=>setForm({})}><Icon name="plus" size={17}/>Add classification</button>}/>
+<Hero title="Classification Rules" sub="The kinds of worker you employ. Probation and notice come from HR configuration; PF and ESI are set on each person's salary structure." actions={<button className="btn pri" onClick={()=>setForm({})}><Icon name="plus" size={17}/>Add classification</button>}/>
 <div className="card mixcard"><div className="mix-h"><div><h3>Workforce mix</h3><p>Everyone who works for you today, by classification</p></div><div className="mix-total"><b className="num">{total}</b><small>people</small></div></div>
 <div className="mix">{rows.filter(r=>r.hc>0).map(r=><span key={r.id} style={Object.assign({flex:r.hc},tone(r.t))} title={r.name+': '+r.hc}></span>)}</div>
 <div className="legend">{rows.map(r=><div className="lg" key={r.id} style={tone(r.t)}><i></i>{r.name}<b className="num">{r.hc}</b><span className="muted">{pct(r.hc,total)}%</span></div>)}</div></div>
