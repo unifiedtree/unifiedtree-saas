@@ -17,7 +17,7 @@ import { useCompanies } from '../api/useOrg'
 import {
   useTeamDashboard, useAttendanceTrend, useAttendanceSources, useMonthlyStats, useAttendanceHistory,
   useMyCorrections, useCorrectionApprovals, useCreateCorrection, useDecideCorrection,
-  type StaffStatusResponse, type CorrectionRequestResponse,
+  type StaffStatusResponse, type CorrectionRequestResponse, type AttendanceSourceBreakdown,
 } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, offWeekdays, isWeeklyOff, type DayBuckets } from './attendanceBuckets'
 import {
@@ -46,6 +46,8 @@ const worked = (a?: string | null, b?: string | null) => (a && b ? hm(Math.max(0
 /** yyyy-MM-dd from a date the API sends as a string or as epoch millis. */
 const isoDay = (v: unknown) => (typeof v === 'number' ? isoOf(new Date(v)) : String(v ?? '').slice(0, 10))
 const fileName = (url: string) => { try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || '') || 'Attachment' } catch { return 'Attachment' } }
+/** Last day of a 'yyyy-MM' month, as yyyy-MM-dd. */
+const monthEnd = (ym: string) => `${ym}-${String(new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate()).padStart(2, '0')}`
 
 /** How a punch arrived — capture method → the design's label and icon. */
 const SOURCE: Record<string, [string, string]> = {
@@ -94,6 +96,12 @@ export function AttendanceContainer() {
   const monthStart = today.slice(0, 8) + '01'
   const prevMonthStart = addDays(monthStart, -1).slice(0, 8) + '01'
   const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))]
+  // Attendance Analytics shows one month (?month=yyyy-MM): this month up to today by
+  // default, or any whole past month. Future months and bad values fall back to this month.
+  const curMonth = today.slice(0, 7), monthArg = params.get('month') || ''
+  const anMonth = section === 'analytics' && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthArg) && monthArg < curMonth ? monthArg : curMonth
+  const anPast = anMonth < curMonth
+  const anFrom = anMonth + '-01', anTo = anPast ? monthEnd(anMonth) : today
 
   // ── permissions (the ones each endpoint checks) ──
   const canTeam = usePermission(P.ATTENDANCE_TEAM_READ)
@@ -119,11 +127,18 @@ export function AttendanceContainer() {
   // still show on the days they worked), matching the admin dashboard's counts.
   const team = useTeamDashboard(date, undefined, canTeam, date < today)
   const teamToday = useTeamDashboard(today, undefined, canTeam)
-  const trend = useAttendanceTrend(monthStart, today, undefined, canTeam && section === 'analytics')
-  const sources = useAttendanceSources(today, undefined, canTeam && section === 'analytics')
-  const holidays = useHolidays(companyId, y)
-  const summary = useAttendanceSummaryReport(canReport ? companyId || null : null, monthStart, today, { enabled: section === 'analytics' })
-  const lateMarks = useLateMarksReport(canReport && section === 'analytics' ? companyId || null : null, monthStart, today)
+  const trend = useAttendanceTrend(anFrom, anTo, undefined, canTeam && section === 'analytics')
+  const sources = useAttendanceSources(today, undefined, canTeam && section === 'analytics' && !anPast)
+  // A past month: every check-in of the month (from + to). A server without the range answers for today, which is dropped.
+  const monthSources = useQuery({
+    queryKey: ['hrms', 'attendance', 'dashboard', 'sources', 'range', anFrom, anTo],
+    queryFn: () => apiJson<AttendanceSourceBreakdown>(`/v1/attendance/dashboard/sources?from=${anFrom}&to=${anTo}`),
+    staleTime: 60_000,
+    enabled: canTeam && section === 'analytics' && anPast,
+  })
+  const holidays = useHolidays(companyId, Number(anMonth.slice(0, 4)))
+  const summary = useAttendanceSummaryReport(canReport ? companyId || null : null, anFrom, anTo, { enabled: section === 'analytics' })
+  const lateMarks = useLateMarksReport(canReport && section === 'analytics' ? companyId || null : null, anFrom, anTo)
   // Face punches with names and HR decisions: today's, plus older ones still to check.
   const face = useFaceReviewEvents(weekAgo, today, canFaceList && section === 'daily')
   // Daily Logs "Punched by": punches a manager or HR made with the person's face on their own phone.
@@ -215,17 +230,27 @@ export function AttendanceContainer() {
     const staff = team.data?.staffStatuses ?? []
     const logs = { today, date, rows: staff.map(rowOf), departments: [...new Set(staff.map((s) => s.departmentName).filter(Boolean))].sort() as string[], total: staff.length }
 
-    // Analytics: this month to date (past days from the trend API, today from the live roster).
+    // Analytics: the chosen month — this month to date (past days from the trend API, today from
+    // the live roster), or a whole past month from the trend API alone.
     const daily: Record<string, DayBuckets> = {}
     for (const r of trend.data ?? []) daily[r.date] = trendBuckets(r, today)
     // Today's numbers come from the live roster; whether today is a weekly off comes from the trend.
-    if (teamToday.data) daily[today] = { ...dayBuckets(teamToday.data, today), ...(typeof daily[today]?.weeklyOff === 'boolean' ? { weeklyOff: daily[today].weeklyOff } : {}) }
+    if (teamToday.data && !anPast) daily[today] = { ...dayBuckets(teamToday.data, today), ...(typeof daily[today]?.weeklyOff === 'boolean' ? { weeklyOff: daily[today].weeklyOff } : {}) }
     const hol = (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName }))
     const holSet = new Set(hol.map((h) => h.date))
     // Weekly offs are the company's and each person's own (the trend flags a day nobody was scheduled), not just Sundays.
     const offDays = offWeekdays(daily)
     let workingDays = 0
-    for (let d = monthStart; d <= today; d = addDays(d, 1)) if (!isWeeklyOff(d, daily, offDays) && !holSet.has(d)) workingDays++
+    // A past month's tiles and mix add up its working days: each person once per day, like the trend bars.
+    const monthCounts = { total: 0, present: 0, regular: 0, late: 0, halfDay: 0, wfh: 0, onLeave: 0, notMarked: 0, absent: 0, earlyOut: 0, other: 0 }
+    for (let d = anFrom; d <= anTo; d = addDays(d, 1)) {
+      if (isWeeklyOff(d, daily, offDays) || holSet.has(d)) continue
+      workingDays++
+      const b = daily[d]
+      if (b) for (const k of Object.keys(monthCounts) as (keyof typeof monthCounts)[]) monthCounts[k] += b[k] || 0
+    }
+    // Month sources: only an answer for the range (a server without it sends today's).
+    const rangeSources = monthSources.data && String(monthSources.data.date).slice(0, 10) === anTo ? monthSources.data.sources : null
     const lateBy = new Map<string, { id: string; code: string; name: string; dept: string; n: number }>()
     for (const r of lateMarks.data ?? []) {
       const cur = lateBy.get(r.employee_code) || { id: idByCode.get(r.employee_code) || '', code: r.employee_code, name: r.employee_name, dept: r.department || '—', n: 0 }
@@ -233,10 +258,13 @@ export function AttendanceContainer() {
       lateBy.set(r.employee_code, cur)
     }
     const graces = [...new Set((policies.data ?? []).map((sp) => sp.gracePeriodMinutes ?? 0))]
-    const reportLink = `/hrms/reports/attendance-summary?${new URLSearchParams({ ...(companyId ? { company: companyId } : {}), from: monthStart, to: today })}`
+    const reportLink = `/hrms/reports/attendance-summary?${new URLSearchParams({ ...(companyId ? { company: companyId } : {}), from: anFrom, to: anTo })}`
+    const srcList = anPast ? rangeSources ?? [] : sources.data?.sources ?? []
     const ov = {
-      today, counts: todayCounts, graceMin: graces.length === 1 ? graces[0] : null, daily, offWeekdays: offDays, holidays: hol, workingDays, reportLink,
-      sources: (sources.data?.sources ?? []).filter((s) => s.count > 0).map((s) => ({ label: sourceOf(s.method)[0], icon: sourceOf(s.method)[1], n: s.count })),
+      today, month: anMonth, past: anPast, from: anFrom, to: anTo,
+      counts: anPast ? monthCounts : todayCounts, graceMin: graces.length === 1 ? graces[0] : null, daily, offWeekdays: offDays, holidays: hol, workingDays, reportLink,
+      sourcesLoading: anPast ? monthSources.isLoading : sources.isLoading, sourcesMissing: anPast && !monthSources.isLoading && !rangeSources,
+      sources: srcList.filter((s) => s.count > 0).map((s) => ({ label: sourceOf(s.method)[0], icon: sourceOf(s.method)[1], n: s.count })),
       lateMarks: [...lateBy.values()].sort((a, b) => b.n - a.n).slice(0, 5),
       summary: (summary.data ?? []).map((r) => ({
         id: idByCode.get(r.employee_code) || '', code: r.employee_code, name: r.employee_name, dept: r.department || '—', present: r.present_days, late: r.late_days,
@@ -353,17 +381,18 @@ export function AttendanceContainer() {
 
     return {
       reviewItems, reviewFaces, reviewCount: reviewItems.length,
-      today, todayLabel: fmtWd(today), counts: todayCounts, logs, ov, face: faceRows, corr, mineCorr, month, reportLink,
+      today, todayLabel: fmtWd(today), counts: todayCounts, logs, ov, face: faceRows, corr, mineCorr, month, reportLink, anMonth, anPast,
       shifts: shiftList, roster, ot: otRows, otSummary: [...otBy.values()], otRange: `1–${Number(today.slice(8, 10))} ${MON[m - 1]}`,
       sreq: sreqRows, myReq: myReqRows, myShift: myShift.data?.shiftPolicyId || null, mySince: myShift.data?.effectiveFrom ? fmtShort(myShift.data.effectiveFrom) : '',
     }
-  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, assisted.data, review.data,
+  }, [team.data, teamToday.data, trend.data, sources.data, sources.isLoading, monthSources.data, monthSources.isLoading, holidays.data, summary.data, lateMarks.data, face.data, assisted.data, review.data,
     approvals.data, approved.data, rejected.data, myCorr.data, monthStats.data, history.data, policies.data, schedule.data, myShift.data,
-    overtime.data, sreq.data, sreqDone.data, myReq.data, companyId, monthStart, today, date, y, m])
+    overtime.data, sreq.data, sreqDone.data, myReq.data, companyId, monthStart, today, date, y, m, anMonth, anPast, anFrom, anTo])
 
   const states: Record<string, St> = {
     logs: stateOf(team, canTeam),
-    ov: stateOf(teamToday, canTeam),
+    // A past month has no live roster: its numbers all come from the trend.
+    ov: anPast ? stateOf(trend, canTeam) : stateOf(teamToday, canTeam),
     face: stateOf(face, canFaceList, !data.face.length),
     review: stateOf(review, canReview),
     corr: stateOf(canApprove ? approvals : myCorr, true),
@@ -385,8 +414,14 @@ export function AttendanceContainer() {
       if (iso && iso !== today) next.set('date', iso); else next.delete('date')
       navigate(`/hrms/attendance?${next}`, { replace: true })
     },
+    // Attendance Analytics month picker: a past month goes in the URL; this month is the default.
+    onMonth: (ym: string) => {
+      const next = new URLSearchParams(params)
+      if (/^\d{4}-\d{2}$/.test(ym) && ym < curMonth) next.set('month', ym); else next.delete('month')
+      navigate(`/hrms/att-analytics?${next}`, { replace: true })
+    },
     retryLogs: () => team.refetch(),
-    retryOv: () => { teamToday.refetch(); trend.refetch(); sources.refetch(); summary.refetch(); lateMarks.refetch() },
+    retryOv: () => { teamToday.refetch(); trend.refetch(); if (anPast) monthSources.refetch(); else sources.refetch(); summary.refetch(); lateMarks.refetch() },
     retryFace: () => face.refetch(),
     retryCorr: () => { approvals.refetch(); myCorr.refetch() },
     retryMonth: () => { monthStats.refetch(); history.refetch() },
@@ -512,7 +547,7 @@ export function AttendanceContainer() {
           canReview={canReview}
           canOverride={canOverride}
           onNavigate={(path: string) => navigate(path)}
-          onTab={(route: string, next: string) => navigate(`${route}?tab=${next}`, { replace: route === location.pathname })}
+          onTab={(route: string, next: string) => navigate(`${route}?tab=${next}${anPast && route === '/hrms/att-analytics' ? '&month=' + anMonth : ''}`, { replace: route === location.pathname })}
         />
       </div>
       {target && <StatusChangeDrawer target={target} onClose={() => setTarget(null)} onSubmit={submitTarget} />}

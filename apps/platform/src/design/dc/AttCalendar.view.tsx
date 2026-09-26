@@ -86,10 +86,10 @@ export function AttCalendarView({ v }: { v: any }) {
                           <svg viewBox={v.cv?.vb} aria-hidden="true" style={{display: "block", width: "100%", height: "auto", fontFamily: "Inter,sans-serif", fontVariantNumeric: "tabular-nums"}}>
                             <rect x={v.cv?.inset} y={v.cv?.inset} width={v.cv?.w} height={v.cv?.h} rx={v.cv?.r} fill={c?.bg} stroke={c?.stroke} strokeWidth={c?.sw} />
                             <text x={v.cv?.tx} y={v.cv?.ty1} textAnchor={v.cv?.anchor} fontSize={v.cv?.fs1} fontWeight="800" fill={c?.fg}>
-                              {txt(c?.day)}
+                              {c?.day}
                             </text>
                             <text x={v.cv?.tx} y={v.cv?.ty2} textAnchor={v.cv?.anchor} fontSize={v.cv?.fs2} fontWeight="800" fill={c?.fg}>
-                              {txt(c?.main)}
+                              {c?.main}
                             </text>
                           </svg>
                         </button>
