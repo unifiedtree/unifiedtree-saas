@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { clsx } from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
+import { DateField } from './calendar'
 
 /**
  * Reusable building blocks shared by every HR list/detail screen so they all
@@ -317,14 +318,32 @@ export function FilterBar({ filters, onClearAll }: {
           onChange: (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => f.onChange(e.target.value),
         }
 
-        if (f.type === 'text' || f.type === 'date') {
+        if (f.type === 'date') {
+          // The shared calendar (day / month / year views); same width, onChange('yyyy-MM-dd' or '').
+          return (
+            <DateField
+              key={f.key}
+              value={f.value}
+              aria-label={f.ariaLabel ?? f.allLabel}
+              data-filter={f.key}
+              placeholder={f.allLabel}
+              onChange={(e) => f.onChange(e.target.value)}
+              format="short"
+              clearable
+              style={{ width: f.width ?? 150 }}
+              className={clsx('ut-input ut-input-sm', activeTint)}
+            />
+          )
+        }
+
+        if (f.type === 'text') {
           return (
             <input
               key={f.key}
               {...shared}
-              type={f.type === 'date' ? 'date' : 'text'}
-              placeholder={f.type === 'text' ? f.allLabel : undefined}
-              style={{ width: f.width ?? (f.type === 'date' ? 150 : 170) }}
+              type="text"
+              placeholder={f.allLabel}
+              style={{ width: f.width ?? 170 }}
               className={clsx('ut-input ut-input-sm', activeTint)}
             />
           )

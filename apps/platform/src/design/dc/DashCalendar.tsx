@@ -3,10 +3,15 @@ import { createRef } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { DashCalendarView } from './DashCalendar.view'
 import { dashIcon } from './icons'
+import { monthStep, yearStep } from '@/shared/components/calendar'
+
+/** First year the month/year views offer (attendance data can't predate it). */
+const FIRST_YEAR = 2000
 
 export class DashCalendar extends DCLogic {
-  state: any = { month: null, pick: null }
+  state: any = { month: null, pick: null, view: 'days', curMonth: null, curYear: null, kbd: false }
   rootRef = createRef<HTMLDivElement>()
+  uid = 'dcal' + Math.random().toString(36).slice(2, 8)
   componentDidMount() {
     const el = this.rootRef.current
     if (el && el.focus) el.focus({ preventScroll: true })
@@ -14,7 +19,7 @@ export class DashCalendar extends DCLogic {
   today(): string { return this.props.today }
   iso(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   cur(): string { return this.state.pick || this.props.selected || this.today() }
-  set(k: string) { if (k <= this.today()) this.setState({ pick: k, month: k.slice(0, 7) }) }
+  set(k: string) { if (k <= this.today()) this.setState({ pick: k, month: k.slice(0, 7), view: 'days' }) }
   shift(days: number) {
     const d = new Date(this.cur() + 'T00:00:00')
     d.setDate(d.getDate() + days)
@@ -24,7 +29,39 @@ export class DashCalendar extends DCLogic {
     const k = this.cur()
     if (k <= this.today() && this.props.onApply) this.props.onApply(k)
   }
+  // Month and year views (the header's "September ▾" / "2026 ▾" chips), shared with every date field.
+  shownMonth(): string { return this.state.month || this.cur().slice(0, 7) }
+  clampYm(ym: string): string { const t = this.today().slice(0, 7), lo = `${FIRST_YEAR}-01`; return ym > t ? t : ym < lo ? lo : ym }
+  showMonths = () => {
+    const s = this.state
+    if (s.view === 'months') { this.setState({ view: 'days' }); return }
+    const ym = s.view === 'years' ? this.clampYm(`${s.curYear}-${this.shownMonth().slice(5, 7)}`) : this.shownMonth()
+    this.setState({ view: 'months', curMonth: ym })
+  }
+  showYears = () => {
+    const s = this.state
+    if (s.view === 'years') { this.setState({ view: 'days' }); return }
+    this.setState({ view: 'years', curYear: Number((s.view === 'months' ? s.curMonth : this.shownMonth()).slice(0, 4)) })
+  }
+  pickMonth = (ym: string) => { if (ym <= this.today().slice(0, 7)) this.setState({ view: 'days', month: ym }) }
+  pickYear = (y: number) => {
+    if (y < FIRST_YEAR || y > Number(this.today().slice(0, 4))) return
+    this.setState({ view: 'months', curMonth: this.clampYm(`${y}-${this.shownMonth().slice(5, 7)}`) })
+  }
   onKey = (e: any) => {
+    const s = this.state
+    if (s.view !== 'days' && e.key !== 'Escape') {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (s.view === 'months') this.pickMonth(s.curMonth); else this.pickYear(s.curYear); return }
+      const ty = Number(this.today().slice(0, 4))
+      if (s.view === 'months') {
+        const n = monthStep(e.key, s.curMonth)
+        if (n) { e.preventDefault(); this.setState({ curMonth: this.clampYm(n), kbd: true }) }
+      } else {
+        const n = yearStep(e.key, s.curYear, FIRST_YEAR, ty)
+        if (n !== null) { e.preventDefault(); this.setState({ curYear: Math.min(Math.max(n, FIRST_YEAR), ty), kbd: true }) }
+      }
+      return
+    }
     const mv = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 } as Record<string, number>)[e.key]
     if (mv) { e.preventDefault(); this.shift(mv) } else if (e.key === 'Enter') { e.preventDefault(); this.apply() } else if (e.key === 'Escape') {
       e.preventDefault(); e.stopPropagation(); if (this.props.onClose) this.props.onClose()
@@ -74,6 +111,15 @@ export class DashCalendar extends DCLogic {
       const d = new Date(y, m - 1 + dm, 1)
       this.setState({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
     }
+    const view: string = this.state.view, ty = Number(today.slice(0, 4))
+    const curMonth: string = this.state.curMonth || month, curYear: number = this.state.curYear || y
+    const nav = view === 'months'
+      ? { prev: () => this.setState({ curMonth: this.clampYm(`${Number(curMonth.slice(0, 4)) - 1}${curMonth.slice(4)}`) }), next: () => this.setState({ curMonth: this.clampYm(`${Number(curMonth.slice(0, 4)) + 1}${curMonth.slice(4)}`) }),
+        prevOff: Number(curMonth.slice(0, 4)) <= FIRST_YEAR, nextOff: Number(curMonth.slice(0, 4)) >= ty, prevAria: 'Previous year', nextAria: 'Next year' }
+      : view === 'years'
+        ? { prev: () => this.setState({ curYear: Math.max(FIRST_YEAR, curYear - 10) }), next: () => this.setState({ curYear: Math.min(ty, curYear + 10) }),
+          prevOff: curYear <= FIRST_YEAR, nextOff: curYear >= ty, prevAria: 'Previous decade', nextAria: 'Next decade' }
+        : { prev: monthShift(-1), next: monthShift(1), prevOff: false, nextOff: false, prevAria: 'Previous month', nextAria: 'Next month' }
     const pd = daily[pick], pw = new Date(pick + 'T00:00:00'), pwd = pw.getDay(), r = rateOf(pick)
     const tag = pick === today ? ['ok', 'Today'] : hol[pick] ? ['warn', hol[pick]] : isWeekOff(pick) ? ['gray', 'Weekly off'] : ['info', 'Past day']
     const sc = emerald ? ['#0f6e56', '#10b981', '#0a5240', '#34d399'] : ['#10b981', '#f59e0b', '#f43f5e', '#8b5cf6']
@@ -96,7 +142,11 @@ export class DashCalendar extends DCLogic {
     return {
       rootRef: this.rootRef, onKey: this.onKey, monthLabel: `${MONTHS[m - 1]} ${y}`, cells, rate, panel,
       icPrev: dashIcon('chevronLeft', 16), icNext: dashIcon('chevronRight', 16),
-      prevMonth: monthShift(-1), nextMonth: monthShift(1),
+      prevMonth: nav.prev, nextMonth: nav.next, prevOff: nav.prevOff, nextOff: nav.nextOff, prevAria: nav.prevAria, nextAria: nav.nextAria,
+      isDays: view === 'days', isMonths: view === 'months', isYears: view === 'years',
+      monthChip: MONTHS[Number((view === 'months' ? curMonth : month).slice(5, 7)) - 1], yearChip: view === 'years' ? curYear : view === 'months' ? Number(curMonth.slice(0, 4)) : y,
+      showMonths: this.showMonths, showYears: this.showYears,
+      grids: { uid: this.uid, today, max: today, min: `${FIRST_YEAR}-01-01`, lo: FIRST_YEAR, hi: ty, curMonth, curYear, kbd: !!this.state.kbd, selectedMonth: pick.slice(0, 7), selectedYear: Number(pick.slice(0, 4)), pickMonth: this.pickMonth, pickYear: this.pickYear },
       pickToday: () => this.set(today),
       pickYesterday: () => { const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() - 1); this.set(this.iso(d)) },
       pickLastWorking: lastWorking,

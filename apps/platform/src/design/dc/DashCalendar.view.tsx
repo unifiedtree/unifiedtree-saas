@@ -2,6 +2,7 @@
 // Do not edit by hand — change the design (or the view model) and regenerate.
 import { Fragment } from 'react'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import { CalChip, MonthGrid, YearGrid } from '@/shared/components/calendar'
 import { arr, txt } from './dc-runtime'
 import './DashCalendar.view.css'
 
@@ -15,15 +16,16 @@ export function DashCalendarView({ v }: { v: any }) {
               <p style={{margin: "0", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#0f6e56"}}>
                 {"Dashboard date · IST"}
               </p>
-              <h3 style={{margin: "2px 0 0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "17px", fontWeight: "700", letterSpacing: "-.01em"}}>
-                {txt(v.monthLabel)}
+              <h3 aria-label={v.monthLabel} style={{margin: "2px 0 0 0", display: "flex", alignItems: "center", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "17px", fontWeight: "700", letterSpacing: "-.01em"}}>
+                <CalChip label={v.monthChip} active={v.isMonths} onClick={v.showMonths} ariaLabel={v.isMonths ? 'Back to days' : 'Choose month'} />
+                <CalChip label={v.yearChip} active={v.isYears} onClick={v.showYears} ariaLabel={v.isYears ? 'Close year list' : 'Choose year'} />
               </h3>
             </div>
             <div style={{display: "flex", gap: "6px"}}>
-              <button type="button" aria-label="Previous month" onClick={v.prevMonth} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", borderRadius: "9px", background: "#fff", color: "#334155", cursor: "pointer"}} className="dc-dash-calendar-0">
+              <button type="button" aria-label={v.prevAria} onClick={v.prevMonth} disabled={v.prevOff} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", borderRadius: "9px", background: "#fff", color: v.prevOff ? "#cbd5e1" : "#334155", cursor: v.prevOff ? "not-allowed" : "pointer"}} className="dc-dash-calendar-0">
                 {txt(v.icPrev)}
               </button>
-              <button type="button" aria-label="Next month" onClick={v.nextMonth} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", borderRadius: "9px", background: "#fff", color: "#334155", cursor: "pointer"}} className="dc-dash-calendar-0">
+              <button type="button" aria-label={v.nextAria} onClick={v.nextMonth} disabled={v.nextOff} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", borderRadius: "9px", background: "#fff", color: v.nextOff ? "#cbd5e1" : "#334155", cursor: v.nextOff ? "not-allowed" : "pointer"}} className="dc-dash-calendar-0">
                 {txt(v.icNext)}
               </button>
             </div>
@@ -39,6 +41,22 @@ export function DashCalendarView({ v }: { v: any }) {
               {"Last working day"}
             </button>
           </div>
+          {v.isMonths ? (
+            <>
+              <div style={{height: "272px"}}>
+                <MonthGrid uid={v.grids?.uid} year={Number(String(v.grids?.curMonth).slice(0, 4))} today={v.grids?.today} min={v.grids?.min} max={v.grids?.max} selected={v.grids?.selectedMonth} cursor={v.grids?.curMonth} showCursor={v.grids?.kbd} onPick={v.grids?.pickMonth} />
+              </div>
+            </>
+          ) : null}
+          {v.isYears ? (
+            <>
+              <div style={{height: "272px"}}>
+                <YearGrid uid={v.grids?.uid} lo={v.grids?.lo} hi={v.grids?.hi} today={v.grids?.today} min={v.grids?.min} max={v.grids?.max} selected={v.grids?.selectedYear} cursor={v.grids?.curYear} showCursor={v.grids?.kbd} onPick={v.grids?.pickYear} />
+              </div>
+            </>
+          ) : null}
+          {v.isDays ? (
+            <>
           <div style={{display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: "4px", fontSize: "11px", fontWeight: "700", letterSpacing: ".04em", textTransform: "uppercase", textAlign: "center"}}>
             <span style={{color: "#64748b"}}>
               {"Mon"}
@@ -135,6 +153,8 @@ export function DashCalendarView({ v }: { v: any }) {
               </Fragment>
             ))}
           </div>
+            </>
+          ) : null}
           <div style={{display: "flex", flexWrap: "wrap", gap: "6px 14px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", fontSize: "11px", color: "#64748b"}}>
             <span style={{display: "inline-flex", alignItems: "center", gap: "5px"}}>
               <i style={{width: "12px", height: "12px", borderRadius: "4px", boxShadow: "inset 0 0 0 1.5px #0f6e56", display: "inline-block"}} />

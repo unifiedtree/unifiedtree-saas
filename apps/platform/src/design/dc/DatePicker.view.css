@@ -1,9 +1,3 @@
-.dc-date-picker-0:hover{border-color:#94a3b8 !important}
-.dc-date-picker-1:focus{border-color:#0f6e56 !important;box-shadow:0 0 0 3px #a7f3d0 !important}
-.dc-date-picker-2:hover{background:#f1f5f9 !important}
-.dc-date-picker-3:hover{background:#f1f5f9 !important;border-color:#cbd5e1 !important}
-.dc-date-picker-4:hover{background:#ecfdf5 !important}
-.dc-date-picker-5:hover{background:#ecfdf5 !important;color:#0a5240 !important}
-.dc-date-picker-6:hover{background:#f1f5f9 !important;color:#475569 !important}
-.dc-date-picker-7:hover{border-color:#a7f3d0 !important;color:#0a5240 !important;background:#f0fdf4 !important}
-.dc-date-picker-8:hover{background:#fff1f2 !important}
+/* The design's trigger: 42px, 10px radius, slate-300 border (the shared calendar supplies the rest). */
+.dc-date-picker { display: flex; height: 42px; padding: 0 12px; gap: 10px; border-color: #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 500; }
+.dc-date-picker:not([data-open]):not(:focus-within):hover { border-color: #94a3b8; }
