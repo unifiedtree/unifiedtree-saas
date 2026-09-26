@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, endOfMonth } from 'date-fns'
 import { HrButton } from '@/shared/components/hr'
+import { MonthField } from '@/shared/components/calendar'
 import { API_BASE_URL } from '@/core/api/client'
 import { inspectorCsv } from './inspectorCsv'
 interface View {
@@ -122,9 +123,9 @@ export default function InspectorView() {
         <>
           <label className="block">
             Reporting month
-            <input
+            <MonthField
+              aria-label="Reporting month"
               className="ut-input max-w-xs"
-              type="month"
               disabled={exporting}
               value={month}
               onChange={(e) => setMonth(e.target.value)}
