@@ -149,7 +149,7 @@ try {
   let seenPages = 0
   await page.route('**/v1/leave/approvals/history**', async (route) => {
     seenPages++
-    const res = await route.fetch()
+    const res = await route.fetch({ url: route.request().url().replace('//demo.localhost', '//127.0.0.1') })
     const body = await res.json()
     await route.fulfill({ response: res, json: { ...body, last: false, totalPages: 999, totalElements: 99_999 } })
   })

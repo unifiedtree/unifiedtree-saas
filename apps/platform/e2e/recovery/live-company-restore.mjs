@@ -40,7 +40,8 @@ const lit = (s) => `'${String(s).replace(/'/g, "''")}'`
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const tag = String(Date.now() % 1000000)
-const tempName = `QA Restore Co ${tag}`
+// Sorts after every real company, so it never becomes anyone's default (first) company while it exists.
+const tempName = `zz QA Restore Co ${tag}`
 let tempId = null
 let where = 'start', lastPage = null // for the failure report
 const at = (name, page) => { where = name; if (page) lastPage = page; console.log(`..  ${name}`) }
@@ -83,8 +84,9 @@ async function signIn(email, viewport = { width: 1440, height: 900 }) {
   return { page, context, errors, failed, settle }
 }
 const aside = (page) => page.locator('aside[aria-label="Companies"]')
-// The confirm modal (the company picker's popup is also a dialog, but not a modal one).
-const dialog = (page) => page.locator('[role=dialog][aria-modal=true]')
+// The confirm modal: the page's dialogs don't carry aria-modal, so it's the dialog that isn't
+// the company picker's popup (the popup holds the "Search companies" box).
+const dialog = (page) => page.getByRole('dialog').filter({ hasNot: page.getByLabel('Search companies') })
 const toastSeen = (page, text) => page.getByText(text).first().waitFor({ timeout: 20000 }).then(() => true, () => false)
 /** Open the company picker and search; returns the matching option (count 0 when not listed). */
 async function searchPicker(page, name) {

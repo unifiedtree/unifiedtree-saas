@@ -224,7 +224,7 @@ try {
   await section('personal', async () => {
     await page.route((u) => u.pathname.endsWith(`/v1/employees/${EMP_PROBATION}/profile/identity`), async (route) => {
       if (route.request().method() !== 'GET') return route.continue()
-      const res = await route.fetch()
+      const res = await route.fetch({ url: route.request().url().replace('//demo.localhost', '//127.0.0.1') })
       const body = res.ok() ? await res.json().catch(() => ({})) : {}
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...body, passportExpiry: '2031-03-15' }) })
     })
@@ -383,7 +383,7 @@ try {
   // ── 12. Interviews: schedule drawer date (a stand-in Screening candidate; nothing is booked) ──
   await section('interviews', async () => {
     await page.route((u) => u.pathname.endsWith('/v1/hiring/candidates'), async (route) => {
-      const res = await route.fetch()
+      const res = await route.fetch({ url: route.request().url().replace('//demo.localhost', '//127.0.0.1') })
       const list = res.ok() ? await res.json().catch(() => []) : []
       const fake = {
         id: FAKE_CANDIDATE, requisitionId: list[0]?.requisitionId || FAKE_CANDIDATE, requisitionTitle: 'Calendar check', fullName: 'W3 R1 Stand-in', email: 'standin@example.invalid',
