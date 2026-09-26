@@ -50,8 +50,17 @@ export class CompaniesPage extends DCLogic {
     const companies: any[] = p.companies || [], branches: any[] = p.branches || []
     // Archived branches (API includeArchived) show only under the "Inactive" filter, with Restore.
     const archived: any[] = p.archivedBranches || []
+    // Archived companies show there too (after the branches), each with Restore.
+    const archivedCos: any[] = p.archivedCompanies || []
     const isEmpty = st === 'empty', isLoading = st === 'loading', isError = st === 'error'
     const list = isEmpty ? [] : companies
+    /** Why a company can't be archived yet, or null. The server refuses the same two cases. */
+    const archiveBlock = (c: any) => {
+      if (!c) return null
+      if (list.length <= 1) return 'This is the only active company. Add or restore another company before archiving this one.'
+      const n = Number(c.employees) || 0
+      return n > 0 ? `${n === 1 ? '1 person still works' : `${n} people still work`} at ${c.name}. Move them to another company or record their exit first.` : null
+    }
     const co0 = list.find((c) => c.id === p.companyId) || list[0] || null
     const coB = co0 ? branches.filter((b) => b.companyId === co0.id) : []
     const coArch = co0 ? archived.filter((b) => b.companyId === co0.id) : []
@@ -108,6 +117,31 @@ export class CompaniesPage extends DCLogic {
           canEdit ? createElement(HrButton, { size: 'sm', variant: 'ghost', onClick: b.onArchive, 'data-tip': b.archiveTip } as any, b.archiveLabel) : null),
       },
     ]
+    // Under "Inactive" the search applies to archived companies too; with no active company left
+    // (the empty page) every archived one is listed, so the workspace can always get one back.
+    const coPool = isEmpty ? archivedCos : sf === 'INACTIVE' ? archivedCos : []
+    const coRows = coPool
+      .filter((c) => isEmpty || !q || `${c.name} ${c.legal || ''} ${c.industry || ''}`.toLowerCase().includes(q))
+      .map((c) => {
+        const n = branches.filter((b) => b.companyId === c.id).length
+        return {
+          ...c, meta: `${c.industry || '—'} · ${c.country || 'India'} · ${c.currency || 'INR'}`, legalLabel: c.legal || '—', branchCount: n,
+          onRestore: () => this.setState({ confirm: { kind: 'restore', id: c.id, name: c.name } }),
+        }
+      })
+    const coColumns = [
+      { key: 'name', header: 'Company', render: (c: any) => createElement('strong', { style: { fontWeight: 700, color: '#0f172a' } }, c.name) },
+      { key: 'industry', header: 'Industry', render: (c: any) => c.industry || '—' },
+      { key: 'employees', header: 'Employees', render: (c: any) => createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, c.employees) },
+      { key: 'branches', header: 'Branches', render: (c: any) => createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, c.branchCount) },
+      { key: 'status', header: 'Status', render: () => createElement(HrStatusPill, { tone: 'gray' } as any, 'Inactive') },
+      {
+        key: 'actions', header: '', render: (c: any) => canEdit
+          ? createElement('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end' } },
+            createElement(HrButton, { size: 'sm', variant: 'ghost', onClick: c.onRestore, 'data-tip': 'Restores this company to lists and pickers' } as any, 'Restore'))
+          : null,
+      },
+    ]
     const cities = [...new Set(pool.map((b) => b.city).filter(Boolean))].sort()
     const view = mobile ? 'cards' : this.state.view
     const hasList = !isLoading && !isError && pool.length > 0
@@ -115,6 +149,11 @@ export class CompaniesPage extends DCLogic {
     const drawerBranch = d && d.type === 'branch' ? (d.id ? branches.find((b) => b.id === d.id) || archived.find((b) => b.id === d.id) || null : null) : null
     const drawerCompany = d && d.type === 'company' ? (d.id ? { ...(companies.find((c) => c.id === d.id) || {}), prefix: fmt?.prefix, next: fmt?.next } : null) : null
     const cf2 = this.state.confirm
+    const restoring = !!cf2 && cf2.kind === 'restore'
+    // A company archive the server would refuse: the dialog says what to do first instead of offering Archive.
+    const block = cf2 && cf2.kind === 'company' ? archiveBlock(list.find((c) => c.id === cf2.id)) : null
+    const coErr = !!p.archivedCompaniesError
+    const emptyWithArchived = isEmpty && coRows.length > 0
     const addBranch = () => this.setState({ drawer: { type: 'branch', id: null } })
     const addCompany = () => this.setState({ drawer: { type: 'company', id: null } })
     const nB = branches.filter((b) => list.some((c) => c.id === b.companyId)).length
@@ -146,6 +185,16 @@ export class CompaniesPage extends DCLogic {
       employeesTip: co0 ? `→ /hrms/employees?companyId=${co0.id}` : '',
       editCompany: () => co0 && this.setState({ drawer: { type: 'company', id: co0.id } }),
       archiveCompany: () => co0 && this.setState({ confirm: { kind: 'company', id: co0.id, name: co0.name } }),
+      archiveCompanyTip: archiveBlock(co0) || 'Archives this company',
+      // Archived companies: under "Inactive" after the branches, or on the empty page when none is active.
+      archivedPanelLive: list.length > 0 && !isLoading && sf === 'INACTIVE' && (coRows.length > 0 || coErr),
+      archivedPanelEmpty: emptyWithArchived,
+      archivedCoList: coRows.length > 0, archivedCoRows: coRows, archivedCoCount: coRows.length, coColumns,
+      archivedCoCards: isEmpty || view === 'cards', archivedCoTable: !isEmpty && view === 'table',
+      archivedCoHint: canEdit ? 'Restore one to bring it back to lists and pickers.' : 'Hidden from lists and pickers.',
+      archivedCoError: coErr && coRows.length === 0, retryArchived: () => p.onRetryArchived && p.onRetryArchived(),
+      emptyTitle: emptyWithArchived ? 'No active companies' : 'No companies yet',
+      emptyDesc: emptyWithArchived ? (canEdit ? 'Restore an archived company below, or add a new one.' : 'Every company is archived.') : 'Add your first company to get started.',
       addBranch,
       addBranchAction: canEdit ? { label: 'Add branch', onClick: addBranch } : undefined,
       addCompanyAction: canEdit ? { label: 'Add company', onClick: addCompany } : undefined,
@@ -159,10 +208,21 @@ export class CompaniesPage extends DCLogic {
       saveCompany: (c: any) => this.run(() => p.onSaveCompany && p.onSaveCompany(c), { drawer: null }),
       saveFormat: (f: any) => this.run(() => p.onSaveFormat && p.onSaveFormat(co0, f), {}),
       saveBranch: (b: any) => this.run(() => p.onSaveBranch && p.onSaveBranch({ ...b, companyId: b.companyId || (co0 && co0.id) }, hqB), { drawer: null }),
-      confirmOpen: !!cf2, confirmTitle: cf2 ? `Archive ${cf2.name}?` : 'Archive?',
+      confirmOpen: !!cf2,
+      // Short when refused: the title is cut to one line, and the description names the company.
+      confirmTitle: !cf2 ? 'Archive?' : restoring ? `Restore ${cf2.name}?` : block ? 'Can’t archive yet' : `Archive ${cf2.name}?`,
+      confirmDesc: restoring ? 'It shows in lists and pickers again.' : block || (cf2 && cf2.kind === 'company'
+        ? 'It will be hidden from lists and pickers. To bring it back, choose Inactive in the status filter.'
+        : 'It will be hidden from lists and pickers. Existing employee assignments are kept.'),
+      confirmCanAct: !block, cancelLabel: block ? 'OK' : 'Cancel',
+      confirmLabel: restoring ? 'Restore' : 'Archive', confirmVariant: restoring ? 'primary' : 'danger',
       setConfirmOpen: (o: boolean) => { if (!o) this.setState({ confirm: null }) },
       cancelConfirm: () => this.setState({ confirm: null }),
-      doArchive: () => cf2 && this.run(() => p.onArchive && p.onArchive(cf2.kind, cf2.id), { confirm: null }),
+      doConfirm: () => {
+        if (!cf2 || block) return
+        if (restoring) this.run(() => p.onRestoreCompany && p.onRestoreCompany({ id: cf2.id, name: cf2.name }), { confirm: null })
+        else this.run(() => p.onArchive && p.onArchive(cf2.kind, cf2.id), { confirm: null })
+      },
       icBuilding: dashIcon('building', 18), icBuildingLg: dashIcon('building', 24), icPencil: dashIcon('pencil', 15), icArchive: dashIcon('archive', 15),
       icShieldSm: dashIcon('shield', 14), icPlus: dashIcon('plus', 15), icGrid: dashIcon('grid', 14), icList: dashIcon('list', 14),
       icSearch: dashIcon('search', 16), icPin: dashIcon('mapPin', 14), icChevronDown: dashIcon('chevronDown', 16), icCheck: dashIcon('check', 16),

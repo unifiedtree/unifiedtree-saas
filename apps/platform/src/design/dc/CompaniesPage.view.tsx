@@ -181,7 +181,7 @@ export function CompaniesPageView({ v }: { v: any }) {
                               <HrButton variant="ghost" size="sm" onClick={v.editCompany} data-tip="Opens Edit company">
                                 {txt(v.icPencil)}{" Edit"}
                               </HrButton>
-                              <HrButton variant="ghost" size="sm" onClick={v.archiveCompany} data-tip="Archives this company">
+                              <HrButton variant="ghost" size="sm" onClick={v.archiveCompany} data-tip={v.archiveCompanyTip}>
                                 {txt(v.icArchive)}{" Archive"}
                               </HrButton>
                             </div>
@@ -488,6 +488,114 @@ export function CompaniesPageView({ v }: { v: any }) {
                     </div>
                   </>
                 ) : null}
+                {v.archivedPanelLive ? (
+                  <>
+                    {v.archivedCoList ? (
+                      <>
+                        <div style={{display: "grid", gap: "10px"}}>
+                          <div style={{display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "4px 12px"}}>
+                            <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "15px", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px"}}>
+                              {"Archived companies"}
+                              <span style={{padding: "1px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontFamily: "Inter,sans-serif", fontSize: "12px", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                                {txt(v.archivedCoCount)}
+                              </span>
+                            </h3>
+                            <span style={{fontSize: "12.5px", color: "#64748b"}}>
+                              {txt(v.archivedCoHint)}
+                            </span>
+                          </div>
+                          {v.archivedCoCards ? (
+                            <>
+                              {arr(v.archivedCoRows).map((c: any, $index: number) => (
+                                <Fragment key={$index}>
+                                  <article style={{display: "grid", gap: "12px", padding: "14px 16px", border: "1px solid #e2e8f0", borderRadius: "14px", background: "#fff"}} className="dc-companies-page-3">
+                                    <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 14px"}}>
+                                      <span aria-hidden="true" style={{width: "48px", height: "48px", borderRadius: "12px", flexShrink: "0", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#0f6e56", background: "repeating-linear-gradient(135deg,#ecfdf5 0 8px,#f0fdf4 8px 16px)", border: "1px solid #d1fae5"}}>
+                                        {txt(v.icBuildingLg)}
+                                      </span>
+                                      <div style={{flex: "1 1 180px", minWidth: "0", display: "grid", gap: "4px"}}>
+                                        <h4 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "15px", fontWeight: "700"}}>
+                                          {txt(c?.name)}
+                                        </h4>
+                                        <p style={{margin: "0", fontSize: "13px", color: "#475569"}}>
+                                          {txt(c?.meta)}
+                                        </p>
+                                      </div>
+                                      {v.canEdit ? (
+                                        <>
+                                          <div style={{display: "flex", gap: "8px", marginLeft: "auto"}}>
+                                            <HrButton variant="ghost" size="sm" onClick={c?.onRestore} data-tip="Restores this company to lists and pickers">
+                                              {"Restore"}
+                                            </HrButton>
+                                          </div>
+                                        </>
+                                      ) : null}
+                                    </div>
+                                    <dl style={{margin: "0", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(100px,1fr))", gap: "10px", paddingTop: "12px", borderTop: "1px solid #f1f5f9", fontSize: "13px"}}>
+                                      <div>
+                                        <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                          {"Legal name"}
+                                        </dt>
+                                        <dd style={{margin: "3px 0 0", fontWeight: "600", overflowWrap: "anywhere"}}>
+                                          {txt(c?.legalLabel)}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                          {"Employees"}
+                                        </dt>
+                                        <dd style={{margin: "3px 0 0", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                                          {txt(c?.employees)}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                          {"Branches"}
+                                        </dt>
+                                        <dd style={{margin: "3px 0 0", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                                          {txt(c?.branchCount)}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                          {"Status"}
+                                        </dt>
+                                        <dd style={{margin: "3px 0 0"}}>
+                                          <HrStatusPill tone="gray">
+                                            {"Inactive"}
+                                          </HrStatusPill>
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                  </article>
+                                </Fragment>
+                              ))}
+                            </>
+                          ) : null}
+                          {v.archivedCoTable ? (
+                            <>
+                              <div style={{margin: "0 -22px"}}>
+                                <TableCard>
+                                  <DataTable columns={v.coColumns} data={v.archivedCoRows} keyField="id" />
+                                </TableCard>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
+                    {v.archivedCoError ? (
+                      <>
+                        <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "10px", padding: "18px 12px", border: "1px dashed #cbd5e1", borderRadius: "14px", fontSize: "13px", color: "#475569"}}>
+                          {"Archived companies didn’t load."}
+                          <button type="button" onClick={v.retryArchived} style={{background: "none", border: "0", padding: "0", color: "#0f6e56", font: "inherit", fontWeight: "700", cursor: "pointer"}}>
+                            {"Retry"}
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
               </section>
             </div>
           </>
@@ -507,8 +615,118 @@ export function CompaniesPageView({ v }: { v: any }) {
               ) : null}
             </div>
             <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
-              <EmptyState icon={v.emptyBuildingIcon} title="No companies yet" description="Add your first company to get started." action={v.addCompanyAction} />
+              <EmptyState icon={v.emptyBuildingIcon} title={v.emptyTitle} description={v.emptyDesc} action={v.addCompanyAction} />
             </section>
+            {v.archivedPanelEmpty ? (
+              <>
+                <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "16px"}}>
+                  {v.archivedCoList ? (
+                    <>
+                      <div style={{display: "grid", gap: "10px"}}>
+                        <div style={{display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "4px 12px"}}>
+                          <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "15px", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px"}}>
+                            {"Archived companies"}
+                            <span style={{padding: "1px 8px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", fontFamily: "Inter,sans-serif", fontSize: "12px", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                              {txt(v.archivedCoCount)}
+                            </span>
+                          </h3>
+                          <span style={{fontSize: "12.5px", color: "#64748b"}}>
+                            {txt(v.archivedCoHint)}
+                          </span>
+                        </div>
+                        {v.archivedCoCards ? (
+                          <>
+                            {arr(v.archivedCoRows).map((c: any, $index: number) => (
+                              <Fragment key={$index}>
+                                <article style={{display: "grid", gap: "12px", padding: "14px 16px", border: "1px solid #e2e8f0", borderRadius: "14px", background: "#fff"}} className="dc-companies-page-3">
+                                  <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 14px"}}>
+                                    <span aria-hidden="true" style={{width: "48px", height: "48px", borderRadius: "12px", flexShrink: "0", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#0f6e56", background: "repeating-linear-gradient(135deg,#ecfdf5 0 8px,#f0fdf4 8px 16px)", border: "1px solid #d1fae5"}}>
+                                      {txt(v.icBuildingLg)}
+                                    </span>
+                                    <div style={{flex: "1 1 180px", minWidth: "0", display: "grid", gap: "4px"}}>
+                                      <h4 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "15px", fontWeight: "700"}}>
+                                        {txt(c?.name)}
+                                      </h4>
+                                      <p style={{margin: "0", fontSize: "13px", color: "#475569"}}>
+                                        {txt(c?.meta)}
+                                      </p>
+                                    </div>
+                                    {v.canEdit ? (
+                                      <>
+                                        <div style={{display: "flex", gap: "8px", marginLeft: "auto"}}>
+                                          <HrButton variant="ghost" size="sm" onClick={c?.onRestore} data-tip="Restores this company to lists and pickers">
+                                            {"Restore"}
+                                          </HrButton>
+                                        </div>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                  <dl style={{margin: "0", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(100px,1fr))", gap: "10px", paddingTop: "12px", borderTop: "1px solid #f1f5f9", fontSize: "13px"}}>
+                                    <div>
+                                      <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                        {"Legal name"}
+                                      </dt>
+                                      <dd style={{margin: "3px 0 0", fontWeight: "600", overflowWrap: "anywhere"}}>
+                                        {txt(c?.legalLabel)}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                        {"Employees"}
+                                      </dt>
+                                      <dd style={{margin: "3px 0 0", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                                        {txt(c?.employees)}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                        {"Branches"}
+                                      </dt>
+                                      <dd style={{margin: "3px 0 0", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                                        {txt(c?.branchCount)}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                                        {"Status"}
+                                      </dt>
+                                      <dd style={{margin: "3px 0 0"}}>
+                                        <HrStatusPill tone="gray">
+                                          {"Inactive"}
+                                        </HrStatusPill>
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                </article>
+                              </Fragment>
+                            ))}
+                          </>
+                        ) : null}
+                        {v.archivedCoTable ? (
+                          <>
+                            <div style={{margin: "0 -22px"}}>
+                              <TableCard>
+                                <DataTable columns={v.coColumns} data={v.archivedCoRows} keyField="id" />
+                              </TableCard>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
+                  {v.archivedCoError ? (
+                    <>
+                      <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "10px", padding: "18px 12px", border: "1px dashed #cbd5e1", borderRadius: "14px", fontSize: "13px", color: "#475569"}}>
+                        {"Archived companies didn’t load."}
+                        <button type="button" onClick={v.retryArchived} style={{background: "none", border: "0", padding: "0", color: "#0f6e56", font: "inherit", fontWeight: "700", cursor: "pointer"}}>
+                          {"Retry"}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </section>
+              </>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -522,14 +740,18 @@ export function CompaniesPageView({ v }: { v: any }) {
           <BranchDrawer branch={v.drawerBranch} companyName={v.co?.name} currentHq={v.currentHq} readOnly={v.readOnly} onSave={v.saveBranch} onClose={v.closeDrawer} />
         </>
       ) : null}
-      <Modal open={v.confirmOpen} onOpenChange={v.setConfirmOpen} title={v.confirmTitle} description="It will be hidden from lists and pickers. Existing employee assignments are kept." size="sm">
+      <Modal open={v.confirmOpen} onOpenChange={v.setConfirmOpen} title={v.confirmTitle} description={v.confirmDesc} size="sm">
         <div style={{display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px"}}>
           <HrButton variant="ghost" onClick={v.cancelConfirm}>
-            {"Cancel"}
+            {txt(v.cancelLabel)}
           </HrButton>
-          <HrButton variant="danger" onClick={v.doArchive}>
-            {"Archive"}
-          </HrButton>
+          {v.confirmCanAct ? (
+            <>
+              <HrButton variant={v.confirmVariant} onClick={v.doConfirm}>
+                {txt(v.confirmLabel)}
+              </HrButton>
+            </>
+          ) : null}
         </div>
       </Modal>
     </>

@@ -240,7 +240,18 @@ const LITERALS = {
     ['<div style="padding:11px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9">Needs attention', '<div role="heading" aria-level="2" style="padding:11px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9">Needs attention'],
   ],
   // Archived branches are listed under the "Inactive" filter; their card button restores them.
-  CompaniesPage: [['onClick="{{ b.onArchive }}" data-tip="Archives this branch" hint-size="80px,32px">Archive</x-import>', 'onClick="{{ b.onArchive }}" data-tip="{{ b.archiveTip }}" hint-size="80px,32px">{{ b.archiveLabel }}</x-import>']],
+  CompaniesPage: [
+    ['onClick="{{ b.onArchive }}" data-tip="Archives this branch" hint-size="80px,32px">Archive</x-import>', 'onClick="{{ b.onArchive }}" data-tip="{{ b.archiveTip }}" hint-size="80px,32px">{{ b.archiveLabel }}</x-import>'],
+    // A company the server won't archive (the last active one, or people still work there):
+    // the tooltip and the dialog say what to do first, and the dialog offers only OK. The same
+    // dialog confirms restoring an archived company (see PATCH).
+    ['onClick="{{ archiveCompany }}" data-tip="Archives this company"', 'onClick="{{ archiveCompany }}" data-tip="{{ archiveCompanyTip }}"'],
+    ['description="It will be hidden from lists and pickers. Existing employee assignments are kept."', 'description="{{ confirmDesc }}"'],
+    ['variant="ghost" onClick="{{ cancelConfirm }}" hint-size="80px,40px">Cancel</x-import><x-import component-from-global-scope="UnifiedTree.HrButton" variant="danger" onClick="{{ doArchive }}" hint-size="90px,40px">Archive</x-import>',
+      'variant="ghost" onClick="{{ cancelConfirm }}" hint-size="80px,40px">{{ cancelLabel }}</x-import><sc-if value="{{ confirmCanAct }}"><x-import component-from-global-scope="UnifiedTree.HrButton" variant="{{ confirmVariant }}" onClick="{{ doConfirm }}" hint-size="90px,40px">{{ confirmLabel }}</x-import></sc-if>'],
+    // With no active company left, the empty page says so and lists the archived ones (PATCH).
+    ['title="No companies yet" description="Add your first company to get started."', 'title="{{ emptyTitle }}" description="{{ emptyDesc }}"'],
+  ],
   AttCalendar: [['September 2026', '{{ monthLabel }}']],
   AttendancePage: [['September 2026', '{{ monthLabel }}']],
   ShiftOvertime: [['Overtime · September 2026', 'Overtime · {{ monthLabel }}']],
@@ -345,6 +356,35 @@ const PATCH = {
   CompaniesPage(html) {
     html = replaceOnce(html, '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;min-height:40px;margin-bottom:4px"><h1 style="margin:0;font-family:\'Plus Jakarta Sans\',Inter,sans-serif;font-size:20px;font-weight:700;letter-spacing:-.01em;color:#0f172a">Companies &amp; Branches</h1><sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="UnifiedTree.HrButton" size="sm" onClick="{{ addCompany }}" data-tip="Opens Add company" hint-size="124px,32px">{{ icPlus }} Add company</x-import></sc-if></div>\n', '')
     html = replaceOnce(html, '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px;min-width:0">\n', '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;min-width:0"><div style="display:grid;gap:4px;min-width:0"><h1 style="margin:0;font-family:\'Plus Jakarta Sans\',Inter,sans-serif;font-size:28px;font-weight:700;letter-spacing:-.02em;color:#0f172a">Companies &amp; Branches</h1><p style="margin:0;font-size:14px;line-height:1.5;color:#64748b">Manage your company details and branch locations with their attendance boundaries.</p></div><sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="UnifiedTree.HrButton" size="sm" onClick="{{ addCompany }}" data-tip="Opens Add company" hint-size="124px,32px">{{ icPlus }} Add company</x-import></sc-if></div>\n' + '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px;min-width:0">\n')
+    // Client, 26 Sep: an archived company could not be found again. Archived
+    // companies (GET /v1/hrms/companies?includeArchived=true) now show under the
+    // "Inactive" filter after the archived branches, each drawn as a branch
+    // card with Restore (confirmed in the page's dialog), or as a table in table
+    // view. With no active company left, the empty page lists them the same way,
+    // so a workspace can always get one back. Same card styles as a branch, so
+    // the hover rule is shared and no generated class name moves.
+    const dt = 'font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b'
+    const card = '<article style="display:grid;gap:12px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff" style-hover="border-color:#a7f3d0;box-shadow:0 10px 22px -18px rgba(15,110,86,.7)">'
+      + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px">'
+      + '<span aria-hidden="true" style="width:48px;height:48px;border-radius:12px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;color:#0f6e56;background:repeating-linear-gradient(135deg,#ecfdf5 0 8px,#f0fdf4 8px 16px);border:1px solid #d1fae5">{{ icBuildingLg }}</span>'
+      + '<div style="flex:1 1 180px;min-width:0;display:grid;gap:4px"><h4 style="margin:0;font-family:\'Plus Jakarta Sans\',Inter,sans-serif;font-size:15px;font-weight:700">{{ c.name }}</h4><p style="margin:0;font-size:13px;color:#475569">{{ c.meta }}</p></div>'
+      + '<sc-if value="{{ canEdit }}"><div style="display:flex;gap:8px;margin-left:auto"><x-import component-from-global-scope="UnifiedTree.HrButton" variant="ghost" size="sm" onClick="{{ c.onRestore }}" data-tip="Restores this company to lists and pickers">Restore</x-import></div></sc-if>'
+      + '</div>'
+      + '<dl style="margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;padding-top:12px;border-top:1px solid #f1f5f9;font-size:13px">'
+      + `<div><dt style="${dt}">Legal name</dt><dd style="margin:3px 0 0;font-weight:600;overflow-wrap:anywhere">{{ c.legalLabel }}</dd></div>`
+      + `<div><dt style="${dt}">Employees</dt><dd style="margin:3px 0 0;font-weight:700;font-variant-numeric:tabular-nums">{{ c.employees }}</dd></div>`
+      + `<div><dt style="${dt}">Branches</dt><dd style="margin:3px 0 0;font-weight:700;font-variant-numeric:tabular-nums">{{ c.branchCount }}</dd></div>`
+      + `<div><dt style="${dt}">Status</dt><dd style="margin:3px 0 0"><x-import component-from-global-scope="UnifiedTree.HrStatusPill" tone="gray">Inactive</x-import></dd></div>`
+      + '</dl></article>'
+    const archivedCompanies = '<sc-if value="{{ archivedCoList }}"><div style="display:grid;gap:10px">'
+      + '<div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px"><h3 style="margin:0;font-family:\'Plus Jakarta Sans\',Inter,sans-serif;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Archived companies<span style="padding:1px 8px;border-radius:999px;background:#f1f5f9;color:#475569;font-family:Inter,sans-serif;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums">{{ archivedCoCount }}</span></h3><span style="font-size:12.5px;color:#64748b">{{ archivedCoHint }}</span></div>'
+      + `<sc-if value="{{ archivedCoCards }}"><sc-for list="{{ archivedCoRows }}" as="c">${card}</sc-for></sc-if>`
+      + '<sc-if value="{{ archivedCoTable }}"><div style="margin:0 -22px"><x-import component-from-global-scope="UnifiedTree.TableCard"><x-import component-from-global-scope="UnifiedTree.DataTable" columns="{{ coColumns }}" data="{{ archivedCoRows }}" key-field="id"></x-import></x-import></div></sc-if>'
+      + '</div></sc-if>'
+      + '<sc-if value="{{ archivedCoError }}"><div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;padding:18px 12px;border:1px dashed #cbd5e1;border-radius:14px;font-size:13px;color:#475569">Archived companies didn’t load.<button type="button" onClick="{{ retryArchived }}" style="background:none;border:0;padding:0;color:#0f6e56;font:inherit;font-weight:700;cursor:pointer">Retry</button></div></sc-if>'
+    html = replaceOnce(html, 'Add branch</x-import></div></sc-if>\n</section>', `Add branch</x-import></div></sc-if>\n<sc-if value="{{ archivedPanelLive }}">${archivedCompanies}</sc-if>\n</section>`)
+    html = replaceOnce(html, 'action="{{ addCompanyAction }}" hint-size="100%,320px"></x-import></section></sc-if>',
+      `action="{{ addCompanyAction }}" hint-size="100%,320px"></x-import></section><sc-if value="{{ archivedPanelEmpty }}"><section style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04);padding:20px 22px;display:grid;gap:16px">${archivedCompanies}</section></sc-if></sc-if>`)
     return html
   },
   AttendancePage(html) {
