@@ -1,4 +1,4 @@
-// Notification templates (/hrms/notification-templates), on the module kit.
+// Notification templates (/hrms/settings/notifications, in HRMS settings), on the module kit.
 // Templates are stored per company, channel and event. When a notification
 // goes out, the sender uses the person's company's active template for that
 // event and channel ({{placeholders}} filled in), or the built-in wording.
@@ -119,7 +119,7 @@ export const NotificationTemplates: React.FC = () => {
   }
 
   return (
-    <ModulePage crumb="HR setup" title="Notification templates" subtitle="Message wording by channel and event."
+    <ModulePage crumb="HRMS settings" title="Notification templates" subtitle="Message wording by channel and event."
       actions={<>
         {companies.length > 1 && (
           <select aria-label="Company" value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-56">

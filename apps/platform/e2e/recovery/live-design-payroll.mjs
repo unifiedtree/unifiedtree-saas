@@ -2,7 +2,8 @@
 //
 //   node e2e/recovery/live-design-payroll.mjs
 //
-// Owner: every section renders under the module's own section bar; a TEST run
+// Owner: every section renders under the module's own section bar (Payroll
+// Settings opens in HRMS settings, without it); a TEST run
 // for Jun 2027 (a month with no advance recoveries due) is created → processed →
 // payslip opened → locked → reopened, then deleted from the local database; a
 // paid run's register and a payslip PDF download; the planned bank file shows;
@@ -44,11 +45,15 @@ try {
   if (existing) sql(`delete from payroll.runs where id = '${existing}'`) // leftover of an interrupted run
 
   // ── every section renders under the module's section bar ──
-  for (const [route, heading] of [['/hrms/payroll-dashboard', 'Payroll Dashboard'], ['/hrms/salary-structure', 'Salary Structure'], ['/hrms/payroll/runs', 'Processing & Payslips'], ['/hrms/payroll/settings', 'Payroll Settings'], ['/hrms/pli', 'Production-Linked Incentive (PLI)'], ['/hrms/advances', 'Advances & Loans'], ['/hrms/bank-disbursement', 'Bank Disbursement']]) {
+  for (const [route, heading] of [['/hrms/payroll-dashboard', 'Payroll Dashboard'], ['/hrms/salary-structure', 'Salary Structure'], ['/hrms/payroll/runs', 'Processing & Payslips'], ['/hrms/pli', 'Production-Linked Incentive (PLI)'], ['/hrms/advances', 'Advances & Loans'], ['/hrms/bank-disbursement', 'Bank Disbursement']]) {
     await page.goto(base + route); await hr.settle()
     const ok = await bar(page).count() === 1 && await page.getByRole('heading', { name: heading, exact: true }).count() > 0
     check(`${route} renders the design with its section bar`, ok)
   }
+  // Payroll Settings moved to HRMS settings: the old address opens it there, under the hub's tabs.
+  await page.goto(base + '/hrms/payroll/settings'); await hr.settle()
+  check('/hrms/payroll/settings opens Payroll Settings in HRMS settings', new URL(page.url()).pathname === '/hrms/settings/payroll' && await page.getByRole('heading', { name: 'Payroll Settings', exact: true }).count() > 0 && await bar(page).count() === 0, new URL(page.url()).pathname)
+  await page.goto(base + '/hrms/payroll-dashboard'); await hr.settle()
   check('shell sub-nav hidden on payroll pages', (await page.getByRole('navigation', { name: 'Payroll sections' }).count()) === 1 && (await page.getByRole('navigation', { name: /^Payroll sections$/ }).count()) === 1)
 
   // ── a test run: create → process → payslip → lock → reopen ──
@@ -125,7 +130,7 @@ try {
   check('salary drawer previews the split from real settings', /Income tax \(TDS\)/.test(prev) && /Not calculated yet/.test(prev))
   await page.getByRole('button', { name: 'Cancel' }).last().click()
 
-  await page.goto(base + '/hrms/payroll/settings'); await hr.settle()
+  await page.goto(base + '/hrms/settings/payroll'); await hr.settle()
   await page.getByRole('switch', { name: /Apply Provident Fund/ }).click()
   await page.getByText(/1 change · used by runs processed after saving/).first().waitFor({ timeout: 5000 })
   check('settings shows the unsaved-change bar', true)

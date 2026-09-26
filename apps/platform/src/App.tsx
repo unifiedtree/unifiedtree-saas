@@ -29,6 +29,8 @@ import { ComingSoon } from '@/shared/components/ComingSoon'
 import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
+import { useAccessContext } from '@/shared/navigation/useAccess'
+import { workspaceSettingsFor } from '@/shared/navigation/workspaceSettings'
 
 //   // route disabled — see /module-workspace redirect below
 
@@ -62,7 +64,9 @@ const ShiftChangeRequest = lazyPage(() => import('@/modules/hrms/shifts/ShiftCha
 const TeamDashboard = lazyPage(() => import('@/modules/hrms/team/TeamDashboard').then(m => ({ default: m.TeamDashboard })))
 const ReportsIndex = lazyPage(() => import('@/modules/hrms/reports/ReportsIndex').then(m => ({ default: m.ReportsIndex })))
 const HrConfigurationPage = lazyPage(() => import('@/modules/hrms/settings/HrConfigurationPage').then(m => ({ default: m.HrConfigurationPage })))
+const HrmsSettingsHub = lazyPage(() => import('@/modules/hrms/settings/HrmsSettingsHub').then(m => ({ default: m.HrmsSettingsHub })))
 const Expense = lazyPage(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
+const ExpensePolicies = lazyPage(() => import('@/modules/hrms/Expense').then(m => ({ default: m.ExpensePolicies })))
 const FullAndFinal = lazyPage(() => import('@/modules/hrms/FullAndFinal').then(m => ({ default: m.FullAndFinal })))
 const ExitCenter = lazyPage(() => import('@/modules/hrms/exit/ExitCenter').then(m => ({ default: m.ExitCenter })))
 const Hiring = lazyPage(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
@@ -80,10 +84,10 @@ const Learning = lazyPage(() => import('@/modules/hrms/Learning').then(m => ({ d
 const LearningProgramDetail = lazyPage(() => import('@/modules/hrms/learning/ProgramDetail').then(m => ({ default: m.ProgramDetail })))
 const Compliance = lazyPage(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = lazyPage(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
-/** Policy admins get the Master "Policy Documents" page; everyone else keeps the page where they read and acknowledge policies. */
+/** Policy admins manage policy documents in HRMS settings; everyone else keeps the page where they read and acknowledge policies. */
 function PoliciesRoute() {
   const admin = useSdkStore(s => s.permissions.has('hrms.policy.write') && s.permissions.has('hrms.policy.read'))
-  return admin ? <MasterModule /> : <Policies />
+  return admin ? <MovedTo to="/hrms/settings/policies" /> : <Policies />
 }
 const Integrations = lazyPage(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = lazyPage(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
@@ -105,6 +109,22 @@ const MyAssets = lazyPage(() => import('@/modules/hrms/onboarding/MyAssets').the
 const MyInterviews = lazyPage(() => import('@/modules/hrms/hiring/Interviews').then(m => ({ default: m.MyInterviews })))
 const ModuleWorkspace = lazyPage(() => import('@/pages/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })))
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
+
+/**
+ * An old address that moved: opens the new one, keeping the old address's
+ * ?tab= / ?view= and #section unless the new one sets its own.
+ */
+function MovedTo({ to }: { to: string }) {
+  const { search, hash } = useLocation()
+  const u = new URL(to, 'http://x')
+  return <Navigate to={{ pathname: u.pathname, search: u.search || search, hash: u.hash || hash }} replace />
+}
+
+/** /settings opens the first workspace settings page this person may open (Security is open to everyone). */
+function WorkspaceSettingsHome() {
+  const first = workspaceSettingsFor(useAccessContext())[0]
+  return <Navigate to={first?.path ?? '/settings/security'} replace />
+}
 
 function RoleAwareLanding() {
   const roles = useSdkStore(s => s.user?.roles ?? [])
@@ -195,9 +215,20 @@ const ROUTE_TREE = (
         {/* AUTH-ONLY (intentional): Analytics renders mock KPIs (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/analytics" element={<ComingSoonForAdmins module="analytics" />} />
-        {/* Gated on any settings capability so non-admins (e.g. plain EMPLOYEE) get a clean
-            "Access Restricted" instead of an empty page; matches the sidebar's Settings gate. */}
-        <Route path="/settings"      element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'workspace.profile.update', 'workspace.security.manage']}><Settings /></RouteGuard>} />
+        {/* Workspace settings (opened from the Apps page and the profile menu): /settings
+            opens the first page the person may open; each page keeps its own gate below. */}
+        <Route path="/settings"      element={<WorkspaceSettingsHome />} />
+        {/* Document types moved to HRMS settings; the HR integration register moved under
+            workspace Integrations. Static paths win over /settings/:tab. */}
+        <Route path="/settings/documents" element={<MovedTo to="/hrms/settings/document-types" />} />
+        <Route
+          path="/settings/integrations/register"
+          element={
+            <RouteGuard anyOf={['hrms.integration.read', 'hrms.integration.write']}>
+              <ModuleGate moduleKey="hrms"><Integrations /></ModuleGate>
+            </RouteGuard>
+          }
+        />
         {/* Two tabs of the settings page carry destructive/financial authority
             and get their own gated routes so a plain SETTINGS_READ user can't
             deep-link into them. React Router v6 matches the static paths in
@@ -220,7 +251,8 @@ const ROUTE_TREE = (
             clean denial). Guard them on the same permission the page's data requires so
             non-admins get "Access Restricted" up front. (super-admin holds all three.) */}
         <Route path="/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
-        <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
+        {/* Roles & permissions moved to HRMS settings (/hrms/settings/roles). */}
+        <Route path="/roles"      element={<MovedTo to="/hrms/settings/roles" />} />
         <Route path="/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
         {/* App launcher (Odoo-style). The universal post-login landing / app picker —
             open to every authenticated user. Entering a specific app's routes is still
@@ -339,6 +371,10 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
+        {/* Master data's rules and statutory settings moved to HRMS settings (static paths win over /hrms/master/*). */}
+        <Route path="/hrms/master/shift-rules" element={<MovedTo to="/hrms/settings/shift-rules" />} />
+        <Route path="/hrms/master/leave-rules" element={<MovedTo to="/hrms/settings/leave-rules" />} />
+        <Route path="/hrms/master/statutory" element={<MovedTo to="/hrms/settings/statutory" />} />
         <Route
           path="/hrms/organization"
           element={
@@ -489,14 +525,7 @@ const ROUTE_TREE = (
           }
         />
         {/* HR Configuration opened at its Work week section (old link). */}
-        <Route
-          path="/hrms/settings/work-time"
-          element={
-            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ, 'attendance.policy.manage']}>
-              <ModuleGate moduleKey="hrms"><HrConfigurationPage /></ModuleGate>
-            </RouteGuard>
-          }
-        />
+        <Route path="/hrms/settings/work-time" element={<MovedTo to="/hrms/settings/hr-configuration#st-week" />} />
         <Route
           path="/hrms/bank-disbursement"
           element={
@@ -586,22 +615,9 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
-        <Route
-          path="/hrms/integrations"
-          element={
-            <RouteGuard anyOf={['hrms.integration.read', 'hrms.integration.write']}>
-              <ModuleGate moduleKey="hrms"><Integrations /></ModuleGate>
-            </RouteGuard>
-          }
-        />
-        <Route
-          path="/hrms/notification-templates"
-          element={
-            <RouteGuard anyOf={['hrms.notiftemplate.read', 'hrms.notiftemplate.write']}>
-              <ModuleGate moduleKey="hrms"><NotificationTemplates /></ModuleGate>
-            </RouteGuard>
-          }
-        />
+        {/* The integration register is a workspace setting now; notification templates are in HRMS settings. */}
+        <Route path="/hrms/integrations" element={<MovedTo to="/settings/integrations/register" />} />
+        <Route path="/hrms/notification-templates" element={<MovedTo to="/hrms/settings/notifications" />} />
         <Route
           path="/hrms/shifts"
           element={
@@ -667,11 +683,93 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
+        {/* ── HRMS settings: the one settings place in HRMS ───────────────────
+            The overview lists every HR setting the person may open (it checks
+            that itself); each page below keeps the gate it had at its old address. */}
         <Route
           path="/hrms/settings"
+          element={<ModuleGate moduleKey="hrms"><HrmsSettingsHub /></ModuleGate>}
+        />
+        <Route
+          path="/hrms/settings/hr-configuration"
           element={
             <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ, 'attendance.policy.manage']}>
               <ModuleGate moduleKey="hrms"><HrConfigurationPage /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/payroll"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_SETTINGS_READ]}>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/document-types"
+          element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write', 'workspace.profile.update', 'workspace.security.manage']}><Settings tab="documents" crumb="HRMS settings" /></RouteGuard>}
+        />
+        <Route
+          path="/hrms/settings/notifications"
+          element={
+            <RouteGuard anyOf={['hrms.notiftemplate.read', 'hrms.notiftemplate.write']}>
+              <ModuleGate moduleKey="hrms"><NotificationTemplates /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route path="/hrms/settings/roles" element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
+        {/* HRMS access: who can use HRMS, with which role (the Roles page's assignments view). */}
+        <Route path="/hrms/settings/access" element={<MovedTo to="/hrms/settings/roles?view=assignments" />} />
+        {/* Master data's rules and payroll configuration, and the policy documents admin view:
+            the same Master data sections (MasterContainer picks the section from the path and
+            checks its own permissions), shown under the hub's tabs. */}
+        <Route
+          path="/hrms/settings/shift-rules"
+          element={
+            <RouteGuard anyOf={['attendance.workforce.admin', 'hrms.policy.write']}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/leave-rules"
+          element={
+            <RouteGuard anyOf={[P.LEAVE_TYPE_WRITE, 'hrms.policy.write']}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/salary-components"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_COMPONENTS_READ]}>
+              <ModuleGate moduleKey="payroll"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/statutory"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_SETTINGS_READ]}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/policies"
+          element={
+            <RouteGuard anyOf={['hrms.policy.write']}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Expense policies (the Expenses page's Policies tab leads here). */}
+        <Route
+          path="/hrms/settings/expense-policies"
+          element={
+            <RouteGuard anyOf={['hrms.expense.policy.read']}>
+              <ModuleGate moduleKey="hrms"><ExpensePolicies /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -688,22 +786,10 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
-        <Route
-          path="/hrms/payroll/settings"
-          element={
-            <RouteGuard anyOf={[P.PAYROLL_SETTINGS_READ]}>
-              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
-            </RouteGuard>
-          }
-        />
-        <Route
-          path="/hrms/payroll/components"
-          element={
-            <RouteGuard anyOf={[P.PAYROLL_COMPONENTS_READ]}>
-              <ModuleGate moduleKey="payroll"><MasterModule /></ModuleGate>
-            </RouteGuard>
-          }
-        />
+        {/* Payroll settings moved to HRMS settings. */}
+        <Route path="/hrms/payroll/settings" element={<MovedTo to="/hrms/settings/payroll" />} />
+        {/* Salary components moved to HRMS settings. */}
+        <Route path="/hrms/payroll/components" element={<MovedTo to="/hrms/settings/salary-components" />} />
         <Route
           path="/me/salary"
           element={

@@ -7,6 +7,7 @@
 // SettingsSecurity, SettingsDangerZone) because each saves to its own API.
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useAnyPermission } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson } from '@/core/api/client'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
@@ -24,13 +25,13 @@ type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' 
 type Show = (kind: 'ok' | 'error', title: string, msg?: string) => void
 
 const TAB_META: Record<TabKey, { label: string; desc: string }> = {
-  profile:       { label: 'Profile',        desc: 'Your account and the workspace’s own details.' },
+  profile:       { label: 'Workspace profile', desc: 'Your account and the workspace’s own details.' },
   branding:      { label: 'Branding',       desc: 'Your logo and workspace identity.' },
   security:      { label: 'Security',       desc: 'Password, two-factor and active sessions.' },
   notifications: { label: 'Notifications',  desc: 'Which notifications reach you, and how: email, in the app or on your phone.' },
   billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
   integrations:  { label: 'Integrations',   desc: 'Connect external tools and services.' },
-  documents:     { label: 'Document Types', desc: 'Which documents employees must upload, and the rules for each.' },
+  documents:     { label: 'Document types', desc: 'Which documents employees must upload, and the rules for each.' },
   danger:        { label: 'Danger Zone',    desc: 'Export all data, or schedule a reset or deletion of the workspace.' },
 }
 const VALID_TABS = Object.keys(TAB_META) as TabKey[]
@@ -156,9 +157,24 @@ const BillingTab: React.FC = () => {
   )
 }
 
-const IntegrationsTab: React.FC = () => (
-  <>{INTEGRATIONS.map((i) => <SettingsSection key={i.key} id={i.key} icon={i.icon} title={i.name} summary={i.desc} soon />)}</>
-)
+/**
+ * The company's own register of the outside services it uses (the old HR
+ * Setup → Integrations page, now /settings/integrations/register), for people
+ * who may read it. The connectors below it are the roadmap.
+ */
+const IntegrationsTab: React.FC<{ register: boolean }> = ({ register }) => {
+  const navigate = useNavigate()
+  return (
+    <>
+      {register && (
+        <SettingsSection id="register" icon="list" title="Integration register" summary="A record of the outside services your company uses, and whether each one is set up. Adding a record doesn’t connect the service.">
+          <div><HrButton onClick={() => navigate('/settings/integrations/register')}>Open the register</HrButton></div>
+        </SettingsSection>
+      )}
+      {INTEGRATIONS.map((i) => <SettingsSection key={i.key} id={i.key} icon={i.icon} title={i.name} summary={i.desc} soon />)}
+    </>
+  )
+}
 
 const DocumentsTab: React.FC = () => (
   <SettingsSection id="types" icon="fileText" title="Document types" summary="What employees see on their profile. Mark a type Required to make it a mandatory upload; HR verifies each upload.">
@@ -170,9 +186,11 @@ const DocumentsTab: React.FC = () => (
  * @param tab  Forces the tab for routes with a LITERAL path (/settings/billing,
  *             /settings/danger). Those have no `:tab` param; without the prop
  *             the page fell back to Profile under a "Billing" header (P0-7).
+ * @param crumb Where the page sits (Document types is shown inside HRMS settings).
  */
-export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
+export const Settings: React.FC<{ tab?: TabKey; crumb?: string }> = ({ tab: tabProp, crumb = 'Workspace Settings' }) => {
   const { tab } = useParams<{ tab?: string }>()
+  const canRegister = useAnyPermission(['hrms.integration.read', 'hrms.integration.write'])
   const resolved = tabProp ?? tab
   const active: TabKey = VALID_TABS.includes(resolved as TabKey) ? (resolved as TabKey) : 'profile'
   const meta = TAB_META[active]
@@ -186,21 +204,22 @@ export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
   const nav = isNotif && notif.draft
     ? NAV.notifications.map((n) => (n.key === 'email' ? { ...n, state: notif.draft!.emailEnabled ? 'on' as const : 'off' as const }
       : n.key === 'push' ? { ...n, state: notif.draft!.pushEnabled ? 'on' as const : 'off' as const } : n))
-    : (NAV[active] ?? [])
+    : active === 'integrations' && canRegister ? [{ key: 'register', label: 'Integration register', state: 'none' as const }, ...NAV.integrations!]
+      : (NAV[active] ?? [])
   if (active === 'profile' || active === 'security' || active === 'danger') {
     const Page = active === 'profile' ? WorkspaceProfileSettings : active === 'security' ? SecuritySettings : DangerZoneSettings
-    return <DesignFrame><Page key={active} crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} /></DesignFrame>
+    return <DesignFrame><Page key={active} crumb={crumb} title={meta.label} subtitle={meta.desc} /></DesignFrame>
   }
   const body: Partial<Record<TabKey, React.ReactNode>> = {
     branding: <BrandingTab show={show} />,
     notifications: <NotificationsTab c={notif} />,
     billing: <BillingTab />,
-    integrations: <IntegrationsTab />,
+    integrations: <IntegrationsTab register={canRegister} />,
     documents: <DocumentsTab />,
   }
   return (
     <DesignFrame>
-      <SettingsPage key={active} crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} nav={nav} access="edit"
+      <SettingsPage key={active} crumb={crumb} title={meta.label} subtitle={meta.desc} nav={nav} access="edit"
         status={isNotif ? notif.status : 'live'} onRetry={isNotif ? notif.refetch : undefined} entity={isNotif ? 'your notification choices' : 'settings'}
         dirty={isNotif && notif.dirty} changeCount={isNotif ? notif.changeCount : 0} errorCount={0} saving={isNotif && notif.saving}
         onSave={isNotif ? () => { void saveNotif() } : () => {}} onDiscard={isNotif ? notif.discard : () => {}} toast={toast} onDismissToast={dismiss}>

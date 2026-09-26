@@ -1,4 +1,4 @@
-// Live check of HR Configuration (/hrms/settings) in the Payroll Settings
+// Live check of HR Configuration (/hrms/settings/hr-configuration, in HRMS settings) in the Payroll Settings
 // design's settings pattern, against the local API. The owner changes the
 // late-grace minutes and the probation reminder days, saves, and the database
 // is checked; a bad prefix blocks the save; /hrms/settings/work-time opens the
@@ -42,7 +42,7 @@ try {
   // ── Owner: edits and saves ──
   {
     const { ctx, page, errors, failed } = await session('owner@unifiedtree.demo')
-    await page.goto(base + '/hrms/settings'); await settle(page)
+    await page.goto(base + '/hrms/settings/hr-configuration'); await settle(page)
     await page.getByRole('heading', { name: 'HR Configuration' }).waitFor({ timeout: 30_000 })
     const toc = page.getByRole('navigation', { name: 'On this page' })
     check('"On this page" lists the seven sections', (await toc.getByRole('link').count()) === 7)
@@ -83,7 +83,7 @@ try {
 
     // Phone width: chip nav instead of the side list.
     const m = await session('owner@unifiedtree.demo', 390)
-    await m.page.goto(base + '/hrms/settings'); await settle(m.page)
+    await m.page.goto(base + '/hrms/settings/hr-configuration'); await settle(m.page)
     await m.page.getByRole('heading', { name: 'HR Configuration' }).waitFor({ timeout: 30_000 })
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     check('phone: no sideways scroll', overflow <= 1, `overflow=${overflow}`)
@@ -95,7 +95,7 @@ try {
   // ── Reader and manager: view only, or no access ──
   for (const who of ['reader@unifiedtree.demo', 'mgr@unifiedtree.demo']) {
     const { ctx, page, errors, failed } = await session(who)
-    await page.goto(base + '/hrms/settings'); await settle(page); await page.waitForTimeout(800)
+    await page.goto(base + '/hrms/settings/hr-configuration'); await settle(page); await page.waitForTimeout(800)
     const heading = await page.getByRole('heading', { name: 'HR Configuration' }).count()
     const viewOnly = await page.getByText('View only', { exact: true }).count()
     const saveable = await page.getByRole('textbox').count()

@@ -1,4 +1,4 @@
-// Integrations (/hrms/integrations), on the module kit. This is a registry:
+// Integrations (/settings/integrations/register, under workspace settings), on the module kit. This is a registry:
 // a record of the third-party services the company uses and whether someone
 // has marked them configured. Adding a record doesn't authorise the provider
 // or sync any data, and the page says so.
@@ -54,7 +54,7 @@ export const Integrations: React.FC = () => {
   }
 
   return (
-    <ModulePage crumb="HR setup" title="Integrations" subtitle="A record of the outside services your company uses."
+    <ModulePage crumb="Workspace settings" title="Integrations" subtitle="A record of the outside services your company uses."
       actions={companies.length > 1 ? (
         <select aria-label="Company" value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-56">
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

@@ -87,8 +87,11 @@ try {
     await page.goto(`${base}/settings/${tab}`); await settle(page)
     await heading(page, sections[0]).waitFor({ timeout: 30_000 }).catch(() => {})
     let all = true
-    for (const h of sections) if ((await heading(page, h).count()) !== 1) all = false
+    // Document types moved to HRMS settings, where the page title reads the same as its one section.
+    const section = (h) => (tab === 'documents' ? page.getByRole('heading', { level: 2, name: h, exact: true }) : heading(page, h))
+    for (const h of sections) if ((await section(h).count()) !== 1) all = false
     check(`settings/${tab}: sections render`, all)
+    if (tab === 'documents') check('settings/documents: opens Document types in HRMS settings', new URL(page.url()).pathname === '/hrms/settings/document-types', new URL(page.url()).pathname)
     // The local recovery tenant has no platform.account_workspaces row, so
     // /v1/workspace/plan/current answers 403 "isn't linked to this workspace".
     // That's accepted only when the page says so instead of showing a plan.
