@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.hrms.api.invitation.InvitationService;
+import com.unifiedtree.audit.AuditService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -81,6 +82,8 @@ public class WorkforceController {
     private final EmploymentTypeService     employmentTypes;
     private final ShiftService              shifts;
     private final InvitationService         invitationService;
+    @Autowired(required = false)
+    private AuditService                    audit;
 
     public WorkforceController(CompanyService companies,
                                @Qualifier("workforceBranchService") BranchService branches,
@@ -109,8 +112,10 @@ public class WorkforceController {
     // -- Companies -----------------------------------------------------------
     @GetMapping("/companies")
     @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
-    public List<CompanyResponse> listCompanies() {
-        return companies.list();
+    public List<CompanyResponse> listCompanies(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        // includeArchived: archived companies too (active=false), for the
+        // Companies & Branches "Inactive" filter. Pickers leave it off.
+        return companies.list(includeArchived);
     }
 
     @PostMapping("/companies")
@@ -133,11 +138,36 @@ public class WorkforceController {
         return companies.update(id, req);
     }
 
+    /** Refused (422) for the last active company or one people still work at; see CompanyService.archive. */
     @DeleteMapping("/companies/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('org.company.write')")
     public void archiveCompany(@PathVariable UUID id) {
-        companies.archive(id);
+        CompanyService.StatusChange result = companies.archive(id);
+        if (result.changed()) auditCompany("ARCHIVE", result.company(), "Archived company ");
+    }
+
+    /** Bring an archived company back to lists and pickers. Restoring an active company changes nothing. */
+    @PostMapping("/companies/{id}/restore")
+    @PreAuthorize("hasAuthority('org.company.write')")
+    public CompanyResponse restoreCompany(@PathVariable UUID id) {
+        CompanyService.StatusChange result = companies.restore(id);
+        if (result.changed()) auditCompany("RESTORE", result.company(), "Restored company ");
+        return result.company();
+    }
+
+    /**
+     * One audit.events row per company archived or restored (the Audit logs
+     * "Company" resource). Written after the change is saved, and best-effort:
+     * a failed audit write never undoes or fails the change itself.
+     */
+    private void auditCompany(String action, CompanyResponse company, String summary) {
+        if (audit == null) return;
+        try {
+            audit.record("org", action, "COMPANY", company.id(), summary + company.name());
+        } catch (Exception e) {
+            log.warn("Company {} audit not written for {}: {}", action, company.id(), e.getMessage());
+        }
     }
 
     // -- Branches ------------------------------------------------------------

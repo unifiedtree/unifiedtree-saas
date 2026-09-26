@@ -150,10 +150,42 @@ export function useUpdateCompany() {
   })
 }
 
+/**
+ * DELETE /v1/hrms/companies/{id} — archive. The server refuses (422) the
+ * workspace's last active company (LAST_ACTIVE_COMPANY) and one people still
+ * work at (COMPANY_HAS_EMPLOYEES); the error message says what to do first.
+ */
 export function useArchiveCompany() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiJson<void>(`/v1/hrms/companies/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'companies'] }),
+  })
+}
+
+/**
+ * Every company, archived ones too (they come back with `active: false`), for
+ * the Companies & Branches "Inactive" filter. Pickers keep useCompanies, which
+ * lists active companies only. Its key sits under ['hrms', 'companies'], so
+ * anything that refreshes the company list refreshes this too.
+ */
+export function useCompaniesWithArchived(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'companies', 'with-archived'],
+    queryFn: () => apiJson<Company[]>('/v1/hrms/companies?includeArchived=true'),
+    enabled,
+  })
+}
+
+/**
+ * POST /v1/hrms/companies/{id}/restore — an archived company shows in lists
+ * and pickers again. Refreshes every company list (useCompanies included), so
+ * each company picker gets it back.
+ */
+export function useRestoreCompany() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiJson<Company>(`/v1/hrms/companies/${id}/restore`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'companies'] }),
   })
 }

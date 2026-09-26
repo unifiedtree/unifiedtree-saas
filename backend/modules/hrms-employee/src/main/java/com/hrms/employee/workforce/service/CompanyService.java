@@ -28,8 +28,16 @@ public class CompanyService {
 
     @Transactional(readOnly = true)
     public List<CompanyResponse> list() {
+        return list(false);
+    }
+
+    /** {@code includeArchived}: also return archived (inactive) companies, for the "Inactive" filter. */
+    @Transactional(readOnly = true)
+    public List<CompanyResponse> list(boolean includeArchived) {
         Map<UUID, Integer> counts = headcount.byColumn("company_id");
-        return repository.findAllByActiveTrueOrderByNameAsc()
+        return (includeArchived
+                ? repository.findAllByOrderByNameAsc()
+                : repository.findAllByActiveTrueOrderByNameAsc())
                 .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
@@ -120,11 +128,47 @@ public class CompanyService {
         }
     }
 
-    public void archive(UUID id) {
+    /** The company after an archive or restore, and whether this call changed it (false: it already was). */
+    public record StatusChange(CompanyResponse company, boolean changed) { }
+
+    /**
+     * Soft archive: the company leaves every list and picker; its people and
+     * records keep pointing at it. Refused for the workspace's last active
+     * company (the app always needs one) and while people still work there
+     * (the live headcount this company's response reports), so nobody is left
+     * under a company no screen shows. Archiving an archived company changes
+     * nothing.
+     */
+    public StatusChange archive(UUID id) {
         Company c = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Company " + id + " not found"));
+        if (!c.isActive()) return new StatusChange(toResponse(c), false);
+        if (!repository.existsByActiveTrueAndIdNot(id)) {
+            throw new BusinessRuleException(
+                    "This is the only active company. Add or restore another company before archiving this one.",
+                    "LAST_ACTIVE_COMPANY");
+        }
+        int people = headcount.countFor("company_id", id);
+        if (people > 0) {
+            throw new BusinessRuleException(
+                    (people == 1 ? "1 person still works at " : people + " people still work at ") + c.getName()
+                            + ". Move them to another company or record their exit first.",
+                    "COMPANY_HAS_EMPLOYEES");
+        }
         c.setActive(false);
-        repository.save(c);
+        return new StatusChange(toResponse(repository.save(c), 0), true);
+    }
+
+    /**
+     * Bring an archived company back: it shows in lists and pickers again.
+     * Restoring an active company changes nothing (as restoring a branch).
+     */
+    public StatusChange restore(UUID id) {
+        Company c = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Company " + id + " not found"));
+        if (c.isActive()) return new StatusChange(toResponse(c), false);
+        c.setActive(true);
+        return new StatusChange(toResponse(repository.save(c)), true);
     }
 
     /** Upper-cased TAN (AAAA99999A, checked on the request); blank = none. */

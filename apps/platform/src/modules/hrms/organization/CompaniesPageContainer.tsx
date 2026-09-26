@@ -9,18 +9,29 @@ import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import {
   useCompanies, useBranches, useCreateCompany, useUpdateCompany, useArchiveCompany,
   useCreateBranch, useUpdateBranch, useSaveBranchGeofence, useArchiveBranch,
+  useCompaniesWithArchived, useRestoreCompany, type Company,
 } from '../api/useOrg'
 import { useHrConfig, useUpdateHrConfig } from '../api/useSettings'
 
 const errText = (e: unknown) => (e as Error)?.message || 'Please try again.'
 
+/** A company as the page draws it. */
+const toCompanyView = (c: Company) => ({
+  id: c.id, name: c.name, legal: c.legalName || '', industry: c.industry || '', currency: c.currency || 'INR', country: c.country || 'India',
+  desc: '', cin: c.registrationNumber || '', pan: c.panNumber || '', gstin: c.gstin || '', employees: c.employeeCount ?? 0,
+  status: c.active === false ? 'INACTIVE' : 'ACTIVE',
+})
+
 export function CompaniesPageContainer() {
   const navigate = useNavigate()
   const mobile = useIsMobile()
   const canEdit = usePermission(P.ORG_COMPANY_WRITE)
+  const canReadCompanies = usePermission(P.ORG_COMPANY_READ)
   const canGeofence = usePermission('org.geofence.write' as any)
 
   const companiesQ = useCompanies()
+  // Archived companies too, for the same "Inactive" filter (only the archived ones are used from it).
+  const withArchivedQ = useCompaniesWithArchived(canReadCompanies)
   // Archived branches too, for the "Inactive" filter (they come back with active: false).
   const branchesQ = useBranches(undefined, { includeArchived: true })
   const [picked, setPicked] = useState<string | undefined>()
@@ -31,17 +42,16 @@ export function CompaniesPageContainer() {
   const createCompany = useCreateCompany()
   const updateCompany = useUpdateCompany()
   const archiveCompany = useArchiveCompany()
+  const restoreCompany = useRestoreCompany()
   const createBranch = useCreateBranch()
   const updateBranch = useUpdateBranch()
   const saveGeofence = useSaveBranchGeofence()
   const archiveBranch = useArchiveBranch()
   const updateHrConfig = useUpdateHrConfig()
 
-  const companies = useMemo(() => companiesRaw.map((c) => ({
-    id: c.id, name: c.name, legal: c.legalName || '', industry: c.industry || '', currency: c.currency || 'INR', country: c.country || 'India',
-    desc: '', cin: c.registrationNumber || '', pan: c.panNumber || '', gstin: c.gstin || '', employees: c.employeeCount ?? 0,
-    status: c.active === false ? 'INACTIVE' : 'ACTIVE',
-  })), [companiesRaw])
+  const companies = useMemo(() => companiesRaw.map(toCompanyView), [companiesRaw])
+  // An older server ignores includeArchived and sends active companies only: then none show as archived.
+  const archivedCompanies = useMemo(() => (withArchivedQ.data ?? []).filter((c) => c.active === false).map(toCompanyView), [withArchivedQ.data])
 
   const allBranches = useMemo(() => (branchesQ.data ?? []).map((b) => ({
     id: b.id, companyId: b.companyId, name: b.name, code: b.code || '', city: b.city || '', state: b.state || '', country: b.country || 'India',
@@ -66,6 +76,8 @@ export function CompaniesPageContainer() {
         companies={companies}
         branches={branches}
         archivedBranches={archivedBranches}
+        archivedCompanies={archivedCompanies}
+        archivedCompaniesError={withArchivedQ.isError}
         branchesLoading={branchesQ.isLoading}
         branchesError={branchesQ.isError}
         companyId={selectedId}
@@ -73,6 +85,7 @@ export function CompaniesPageContainer() {
         onPickCompany={setPicked}
         onNavigate={(path: string) => navigate(path)}
         onRetry={() => { companiesQ.refetch(); branchesQ.refetch() }}
+        onRetryArchived={() => { withArchivedQ.refetch() }}
         onSaveCompany={async (c: any) => {
           // Send every field as typed ("" clears it): the update endpoint skips nulls, so undefined would keep the old value.
           const body = { name: c.name, legalName: c.legal ?? '', industry: c.industry ?? '', currency: c.currency, country: c.country, registrationNumber: c.cin ?? '', panNumber: c.pan ?? '', gstin: c.gstin ?? '' }
@@ -123,12 +136,19 @@ export function CompaniesPageContainer() {
             return true
           } catch (e) { toast.error('Could not restore the branch', { description: errText(e) }); return false }
         }}
+        onRestoreCompany={async (c: { id: string; name: string }) => {
+          try {
+            await restoreCompany.mutateAsync(c.id)
+            toast.success(`${c.name} restored`, { description: 'It shows in lists and pickers again.' })
+            return true
+          } catch (e) { toast.error('Could not restore the company', { description: errText(e) }); return false }
+        }}
         onArchive={async (kind: 'branch' | 'company', id: string) => {
           try {
             if (kind === 'branch') { await archiveBranch.mutateAsync(id); toast.success('Branch archived') } else {
               await archiveCompany.mutateAsync(id)
               if (id === selectedId) setPicked(undefined)
-              toast.success('Company archived')
+              toast.success('Company archived', { description: 'To bring it back, choose Inactive in the status filter.' })
             }
             return true
           } catch (e) { toast.error(kind === 'branch' ? 'Could not archive the branch' : 'Could not archive the company', { description: errText(e) }); return false }
