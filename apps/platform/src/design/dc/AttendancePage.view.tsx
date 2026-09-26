@@ -3,6 +3,7 @@
 import { Fragment } from 'react'
 import { HrButton } from '@/shared/components/hr'
 import { EmptyState } from '@/shared/components/EmptyState'
+import { MonthField } from '@/shared/components/calendar'
 import { arr, txt } from './dc-runtime'
 import { AttCalendar } from './AttCalendar'
 import { AttDailyLogs } from './AttDailyLogs'
@@ -89,10 +90,8 @@ export function AttendancePageView({ v }: { v: any }) {
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px"}}>
                 {v.actAnalytics ? (
                   <>
-                    <span style={{display: "inline-flex", alignItems: "center", gap: "7px", height: "40px", padding: "0 12px", boxSizing: "border-box", borderRadius: "10px", background: "#fff", border: "1px solid #e2e8f0", fontSize: "13px", fontWeight: "600", color: "#334155", whiteSpace: "nowrap"}}>
-                      {txt(v.icCal)}{txt(v.monthLabel)}
-                    </span>
-                    <HrButton variant="ghost" onClick={v.goReport} data-tip="→ /hrms/reports?type=attendance&month=2026-09">
+                    <MonthField value={v.anMonth} max={v.anMax} onChange={v.pickMonth} aria-label="Month" align="end" style={{width: "196px"}} />
+                    <HrButton variant="ghost" onClick={v.goReport} data-tip={v.reportTip}>
                       {txt(v.icDownload)}{" Download report"}
                     </HrButton>
                   </>

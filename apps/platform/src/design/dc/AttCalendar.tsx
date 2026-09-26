@@ -1,5 +1,6 @@
 // Attendance Analytics · Calendar — ported from the design component
-// AttCalendar.dc.html, for the current month instead of the prototype's Sep 2026.
+// AttCalendar.dc.html, for the chosen month (?month=, this month by default)
+// instead of the prototype's Sep 2026.
 import { DCLogic, dc } from './dc-runtime'
 import { AttCalendarView } from './AttCalendar.view'
 import { dashIcon } from './icons'
@@ -10,8 +11,10 @@ export class AttCalendar extends DCLogic {
   renderVals() {
     const p = this.props, O = p.ov || { daily: {}, holidays: [] }
     const st = p.state || 'live', mobile = !!p.mobile, open = p.onOpenLogs || (() => {}), isEmpty = st === 'empty'
-    const today: string = O.today, sel: string = this.state.sel || today, daily: Record<string, any> = O.daily || {}
-    const td = dt(today), y = td.getFullYear(), mo = td.getMonth(), mon = MON[mo], dim = new Date(y, mo + 1, 0).getDate()
+    const today: string = O.today || '', daily: Record<string, any> = O.daily || {}
+    const ym: string = O.month || today.slice(0, 7)
+    const y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7)) - 1, mon = MON[mo], dim = new Date(y, mo + 1, 0).getDate()
+    const isoOfDay = (d: number) => `${ym}-${String(d).padStart(2, '0')}`
     const hol: Record<string, string> = {}
     ;(O.holidays || []).forEach((h: any) => { hol[h.date] = h.name })
     const rateOf = (r: any) => { const e = (r.present || 0) + (r.absent || 0) + (r.notMarked || 0); return e ? Math.round((r.present / e) * 100) : 0 }
@@ -23,15 +26,22 @@ export class AttCalendar extends DCLogic {
       if (iso > today) return 'future'
       if (hol[iso]) return 'holiday'
       if (isOff(iso)) return 'off'
-      if (isEmpty || !daily[iso]) return 'none'
+      // No one counted that day (before attendance was tracked, e.g. an old month): no data, not 0%.
+      if (isEmpty || !daily[iso] || !daily[iso].total) return 'none'
       return 'work'
     }
+    // The day in the side panel: the one tapped in this month, else today (this month) or the
+    // month's last working day with numbers (a past month), else its last day.
+    let sel: string = this.state.sel && this.state.sel.slice(0, 7) === ym ? this.state.sel : ''
+    if (!sel && today.slice(0, 7) === ym) sel = today
+    for (let d = dim; !sel && d >= 1; d--) if (kind(isoOfDay(d)) === 'work') sel = isoOfDay(d)
+    if (!sel) sel = isoOfDay(dim)
     const TONE = (r: number): [string, string, string] => (r >= 95 ? ['#059669', '#ffffff', 'Great'] : r >= 90 ? ['#a7f3d0', '#065f46', 'Good'] : ['#fde68a', '#92400e', 'Needs a look'])
     const cells: any[] = [], offset = (new Date(y, mo, 1).getDay() + 6) % 7
     let best: any = null, low: any = null
     for (let i = 0; i < offset; i++) cells.push({ blank: true, isDay: false })
     for (let d = 1; d <= dim; d++) {
-      const iso = `${y}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, k = kind(iso), r = daily[iso] || {}
+      const iso = isoOfDay(d), k = kind(iso), r = daily[iso] || {}
       let bg = '#f1f5f9', fg = '#94a3b8', main = '', aria: string
       if (k === 'work') {
         const rt = rateOf(r), t = TONE(rt)

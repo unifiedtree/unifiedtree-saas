@@ -63,8 +63,11 @@ export class AttendancePage extends DCLogic {
     })
     const openLogs = (status: string, date?: string) => { if (nav) nav(`/hrms/attendance?tab=team${status ? '&status=' + status : ''}${date ? '&date=' + date : ''}`) }
     const go = (path: string) => (nav ? nav(path) : toast(path))
+    // Analytics month ('yyyy-MM', from ?month=); a past month is shown whole.
+    const anMonth: string = D.anMonth || (D.today || '').slice(0, 7), anPast = !!D.anPast
+    const anLabel = anMonth ? `${MONTHS[Number(anMonth.slice(5, 7)) - 1]} ${anMonth.slice(0, 4)}` : ''
     const HELP: Record<string, string> = {
-      overview: 'How everyone is doing today and this month. Tap any number to see the people behind it.',
+      overview: anPast ? `How everyone did in ${anLabel}. Tap a bar to see that day’s people.` : 'How everyone is doing today and this month. Tap any number to see the people behind it.',
       calendar: 'Each box is one day. Greener means more people came in. Tap a day to see what happened.',
       team: 'Everyone’s check-in and check-out for the day. Tap a coloured box to see only those people, or tap a person for details.',
       face: 'Every check-in made at a face kiosk. When the camera isn’t sure it’s the right person, it asks you to take a look.',
@@ -82,7 +85,7 @@ export class AttendancePage extends DCLogic {
     const today: string = D.today || ''
     const monthLabel = today ? `${MONTHS[Number(today.slice(5, 7)) - 1]} ${today.slice(0, 4)}` : ''
     const px = {
-      AttOverview: { state: S.ov, ov: D.ov, onRetry: A.retryOv },
+      AttOverview: { state: S.ov, ov: D.ov, onRetry: A.retryOv, onCalendar: () => setTab('calendar') },
       AttCalendar: { state: S.ov, ov: D.ov, onRetry: A.retryOv },
       AttDailyLogs: { state: S.logs, logs: D.logs, date: p.date || '', onDate: A.onDate, onRetry: A.retryLogs, canRegularize: !!p.canRequestFix, canOverride: !!p.canOverride, onChangeStatus: A.openStatus },
       AttFacePunch: { state: S.face, events: face, onRetry: A.retryFace },
@@ -100,11 +103,12 @@ export class AttendancePage extends DCLogic {
       title: noAccess ? 'Attendance Analytics' : (list.find((t) => t[0] === tab) || [])[1] || sec.label,
       crumbSec: noAccess ? 'Attendance Analytics' : sec.label, subtitle: noAccess ? 'Charts and monthly reports are for HR and managers.' : HELP[tab] || '',
       todayLabel: D.todayLabel || '', monthLabel,
+      anMonth, anMax: today, pickMonth: (_e: unknown, ym: string) => { if (A.onMonth) A.onMonth(ym) },
       icModule: dashIcon('clock', 20), icCal: dashIcon('calendar', 14), icChevron: dashIcon('chevronRight', 18), icInfo: dashIcon('info', 16),
       icPencil: dashIcon('pencil', 15), icFile: dashIcon('fileText', 15), icPlus: dashIcon('plus', 15), icDownload: dashIcon('download', 15),
       actAnalytics: section === 'analytics' && isHr, actDaily: section === 'daily' && isHr && !!p.canManual, actShifts: section === 'shifts' && isHr && !!p.canEditShifts,
       goManual: () => go('/hrms/attendance/manual-entry'), goMuster: () => go('/hrms/muster-roll'),
-      goReport: () => go(D.reportLink || '/hrms/reports/attendance-summary'),
+      goReport: () => go(D.reportLink || '/hrms/reports/attendance-summary'), reportTip: '→ ' + (D.reportLink || '/hrms/reports/attendance-summary'),
       addShift: () => { this.setState({ tab: 'schedules', addKey: ss.addKey + 1, newKey: 0, rosterFilter: null }); if (p.onTab) p.onTab('/hrms/shifts', 'schedules') },
       tOverview: is('analytics', 'overview'), tCalendar: is('analytics', 'calendar'), tTeam: is('daily', 'team'), tFace: is('daily', 'face'), tReg: is('daily', 'corrections'), tMine: is('daily', 'my'),
       tReview: is('daily', 'review'), reviewBlock: is('daily', 'review') ? D.reviewBlock : null,

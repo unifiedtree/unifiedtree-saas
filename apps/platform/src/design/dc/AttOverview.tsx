@@ -1,12 +1,13 @@
 // Attendance Analytics · Overview — ported from the design component
 // AttOverview.dc.html. The prototype was fixed to 1–23 Sep 2026; this version
-// draws the current month to date from real data.
+// draws the chosen month from real data: this month to date (with today on
+// top), or a whole past month (its totals on top).
 import { createElement } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { AttOverviewView } from './AttOverview.view'
 import { HrAvatar, HrStatusPill } from '@/shared/components/hr'
 import { dashIcon, dashIconComponent } from './icons'
-import { dt, MON, WD, WDL } from './dates'
+import { dt, MON, MONTHS, WD, WDL } from './dates'
 
 export class AttOverview extends DCLogic {
   state: any = { q: '' }
@@ -16,16 +17,29 @@ export class AttOverview extends DCLogic {
     const c = O.counts || {}, total = c.total || 0
     const expected = (c.present || 0) + (c.absent || 0) + (c.notMarked || 0), rate = expected ? Math.round((c.present / expected) * 100) : 0
     const isLoading = st === 'loading'
+    // The month on show: this month to date, or a whole past month (O.past) whose top numbers are its totals.
+    const today: string = O.today || '', ym: string = O.month || today.slice(0, 7), past = !!O.past
     const dur = (m: number) => { const h = Math.floor(m / 60), mm = m % 60; return h && mm ? `${h}h ${String(mm).padStart(2, '0')}m` : h ? `${h}h` : `${mm}m` }
+    // A past month's numbers are many days, so a tile opens its calendar instead of today's logs.
     const tile = (label: string, color: string, icon: string, value: any, sub: string, status: string) => ({
-      icon: dashIcon(icon, 17), color, label, value: isLoading ? '—' : value, sub, tip: `→ /hrms/attendance?tab=team&status=${status}`, onClick: () => open(status),
+      icon: dashIcon(icon, 17), color, label, value: isLoading ? '—' : value, sub,
+      tip: past ? `→ /hrms/att-analytics?tab=calendar&month=${ym}` : `→ /hrms/attendance?tab=team&status=${status}`,
+      onClick: () => (past ? p.onCalendar && p.onCalendar() : open(status)),
     })
-    const tiles = [
-      tile('Came in', 'green', 'userCheck', c.present ?? 0, `${rate}% of people expected`, 'PRESENT'),
-      tile('Late', 'orange', 'clock', c.late ?? 0, O.graceMin != null ? `After the ${O.graceMin}-min grace time` : 'After each shift’s grace time', 'LATE'),
-      tile('On leave', 'purple', 'userMinus', c.onLeave ?? 0, `+ ${c.wfh ?? 0} working from home`, 'ON_LEAVE'),
-      tile('Not marked', 'blue', 'help', c.notMarked ?? 0, `+ ${c.absent ?? 0} marked absent`, 'NOT_MARKED'),
-    ]
+    const grace = O.graceMin != null ? `After the ${O.graceMin}-min grace time` : 'After each shift’s grace time'
+    const tiles = past
+      ? [
+        tile('Came in', 'green', 'userCheck', c.present ?? 0, `${rate}% of expected days`, 'PRESENT'),
+        tile('Late', 'orange', 'clock', c.late ?? 0, grace, 'LATE'),
+        tile('On leave', 'purple', 'userMinus', c.onLeave ?? 0, `+ ${c.wfh ?? 0} working from home`, 'ON_LEAVE'),
+        tile('Absent', 'red', 'userX', c.absent ?? 0, 'No check-in and no leave', 'ABSENT'),
+      ]
+      : [
+        tile('Came in', 'green', 'userCheck', c.present ?? 0, `${rate}% of people expected`, 'PRESENT'),
+        tile('Late', 'orange', 'clock', c.late ?? 0, grace, 'LATE'),
+        tile('On leave', 'purple', 'userMinus', c.onLeave ?? 0, `+ ${c.wfh ?? 0} working from home`, 'ON_LEAVE'),
+        tile('Not marked', 'blue', 'help', c.notMarked ?? 0, `+ ${c.absent ?? 0} marked absent`, 'NOT_MARKED'),
+      ]
     const MIX: [string, number, string, string][] = [
       ['On time', c.regular, '#10b981', ''], ['Late', c.late, '#f59e0b', 'LATE'], ['Half day', c.halfDay, '#84cc16', ''], ['Working from home', c.wfh, '#14b8a6', 'WFH'],
       ['On leave', c.onLeave, '#a855f7', 'ON_LEAVE'], ['Absent', c.absent, '#f43f5e', 'ABSENT'], ['Not marked yet', c.notMarked, '#64748b', 'NOT_MARKED'], ['Day off', c.other, '#cbd5e1', ''],
@@ -34,19 +48,24 @@ export class AttOverview extends DCLogic {
     let acc = 0
     const mix = MIX.map(([label, n0, color, status]) => {
       const n = n0 || 0, len = (n / T) * C
+      // Rows open today's logs; a past month's rows are many days, so they don't open.
+      const opens = !!status && !past
       const m = {
         label, n, color, pct: Math.round((n / T) * 100) + '%', dash: `${Math.max(0, len - 2).toFixed(2)} ${C.toFixed(2)}`, off: (-acc).toFixed(2), title: `${label}: ${n}`,
-        canOpen: !!status, noOpen: !status, tip: status ? `→ /hrms/attendance?tab=team&status=${status}` : '', onClick: () => { if (status) open(status) },
+        canOpen: opens, noOpen: !opens, tip: opens ? `→ /hrms/attendance?tab=team&status=${status}` : '', onClick: () => { if (opens) open(status) },
       }
       acc += len
       return m
     })
-    const srcTotal = (O.sources || []).reduce((n: number, s: any) => n + s.n, 0) || 1
+    const srcN = (O.sources || []).reduce((n: number, s: any) => n + s.n, 0), srcTotal = srcN || 1
     const sources = (O.sources || []).map((s: any) => ({ label: s.label, n: s.n, icon: dashIcon(s.icon, 17), pct: Math.round((s.n / srcTotal) * 100) + '%', w: ((s.n / srcTotal) * 100).toFixed(1) + '%' }))
     const hol: Record<string, string> = {}
     ;(O.holidays || []).forEach((h: any) => { hol[h.date] = h.name })
-    const today: string = O.today, td = dt(today), y = td.getFullYear(), mo = td.getMonth(), N = td.getDate()
+    const td = dt(today || ym + '-01'), y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7)) - 1
+    // Days drawn: 1 to today this month, every day of a past month.
+    const N = past ? new Date(y, mo + 1, 0).getDate() : td.getDate()
     const mon = MON[mo], f1 = (n: number) => Math.round(n * 10) / 10
+    const monthName = `${MONTHS[mo]} ${y}`
     const W = mobile ? 340 : 720, H = 214, pl = 30, pr = 4, pt = 10, pb = 26, pw = W - pl - pr, ph = H - pt - pb, cw = pw / Math.max(N, 1), bw = Math.max(6, Math.min(20, cw * 0.62))
     let peak = 0
     for (let i = 1; i <= N; i++) { const r = (O.daily || {})[`${y}-${String(mo + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`] || {}; peak = Math.max(peak, (r.present || 0) + (r.absent || 0)) }
@@ -94,14 +113,22 @@ export class AttOverview extends DCLogic {
     const monthKey = `${y}-${String(mo + 1).padStart(2, '0')}`
     return {
       isError: st === 'error', isEmpty: st === 'empty', isLoading, isLive: st === 'live', isDesktop: !mobile, isMobile: mobile,
-      tiles, total, mix, mixAria: `Today: ${mix.map((m) => `${m.n} ${m.label.toLowerCase()}`).join(', ')}`,
-      sources, srcTotal, todayLabel: `${WDL[td.getDay()]}, ${N} ${mon}`, monthChip: `1–${N} ${mon} · ${wdays} working days`,
+      tiles, total, mix, mixAria: `${past ? monthName : 'Today'}: ${mix.map((m) => `${m.n} ${m.label.toLowerCase()}`).join(', ')}`,
+      sources, srcTotal,
+      // Headings: today and this month, or a past month's totals and its days.
+      dayTitle: past ? 'Month in total' : 'Today', monthTitle: past ? 'Day by day' : 'This month', tilesAria: past ? `${monthName} in numbers` : 'Today’s numbers',
+      mixTitle: past ? 'Who was where' : 'Who’s where today', totalUnit: past ? 'days' : 'people',
+      mixSub: past ? `Each person counted once for each working day (${total} in all), grouped by what they were doing.` : `All ${total} people, grouped by what they’re doing. Tap a row to see who.`,
+      srcLine: O.sourcesLoading ? 'Loading…' : O.sourcesMissing ? 'Couldn’t load how people checked in this month.' : `${srcN} ${srcN === 1 ? 'check-in' : 'check-ins'} ${past ? 'in ' + MONTHS[mo] : 'today'}, by the way they punched`,
+      everyoneSub: `Days present, late marks, hours and overtime for ${monthName}`,
+      todayLabel: past ? monthName : `${WDL[td.getDay()]}, ${td.getDate()} ${MON[td.getMonth()]}`, monthChip: `1–${N} ${mon} · ${wdays} working days`,
       legend: [{ label: 'On time', color: '#10b981' }, { label: 'Late', color: '#f59e0b' }, { label: 'Absent', color: '#f43f5e' }, { label: 'Day off', color: '#e2e8f0' }],
       tr: { vb: `0 0 ${W} ${H}`, days, grid, aria: `Daily attendance for 1 to ${N} ${mon}, stacked by on time, late and absent` },
       late, q: this.state.q, setQ: (e: any) => this.setState({ q: e.target.value }), rows, columns,
       rowTips: JSON.stringify(rows.map((r: any) => r.tip)), openRow: (r: any) => r.id && nav('/hrms/employees/' + r.id),
       footLine: `Showing ${rows.length} of ${(O.summary || []).length} people`,
-      goReport: () => nav(O.reportLink || `/hrms/reports/attendance-summary?from=${monthKey}-01&to=${today}`),
+      goReport: () => nav(O.reportLink || `/hrms/reports/attendance-summary?from=${monthKey}-01&to=${O.to || today}`),
+      reportTip: '→ ' + (O.reportLink || `/hrms/reports/attendance-summary?from=${monthKey}-01&to=${O.to || today}`),
       icSearch: dashIcon('search', 15), icChevron: dashIcon('chevronRight', 15), emptyIcon: dashIconComponent('chart'),
       skBig: { style: { height: 300, width: '100%', borderRadius: 18 } }, retry: () => p.onRetry && p.onRetry(),
     }

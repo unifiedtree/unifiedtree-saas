@@ -54,13 +54,13 @@ export function AttOverviewView({ v }: { v: any }) {
             <section aria-labelledby="ov-today" style={{display: "grid", gap: "14px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px"}}>
                 <h2 id="ov-today" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "18px", fontWeight: "800", letterSpacing: "-.01em"}}>
-                  {"Today"}
+                  {txt(v.dayTitle)}
                 </h2>
                 <span style={{padding: "3px 10px", borderRadius: "999px", background: "#fff", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: "600", color: "#475569"}}>
                   {txt(v.todayLabel)}
                 </span>
               </div>
-              <div role="group" aria-label="Today’s numbers" style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "12px"}}>
+              <div role="group" aria-label={v.tilesAria} style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "12px"}}>
                 {arr(v.tiles).map((t: any, $index: number) => (
                   <Fragment key={$index}>
                     <StatTile tile={t} />
@@ -71,10 +71,10 @@ export function AttOverviewView({ v }: { v: any }) {
                 <article style={{flex: "1.25 1 400px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
                   <div>
                     <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "800"}}>
-                      {"Who’s where today"}
+                      {txt(v.mixTitle)}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b", textWrap: "pretty"}}>
-                      {"All "}{txt(v.total)}{" people, grouped by what they’re doing. Tap a row to see who."}
+                      {txt(v.mixSub)}
                     </p>
                   </div>
                   <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "18px 28px"}}>
@@ -96,7 +96,7 @@ export function AttOverviewView({ v }: { v: any }) {
                           {txt(v.total)}
                         </strong>
                         <span style={{marginTop: "5px", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
-                          {"people"}
+                          {txt(v.totalUnit)}
                         </span>
                       </span>
                     </div>
@@ -152,7 +152,7 @@ export function AttOverviewView({ v }: { v: any }) {
                       {"How people checked in"}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
-                      {txt(v.srcTotal)}{" check-ins today, by the way they punched"}
+                      {txt(v.srcLine)}
                     </p>
                   </div>
                   <ul style={{margin: "0", padding: "0", listStyle: "none", display: "grid", gap: "14px"}}>
@@ -187,7 +187,7 @@ export function AttOverviewView({ v }: { v: any }) {
             <section aria-labelledby="ov-month" style={{display: "grid", gap: "14px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px"}}>
                 <h2 id="ov-month" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "18px", fontWeight: "800", letterSpacing: "-.01em"}}>
-                  {"This month"}
+                  {txt(v.monthTitle)}
                 </h2>
                 <span style={{padding: "3px 10px", borderRadius: "999px", background: "#fff", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: "600", color: "#475569"}}>
                   {txt(v.monthChip)}
@@ -222,7 +222,7 @@ export function AttOverviewView({ v }: { v: any }) {
                       <Fragment key={$index}>
                         <line x1={g?.x1} x2={g?.x2} y1={g?.y} y2={g?.y} stroke="#e5ebe9" strokeDasharray={g?.dash} />
                         <text x={g?.tx} y={g?.ty} textAnchor="end" fontSize="10.5" fill="#94a3b8">
-                          {txt(g?.label)}
+                          {g?.label}
                         </text>
                       </Fragment>
                     ))}
@@ -237,7 +237,7 @@ export function AttOverviewView({ v }: { v: any }) {
                           <rect x={d?.x} y={d?.y2} width={d?.w} height={d?.h2} rx="2.5" fill="#f59e0b" />
                           <rect x={d?.x} y={d?.y3} width={d?.w} height={d?.h3} rx="2.5" fill="#f43f5e" />
                           <text x={d?.cx} y={d?.ly} textAnchor="middle" fontSize="10.5" fontWeight={d?.lw} fill={d?.lc}>
-                            {txt(d?.label)}
+                            {d?.label}
                           </text>
                         </g>
                       </Fragment>
@@ -278,7 +278,7 @@ export function AttOverviewView({ v }: { v: any }) {
                       {"Everyone’s month"}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
-                      {"Days present, late marks, hours and overtime for September"}
+                      {txt(v.everyoneSub)}
                     </p>
                   </div>
                   <label style={{position: "relative", flex: "0 1 280px", minWidth: "200px"}}>
@@ -328,7 +328,7 @@ export function AttOverviewView({ v }: { v: any }) {
                   <span>
                     {txt(v.footLine)}
                   </span>
-                  <button type="button" onClick={v.goReport} data-tip="→ /hrms/reports?type=attendance&month=2026-09" style={{display: "inline-flex", alignItems: "center", gap: "4px", padding: "0", border: "0", background: "none", font: "inherit", fontWeight: "700", color: "#0f6e56", cursor: "pointer"}}>
+                  <button type="button" onClick={v.goReport} data-tip={v.reportTip} style={{display: "inline-flex", alignItems: "center", gap: "4px", padding: "0", border: "0", background: "none", font: "inherit", fontWeight: "700", color: "#0f6e56", cursor: "pointer"}}>
                     {"Open the full report "}{txt(v.icChevron)}
                   </button>
                 </div>
