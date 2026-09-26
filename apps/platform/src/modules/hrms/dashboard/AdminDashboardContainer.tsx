@@ -1,8 +1,14 @@
 // Real-data container for the redesigned Company Admin Dashboard
 // (design/dc/AdminDashboard). Every number comes from an existing endpoint;
 // each dashboard section gets its own loading / empty / error state.
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+//
+// The date (?date= in the URL) drives every card: a past day asks each endpoint
+// for that day (`date=`, the history view: headcount from joining / exit dates
+// and status history, the day's attendance with the people employed then, the
+// requests pending then, the payroll months up to it…). Today's view sends the
+// same requests as before. Seats have no history: they say "As of today".
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
@@ -15,22 +21,25 @@ import { AdminDashboard, type SectionKey, type SectionStatus, type ShowKey } fro
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, istHour, addDays, dt, fmtShort, fmtLong, MON } from '@/design/dc/dates'
 import { useCompanies } from '../api/useOrg'
-import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals } from '../api/useAttendance'
+import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals, type TeamDashboardResponse, type DailyAttendanceCounts } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useLeaveOverview } from '../api/useLeave'
 import { useHeadcountReport, fetchHeadcountWorkbook } from '../api/useReports'
-import { useActivityFeed, activityActor } from '../api/useActivity'
+import { useActivityFeed, activityActor, type AuditPageResponse } from '../api/useActivity'
 import { useSeatsUsage } from '../api/useSeats'
 import { useHolidays } from '../api/useSettings'
 import { useMilestones, useRetirementsDue, type Milestone } from '../api/useMilestones'
-import { useUpcomingProbations } from '../api/useProbation'
+import { useUpcomingProbations, type UpcomingProbation } from '../api/useProbation'
 import { useRuns } from '../api/usePayrollRuns'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import { ProjectProductivity } from './ProjectProductivity'
 import { headcountFileName, headcountSheets } from './headcountWorkbook'
 import { saveAndRecord, xlsxBlob } from '@/shared/export/fileExport'
+import { endOfIstDay, monthToDate, parseDashboardDate, payrollWindow } from './dashboardDate'
 
-interface Stats { activeEmployees?: number; openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string }
+interface Stats { activeEmployees?: number; openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string
+  /** Past dates only (the history view): everyone on the roll that day, and the month's joiners / leavers up to it. */
+  headcount?: number; joinedInMonth?: number; leftInMonth?: number }
 interface Alert { type: string; count: number; label: string; path: string }
 interface Notice { id: string; title: string; body: string; expiresOn?: string; createdAt: string }
 interface Project { id: string; name: string; status: string; total: number; completed: number }
@@ -64,8 +73,33 @@ export function AdminDashboardContainer() {
   const confirm = useConfirmDialog()
   const mobile = useIsMobile()
   const today = istToday()
-  const [date, setDate] = useState<string | null>(null)
+  // The date is kept in the URL (?date=yyyy-MM-dd): a refresh or Back keeps it.
+  // Only past days are kept; today, a later day or a bad value is today's view.
+  const [params, setParams] = useSearchParams()
+  const rawDate = params.get('date')
+  const parsed = parseDashboardDate(rawDate, today)
+  const date = parsed.date
+  const setDate = (iso: string | null) => setParams((prev) => {
+    const next = new URLSearchParams(prev)
+    if (iso && iso < today) next.set('date', iso)
+    else next.delete('date')
+    return next
+  }, { replace: true })
+  const futureNoted = useRef(false)
+  useEffect(() => {
+    if (!rawDate || date) return
+    // A later day (or not a date) can't be shown: say so once and drop it from the URL.
+    if (parsed.future && !futureNoted.current) {
+      futureNoted.current = true
+      toast.info('Showing today', { description: 'The dashboard can show today or an earlier date, not a date after today.' })
+    }
+    setDate(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawDate, date, parsed.future])
   const sel = date || today
+  const isPast = !!date
+  /** `&date=` for the endpoints that take a past day; nothing for today's view (the same request as before). */
+  const dq = isPast ? `&date=${sel}` : ''
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [noticePage, setNoticePage] = useState(0)
@@ -104,21 +138,32 @@ export function AdminDashboardContainer() {
   // ── data ───────────────────────────────────────────────────────────────────
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id as string | undefined
-  const team = useTeamDashboard(sel, undefined, canReadTeam)
-  const trend = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam)
-  const directory = useEmployeeDirectory({ companyId, pageSize: 1 }, { enabled: canReadEmployees && !!companyId && !canReadTeam })
-  const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}`), enabled: canReadCompany && !!companyId })
-  const alerts = useQuery({ queryKey: ['dashboard', 'alerts', companyId], queryFn: () => apiJson<Alert[]>('/v1/admin/dashboard/alerts'), enabled: canReadCompany && !!companyId })
+  // Attendance: today's view keeps its hooks; a past day asks for the team as it was then
+  // (includeLeavers: people who have left since count on the days they worked) and a trend ending on it.
+  const teamToday = useTeamDashboard(sel, undefined, canReadTeam && !isPast)
+  const teamPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'history', sel], queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?date=${sel}&includeLeavers=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
+  const team = isPast ? teamPast : teamToday
+  const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast)
+  const trendPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'history', sel], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${addDays(sel, -30)}&to=${sel}&includeLeavers=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
+  const trend = isPast ? trendPast : trendToday
+  const directory = useEmployeeDirectory({ companyId, pageSize: 1 }, { enabled: canReadEmployees && !!companyId && !canReadTeam && !isPast })
+  const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId, date], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}${dq}`), enabled: canReadCompany && !!companyId })
+  const alerts = useQuery({ queryKey: ['dashboard', 'alerts', companyId, date], queryFn: () => apiJson<Alert[]>(`/v1/admin/dashboard/alerts${isPast ? `?date=${sel}` : ''}`), enabled: canReadCompany && !!companyId })
   const seats = useSeatsUsage({ enabled: canBilling })
-  const holidays = useHolidays(companyId ?? '', Number(today.slice(0, 4)))
-  const headcount = useHeadcountReport(canReadEmployees && canExport ? (companyId ?? null) : null)
-  const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId], queryFn: () => apiJson<{ id: string; name: string; department?: string | null; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}`), enabled: canReadPerformance && !!companyId })
-  const onboarding = useQuery({ queryKey: ['admin-dashboard', 'onboarding', companyId], queryFn: () => apiJson<{ id: string; name: string; status: string; completed: number; total: number }[]>(`/v1/admin/dashboard/onboarding?companyId=${companyId}`), enabled: canReadOnboarding && !!companyId })
-  const hiring = useQuery({ queryKey: ['admin-dashboard', 'hiring', companyId], queryFn: () => apiJson<{ openJobs: number; stages: { stage: string; count: number }[] }>(`/v1/admin/dashboard/hiring?companyId=${companyId}`), enabled: canReadHiring && !!companyId })
-  const projects = useQuery({ queryKey: ['hrms', 'projects', companyId], queryFn: () => apiJson<Project[]>(`/v1/hrms/projects?companyId=${companyId}`), enabled: canReadProjects && !!companyId })
+  const holidays = useHolidays(companyId ?? '', Number(sel.slice(0, 4)))
+  const headcount = useHeadcountReport(canReadEmployees && canExport ? (companyId ?? null) : null, isPast ? sel : undefined)
+  const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId, date], queryFn: () => apiJson<{ id: string; name: string; department?: string | null; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}${dq}`), enabled: canReadPerformance && !!companyId })
+  const onboarding = useQuery({ queryKey: ['admin-dashboard', 'onboarding', companyId, date], queryFn: () => apiJson<{ id: string; name: string; status: string; completed: number; total: number }[]>(`/v1/admin/dashboard/onboarding?companyId=${companyId}${dq}`), enabled: canReadOnboarding && !!companyId })
+  const hiring = useQuery({ queryKey: ['admin-dashboard', 'hiring', companyId, date], queryFn: () => apiJson<{ openJobs: number; stages: { stage: string; count: number }[] }>(`/v1/admin/dashboard/hiring?companyId=${companyId}${dq}`), enabled: canReadHiring && !!companyId })
+  const projects = useQuery({ queryKey: isPast ? ['hrms', 'projects', companyId, 'on', sel] : ['hrms', 'projects', companyId], queryFn: () => apiJson<Project[]>(`/v1/hrms/projects?companyId=${companyId}${dq}`), enabled: canReadProjects && !!companyId })
   const runs = useRuns({ companyId }, { enabled: hasPayroll && !!companyId })
-  const activity = useActivityFeed(5, canAudit)
-  const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, noticePage], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=${noticePage}&size=${NOTICES_PER_PAGE}`), enabled: !!companyId })
+  const activityToday = useActivityFeed(5, canAudit && !isPast)
+  // A past day: the five latest events up to the end of it.
+  const activityPast = useQuery({ queryKey: ['hrms', 'activity', 'feed', 5, 'to', sel], queryFn: () => apiJson<AuditPageResponse>(`/v1/audit/events?page=0&size=5&to=${encodeURIComponent(endOfIstDay(sel))}`), enabled: canAudit && isPast, staleTime: 60_000 })
+  const activity = isPast ? activityPast : activityToday
+  const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, noticePage, date], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=${noticePage}&size=${NOTICES_PER_PAGE}${dq}`), enabled: !!companyId })
+  // A different day starts the notices from their first page.
+  useEffect(() => { setNoticePage(0) }, [date])
   // Archiving the last notice on a page steps back to the page before.
   const noticePages = Math.max(1, Math.ceil((notices.data?.totalElements ?? 0) / NOTICES_PER_PAGE))
   useEffect(() => { if (notices.data && noticePage > 0 && noticePage >= noticePages) setNoticePage(noticePages - 1) }, [notices.data, noticePage, noticePages])
@@ -128,7 +173,10 @@ export function AdminDashboardContainer() {
   sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6)
   const retirementDays = Math.round((sixMonthsOut.getTime() - dt(today).getTime()) / 86400000)
   const retirementsDue = useRetirementsDue(retirementDays, { companyId, enabled: canReadEmployees && !!companyId })
-  const probations = useUpcomingProbations(30, canReadEmployees)
+  const probationsToday = useUpcomingProbations(30, canReadEmployees && !isPast)
+  // A past day: people on probation then whose probation ended within 30 days of it.
+  const probationsPast = useQuery({ queryKey: ['hrms', 'probation', 'upcoming', 30, 'on', sel], queryFn: () => apiJson<UpcomingProbation[]>(`/v1/probation/upcoming?days=30&date=${sel}`), enabled: canReadEmployees && isPast, staleTime: 60_000 })
+  const probations = isPast ? probationsPast : probationsToday
   const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
   const leaveOverview = useLeaveOverview()
 
@@ -161,7 +209,7 @@ export function AdminDashboardContainer() {
   // ── view data (shapes follow the design's sample data) ──────────────────────
   const data = useMemo(() => {
     // One bucket per person, the same numbers as Attendance & Time (see attendanceBuckets.ts).
-    const total = team.data ? team.data.staffStatuses.length : directory.data?.totalElements ?? 0
+    const total = team.data ? team.data.staffStatuses.length : isPast ? stats.data?.headcount ?? 0 : directory.data?.totalElements ?? 0
     const c = team.data
       ? dayBuckets(team.data, today)
       : { total, present: 0, regular: 0, late: 0, halfDay: 0, wfh: 0, onLeave: 0, notMarked: 0, absent: 0, earlyOut: 0, other: 0 }
@@ -178,8 +226,10 @@ export function AdminDashboardContainer() {
       payrollMonths.set(m, (payrollMonths.get(m) || 0) + Number(run.totalGross || 0))
       if (!monthRun.has(m)) monthRun.set(m, run.id)
     }
-    // A month's bar opens that month's run (the runs list has no month filter).
-    const payroll = [...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([month, gross]) => ({
+    // A month's bar opens that month's run (the runs list has no month filter). Today: the last six finalized
+    // months, as before; a past date: the six up to that date's month.
+    const finalized = [...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).map(([month, gross]) => ({ month, gross }))
+    const payroll = (isPast ? payrollWindow(finalized, sel.slice(0, 7)) : finalized.slice(-6)).map(({ month, gross }) => ({
       month, gross, label: MON[Number(month.slice(5, 7)) - 1], title: `${MON[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`,
       path: monthRun.has(month) ? `/hrms/payroll/runs/${monthRun.get(month)}` : `/hrms/payroll/runs?month=${month}`,
     }))
@@ -199,6 +249,8 @@ export function AdminDashboardContainer() {
         active: st.activeEmployees, openRoles: st.openRoles, complianceDue: st.complianceDue, complianceDone: st.complianceCompleted,
         payrollMonth: st.month, payrollGross: st.monthlyPayroll ?? null, hasPayrollFigure: 'monthlyPayroll' in st,
         pipeline: hiring.data ? hiring.data.stages.reduce((n, x) => n + x.count, 0) : undefined,
+        // The history view: the month's joiners and leavers up to the day ("2 joined · 1 left, 1–14 Mar 2025").
+        monthMoves: isPast && st.joinedInMonth != null ? `${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${monthToDate(sel)}` : undefined,
       } : {},
       alerts: alerts.data ?? [],
       seats: seats.data ? { used: seats.data.current, purchased: seats.data.purchased } : { used: 0, purchased: 0 },
@@ -217,7 +269,7 @@ export function AdminDashboardContainer() {
         const record = e.resourceName?.trim() || ''
         const summary = e.summary?.trim() || ''
         const words = summary || `${verb(e.action || 'update')}${e.resourceType ? ' ' + humanise(e.resourceType) : ''}`
-        return { id: e.id, type, actor: activityActor(e), action: words, record: summary && record && summary.includes(record) ? '' : record, path: e.resourcePath || '/audit-logs', rel: relTime(e.occurredAt), time: clock(e.occurredAt) }
+        return { id: e.id, type, actor: activityActor(e), action: words, record: summary && record && summary.includes(record) ? '' : record, path: e.resourcePath || '/audit-logs', rel: isPast && e.occurredAt ? fmtShort(istToday(new Date(e.occurredAt))) : relTime(e.occurredAt), time: clock(e.occurredAt) }
       }),
       notices: (notices.data?.content ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body, published: fmtShort(n.createdAt.slice(0, 10)), until: n.expiresOn ? fmtShort(n.expiresOn) : null, expiryIso: n.expiresOn || '' })),
       noticeTotal: notices.data?.totalElements,
@@ -229,9 +281,19 @@ export function AdminDashboardContainer() {
           : milestones.data?.retirements ?? []).map((m) => milestone(m, 'r')),
       },
       probations: (probations.data ?? []).map((p) => ({ id: p.employeeId, code: p.employeeCode, name: p.employeeName, title: p.jobTitle || '', manager: p.managerName || '—', end: fmtShort(p.probationEndDate), days: p.daysRemaining })),
-      ops: { corrections: corrections.data?.totalElements ?? 0, leave: leaveOverview.data?.pendingApprovals ?? 0 },
+      ops: (() => {
+        // A past day: what was pending then, from the dashboard's alerts for that day. Without them
+        // (no permission to read the alerts) the counts are today's and say so.
+        const then = (type: string) => (isPast && alerts.data ? alerts.data.find((a) => a.type === type)?.count : undefined)
+        const c = then('CORRECTIONS'), l = then('LEAVE')
+        return {
+          corrections: c ?? corrections.data?.totalElements ?? 0, leave: l ?? leaveOverview.data?.pendingApprovals ?? 0,
+          correctionsToday: isPast && c == null, leaveToday: isPast && l == null,
+        }
+      })(),
+      isPast,
     }
-  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, retirementsDue.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName])
+  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, retirementsDue.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName, isPast])
 
   const d = data
   const sec: Record<SectionKey, { state: SectionStatus; retry: () => void }> = {
@@ -269,7 +331,8 @@ export function AdminDashboardContainer() {
     canShiftAdmin && canReadTeam && { label: 'Change shifts', icon: 'swap', path: '/hrms/shifts?tab=roster' },
     canRequestLeave && { label: 'Add time-off', icon: 'calendarPlus', path: '/hrms/leave?tab=apply' },
     hasPayroll && { label: 'Run payroll', icon: 'rupee', path: '/hrms/payroll-dashboard' },
-    canViewReports && { label: 'View reports', icon: 'fileText', path: '/hrms/reports' },
+    // A past date: the reports open on that date (Reports Center passes it on to the dated reports).
+    canViewReports && { label: 'View reports', icon: 'fileText', path: isPast ? `/hrms/reports?asOf=${sel}` : '/hrms/reports' },
     canManageOrg && { label: 'Org setup', icon: 'building', path: '/hrms/organization' },
   ].filter(Boolean)
 
@@ -294,12 +357,13 @@ export function AdminDashboardContainer() {
         canReadTeam={canReadTeam}
         canExport={canExport}
         canAddEmployee={canAddEmployee}
-        canManageNotices={canWriteCompany}
+        canManageNotices={canWriteCompany && !isPast}
         exporting={exporting}
         exportName={exportName}
         quickActions={quickActions}
         payRange={(() => {
-          if (!d.payroll.length) return ''
+          // A past date with no finalized months up to it still says which months the chart covers.
+          if (!d.payroll.length) return isPast ? `Up to ${MON[Number(sel.slice(5, 7)) - 1]} ${sel.slice(0, 4)}` : ''
           const first = d.payroll[0], last = d.payroll[d.payroll.length - 1]
           return `${first.month.slice(0, 4) === last.month.slice(0, 4) ? first.label : first.title} – ${last.title}`
         })()}
@@ -330,6 +394,12 @@ export function AdminDashboardContainer() {
       />
       {projectsOpen && companyId && (
         <HrDrawer title="Projects & Productivity" onClose={() => setProjectsOpen(false)} width="max-w-2xl">
+          {/* The card shows the chosen day; this list is where projects are managed, so it is always today's. */}
+          {isPast && (
+            <p role="note" className="mb-4 rounded-lg border border-border-default bg-bg-base px-3 py-2 text-xs text-text-secondary">
+              <strong className="text-text-primary">As of today.</strong> The dashboard card shows {fmtShort(sel)}; the projects and tasks here are today’s, and changes apply today.
+            </p>
+          )}
           <ProjectProductivity companyId={companyId} />
         </HrDrawer>
       )}

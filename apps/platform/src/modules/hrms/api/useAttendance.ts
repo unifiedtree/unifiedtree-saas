@@ -341,12 +341,17 @@ export function useAttendanceTrend(from?: string, to?: string, departmentId?: st
   })
 }
 
-export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true) {
+/**
+ * `includeLeavers` (a past day): the team as it was then, so people who have
+ * left since still show on the days they worked. Off: today's team (as before).
+ */
+export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true, includeLeavers: boolean = false) {
   const params = new URLSearchParams()
   if (date) params.set('date', date)
   if (departmentId) params.set('departmentId', departmentId)
+  if (includeLeavers) params.set('includeLeavers', 'true')
   return useQuery({
-    queryKey: ['hrms', 'attendance', 'dashboard', date, departmentId],
+    queryKey: includeLeavers ? ['hrms', 'attendance', 'dashboard', date, departmentId, 'leavers'] : ['hrms', 'attendance', 'dashboard', date, departmentId],
     queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?${params}`),
     staleTime: 5_000,
     refetchInterval: 60_000,

@@ -3,8 +3,10 @@ import com.hrms.core.exception.BusinessRuleException;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,11 +25,27 @@ public class CompanyNoticeController {
  @GetMapping
  @PreAuthorize("isAuthenticated()")
  @Transactional(readOnly=true)
- public Map<String,Object> list(@RequestParam UUID companyId,@RequestParam(defaultValue="0") int page) {
+ public Map<String,Object> list(@RequestParam UUID companyId,@RequestParam(defaultValue="0") int page,@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date,Authentication auth) {
   if(page<0||page>100000)throw new BusinessRuleException("Invalid page","NOTICE_PAGE_INVALID");
+  // A past day lists notices archived since, so it is the dashboard's company
+  // view only (org.company.read); anyone else gets today's list, as before.
+  LocalDate past=DashboardSummaryController.pastDate(date);
+  if(past!=null&&canReadCompany(auth))return listOn(companyId,page,past);
   String where=" WHERE tenant_id=? AND company_id=? AND NOT archived AND (expires_on IS NULL OR expires_on>=CURRENT_DATE)";
   return Map.of("content",jdbc.queryForList("SELECT id,title,body,expires_on AS \"expiresOn\",created_at AS \"createdAt\" FROM hrms.company_notices"+where+" ORDER BY created_at DESC,id LIMIT 5 OFFSET ?",TenantContext.requireTenantId(),companyId,page*5),"totalElements",jdbc.queryForObject("SELECT count(*) FROM hrms.company_notices"+where,Long.class,TenantContext.requireTenantId(),companyId));
  }
+ /**
+  * The notices that were up at the end of a past day (the dashboard's history
+  * view): published by then, not yet expired on that day, and not archived, or
+  * archived after it (archiving is a notice's last change, so its updated_at).
+  */
+ private Map<String,Object> listOn(UUID companyId,int page,LocalDate date){
+  java.sql.Timestamp end=java.sql.Timestamp.from(DashboardAsOf.endOf(date));
+  String where=" WHERE tenant_id=? AND company_id=? AND created_at<? AND (expires_on IS NULL OR expires_on>=?) AND (NOT archived OR updated_at>=?)";
+  UUID tenant=TenantContext.requireTenantId();
+  return Map.of("content",jdbc.queryForList("SELECT id,title,body,expires_on AS \"expiresOn\",created_at AS \"createdAt\" FROM hrms.company_notices"+where+" ORDER BY created_at DESC,id LIMIT 5 OFFSET ?",tenant,companyId,end,date,end,page*5),"totalElements",jdbc.queryForObject("SELECT count(*) FROM hrms.company_notices"+where,Long.class,tenant,companyId,end,date,end));
+ }
+ private static boolean canReadCompany(Authentication auth){return auth!=null&&auth.getAuthorities().stream().anyMatch(a->"org.company.read".equals(a.getAuthority()));}
  private void validate(Input input) {
   if(jdbc.queryForObject("SELECT count(*) FROM org.companies WHERE id=? AND tenant_id=?",Integer.class,input.companyId(),TenantContext.requireTenantId())==0)throw new BusinessRuleException("Company not found","NOTICE_COMPANY_INVALID");
   if(input.expiresOn()!=null&&input.expiresOn().isBefore(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"))))throw new BusinessRuleException("Expiry cannot be in the past","NOTICE_EXPIRY_INVALID");

@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,25 @@ public class ProjectController {
     @GetMapping
     @PreAuthorize("hasAuthority('hrms.project.read')")
     @Transactional(readOnly=true)
-    public List<Map<String,Object>> list(@RequestParam UUID companyId) {
+    public List<Map<String,Object>> list(@RequestParam UUID companyId,
+                                         @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date) {
+        LocalDate past=DashboardSummaryController.pastDate(date);
+        if (past!=null) {
+            // The projects as they stood at the end of a past day (the admin
+            // dashboard's history view): created by then, counting the tasks
+            // added by then and those done by then. A project keeps no status
+            // history; a completed one whose last task was done after that day
+            // was still active on it.
+            java.sql.Timestamp end=java.sql.Timestamp.from(DashboardAsOf.endOf(past));
+            return jdbc.queryForList("""
+                SELECT p.id,p.name,
+                  CASE WHEN p.status='COMPLETED' AND max(t.completed_at)>=? THEN 'ACTIVE' ELSE p.status END AS status,
+                  count(t.id) FILTER(WHERE t.created_at<?) AS total,
+                  count(t.id) FILTER(WHERE t.status='DONE' AND t.completed_at<?) AS completed
+                FROM hrms.projects p LEFT JOIN hrms.project_tasks t ON t.project_id=p.id AND t.tenant_id=p.tenant_id
+                WHERE p.tenant_id=? AND p.company_id=? AND p.created_at<? GROUP BY p.id ORDER BY p.created_at DESC
+                """, end,end,end,TenantContext.requireTenantId(),companyId,end);
+        }
         return jdbc.queryForList("""
             SELECT p.id,p.name,p.status,count(t.id) AS total,
               count(t.id) FILTER(WHERE t.status='DONE') AS completed

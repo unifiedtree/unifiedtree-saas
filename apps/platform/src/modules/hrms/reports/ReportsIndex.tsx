@@ -3,8 +3,9 @@
 // shown only to people allowed to read it, scheduled report emails, and the
 // workspace's download history (the server export log). The company picked
 // here travels with every link (?co=), so the report opens on the same company.
+// A date from the admin dashboard (?asOf=) travels to the reports that take one.
 import { useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrPageHeader, HrSelect, HrStatusPill } from '@/shared/components/hr'
 import { EmptyState } from '@/shared/components/EmptyState'
@@ -14,7 +15,7 @@ import { DesignFrame } from '@/design/dc/DesignFrame'
 import { fileSize } from '@/shared/export/fileExport'
 import { useExportLog, type ExportLogRow } from '@/modules/hrms/api/useReportExports'
 import { useReportCompany } from './useReportCompany'
-import { Ico, KPI_ICON, SECTION } from './ReportKit'
+import { Ico, KPI_ICON, SECTION, isoDate, todayIso } from './ReportKit'
 import { REPORT_LABEL } from './reportSpec'
 import { ScheduledEmails } from './ReportSchedules'
 
@@ -74,9 +75,26 @@ function filtersText(f: ExportLogRow['filters']) {
 }
 const PAGE = 20
 
+/**
+ * The date the admin dashboard was showing (?asOf=, a past day) for each report
+ * that takes one: headcount as of that day, attendance summary and late marks
+ * for its month up to it, attrition for the 12 months up to it. Others: none.
+ */
+function datedParams(to: string, asOf: string): Record<string, string> {
+  const [y, m] = asOf.split('-').map(Number)
+  const monthStart = (back: number) => isoDate(new Date(y, m - 1 - back, 1))
+  if (to === '/hrms/reports/headcount') return { asOf }
+  if (to === '/hrms/reports/attendance-summary' || to === '/hrms/reports/late-marks') return { from: monthStart(0), to: asOf }
+  if (to === '/hrms/reports/attrition') return { from: monthStart(11), to: asOf }
+  return {}
+}
+
 export function ReportsIndex() {
   const navigate = useNavigate()
   const co = useReportCompany()
+  const [params] = useSearchParams()
+  const rawAsOf = params.get('asOf') || ''
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(rawAsOf) && rawAsOf <= todayIso() ? rawAsOf : null
   const head = usePermission(P.HRMS_REPORT_HEADCOUNT), attr = usePermission(P.HRMS_REPORT_ATTRITION), div = usePermission(P.HRMS_REPORT_DIVERSITY)
   const att = usePermission(P.HRMS_REPORT_ATTENDANCE), leave = usePermission(P.HRMS_REPORT_LEAVE)
   const canSchedule = usePermission('hrms.report.schedule.manage')
@@ -85,7 +103,10 @@ export function ReportsIndex() {
   const anyReport = head || attr || div || att || leave
   const log = useExportLog(scope, page, PAGE, anyReport)
   const downloads = log.data?.content ?? []
-  const go = (to: string) => navigate(`${to}${co.company ? `?co=${co.company}` : ''}`)
+  const go = (to: string) => {
+    const q = new URLSearchParams({ ...(co.company ? { co: co.company } : {}), ...(asOf ? datedParams(to, asOf) : {}) }).toString()
+    navigate(`${to}${q ? `?${q}` : ''}`)
+  }
   const EXPORTS = ['PDF', 'Excel', 'CSV']
   const people: Card[] = [
     { key: 'headcount', title: 'Headcount', desc: 'Active, probation and notice-period people by department, on any date.', to: '/hrms/reports/headcount', icon: KPI_ICON.users, color: 'blue', has: ['By department', ...EXPORTS], allowed: head },
@@ -109,6 +130,7 @@ export function ReportsIndex() {
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: -4 }}>
           <div style={{ flex: '0 1 250px', minWidth: 0 }}><HrSelect value={co.company} options={co.options} onChange={co.setCompany} placeholder="Select company…" size="sm" disabled={co.locked} /></div>
           <span style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500 }}>{co.locked ? 'Your company. You can’t browse others.' : 'Reports open on this company.'}</span>
+          {asOf && <span role="note" style={{ fontSize: 12.5, color: '#0a5240', fontWeight: 600 }}>{`Headcount, attendance and attrition reports open on ${d(asOf)}, the date picked on the dashboard.`}</span>}
           <span style={{ flex: 1 }} />
           <HrStatusPill tone="green">{`${count + (analytics ? 1 : 0)} available to you`}</HrStatusPill>
         </div>

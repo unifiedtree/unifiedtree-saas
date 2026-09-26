@@ -110,6 +110,49 @@ public class ProbationService {
 
     // ── Dashboard list ──────────────────────────────────────────────────────
 
+    /**
+     * The list as it stood on a past day (the admin dashboard's history view):
+     * people who had joined by then and were on probation that day (their status
+     * then, from hrms.employee_status_history; the current status when no history
+     * is recorded), with a probation end within {@code daysAhead} of it. Days are
+     * counted from that day. The end date is today's record (an extension made
+     * later shows its new date).
+     */
+    @Transactional
+    public List<UpcomingProbationDto> listUpcomingOn(UUID tenantId, int daysAhead, LocalDate asOf) {
+        bindTenant(tenantId);
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+            WITH status_on AS (
+                SELECT DISTINCT ON (h.employee_id) h.employee_id, h.status
+                  FROM hrms.employee_status_history h
+                 WHERE h.effective_on <= ?
+                 ORDER BY h.employee_id, h.effective_on DESC, h.recorded_at DESC
+            )
+            SELECT e.id, e.employee_code, e.first_name, e.last_name, e.probation_end_date,
+                   d.title AS job_title, m.first_name AS mgr_first, m.last_name AS mgr_last
+              FROM hrms.employees e
+              LEFT JOIN status_on s ON s.employee_id = e.id
+              LEFT JOIN hrms.designations d ON d.id = e.designation_id
+              LEFT JOIN hrms.employees    m ON m.id = e.reporting_manager_id
+             WHERE e.is_active = TRUE
+               AND e.date_of_joining <= ?
+               AND COALESCE(s.status, e.employment_status) = 'PROBATION'
+               AND e.probation_end_date IS NOT NULL
+               AND e.probation_end_date <= ?
+             ORDER BY e.probation_end_date ASC
+            """, asOf, asOf, asOf.plusDays(daysAhead));
+        List<UpcomingProbationDto> out = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            LocalDate end = ((java.sql.Date) r.get("probation_end_date")).toLocalDate();
+            out.add(new UpcomingProbationDto(
+                (UUID) r.get("id"), (String) r.get("employee_code"),
+                name(r.get("first_name"), r.get("last_name")),
+                end.toString(), ChronoUnit.DAYS.between(asOf, end), (String) r.get("job_title"),
+                managerName(r.get("mgr_first"), r.get("mgr_last"))));
+        }
+        return out;
+    }
+
     @Transactional
     public List<UpcomingProbationDto> listUpcoming(UUID tenantId, int daysAhead) {
         bindTenant(tenantId);
