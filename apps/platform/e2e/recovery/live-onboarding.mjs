@@ -89,6 +89,8 @@ try {
   await page.getByPlaceholder('e.g. Dell Latitude 5450').fill('Local QA Laptop')
   await page.getByPlaceholder('e.g. SN-84213').fill(`QA-${stamp}`)
   await next()
+  // People who can give roles get an Access step before Joining (wave 3); the default access is kept.
+  if(await page.getByRole('button',{name:'Create Employee',exact:true}).count()===0) await next()
   const createdResponse=page.waitForResponse(r=>r.url().endsWith('/v1/hrms/employees') && r.request().method()==='POST')
   await page.getByRole('button',{name:'Create Employee',exact:true}).click()
   const created=await createdResponse
