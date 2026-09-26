@@ -82,22 +82,48 @@ export function SettingsPage({
     ;(sc || window).addEventListener('scroll', onScroll, { passive: true })
     return () => { (sc || window).removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf) }
   }, [keys, offset])
-  // A link to "#st-<section>" (from another page) opens at that section once it's drawn.
+  // A link to "#st-<section>" (from another page) opens at that section once it's drawn, and keeps
+  // it there while sections above it finish loading (a card that fills in later would otherwise
+  // push it down), until the person scrolls or two seconds pass.
   useEffect(() => {
     if (!live) return
     let t: ReturnType<typeof setTimeout> | undefined
+    let ro: ResizeObserver | undefined
+    let holdUntil = 0
+    const place = (h: string) => {
+      const el = document.getElementById(h), sc = scrollerOf(rootRef.current)
+      if (el && sc) { lockUntil.current = Date.now() + 900; setActive(h.slice(3)); sc.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - offset) }) }
+    }
+    const release = () => { holdUntil = 0; ro?.disconnect(); ro = undefined }
     const go = () => {
       const h = window.location.hash.slice(1)
       if (!h.startsWith('st-')) return
       clearTimeout(t)
       t = setTimeout(() => {
-        const el = document.getElementById(h), sc = scrollerOf(rootRef.current)
-        if (el && sc) { lockUntil.current = Date.now() + 900; setActive(h.slice(3)); sc.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - offset) }) }
+        place(h)
+        holdUntil = Date.now() + 2000
+        const root = rootRef.current
+        if (root && typeof ResizeObserver !== 'undefined') {
+          ro?.disconnect()
+          ro = new ResizeObserver(() => { if (Date.now() < holdUntil) place(h); else release() })
+          ro.observe(root)
+        }
       }, 60)
     }
+    // The person scrolling takes over at once.
+    const userScroll = () => { if (holdUntil) release() }
     go()
     window.addEventListener('hashchange', go)
-    return () => { clearTimeout(t); window.removeEventListener('hashchange', go) }
+    window.addEventListener('wheel', userScroll, { passive: true })
+    window.addEventListener('touchmove', userScroll, { passive: true })
+    window.addEventListener('keydown', userScroll)
+    return () => {
+      clearTimeout(t); release()
+      window.removeEventListener('hashchange', go)
+      window.removeEventListener('wheel', userScroll)
+      window.removeEventListener('touchmove', userScroll)
+      window.removeEventListener('keydown', userScroll)
+    }
   }, [live]) // eslint-disable-line react-hooks/exhaustive-deps
   // Closing or reloading the tab with unsaved changes asks first.
   useEffect(() => {
