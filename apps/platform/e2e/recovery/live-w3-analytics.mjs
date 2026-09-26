@@ -25,7 +25,7 @@ import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3018'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'

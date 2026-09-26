@@ -15,7 +15,7 @@
 /* global process, console, sessionStorage, fetch */
 import { chromium } from '@playwright/test'
 
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3023'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', readerId = '22222222-2222-2222-2222-222222222222'
 const shots = process.env.R3_SHOTS || 'C:/REACT/ut-wt/_results/shots'

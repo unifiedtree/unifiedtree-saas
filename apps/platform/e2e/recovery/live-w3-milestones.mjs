@@ -28,14 +28,14 @@ import { mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3017'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const shots = process.env.SHOTS || 'C:/REACT/ut-wt/_results/shots'
 mkdirSync(shots, { recursive: true })
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',
-  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'ut_w3_dev', '-v', 'ON_ERROR_STOP=1', '-Atc', q],
+  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q],
   { env: { ...process.env, PGPASSWORD: process.env.PGPASSWORD || 'postgres' }, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim()
 const lit = (v) => (v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`)
 

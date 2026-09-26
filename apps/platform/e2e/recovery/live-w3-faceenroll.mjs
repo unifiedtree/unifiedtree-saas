@@ -38,10 +38,10 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { format } from 'date-fns'
 
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3020'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
-const db = process.env.RECOVERY_DB || 'ut_w3_dev'
+const db = process.env.RECOVERY_DB || 'unifiedtree_recovery'
 const shotDir = process.env.SHOTS_DIR || 'C:/REACT/ut-wt/_results/shots'
 const faceVideo = process.env.FACE_VIDEO && existsSync(process.env.FACE_VIDEO) ? process.env.FACE_VIDEO : null
 const facePunch = process.env.FACE_PUNCH && existsSync(process.env.FACE_PUNCH) ? process.env.FACE_PUNCH : null

@@ -6,7 +6,7 @@
 /* global process, console, URL, document */
 import { chromium } from '@playwright/test'
 
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3011'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }

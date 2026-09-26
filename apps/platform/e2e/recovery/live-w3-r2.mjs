@@ -8,7 +8,7 @@
 /* global process, console, document */
 import { chromium } from '@playwright/test'
 
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3022'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const SHOTS = process.env.SHOTS_DIR || 'C:/REACT/ut-wt/_results/shots'
 const results = []

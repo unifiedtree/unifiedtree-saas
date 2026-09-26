@@ -40,7 +40,7 @@ import { mkdirSync } from 'node:fs'
 import { chromium } from '@playwright/test'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3019'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const db = process.env.RECOVERY_DB || 'unifiedtree_recovery'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'

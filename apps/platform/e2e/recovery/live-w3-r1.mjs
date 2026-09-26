@@ -11,7 +11,7 @@
 import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 
-const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3021'
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const SHOTS = 'C:/REACT/ut-wt/_results/shots'
 mkdirSync(SHOTS, { recursive: true })

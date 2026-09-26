@@ -35,6 +35,18 @@ const created = [] // emails of people this test adds
 let where = 'start', lastPage = null // for the failure report
 const at = (name, page) => { where = name; if (page) lastPage = page; console.log(`..  ${name}`) }
 mkdirSync(shots, { recursive: true })
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+// Dates are the shared calendar now (a trigger button + hidden input): pick year, month, then day.
+async function pickDate(page, trigger, iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+  await calendar.waitFor({ state: 'hidden' })
+}
 
 async function apiLogin(email) {
   const r = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant }, body: JSON.stringify({ tenantId: tenant, email, password }) })
@@ -210,7 +222,7 @@ try {
     await page.locator('#field-fullName input').fill(`QA${tag}O Access`)
     await page.locator('#field-email input').fill(email)
     await page.locator('#field-phone input').fill('9000000000')
-    await page.locator('#field-dateOfBirth input').fill('1995-01-15')
+    await pickDate(page, page.locator('#field-dateOfBirth .utc-trigger'), '1995-01-15')
     const next = () => page.getByRole('button', { name: 'Next', exact: true }).click()
     await next()
     const choose = async (id) => {
@@ -225,7 +237,7 @@ try {
     await page.locator('#field-designationText input, #field-designationId select').first().waitFor({ state: 'visible' })
     if (await page.locator('#field-designationText input').count()) await page.locator('#field-designationText input').fill('QA Specialist')
     else await choose('designationId')
-    await page.locator('#field-dateOfJoining input').fill('2026-10-01')
+    await pickDate(page, page.locator('#field-dateOfJoining .utc-trigger'), '2026-10-01')
     await next()
     await next() // documents
     at('Onboarding: payroll')
