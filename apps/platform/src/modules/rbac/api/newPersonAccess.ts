@@ -60,8 +60,20 @@ export async function applyNewPersonAccess(employeeId: string, email: string | n
   let users: WorkspaceUser[]
   try { users = await apiJson<WorkspaceUser[]>('/v1/workspace/users') } catch (e) { return { problems: [`their login couldn’t be looked up (${errText(e)})`] } }
   const mail = (email || '').trim().toLowerCase()
-  const user = users.find((u) => u.employeeId === employeeId) ?? (mail ? users.find((u) => u.email.toLowerCase() === mail) : undefined)
+  const byEmployee = users.find((u) => u.employeeId === employeeId)
+  const user = byEmployee ?? (mail ? users.find((u) => u.email.toLowerCase() === mail) : undefined)
   if (!user) return { problems: ['their login wasn’t found'] }
+  // Found by email only: the invitation may have reused a login this email already
+  // had (the same person in another company). Only a fresh Employee-only login is
+  // changed from here; an existing one keeps its access, set in Users & access.
+  if (!byEmployee) {
+    const existing = 'this email already had a login, so its access wasn’t changed here'
+    if (user.roles.some((r) => r.roleCode !== BASE_ROLE)) return { problems: [existing] }
+    try {
+      const view = await apiJson<UserPermissionsView>(`/v1/workspace/users/${user.userId}/permissions`)
+      if (view.overrides.length) return { problems: [existing] }
+    } catch (e) { return { problems: [`their login couldn’t be checked (${errText(e)})`] } }
+  }
 
   const problems: string[] = []
   const refused: [string, string][] = []
