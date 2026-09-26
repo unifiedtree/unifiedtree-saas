@@ -32,6 +32,8 @@ const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const tag = String(Date.now() % 1000000)
 const created = [] // emails of people this test adds
+let where = 'start', lastPage = null // for the failure report
+const at = (name, page) => { where = name; if (page) lastPage = page; console.log(`..  ${name}`) }
 mkdirSync(shots, { recursive: true })
 
 async function apiLogin(email) {
@@ -66,33 +68,53 @@ async function signIn(email, viewport = { width: 1440, height: 900 }) {
   await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
   errors.length = 0; failed.length = 0
+  lastPage = page
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(500) }
   return { page, context, errors, failed, settle }
 }
 const drawer = (page) => page.locator('#utm-portal .drawer')
 const toastSeen = (page, re) => page.locator('.toast').filter({ hasText: re }).first().waitFor({ timeout: 30000 }).then(() => true, () => false)
-async function pickFirst(page, label) {
-  await drawer(page).locator('.field').filter({ hasText: label }).locator('.ddb').first().click()
+async function pickFirst(page, label, onlyIfEmpty = false) {
+  at(`pick ${label}`)
+  // The Field wrapper whose own label is exactly this (the dropdown inside it is also a .field).
+  const field = drawer(page).locator('div.field').filter({ has: page.locator('label').filter({ hasText: new RegExp(`^${label}\\*?$`) }) }).first()
+  const btn = field.locator('.ddb').first()
+  if (onlyIfEmpty && await btn.locator('.ph').count() === 0) return
+  // The design closes its popovers on any scroll or resize (and its drawers on Escape), so open
+  // it again if it closed under us, and pick the option with a plain DOM click.
   const opt = page.locator('#utm-portal .pop .opt').first()
-  await opt.waitFor({ timeout: 10000 })
-  await opt.click()
+  for (let i = 0; i < 4; i++) {
+    if (await opt.count() === 0) await btn.click({ timeout: 10000 })
+    try {
+      await opt.waitFor({ state: 'attached', timeout: 3000 })
+      await opt.dispatchEvent('click')
+    } catch { /* closed again */ }
+    await page.waitForTimeout(300)
+    if (await btn.locator('.ph').count() === 0) { if (i) console.log(`..  (${label} needed ${i + 1} tries)`); return }
+  }
+  throw new Error(`couldn’t pick a ${label}`)
 }
 /** Open Employee Master → Add employee and fill the required fields. */
 async function openAddEmployee(page, settle, first, email) {
   await page.goto(base + '/hrms/employees'); await settle()
-  await page.getByRole('button', { name: /Add employee/ }).first().click()
+  at('open Add employee')
+  await page.locator('.utm .hero-act').getByRole('button', { name: /Add employee/ }).click()
   const d = drawer(page)
   await d.waitFor()
+  // Let the Access section (when there is one) finish loading before using the dropdowns.
+  if (await d.locator('[data-access-step]').count()) await d.locator('[data-access-step]').getByText(/of \d+ on/).first().waitFor({ timeout: 30000 })
+  else await page.waitForTimeout(800)
   await d.getByPlaceholder('e.g. Ananya').fill(first)
   await d.getByPlaceholder('e.g. Sharma').fill('Access')
   await d.getByPlaceholder('name@company.com').fill(email)
-  await pickFirst(page, 'Branch')
+  await pickFirst(page, 'Branch', true)
   await pickFirst(page, 'Department')
   await pickFirst(page, 'Designation')
   return d
 }
 /** Tick or untick one permission through the picker's search. */
 async function togglePermission(scope, name) {
+  at(`toggle ${name}`)
   await scope.getByRole('textbox', { name: 'Search permissions' }).fill(name)
   const box = scope.getByRole('checkbox', { name, exact: true })
   await box.waitFor({ timeout: 10000 })
@@ -119,6 +141,7 @@ try {
     const email = `qa.access.m${tag}@example.invalid`
     created.push(email)
     const d = await openAddEmployee(page, settle, `QA${tag}M`, email)
+    at('Master: access section')
     const step = d.locator('[data-access-step]')
     check('Master: the Add employee drawer has an Access section', await step.count() === 1)
     const employee = step.getByRole('checkbox', { name: 'Employee', exact: true })
@@ -134,6 +157,7 @@ try {
     await step.getByRole('button', { name: 'Changes' }).click()
     await step.scrollIntoViewIfNeeded(); await page.waitForTimeout(300)
     await page.screenshot({ path: `${shots}/access-master-1440.png` })
+    at('Master: save')
     await d.getByRole('button', { name: /Add employee/ }).click()
     check('Master: the employee is added', await toastSeen(page, new RegExp(`QA${tag}M Access added`)))
     await settle()
@@ -146,16 +170,31 @@ try {
     check('Master: no failed API calls', !o.failed.length, o.failed.join(' | '))
     await o.context.close()
 
-    // phone width
+    at('Master: phone width')
     const p = await signIn('owner@unifiedtree.demo', { width: 390, height: 844 })
     const d2 = await openAddEmployee(p.page, p.settle, `QA${tag}P`, `qa.access.p${tag}@example.invalid`)
     const step2 = d2.locator('[data-access-step]')
     await step2.getByText(/of \d+ on/).first().waitFor({ timeout: 20000 })
-    await step2.getByRole('textbox', { name: 'Search permissions' }).fill(EXTRA_NAME.split(' ').slice(0, 2).join(' '))
-    await step2.scrollIntoViewIfNeeded(); await p.page.waitForTimeout(300)
+    // Select all / clear all on one group (this drawer is never saved).
+    at('Master (390): select all in a group')
+    await step2.getByRole('textbox', { name: 'Search permissions' }).fill(REMOVE_NAME)
+    const group = step2.locator('[data-access-group]').first()
+    const count = group.getByText(/^\d+ of \d+ on$/)
+    const total = Number(((await count.textContent()) || '').match(/of (\d+)/)?.[1] || 0)
+    const box = group.getByRole('checkbox', { name: /^All .* permissions$/ })
+    await box.click()
+    const yes = step2.getByRole('button', { name: /^Yes, give (it|them)$/ })
+    if (await yes.count()) await yes.click()
+    check('Master (390 wide): a group’s box ticks the whole group', total > 0 && (await count.textContent()) === `${total} of ${total} on`, await count.textContent())
+    await box.click()
+    check('Master (390 wide): clicking it again unticks the whole group', (await count.textContent()) === `0 of ${total} on`, await count.textContent())
+    await box.click()
+    if (await yes.count()) await yes.click()
+    await group.scrollIntoViewIfNeeded(); await p.page.waitForTimeout(300)
     const noScroll = await p.page.evaluate(() => { const el = document.querySelector('#utm-portal .drawer .dr-b'); return !!el && el.scrollWidth <= el.clientWidth + 1 })
     check('Master (390 wide): the Access section fits without sideways scrolling', noScroll)
     await p.page.screenshot({ path: `${shots}/access-master-390.png` })
+    check('Master (390 wide): no page errors', !p.errors.length, p.errors[0] || '')
     await p.context.close()
   }
 
@@ -165,6 +204,7 @@ try {
     const { page, settle } = o
     const email = `qa.access.o${tag}@example.invalid`
     created.push(email)
+    at('Onboarding: basic')
     await page.goto(base + '/hrms/onboarding/instances/new'); await settle()
     check('Onboarding: the stepper has an Access step', await stepLabels(page).filter({ hasText: /^\d*Access$/ }).count() === 1)
     await page.locator('#field-fullName input').fill(`QA${tag}O Access`)
@@ -179,6 +219,7 @@ try {
       const value = await select.locator('option').evaluateAll((options) => options.find((x) => x.value && !x.disabled)?.value)
       await select.selectOption(value)
     }
+    at('Onboarding: employment')
     await choose('departmentId')
     await choose('branchId')
     await page.locator('#field-designationText input, #field-designationId select').first().waitFor({ state: 'visible' })
@@ -187,6 +228,7 @@ try {
     await page.locator('#field-dateOfJoining input').fill('2026-10-01')
     await next()
     await next() // documents
+    at('Onboarding: payroll')
     await page.locator('#field-ctcAnnual input').fill('600000')
     await page.locator('#field-accountHolderName input').fill(`QA${tag}O Access`)
     await choose('bankName')
@@ -196,6 +238,7 @@ try {
     await next() // benefits
     await next() // policies
     await next() // assets
+    at('Onboarding: access')
     await page.getByRole('heading', { name: 'Roles and permissions' }).waitFor({ timeout: 15000 })
     check('Onboarding: Access starts with the invite off and says why', await page.getByText('Access can be set once this person has a login.').count() > 0)
     await page.getByText('Send their login invite when the employee is created').click()
@@ -221,6 +264,7 @@ try {
     check('Onboarding (390 wide): no sideways page scroll', fits)
     await page.screenshot({ path: `${shots}/access-onboarding-390.png`, fullPage: true })
     await page.setViewportSize({ width: 1440, height: 900 })
+    at('Onboarding: create')
     await next() // → joining
     await page.getByRole('button', { name: 'Create Employee', exact: true }).click()
     const saved = await page.getByText('Login invite sent, and their roles and permissions are saved.').waitFor({ timeout: 60000 }).then(() => true, () => false)
@@ -237,6 +281,7 @@ try {
 
   // ── 3. HR manager: adds people, can't give roles → no Access step, adding works as before ──
   {
+    at('HR manager')
     const h = await signIn('hrm@unifiedtree.demo')
     const { page, settle } = h
     const email = `qa.access.h${tag}@example.invalid`
@@ -259,17 +304,19 @@ try {
 
   // ── 4. Department manager: no Access step anywhere ──
   {
+    at('Dept manager')
     const m = await signIn('mgr@unifiedtree.demo')
     const { page, settle } = m
     await page.goto(base + '/hrms/employees'); await settle()
-    check('Dept manager: no Add employee / Access on Employee Master (as before)', await page.locator('[data-access-step]').count() === 0 && await page.getByRole('button', { name: /Add employee/ }).count() === 0)
+    check('Dept manager: no Add employee / Access on Employee Master (as before)', await page.locator('[data-access-step]').count() === 0 && await page.locator('.utm .hero-act').getByRole('button', { name: /Add employee/ }).count() === 0)
     await page.goto(base + '/hrms/onboarding/instances/new'); await settle()
     check('Dept manager: no Access step in onboarding', await page.locator('[data-access-picker]').count() === 0 && await stepLabels(page).filter({ hasText: /^\d*Access$/ }).count() === 0)
     check('Dept manager: no page errors', !m.errors.length, m.errors[0] || '')
     await m.context.close()
   }
 } catch (e) {
-  check('test ran to the end', false, String(e && e.message || e).split('\n')[0])
+  check('test ran to the end', false, `at "${where}": ${String(e && e.message || e).split('\n').slice(0, 14).join(' | ')}`)
+  try { await lastPage?.screenshot({ path: `${shots}/access-fail.png`, fullPage: true }) } catch { /* page gone */ }
 } finally {
   await browser.close()
   // Remove everyone this test added: their login (roles, overrides and invitation cascade), the employee and what the wizard saved.

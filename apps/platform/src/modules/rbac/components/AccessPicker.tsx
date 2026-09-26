@@ -326,15 +326,15 @@ export function AccessPicker({ value, onChange }: { value: AccessDraft; onChange
                     const on = all.filter((p) => isOn(p.code)).length
                     const added = all.filter((p) => grants.has(p.code)).length
                     const removed = all.filter((p) => inheritedFrom.has(p.code) && denies.has(p.code)).length
-                    const selectable = list.filter((p) => inheritedFrom.has(p.code) || grants.has(p.code) || !blockedWhy(p))
-                    const listOn = list.filter((p) => isOn(p.code)).length
-                    const head: 'on' | 'off' | 'mixed' = listOn === 0 ? 'off' : selectable.every((p) => isOn(p.code)) ? 'on' : 'mixed'
+                    // The group's box is for the whole group (like its "x of y on"), whatever the search shows.
+                    const selectable = all.filter((p) => !blockedWhy(p))
+                    const head: 'on' | 'off' | 'mixed' = on === 0 ? 'off' : selectable.every((p) => isOn(p.code)) ? 'on' : 'mixed'
                     return (
                       <div key={module} className="overflow-hidden rounded-xl border border-border-default bg-[var(--bg-surface)]" data-access-group={module}>
                         <div className="flex items-center gap-2 bg-[var(--bg-subtle)] px-3 py-2">
                           <button type="button" role="checkbox" aria-checked={head === 'mixed' ? 'mixed' : head === 'on'}
                             aria-label={`All ${label} permissions`} disabled={!canEditPerms || !selectable.length}
-                            onClick={() => (head === 'on' ? clearAll(list) : selectAll(module, list))}
+                            onClick={() => (head === 'on' ? clearAll(all) : selectAll(module, all))}
                             className="flex shrink-0 items-center disabled:cursor-not-allowed disabled:opacity-50">
                             <Tick state={head} />
                           </button>
