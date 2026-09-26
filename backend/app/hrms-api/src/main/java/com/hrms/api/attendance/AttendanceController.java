@@ -688,20 +688,30 @@ public class AttendanceController {
      * method, and bucketing them under "manual" would invent a punch. Methods
      * with a zero count are still returned so the panel keeps a stable shape
      * instead of reflowing as usage shifts through the day.
+     *
+     * <p>Optional {@code from} + {@code to} (both given) count every check-in in
+     * that range instead — Attendance Analytics for a past month. The range is
+     * clamped like the trend's; without it the endpoint answers for one day,
+     * as before.
      */
-    @Operation(summary = "Today's check-ins grouped by capture method")
+    @Operation(summary = "Check-ins grouped by capture method, for a day or a date range")
     @GetMapping("/dashboard/sources")
     @PreAuthorize("hasAuthority('attendance.team.read')")
     public ResponseEntity<AttendanceSourceBreakdown> dashboardSources(
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
             @AuthenticationPrincipal Jwt jwt) {
         LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        LocalDate[] range = sourceRange(selectedDate, from, to);
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         List<AttendanceRecord> records = employeeIds.isEmpty()
                 ? List.of()
-                : attendanceService.getRecordsForEmployeesOnDate(employeeIds, selectedDate);
+                : range[0].equals(range[1])
+                        ? attendanceService.getRecordsForEmployeesOnDate(employeeIds, range[0])
+                        : attendanceService.getRecordsForEmployeesBetween(employeeIds, range[0], range[1]);
 
         Map<String, Long> byMethod = new HashMap<>();
         for (CheckInMethod method : CheckInMethod.values()) byMethod.put(method.name(), 0L);
@@ -716,7 +726,20 @@ public class AttendanceController {
                 .map(entry -> new SourceCount(entry.getKey(), entry.getValue()))
                 .sorted(Comparator.comparing(SourceCount::method))
                 .toList();
-        return ResponseEntity.ok(new AttendanceSourceBreakdown(selectedDate, sources, unknown));
+        return ResponseEntity.ok(new AttendanceSourceBreakdown(range[1], sources, unknown));
+    }
+
+    /**
+     * The days the sources panel counts: {@code [from, to]} when both are given
+     * (swapped if reversed, clamped to the last {@link #MAX_TREND_DAYS} days),
+     * otherwise just {@code date}.
+     */
+    static LocalDate[] sourceRange(LocalDate date, LocalDate from, LocalDate to) {
+        if (from == null || to == null) return new LocalDate[] { date, date };
+        LocalDate start = from, end = to;
+        if (start.isAfter(end)) { LocalDate swap = start; start = end; end = swap; }
+        if (start.isBefore(end.minusDays(MAX_TREND_DAYS - 1L))) start = end.minusDays(MAX_TREND_DAYS - 1L);
+        return new LocalDate[] { start, end };
     }
 
     /** One capture-method bucket. */
