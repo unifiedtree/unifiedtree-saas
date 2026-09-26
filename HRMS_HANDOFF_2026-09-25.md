@@ -8,7 +8,7 @@ Pull `main` and read this page first. It points to everything else.
 Follow **`docs/production/DEPLOY_2026-09-26.md`** step by step. It is the one checklist, and it covers everything on `main`:
 1. Back up the database.
 2. Find which migrations production already has (one status query, `t`/`f` per migration).
-3. Apply the missing ones of **V140 → V143_40**, in order, as a superuser. V143_2 is critical: without it nobody can sign in.
+3. Apply the missing ones of **V140 → V143_40**, in order, as a superuser. V143_2 matters most: without it every sign-in falls back to a slow scan of every workspace.
 4. Deploy the backend and check it's the latest revision.
 5. Check the web app (Vercel) and the production settings (face worker, mail, document storage).
 6. Smoke test each role, including the settings back in their places and the left-menu fix.
