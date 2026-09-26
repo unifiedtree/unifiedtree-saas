@@ -231,9 +231,21 @@ try {
   } else skip('outside-geofence rejection', 'reader@ has no active face enrolment and the stand-in worker could not start')
 
   // ── night shift: punched in yesterday evening, punched out after midnight ──
+  // (The closed shift stays until cleanup, so Daily Logs can show it when today is a weekly off.)
   if (enrolled && workerUp && !readerHadYesterday && !readerHadRecord) {
+    // First left open longer than the 20 hours AttendanceService.checkOut allows.
     nightRecord = sql(`insert into attendance.records (id, tenant_id, employee_id, company_id, attendance_date, check_in_at, attendance_type, attendance_status, check_in_method)
-        values (gen_random_uuid(), '${tenant}', '${READER}', '${company}', '${yesterday}', now() - interval '4 hours', 'OFFICE', 'PRESENT', 'FACE_RECOGNITION') returning id`).split('\n')[0]
+        values (gen_random_uuid(), '${tenant}', '${READER}', '${company}', '${yesterday}', now() - interval '21 hours', 'OFFICE', 'PRESENT', 'FACE_RECOGNITION') returning id`).split(/\r?\n/)[0].trim()
+    const stale = (await mgr.call('GET', '/v1/attendance/assisted-punch/eligible')).json?.employees?.find((e) => e.employeeId === READER)
+    check('a shift left open over 20 hours is not listed as in', stale?.todayStatus === 'NOT_PUNCHED' && stale?.sinceYesterday === false, `${stale?.todayStatus} ${stale?.sinceYesterday}`)
+    const before = workerCalls.filter((u) => u === '/face/verify').length
+    const sOut = await punch(mgr, READER, 'CHECK_OUT')
+    check('…and punching it out is refused (409 NOT_CHECKED_IN) before the face is scanned',
+      sOut.status === 409 && sOut.json?.errorCode === 'NOT_CHECKED_IN' && workerCalls.filter((u) => u === '/face/verify').length === before,
+      `${sOut.status} ${sOut.json?.errorCode}`)
+
+    // Then punched in four hours ago: still in, and the next punch closes yesterday's shift.
+    sql(`update attendance.records set check_in_at = now() - interval '4 hours' where id='${nightRecord}' and attendance_date='${yesterday}'`)
     const nl = (await mgr.call('GET', '/v1/attendance/assisted-punch/eligible')).json?.employees?.find((e) => e.employeeId === READER)
     check('night shift: reader@, punched in yesterday evening, is listed as in (next punch: out)', nl?.todayStatus === 'PUNCHED_IN' && nl?.sinceYesterday === true, `${nl?.todayStatus} ${nl?.sinceYesterday}`)
     const nOut = await punch(mgr, READER, 'CHECK_OUT')
@@ -247,16 +259,6 @@ try {
     check('night shift: the web "Punched by" API has it on yesterday', pb.status === 200
       && pb.json.some((p) => p.employeeId === READER && p.punchType === 'CHECK_OUT' && p.punchedByName === 'Dept Manager' && p.attendanceDate === yesterday),
       `${pb.status} ${JSON.stringify(pb.json)?.slice(0, 200)}`)
-    // Left open longer than the 20 hours AttendanceService.checkOut allows.
-    sql(`update attendance.records set check_out_at = null, check_in_at = now() - interval '21 hours' where id='${nightRecord}' and attendance_date='${yesterday}'`)
-    const stale = (await mgr.call('GET', '/v1/attendance/assisted-punch/eligible')).json?.employees?.find((e) => e.employeeId === READER)
-    check('a shift left open over 20 hours is not listed as in', stale?.todayStatus === 'NOT_PUNCHED' && stale?.sinceYesterday === false, `${stale?.todayStatus} ${stale?.sinceYesterday}`)
-    const before = workerCalls.filter((u) => u === '/face/verify').length
-    const sOut = await punch(mgr, READER, 'CHECK_OUT')
-    check('…and punching it out is refused (409 NOT_CHECKED_IN) before the face is scanned',
-      sOut.status === 409 && sOut.json?.errorCode === 'NOT_CHECKED_IN' && workerCalls.filter((u) => u === '/face/verify').length === before,
-      `${sOut.status} ${sOut.json?.errorCode}`)
-    removeNight()
   } else {
     skip('night shift', !enrolled || !workerUp ? 'reader@ is not enrolled / the stand-in worker could not start'
       : 'reader@ already has attendance yesterday or today in this database')
@@ -306,6 +308,12 @@ try {
     const outAgain = await punch(owner, READER, 'CHECK_OUT')
     check('a later punch out is refused (409 ALREADY_CHECKED_OUT)', outAgain.status === 409 && outAgain.json?.errorCode === 'ALREADY_CHECKED_OUT', `${outAgain.status}`)
     const outName = won[0]?.json?.punchedByName || ''
+    const detail = `Dept Manager (in), ${outName} (out)`
+    // Daily Logs leaves out anyone whose weekly off is that day: use today when reader@ is on today's
+    // roster, else yesterday (the night shift mgr@ punched out, kept until cleanup).
+    const onRoster = async (d) => ((await owner.call('GET', `/v1/attendance/dashboard?date=${d}`)).json?.staffStatuses || []).some((s) => s.employeeId === READER)
+    const logDay = (await onRoster(today)) ? today : nightRecord && (await onRoster(yesterday)) ? yesterday : null
+    const logDetail = logDay === today ? detail : 'Dept Manager (out)'
 
     // The web, owner's view (desktop and phone): Face Punch tab, Daily Logs (row + day drawer), the employee's records.
     const browser = await chromium.launch({ headless: true })
@@ -330,16 +338,19 @@ try {
         await page.screenshot({ path: `${shots}/punch-face-tab-${label}.png`, fullPage: false })
         check(`web Face Punch tab (${label}) shows "Punched by Dept Manager"`, seenFace)
 
-        await page.goto(base + '/hrms/attendance?tab=team')
-        const seenRow = await sees(/Punched by Dept Manager/)
-        await page.getByText('Reader User').first().scrollIntoViewIfNeeded().catch(() => {})
-        await page.screenshot({ path: `${shots}/punch-daily-logs-${label}.png`, fullPage: false })
-        check(`web Daily Logs (${label}): reader@'s row says "Punched by Dept Manager"`, seenRow)
-        await page.getByText('Reader User').first().click()
-        const detail = `Dept Manager (in), ${outName} (out)`
-        const seenDrawer = await sees(detail)
-        await page.screenshot({ path: `${shots}/punch-daily-drawer-${label}.png`, fullPage: false })
-        check(`web Daily Logs day drawer (${label}): "Punched by ${detail}"`, seenDrawer)
+        if (logDay) {
+          await page.goto(base + `/hrms/attendance?tab=team${logDay === today ? '' : `&date=${logDay}`}`)
+          const seenRow = await sees(/Punched by Dept Manager/)
+          await page.getByText('Reader User').first().scrollIntoViewIfNeeded().catch(() => {})
+          await page.screenshot({ path: `${shots}/punch-daily-logs-${label}.png`, fullPage: false })
+          check(`web Daily Logs ${logDay} (${label}): reader@'s row says "Punched by Dept Manager"`, seenRow)
+          if (seenRow) {
+            await page.getByText('Reader User').first().click()
+            const seenDrawer = await sees(logDetail)
+            await page.screenshot({ path: `${shots}/punch-daily-drawer-${label}.png`, fullPage: false })
+            check(`web Daily Logs day drawer (${label}): Punched by "${logDetail}"`, seenDrawer)
+          }
+        } else skip(`web Daily Logs (${label})`, 'today and yesterday are both off days in the Daily Logs roster for reader@')
 
         await page.goto(base + `/hrms/employees/${READER}?tab=attendance`)
         const seenRecords = await sees(`Punched by ${detail}`)
