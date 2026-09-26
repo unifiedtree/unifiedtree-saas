@@ -36,6 +36,19 @@ const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice
 const plusDays = (iso, n) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const longDate = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${MONTHS[m - 1]} ${y}` }
+// The start date uses the shared calendar: its label is on a trigger button, the
+// 'yyyy-MM-dd' value on the hidden input beside it; a date is picked year → month → day.
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+async function pickDate(page, trigger, iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTH_NAMES[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTH_NAMES[m - 1]} ${y}`) }).click()
+  await calendar.waitFor({ state: 'hidden' })
+}
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 
 const checks = []
@@ -142,12 +155,25 @@ try {
   await signIn(empPage, 'reader@unifiedtree.demo')
   await empPage.goto(base + '/me/shift-change')
   await empPage.getByRole('heading', { name: 'Request a Shift Change' }).waitFor({ timeout: 30_000 })
-  const dateInput = empPage.locator('#scr-date')
-  check('date field defaults to tomorrow', (await dateInput.inputValue()) === plusDays(today, 1), await dateInput.inputValue())
-  check('date field allows today through 12 months', (await dateInput.getAttribute('min')) === today && !!(await dateInput.getAttribute('max')))
+  const dateInput = empPage.getByLabel('Starting from')
+  const dateValue = empPage.locator('.utc-field', { has: dateInput }).locator('.utc-native')
+  check('date field defaults to tomorrow', (await dateValue.inputValue()) === plusDays(today, 1), await dateValue.inputValue())
+  // The calendar keeps min / max to itself: no "Yesterday" quick pick means today is the first
+  // day allowed, and a year list that ends next year means the 12-month limit is set.
+  await dateInput.click()
+  const calendar = empPage.getByRole('dialog', { name: 'Choose date' })
+  await calendar.waitFor()
+  const fromToday = (await calendar.getByRole('button', { name: 'Today', exact: true }).count()) === 1 && (await calendar.getByRole('button', { name: 'Yesterday', exact: true }).count()) === 0
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  const year = Number(today.slice(0, 4))
+  await calendar.locator(`[role=gridcell][aria-label="${year}"]`).waitFor()
+  const toNextYear = (await calendar.locator(`[role=gridcell][aria-label="${year + 1}"]`).count()) === 1 && (await calendar.locator(`[role=gridcell][aria-label="${year + 2}"]`).count()) === 0
+  await empPage.keyboard.press('Escape')
+  await calendar.waitFor({ state: 'hidden' })
+  check('date field allows today through 12 months', fromToday && toNextYear)
   check('form says an unapproved request expires', await empPage.getByText("If it isn't approved by then, the request").isVisible())
   await empPage.locator('#scr-shift').selectOption(target.id)
-  await dateInput.fill(start)
+  await pickDate(empPage, dateInput, start)
   await empPage.locator('#scr-reason').fill(reason)
   const posted = empPage.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/v1/shifts/change-requests'), { timeout: 15_000 })
   await empPage.getByRole('button', { name: 'Send request to HR' }).click()
@@ -175,7 +201,7 @@ try {
   const card = page.getByRole('article').filter({ hasText: reason })
   await card.waitFor({ timeout: 20_000 })
   check('card shows "Starts on" with the employee\'s date', (await card.innerText()).includes(`Starts on: ${longDate(start)}`))
-  check('card has no date picker', (await card.locator('input[type=date]').count()) === 0)
+  check('card has no date picker', (await card.locator('.utc-field').count()) === 0)
   const decisionCall = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/v1/shifts/change-requests/${requestId}/decision`), { timeout: 15_000 })
   await card.getByRole('button', { name: 'Approve change' }).click()
   const sent = JSON.parse((await decisionCall).postData() || '{}')

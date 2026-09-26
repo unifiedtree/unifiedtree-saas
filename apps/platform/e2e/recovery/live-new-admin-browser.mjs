@@ -5,11 +5,14 @@ const base='http://demo.localhost:3002'
 const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[]
 page.on('pageerror',e=>errors.push(e.message))
 async function login(email){await page.goto(base+'/login');await page.locator('input[type=email]').fill(email);await page.locator('input[type=password]').fill(process.env.RECOVERY_PASSWORD||'Hrms@12345');await page.locator('button[type=submit]').click();await page.waitForURL(u=>!u.pathname.includes('login'),{timeout:60000})}
+// Date fields use the shared calendar: open it, then pick year, month and day.
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December']
+async function pickDate(page,trigger,iso){const [y,m,d]=iso.split('-').map(Number);await trigger.click();const calendar=page.getByRole('dialog',{name:'Choose date'});await calendar.getByRole('button',{name:'Choose year'}).click();await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click();await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m-1]} ${y}"]`).click();await calendar.getByRole('gridcell',{name:new RegExp(`, ${d} ${MONTHS[m-1]} ${y}`)}).click();await calendar.waitFor({state:'hidden'})}
 try{
  await login('owner@unifiedtree.demo')
  await page.goto(base+'/hrms/learning');await page.locator('[aria-label="Learning views"]').getByRole('button',{name:/^Certifications/}).click();await page.getByLabel('Find employee').fill('Admin');await page.getByRole('button',{name:/Admin User/}).click()
  const skill=`UI certificate ${Date.now()}`
- await page.getByLabel('Skill name',{exact:true}).fill(skill);await page.getByLabel('Certification name',{exact:true}).fill('Verified certificate');await page.getByLabel('Certified on',{exact:true}).fill('2026-01-01');await page.getByLabel('Certification expiry').fill('2026-12-31');await page.getByRole('button',{name:'Save',exact:true}).click()
+ await page.getByLabel('Skill name',{exact:true}).fill(skill);await page.getByLabel('Certification name',{exact:true}).fill('Verified certificate');await pickDate(page,page.getByLabel('Certified on',{exact:true}),'2026-01-01');await pickDate(page,page.getByLabel('Certification expiry'),'2026-12-31');await page.getByRole('button',{name:'Save',exact:true}).click()
  await expect(page.getByRole('row').filter({hasText:skill})).toBeVisible();await page.reload();await page.locator('[aria-label="Learning views"]').getByRole('button',{name:/^Certifications/}).click();await page.getByLabel('Find employee').fill('Admin');await page.getByRole('button',{name:/Admin User/}).click();await expect(page.getByRole('row').filter({hasText:skill})).toContainText('2026')
  console.log('PASS certification browser save and persisted reload')
  // Branch geofence editing moved into the branch drawer on /hrms/companies; live-design-companies.mjs covers it.

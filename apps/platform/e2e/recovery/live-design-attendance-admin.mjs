@@ -20,6 +20,9 @@ const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', [
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// The muster roll's "Date" is the shared calendar: its label is on a trigger button,
+// and the 'yyyy-MM-dd' value sits on the hidden input beside it.
+const dateValue = (page) => page.locator('.utc-field', { has: page.getByLabel('Date') }).locator('.utc-native').inputValue()
 const browser = await chromium.launch()
 async function session(email) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })
@@ -57,7 +60,7 @@ try {
   check('muster: export is recorded for the Reports Center', recorded === 'Muster roll', String(recorded))
   const yesterday = localIso(new Date(Date.now() - 864e5))
   await o.page.goto(base + `/hrms/muster-roll?date=${yesterday}`); await settle(o.page)
-  check('muster: ?date= opens that day', (await o.page.getByLabel('Date').inputValue()) === yesterday)
+  check('muster: ?date= opens that day', (await dateValue(o.page)) === yesterday)
   check('muster: a past day says "Absent"', (await o.page.getByText('Absent', { exact: true }).count()) > 0)
   check('owner: no refused calls on the muster roll', !o.failed.length && !o.errors.length, o.failed[0] || o.errors[0] || '')
 
@@ -68,7 +71,7 @@ try {
     await o.page.getByLabel('Reason').fill('Local QA: biometric downtime')
     await o.page.getByRole('button', { name: 'Save entry' }).click()
     await o.page.waitForURL(/\/hrms\/muster-roll\?date=/, { timeout: 15000 }).catch(() => {})
-    check('manual entry: back on the muster roll for that day', o.page.url().includes(`date=${day}`) && (await o.page.getByLabel('Date').inputValue()) === day, o.page.url().replace(base, ''))
+    check('manual entry: back on the muster roll for that day', o.page.url().includes(`date=${day}`) && (await dateValue(o.page)) === day, o.page.url().replace(base, ''))
     const rec = sql(`select manual_entry||' '||to_char(check_in_at at time zone 'Asia/Kolkata','HH24:MI') from attendance.records where employee_id='${readerId}' and attendance_date='${day}'`)
     check('manual entry: saved as a manual record at 09:00 local time', rec === 'true 09:00', rec)
   }

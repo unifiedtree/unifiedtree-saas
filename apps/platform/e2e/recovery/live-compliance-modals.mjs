@@ -31,6 +31,19 @@ const dueDate = iso(new Date(Date.now() + 10 * 86_400_000))
 const suffix = randomUUID().slice(0, 6)
 const period = `QA-${suffix}` // unique marker, <= 20 chars (StatutoryFilingRequest @Size)
 const reference = `QA-CHALLAN-${suffix}`
+// Date fields use the shared calendar: the label points at a trigger button, so
+// a date is picked year → month → day in the "Choose date" popover.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+async function pickDate(page, trigger, iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+  await calendar.waitFor({ state: 'hidden' })
+}
 
 async function login(email) {
   const r = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers, body: JSON.stringify({ tenantId: tenant, email, password }) })
@@ -94,11 +107,11 @@ try {
   await page.getByRole('button', { name: 'Schedule filing' }).click()
   drawer = page.getByRole('dialog')
   await drawer.getByLabel('Filing type').selectOption('ESI')
-  await drawer.getByLabel('Due date').fill('')
+  await drawer.locator('.utc-field', { has: page.getByLabel('Due date') }).getByRole('button', { name: 'Clear' }).click()
   await drawer.getByRole('button', { name: 'Schedule filing' }).click()
   await drawer.getByText('Pick a due date').waitFor({ timeout: 5_000 })
   check('filings: missing due date is blocked client-side (no POST)', createCalls.length === 0)
-  await drawer.getByLabel('Due date').fill(dueDate)
+  await pickDate(page, drawer.getByLabel('Due date'), dueDate)
   await drawer.getByLabel('Period').fill(period)
   await drawer.getByLabel('Amount (₹)').fill('1234.50')
   await drawer.getByRole('button', { name: 'Schedule filing' }).click()
