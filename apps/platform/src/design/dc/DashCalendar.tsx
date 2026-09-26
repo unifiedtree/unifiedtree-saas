@@ -126,7 +126,10 @@ export class DashCalendar extends DCLogic {
     const panel = {
       title: `${WDL[pwd]}, ${pw.getDate()} ${MON[pw.getMonth()]} ${pw.getFullYear()}`,
       tone: tag[0], tag: tag[1], hasData: !!pd, noData: !pd,
-      note: 'No attendance was recorded for this day, so the dashboard would show empty counts.',
+      // Only the recent days' attendance is loaded here; an older day isn't "empty", it just isn't loaded yet.
+      note: pick < (Object.keys(daily).sort()[0] || today)
+        ? 'This day’s attendance isn’t loaded here yet. Show it on the dashboard to see that day’s numbers.'
+        : 'No attendance was recorded for this day, so the dashboard would show empty counts.',
       rate: r != null ? Math.round(r * 100) + '%' : '—',
       ratePct: r != null ? Math.round(r * 100) : 0,
       rateColor: r != null ? rc(r) : '#e2e8f0',
