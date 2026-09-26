@@ -29,6 +29,7 @@ import { dashIcon } from '@/design/dc/icons'
 import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
 import { PageSkeleton } from '@/shared/components/PageSkeleton'
 import { preloadPath, preloadPathsWhenIdle } from '@/shared/routing/lazyPage'
+import { litRailKey, readRailVia, saveRailVia } from '@/layouts/railLit'
 import {
   DesignRail, DesignHeader, DesignSubNav, DesignMobileHeader, DesignMobileNav, DesignTooltip,
   HeaderIconButton, HeaderBellButton, HeaderProfileButton, HeaderDivider,
@@ -411,6 +412,8 @@ export function PlatformShell() {
   // "Advanced search" (the ⌘K palette) opened from the top bar starts with what was typed there.
   const [advancedQuery, setAdvancedQuery] = useState('')
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  // The rail item the person came through (a rail click, or a tab in its section row); see railLit.ts.
+  const [railVia, setRailVia] = useState<string | null>(readRailVia)
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
@@ -525,6 +528,18 @@ export function PlatformShell() {
     }
     return list
   })()
+
+  const rememberRail = (key: string | null) => { setRailVia(key); saveRailVia(key) }
+  const activeRail = railItems.filter(i => i.active).map(i => ({ key: i.key, tabs: i.children?.length ?? 0 }))
+  // Moving to a page of another rail item (a link on the page, search, a notification) ends the
+  // remembered one. Only on a route change: on a refresh the rail may still be filling in.
+  const activeRailKeys = activeRail.map(i => i.key).join('|')
+  const railPath = useRef(location.pathname)
+  useEffect(() => {
+    if (railPath.current === location.pathname) return
+    railPath.current = location.pathname
+    if (railVia && activeRailKeys && !activeRailKeys.split('|').includes(railVia)) { setRailVia(null); saveRailVia(null) }
+  }, [location.pathname, activeRailKeys, railVia])
 
   // Fetch the code of every page this person can reach from the rail and its sections while the
   // browser is idle, so opening one doesn't wait on a download (lazyPage.ts).
@@ -654,10 +669,10 @@ export function PlatformShell() {
   // Only top-level sections live in the rail; a section's pages render as the
   // white tab row under the top bar. Settings pages keep the HRMS rail, light
   // up the gear, and list the settings pages as tabs.
-  // One lit rail item at a time. When several match (an employee's "My Workspace"
-  // link and Self-service group both own /me), prefer the group whose pages show
-  // as tabs.
-  const litKey = (railItems.find(i => i.active && i.children && i.children.length > 1) ?? railItems.find(i => i.active))?.key
+  // One lit rail item at a time. When several match (a manager's Leave is both the
+  // Leave item and a tab of Me), the one the person came through stays lit;
+  // otherwise the page's own item rather than Me (railLit.ts).
+  const litKey = litRailKey(activeRail, railVia)
   const railEntry = (item: (typeof railItems)[number]): RailEntry => ({
     key: item.key,
     label: item.label,
@@ -665,7 +680,7 @@ export function PlatformShell() {
     icon: RAIL_ICONS[item.key] ? dashIcon(RAIL_ICONS[item.key], 20) : React.cloneElement(item.icon as React.ReactElement, { size: 20 }),
     active: scope !== 'admin' && item.key === litKey,
     divider: RAIL_DIVIDERS.has(item.key),
-    onClick: () => navigate(item.target),
+    onClick: () => { rememberRail(item.key); navigate(item.target) },
     onIntent: () => preloadPath(item.target),
   })
   const railTop = railItems.filter(i => i.key !== 'hrsettings').map(railEntry)
@@ -682,7 +697,8 @@ export function PlatformShell() {
     }
     // Designed pages that draw their own section bar under the header.
     if (ownsSectionBar(location.pathname.replace(/\/$/, ''))) return null
-    const active = railItems.find(i => i.active && i.children && i.children.length > 0)
+    // The lit rail item's pages: Me → its Leave tab keeps Me's tabs.
+    const active = railItems.find(i => i.key === litKey)
     if (!active?.children) return null
     const seen = new Set<string>()
     const kids = active.children.filter(c => { if (seen.has(c.path)) return false; seen.add(c.path); return true })
@@ -690,7 +706,8 @@ export function PlatformShell() {
     // Longest matching path wins, so /hrms/documents/pending does not also light up /hrms/documents.
     const best = kids.filter(c => matchPath(location.pathname, c.path)).sort((a, b) => b.path.length - a.path.length)[0]
     // A page with unsaved changes (Payroll settings) may ask first, as Payroll's own section bar does.
-    const go = (to: string) => { if (typeof window.__utLeaveGuard === 'function' && window.__utLeaveGuard(() => navigate(to))) return; navigate(to) }
+    // A tab keeps its rail item lit, even on a page another rail item also lists.
+    const go = (to: string) => { const open = () => { rememberRail(active.key); navigate(to) }; if (typeof window.__utLeaveGuard === 'function' && window.__utLeaveGuard(open)) return; open() }
     return {
       label: `${active.fullLabel} sections`,
       items: kids.map(c => ({ label: c.label, path: c.path, active: c === best, onClick: () => go(c.path) })),
@@ -703,7 +720,7 @@ export function PlatformShell() {
       label: i.fullLabel,
       icon: RAIL_ICONS[i.key] ? dashIcon(RAIL_ICONS[i.key], 18) : React.cloneElement(i.icon as React.ReactElement, { size: 18 }),
       active: scope !== 'admin' && i.key === litKey,
-      onClick: () => navigate(i.target),
+      onClick: () => { rememberRail(i.key); navigate(i.target) },
     })),
     // Workspace settings open from the Apps page and the profile menu, not from
     // inside a module; the module's own settings are its rail entry above.
