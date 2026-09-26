@@ -3,7 +3,8 @@
 // Me. Now the item you came through stays lit (Leave → Leave, Me → its Leave
 // tab → Me), a fresh link lights the page's own item, and a refresh keeps it.
 // The click counts only on the page it opened: a dashboard card, a button on a
-// page, search, Back or a new sign-in go by the page alone.
+// page, search, Back or a new sign-in go by the page alone. Settings pages light
+// what they lit before 26 Sep (the header gear, HR Setup, Master, Payroll).
 // Read-only: it only opens pages (and signs out and in once).
 //
 //   RECOVERY_APP_URL=http://demo.localhost:3040 node e2e/recovery/live-rail-highlight.mjs
@@ -255,9 +256,21 @@ try {
         check(`${who}: Team, Me → Team Attendance, then Back twice to /team lights Team`, r.ok && new URL(page.url()).pathname === '/team', r.detail)
       }
       if (who === 'owner') {
-        await page.goto(base + '/settings/profile'); await settle(page)
-        const r = await rail(page)
-        check(`${who}: workspace settings light no rail item (as before)`, r.lit.length === 0, JSON.stringify(r.lit))
+        // Settings pages light what they lit before 26 Sep (5f45946): workspace settings light the
+        // header gear and no rail item; HR Setup's pages light HR Setup; Master's rules and policy
+        // documents light Master; Payroll settings light Payroll; expense policies light Expenses.
+        const gearLit = () => page.locator('button[aria-label="Settings"]').filter({ visible: true }).first().evaluate((b) => /ds-hdr-active/.test(b.className)).catch(() => null)
+        for (const [path, want] of [['/settings/profile', null], ['/roles', null], ['/users', null], ['/hrms/settings', 'HR Setup'], ['/hrms/notification-templates', 'HR Setup'],
+          ['/hrms/integrations', 'HR Setup'], ['/hrms/master/shift-rules', 'Master'], ['/hrms/policies', 'Master'], ['/hrms/payroll/settings', 'Payroll'], ['/hrms/expenses?tab=policies', 'Expense Management']]) {
+          await openFresh(page, path)
+          const r = await rail(page), gear = await gearLit()
+          check(`${who}: ${path} lights ${want ?? 'the header gear and no rail item'} (as before)`, want ? r.lit.length === 1 && r.lit[0] === want && gear === false : r.lit.length === 0 && gear === true, `lit: ${JSON.stringify(r.lit)}, gear ${gear ? 'lit' : 'not lit'}`)
+        }
+        // A rail click, then the gear: the gear alone is lit.
+        await clickRail(page, 'HR Setup')
+        await page.locator('button[aria-label="Settings"]').filter({ visible: true }).first().click(); await settle(page)
+        const r = await rail(page), gear = await gearLit()
+        check(`${who}: HR Setup, then the header gear lights the gear alone`, r.lit.length === 0 && gear === true && new URL(page.url()).pathname === '/settings', `lit: ${JSON.stringify(r.lit)}, gear ${gear ? 'lit' : 'not lit'} at ${where(page)}`)
       }
     } catch (e) {
       check(`${who}: run finished`, false, String(e.message || e).slice(0, 300))
