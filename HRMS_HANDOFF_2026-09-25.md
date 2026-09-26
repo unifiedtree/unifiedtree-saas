@@ -3,18 +3,17 @@
 **Who this is for:** the teammate taking over deployment and the remaining build work.
 Pull `main` and read this page first. It points to everything else.
 
-## Your first task: deploy the database and backend
+## Your first task: deploy the database, backend and web app
 
-Follow **`docs/production/DEPLOY_2026-09-25.md`** step by step:
+Follow **`docs/production/DEPLOY_2026-09-26.md`** step by step. It is the one checklist, and it covers everything on `main`:
 1. Back up the database.
-2. Find which migrations production is on.
-3. Apply **V140 → V143_9** in order. V143_2 is critical: without it nobody can sign in.
-4. Deploy the backend.
-5. Check the frontend (Vercel).
-6. Check the production settings (document storage, mail, face worker).
-7. Smoke test each role.
+2. Find which migrations production already has (one status query, `t`/`f` per migration).
+3. Apply the missing ones of **V140 → V143_40**, in order, as a superuser. V143_2 is critical: without it nobody can sign in.
+4. Deploy the backend and check it's the latest revision.
+5. Check the web app (Vercel) and the production settings (face worker, mail, document storage).
+6. Smoke test each role, including the settings back in their places and the left-menu fix.
 
-**Wave 3 (26 Sep) adds one more migration, `V143_40`, and a mobile branch:** see **`docs/production/DEPLOY_2026-09-26_WAVE3.md`** (safe to apply before or after the backend).
+`DEPLOY_2026-09-25.md` and `DEPLOY_2026-09-26_WAVE3.md` are background now. The mobile branch for assisted face punch is separate (checklist step 10).
 
 Production never migrates itself (`SPRING_FLYWAY_ENABLED=false`). The backend won't run on an old database; Cloud Run then quietly keeps the old revision. So do the database first.
 

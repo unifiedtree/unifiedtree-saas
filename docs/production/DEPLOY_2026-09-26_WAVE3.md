@@ -3,7 +3,12 @@
 **Who this is for:** the teammate deploying `main`, and the owner checking the work.
 **What ships:** everything merged from branch `wave-3-ui` on 26 Sep: 10 features across the web app and backend, one database migration, and a separate mobile branch (not merged, not published).
 
-Do the usual deploy first (`DEPLOY_2026-09-25.md`, plus the teammate's own V143_10 → V143_34). This page only adds what wave 3 needs.
+> **To deploy, follow `DEPLOY_2026-09-26.md`.** It is the one checklist: database (V140 → V143_40), backend, web app and a smoke test per role. This page is background: what wave 3 changed, the phone test and the choices made.
+>
+> **Updated 26 Sep, later that day:**
+> - **The settings hub was undone at the client's request.** Every setting is back in its original place, as before 26 Sep (§4). Only the hub's addresses remain, as redirects.
+> - **Left menu fix:** the rail item you click stays lit. Leave no longer lights Me for managers (§4).
+> - Every other wave 3 change stays as described here.
 
 ---
 
@@ -84,11 +89,18 @@ For each area: what to do, then what you should see.
   - See: pages, people and records (leave, claims, payslips, documents, letters, candidates, offers, job openings, policies), each limited by permission on the server (`GET /v1/search/global`).
   - Choosing a result opens that page with the search filled in.
   - The old palette is now **Advanced search** (link at the bottom of the results, or Ctrl/⌘K).
-- **Settings:**
-  - Do: open **HRMS settings** from the gear at the bottom of the HRMS rail (it replaces "HR Setup").
-  - See: every HR setting is there, as tabs: HR configuration, shifts, leave, payroll, components, statutory, expenses, documents, policies, notifications, and roles & permissions.
-  - Workspace settings (profile, branding, security, notifications, billing, integrations, users, audit logs, danger zone) open from **Workspace settings** on the Apps page and from the profile menu.
-  - Every old settings URL redirects and keeps its query and `#section`.
+- **Settings: the hub was undone on 26 Sep, at the client's request.** Everything is back in its original place, exactly as before 26 Sep:
+  - **HR Setup** at the bottom of the HRMS rail: HR Configuration, Notification Templates, Integrations.
+  - **Master → Rules & Policies** (Shift Rules, Leave Rules, Policy Documents) and **Master → Payroll Configuration** (Salary Components, Statutory Settings).
+  - **Payroll → Payroll Settings**; **Expenses → Policies**; Roles & Permissions at `/roles`; Document Types at `/settings/documents`.
+  - The header gear opens Settings again, and the profile menu says **Settings**.
+  - The "HRMS settings" page, the Apps page's **Workspace settings** button and the **Settings** link under the HRMS tile are gone.
+  - The hub's addresses redirect to the original pages and keep their query and `#section`. For example `/hrms/settings/shift-rules` → `/hrms/master/shift-rules` and `/hrms/settings/roles` → `/roles`. The full list is in `DEPLOY_2026-09-26.md` §9.
+- **Left menu (added 26 Sep, after wave 3):**
+  - Do: as a department manager, click **Leave** in the rail. Then click **Me** and its **Leave** tab.
+  - See: Leave → **Leave** stays lit (it used to light Me). Me → Leave keeps **Me** lit, with Me's tabs. A refresh keeps it.
+  - A link, a search result, a dashboard card or Back lights the page's own item. Signing out forgets the click.
+  - Routes, targets and who sees what are unchanged. Test: `e2e/recovery/live-rail-highlight.mjs`.
 - **Adding an employee:**
   - Do: add someone from Employee Master → Add employee, or through the onboarding wizard.
   - See: an **Access** step with roles (Employee is always on) and single permissions by module (search, select-all, added/removed shown).
@@ -108,9 +120,7 @@ For each area: what to do, then what you should see.
 - **Access step:**
   - Onboarding doesn't send the login invite by default, as before, so access applies only when the switch is on.
   - If the email already had a login (the same person in another company), that login's access is left alone, and the admin is told to set it in Users & access.
-- **Settings:**
-  - Holidays and punch zones stay where everyone uses them (Leave page, Companies & Branches); the hub links to them.
-  - Payroll settings and Statutory are two tabs, because merging them would rewrite forms.
+- **Settings:** no longer applies. The hub was undone on 26 Sep (§4), so every setting is where it was before.
 - **Face enrollment:**
   - It reuses the phone's flow and the server's face worker. No face model runs in the browser.
   - Self re-enroll is still blocked for the lock's cooldown (existing server rule, 30 min); HR can unlock sooner.
@@ -127,5 +137,5 @@ For each area: what to do, then what you should see.
 - **Daily Logs** leaves out anyone whose weekly off is the chosen day, even when they punched in.
 - **Muster roll:** the date box spans the whole toolbar row. This is an existing CSS order issue (`.ut-input { width:100% }` after the Tailwind utilities).
 - **My workspace (`/me`)** still shows admins their own month of attendance. Only "My Attendance" was asked to be hidden. The client should decide.
-- **Leave → Leave types** can still be edited there as well as in the hub's Leave rules. This is older duplication; employees read that tab.
+- **Leave → Leave types** can still be edited there as well as in Master → Rules & Policies → Leave Rules. This is older duplication; employees read that tab.
 - **Pre-existing failing live tests:** 29 checks and 4 scripts already failed on `main` before this wave (list in the wave-3 notes in `docs/Designs/STATIC-UI-TO-BUILD.md` §11.20). They are stale tests after the redesign, not new breakage.
