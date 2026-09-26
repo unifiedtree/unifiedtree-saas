@@ -356,7 +356,7 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
               </div>
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Date</label>
-                <DateField value={it.expenseDate} onChange={(e) => setItem(i, { expenseDate: e.target.value })} className="ut-input" format="short" aria-label="Date" />
+                <DateField value={it.expenseDate} onChange={(e) => setItem(i, { expenseDate: e.target.value })} className="ut-input" format="short" icon={false} aria-label="Date" />
               </div>
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Merchant</label>
