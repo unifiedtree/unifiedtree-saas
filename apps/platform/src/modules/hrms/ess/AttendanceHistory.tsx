@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useAttendanceHistory } from '../api/useAttendance'
 import { HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { MonthField } from '@/shared/components/calendar'
 import { Panel, State, dmy } from '@/design/module/ModuleKit'
 
 const TONE: Record<string, PillTone> = { PRESENT: 'ok', ON_TIME: 'ok', LATE: 'warn', ABSENT: 'red', HOLIDAY: 'purple', ON_LEAVE: 'blue', WEEKEND: 'gray', HALF_DAY: 'warn' }
@@ -20,8 +21,8 @@ export function AttendanceHistory() {
   return (
     <Panel title="Attendance history" sub="Your punches, day by day" aside={
       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, color: '#64748b' }}>Month
-        <input aria-label="Attendance month" type="month" value={month} max={monthNow()} onChange={(e) => { if (e.target.value) setMonth(e.target.value) }}
-          style={{ height: 34, padding: '0 10px', border: '1px solid #e2e8f0', borderRadius: 10, font: 'inherit', fontSize: 13, color: '#0f172a' }} />
+        <MonthField aria-label="Attendance month" value={month} max={monthNow()} onChange={(e) => { if (e.target.value) setMonth(e.target.value) }}
+          size="sm" style={{ width: 170 }} />
       </label>}>
       {q.isLoading ? <State kind="loading" />
         : q.isError ? <State kind="error" title="Couldn’t load your attendance" description={(q.error as Error)?.message} onRetry={() => q.refetch()} />

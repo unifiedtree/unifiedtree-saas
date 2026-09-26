@@ -11,7 +11,8 @@
 // The view lives in ?tab= so notifications and the dashboard can deep-link.
 import { useMemo, useState } from 'react'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { Field, Input, Modal } from '@unifiedtree/ui-kit'
+import { Field, Modal } from '@unifiedtree/ui-kit'
+import { DateField } from '@/shared/components/calendar'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { useRoles } from '@/shared/hooks/useRoles'
@@ -146,8 +147,8 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
               options={active.map((t) => { const x = (bal.data ?? []).find((y) => y.leaveTypeId === t.id); return { value: t.id, label: `${t.name}${x ? ` · ${days(x.available)} left` : ` · ${t.annualEntitlement} days a year`}` } })} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
-            <Field label="From *"><Input type="date" min={today} value={f.startDate} onChange={(e: any) => setF({ ...f, startDate: e.target.value })} /></Field>
-            <Field label="To *"><Input type="date" min={f.startDate || today} value={end} disabled={half} onChange={(e: any) => setF({ ...f, endDate: e.target.value })} /></Field>
+            <Field label="From *"><DateField min={today} value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} /></Field>
+            <Field label="To *"><DateField min={f.startDate || today} value={end} disabled={half} onChange={(e) => setF({ ...f, endDate: e.target.value })} /></Field>
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Duration</span>

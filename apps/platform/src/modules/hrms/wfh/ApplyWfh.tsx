@@ -4,7 +4,8 @@
 // approved day lets the person check in from anywhere (the geofence is lifted).
 // POST /v1/wfh, GET /v1/wfh/my, POST /v1/wfh/{id}/cancel.
 import { useMemo, useState } from 'react'
-import { Field, Input, Modal } from '@unifiedtree/ui-kit'
+import { Field, Modal } from '@unifiedtree/ui-kit'
+import { DateField } from '@/shared/components/calendar'
 import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { dashIcon } from '@/design/dc/icons'
 import { ModulePage, Panel, State, RowList, Row, Note, SubHeading, useDesignToast, range, stamp, todayIso } from '@/design/module/ModuleKit'
@@ -40,8 +41,8 @@ export function ApplyWfh() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,340px),1fr))', gap: 16, alignItems: 'start' }}>
         <Panel title="New request" sub="Your approver is notified as soon as you send it.">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
-            <Field label="From *"><Input type="date" min={today} value={from} onChange={(e: any) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value) }} /></Field>
-            <Field label="To *"><Input type="date" min={from || today} value={to} onChange={(e: any) => setTo(e.target.value)} /></Field>
+            <Field label="From *"><DateField min={today} value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value) }} /></Field>
+            <Field label="To *"><DateField min={from || today} value={to} onChange={(e) => setTo(e.target.value)} /></Field>
           </div>
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#334155' }}>Reason *<span style={{ fontWeight: 500, color: '#94a3b8' }}>{reason.length}/500</span></span>
