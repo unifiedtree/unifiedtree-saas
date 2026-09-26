@@ -271,10 +271,10 @@ try {
   /** Picks a day on a DatePicker: opens it, steps months with its arrows, clicks the day. */
   const pickDate = async (page, trigger, iso) => {
     await trigger.click()
-    const pop = page.getByRole('dialog', { name: /choose a date/i }).last()
+    const pop = page.getByRole('dialog', { name: /^choose date$/i }).last()
     await pop.waitFor({ timeout: 5_000 })
-    const day = pop.getByRole('button', { name: new RegExp(`^\\w+, ${dayLabel(iso)}`) })
-    const m = ((await trigger.getAttribute('aria-label')) || '').match(/(\d{1,2}) (\w{3}) (\d{4})/)
+    const day = pop.getByRole('gridcell', { name: new RegExp(`^\\w+, ${dayLabel(iso)}`) })
+    const m = ((await trigger.innerText()) || '').match(/(\d{1,2}) (\w{3}) (\d{4})/)
     const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     const cur = m ? `${m[3]}-${String(MON.indexOf(m[2]) + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}` : today
     const step = iso > cur ? /next month/i : /previous month/i
@@ -286,7 +286,7 @@ try {
   /** Opens a DatePicker and says whether its "Previous month" arrow can be used, then closes it. */
   const prevEnabled = async (page, trigger) => {
     await trigger.click()
-    const pop = page.getByRole('dialog', { name: /choose a date/i }).last()
+    const pop = page.getByRole('dialog', { name: /^choose date$/i }).last()
     await pop.waitFor({ timeout: 5_000 })
     const on = await pop.getByRole('button', { name: /previous month/i }).first().isEnabled()
     await page.keyboard.press('Escape')
@@ -339,7 +339,7 @@ try {
     const ct = await listText(page, 'birthdays')
     const req = asked.find((u) => u.includes(`birthdayFrom=${yearEnd.from}`) && u.includes(`birthdayTo=${yearEnd.to}`))
     check('UI owner custom range across the year end lists 20 Dec and 5 Jan, not November', !!req && ct.includes(F.bDec.name) && ct.includes(F.bJan.name) && !ct.includes(F.b3.name), `req=${!!req}`)
-    const toAria = (await pickers.nth(1).getAttribute('aria-label')) || ''
+    const toAria = (await pickers.nth(1).innerText()) || ''
     check('UI owner custom range: the To calendar shows the chosen day', toAria.includes(`${Number(yearEnd.to.slice(8))} Jan ${yeY + 1}`), toAria)
     await card.screenshot({ path: `${shots}/milestones-custom-1440.png` })
     // "View all" follows the range.

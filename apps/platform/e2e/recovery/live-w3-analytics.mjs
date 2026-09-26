@@ -195,7 +195,7 @@ try {
 
   // 3. A tile opens the month's calendar
   await page.getByRole('group', { name: /in numbers/ }).getByRole('button').filter({ hasText: 'Came in' }).click()
-  await page.getByRole('heading', { name: pName }).waitFor({ timeout: 10_000 })
+  await page.getByRole('heading', { name: pName, exact: true }).waitFor({ timeout: 10_000 })
   check('a tile opens that month’s calendar, month kept', url().searchParams.get('tab') === 'calendar' && url().searchParams.get('month') === P, page.url().replace(base, ''))
   // A past day: came in ÷ (came in + absent), like the calendar.
   const rate = (r) => { const e = came(r) + r.absent; return e ? Math.round((came(r) / e) * 100) : 0 }
@@ -266,7 +266,7 @@ try {
   await page.screenshot({ path: `${SHOTS}/analytics-390-month-picker.png` })
   await page.keyboard.press('Escape')
   await page.goto(`${base}/hrms/att-analytics?tab=calendar&month=${P}`)
-  await page.getByRole('heading', { name: pName }).waitFor({ timeout: 20_000 })
+  await page.getByRole('heading', { name: pName, exact: true }).waitFor({ timeout: 20_000 })
   await page.screenshot({ path: `${SHOTS}/analytics-390-past-calendar.png`, fullPage: true })
   check('390px: no page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))
 } catch (e) {
