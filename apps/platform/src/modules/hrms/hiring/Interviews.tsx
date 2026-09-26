@@ -12,6 +12,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrDrawer, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { useToast } from '@/shared/hooks/useToast'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ModulePage, Panel, Facts, Note, RowList, Row, State, StatRow, SubHeading, todayIso } from '@/design/module/ModuleKit'
@@ -90,7 +91,7 @@ export function ScheduleInterviewDrawer({ candidateId, candidateName, interview,
         <p className="text-sm text-text-secondary">{`With ${candidateName}. Times are India time (IST).`}</p>
         <div><label className={label} htmlFor="iv-title">Interview name</label><input id="iv-title" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Technical round" className="ut-input" /></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div><label className={label} htmlFor="iv-date">Date</label><input id="iv-date" type="date" required min={interview ? undefined : todayIso()} value={date} onChange={(e) => setDate(e.target.value)} className="ut-input" /></div>
+          <div><label className={label} htmlFor="iv-date">Date</label><DateField id="iv-date" required min={interview ? undefined : todayIso()} value={date} onChange={(e) => setDate(e.target.value)} className="ut-input" format="short" /></div>
           <div><label className={label} htmlFor="iv-time">Time (IST)</label><input id="iv-time" type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="ut-input" /></div>
           <div><label className={label} htmlFor="iv-dur">Duration</label>
             <select id="iv-dur" value={duration} onChange={(e) => setDuration(e.target.value)} className="ut-select">

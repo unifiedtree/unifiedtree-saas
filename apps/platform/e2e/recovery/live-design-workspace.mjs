@@ -6,6 +6,7 @@
 // shift assignment are deleted from the local database at the end.
 //
 //   node e2e/recovery/live-design-workspace.mjs
+/* global process, console, fetch */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
@@ -13,7 +14,7 @@ const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const stamp = Date.now() % 1000000
@@ -42,6 +43,18 @@ try {
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(500) }
   const toast = (re) => page.locator('[role=status]').filter({ hasText: re }).first().waitFor({ timeout: 15000 }).then(() => true, () => false)
   const dialog = () => page.getByRole('dialog')
+  // Date fields use the shared calendar: open it, then year → month → day.
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  const pickDate = async (trigger, iso) => {
+    const [y, m, d] = iso.split('-').map(Number)
+    await trigger.click()
+    const calendar = page.getByRole('dialog', { name: 'Choose date' })
+    await calendar.getByRole('button', { name: 'Choose year' }).click()
+    await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+    await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+    await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+    await calendar.waitFor({ state: 'hidden', timeout: 5000 })
+  }
 
   await page.goto(`${base}/hrms/employees/${id}`); await settle()
   await page.getByText(`Workspace QA ${stamp}`).first().waitFor({ timeout: 20000 })
@@ -58,7 +71,7 @@ try {
 
   // ── Extend → confirm → notice → cancel ──
   await page.getByRole('button', { name: 'Extend', exact: true }).click()
-  await dialog().locator('input[type=date]').fill(day(40))
+  await pickDate(dialog().locator('.utc-trigger').first(), day(40))
   await dialog().getByRole('button', { name: 'Extend probation' }).click()
   check('extend probation saves the new end date', await toast(/Probation extended/) && sql(`select probation_end_date from hrms.employees where id='${id}'`) === day(40))
   await settle()
@@ -70,7 +83,7 @@ try {
   await page.getByRole('menuitem', { name: 'Start notice' }).click()
   await dialog().getByRole('button', { name: 'Start notice' }).click()
   check('notice needs a last working day', await dialog().getByText('Last working day is required').count() > 0)
-  await dialog().locator('input[type=date]').nth(1).fill(day(30))
+  await pickDate(dialog().locator('.utc-trigger').nth(1), day(30))
   await dialog().getByRole('button', { name: 'Start notice' }).click()
   check('start notice records it', await toast(/Notice started/) && status() === 'NOTICE_PERIOD')
   await settle()

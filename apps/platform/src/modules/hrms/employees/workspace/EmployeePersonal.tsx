@@ -35,6 +35,7 @@ import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { Calendar, FileText, Mail, Phone, Plus, Trash2, User as UserIcon, XCircle } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeesByIds } from '../../api/useWorkforce'
@@ -192,7 +193,7 @@ function IdentityTab({ employeeId }: { employeeId: string }) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Passport Number" error={errors.passportNumber?.message}><Input {...register('passportNumber')} /></Field>
-            <Field label="Passport Expiry" error={errors.passportExpiry?.message}><Input {...register('passportExpiry')} type="date" /></Field>
+            <Field label="Passport Expiry" error={errors.passportExpiry?.message}><DateField {...register('passportExpiry')} clearable /></Field>
           </div>
           <Button type="submit" loading={saveMut.isPending} disabled={!isDirty || !isValid}>Save Identity</Button>
         </div>
@@ -352,8 +353,8 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
           {/* End Date hides while "currently working" — collapse to one column
               so Start Date doesn't strand beside a dead cell. */}
           <div className={isCurrent ? 'grid grid-cols-1 gap-y-5' : 'grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5'}>
-            <Field label="Start Date" required error={errors.startDate?.message}><Input {...register('startDate')} type="date" /></Field>
-            {!isCurrent && <Field label="End Date" error={errors.endDate?.message}><Input {...register('endDate')} type="date" /></Field>}
+            <Field label="Start Date" required error={errors.startDate?.message}><DateField {...register('startDate')} /></Field>
+            {!isCurrent && <Field label="End Date" error={errors.endDate?.message}><DateField {...register('endDate')} clearable /></Field>}
           </div>
           <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
             <input type="checkbox" {...register('current')} className="rounded border-border bg-white" />
@@ -432,7 +433,7 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
           <Field label="Name" required error={errors.name?.message}><Input {...register('name')} /></Field>
           <Field label="Relationship" required error={errors.relationship?.message}><Input {...register('relationship')} placeholder="Spouse, Child, Parent…" /></Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="Date of Birth" error={errors.dateOfBirth?.message}><Input {...register('dateOfBirth')} type="date" /></Field>
+            <Field label="Date of Birth" error={errors.dateOfBirth?.message}><DateField {...register('dateOfBirth')} fromYear={1900} clearable /></Field>
             <div>
               <label className="block text-[13px] font-semibold text-text-primary mb-1">Gender</label>
               <select {...register('gender')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { X, ChevronRight, Send, Users, Pencil } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
+import { DateField } from '@/shared/components/calendar'
 import { useAuthStore, usePermission } from '@unifiedtree/sdk'
 import { P } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
@@ -1147,10 +1148,10 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   {/* max stops the picker offering future dates at all; the
                       validateBasic check is the real gate (a user can still
                       type into the field on some browsers). */}
-                  <Input error={!!errors.dateOfJoining} type="date" max={todayLocalIso()} value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
+                  <DateField aria-label="Date of joining" invalid={!!errors.dateOfJoining} max={todayLocalIso()} value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
                 </Field>
                 <Field label="Date of Birth" error={errors.dateOfBirth}>
-                  <Input error={!!errors.dateOfBirth} type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} />
+                  <DateField aria-label="Date of birth" invalid={!!errors.dateOfBirth} value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} clearable />
                 </Field>
               </div>
 

@@ -6,6 +6,7 @@ import { DataTable } from '@/shared/components/DataTable'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { SkeletonBlock, SkeletonCardGrid } from '@/shared/components/SkeletonCard'
 import { Input, Label, Modal } from '@unifiedtree/ui-kit'
+import { DateField } from '@/shared/components/calendar'
 import { arr, txt } from './dc-runtime'
 import './EmployeeWorkspace.view.css'
 
@@ -501,7 +502,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                   <Label>
                     {"Effective from"}
                   </Label>
-                  <Input type="date" value={v.eff} min={v.effMin} onChange={v.setEff} />
+                  <DateField value={v.eff} min={v.effMin} onChange={v.setEff} />
                   <div style={{fontSize: "12.5px", color: "#64748b"}}>
                     {txt(v.effHint)}
                   </div>
@@ -547,7 +548,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                       ) : null}
                       {f?.isInput ? (
                         <>
-                          <Input type={f?.type} value={f?.v} placeholder={f?.ph} disabled={f?.off} onChange={f?.on} />
+                          {f?.type === 'date' ? <DateField value={f?.v} disabled={f?.off} onChange={f?.on} /> : <Input type={f?.type} value={f?.v} placeholder={f?.ph} disabled={f?.off} onChange={f?.on} />}
                         </>
                       ) : null}
                       {f?.hasErr ? (
@@ -586,7 +587,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                   ) : null}
                   {f?.isInput ? (
                     <>
-                      <Input type={f?.type} value={f?.v} maxLength={f?.max} placeholder={f?.ph} onChange={f?.on} />
+                      {f?.type === 'date' ? <DateField value={f?.v} onChange={f?.on} /> : <Input type={f?.type} value={f?.v} maxLength={f?.max} placeholder={f?.ph} onChange={f?.on} />}
                     </>
                   ) : null}
                   {f?.hasErr ? (
