@@ -24,20 +24,36 @@ export function litRailKey(active: readonly ActiveRailItem[], via?: string | nul
   return (pool.find(i => i.tabs > 1) ?? pool[0])?.key
 }
 
+/** A rail click (or a tab in its row, or the phone menu): the rail item and the page it opened. */
+export interface RailVia { key: string; path: string }
+
+export const railViaTo = (key: string, to: string): RailVia => ({ key, path: to.split(/[?#]/)[0] })
+
+/**
+ * The clicked rail item while the person is still on the page that click opened
+ * (its own tabs and pages under it included). Any other way onto a page (a link on
+ * the page, search, a notification, Back, a new sign-in) goes by the page alone.
+ */
+export function railViaOn(via: RailVia | null, pathname: string): string | null {
+  if (!via) return null
+  return pathname === via.path || pathname.startsWith(via.path + '/') ? via.key : null
+}
+
 // Kept per browser tab, so a refresh keeps the same rail item lit.
 const VIA_KEY = 'ut:rail-via'
 
-export function readRailVia(): string | null {
+export function readRailVia(): RailVia | null {
   try {
-    return sessionStorage.getItem(VIA_KEY)
+    const v = JSON.parse(sessionStorage.getItem(VIA_KEY) ?? 'null') as Partial<RailVia> | null
+    return v && typeof v.key === 'string' && typeof v.path === 'string' ? { key: v.key, path: v.path } : null
   } catch {
     return null
   }
 }
 
-export function saveRailVia(key: string | null) {
+export function saveRailVia(via: RailVia | null) {
   try {
-    if (key) sessionStorage.setItem(VIA_KEY, key)
+    if (via) sessionStorage.setItem(VIA_KEY, JSON.stringify(via))
     else sessionStorage.removeItem(VIA_KEY)
   } catch {
     /* private mode: the rail still lights, from the page alone */

@@ -29,7 +29,7 @@ import { dashIcon } from '@/design/dc/icons'
 import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
 import { PageSkeleton } from '@/shared/components/PageSkeleton'
 import { preloadPath, preloadPathsWhenIdle } from '@/shared/routing/lazyPage'
-import { litRailKey, readRailVia, saveRailVia } from '@/layouts/railLit'
+import { litRailKey, railViaOn, railViaTo, readRailVia, saveRailVia, type RailVia } from '@/layouts/railLit'
 import {
   DesignRail, DesignHeader, DesignSubNav, DesignMobileHeader, DesignMobileNav, DesignTooltip,
   HeaderIconButton, HeaderBellButton, HeaderProfileButton, HeaderDivider,
@@ -412,8 +412,9 @@ export function PlatformShell() {
   // "Advanced search" (the ⌘K palette) opened from the top bar starts with what was typed there.
   const [advancedQuery, setAdvancedQuery] = useState('')
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-  // The rail item the person came through (a rail click, or a tab in its section row); see railLit.ts.
-  const [railVia, setRailVia] = useState<string | null>(readRailVia)
+  // The rail item the person came through (a rail click, or a tab in its section row) and the page
+  // that click opened; see railLit.ts.
+  const [railVia, setRailVia] = useState<RailVia | null>(readRailVia)
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
@@ -529,17 +530,18 @@ export function PlatformShell() {
     return list
   })()
 
-  const rememberRail = (key: string | null) => { setRailVia(key); saveRailVia(key) }
+  const rememberRail = (key: string, to: string) => { const v = railViaTo(key, to); setRailVia(v); saveRailVia(v) }
   const activeRail = railItems.filter(i => i.active).map(i => ({ key: i.key, tabs: i.children?.length ?? 0 }))
-  // Moving to a page of another rail item (a link on the page, search, a notification) ends the
-  // remembered one. Only on a route change: on a refresh the rail may still be filling in.
-  const activeRailKeys = activeRail.map(i => i.key).join('|')
-  const railPath = useRef(location.pathname)
+  // The click counts only on the page it opened. Any other move to another page (a link on the
+  // page, search, a notification, Back, a load or sign-in elsewhere) forgets it, so it cannot
+  // light Me again later. Checked only when the page itself changes, so a click still on its way
+  // is not forgotten.
+  const railPath = useRef<string | null>(null)
   useEffect(() => {
     if (railPath.current === location.pathname) return
     railPath.current = location.pathname
-    if (railVia && activeRailKeys && !activeRailKeys.split('|').includes(railVia)) { setRailVia(null); saveRailVia(null) }
-  }, [location.pathname, activeRailKeys, railVia])
+    if (railVia && !railViaOn(railVia, location.pathname)) { setRailVia(null); saveRailVia(null) }
+  }, [location.pathname, railVia])
 
   // Fetch the code of every page this person can reach from the rail and its sections while the
   // browser is idle, so opening one doesn't wait on a download (lazyPage.ts).
@@ -606,7 +608,7 @@ export function PlatformShell() {
         )}
       </div>
       <div className="border-t border-[var(--border-subtle)] p-1.5">
-        <button onClick={logout} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--status-error-fg)] hover:bg-[var(--status-error-bg)]"><LogOut size={16} /> Sign out</button>
+        <button onClick={() => { saveRailVia(null); logout() }} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--status-error-fg)] hover:bg-[var(--status-error-bg)]"><LogOut size={16} /> Sign out</button>
       </div>
     </>
   )
@@ -672,7 +674,7 @@ export function PlatformShell() {
   // One lit rail item at a time. When several match (a manager's Leave is both the
   // Leave item and a tab of Me), the one the person came through stays lit;
   // otherwise the page's own item rather than Me (railLit.ts).
-  const litKey = litRailKey(activeRail, railVia)
+  const litKey = litRailKey(activeRail, railViaOn(railVia, location.pathname))
   const railEntry = (item: (typeof railItems)[number]): RailEntry => ({
     key: item.key,
     label: item.label,
@@ -680,7 +682,7 @@ export function PlatformShell() {
     icon: RAIL_ICONS[item.key] ? dashIcon(RAIL_ICONS[item.key], 20) : React.cloneElement(item.icon as React.ReactElement, { size: 20 }),
     active: scope !== 'admin' && item.key === litKey,
     divider: RAIL_DIVIDERS.has(item.key),
-    onClick: () => { rememberRail(item.key); navigate(item.target) },
+    onClick: () => { rememberRail(item.key, item.target); navigate(item.target) },
     onIntent: () => preloadPath(item.target),
   })
   const railTop = railItems.filter(i => i.key !== 'hrsettings').map(railEntry)
@@ -707,7 +709,7 @@ export function PlatformShell() {
     const best = kids.filter(c => matchPath(location.pathname, c.path)).sort((a, b) => b.path.length - a.path.length)[0]
     // A page with unsaved changes (Payroll settings) may ask first, as Payroll's own section bar does.
     // A tab keeps its rail item lit, even on a page another rail item also lists.
-    const go = (to: string) => { const open = () => { rememberRail(active.key); navigate(to) }; if (typeof window.__utLeaveGuard === 'function' && window.__utLeaveGuard(open)) return; open() }
+    const go = (to: string) => { const open = () => { rememberRail(active.key, to); navigate(to) }; if (typeof window.__utLeaveGuard === 'function' && window.__utLeaveGuard(open)) return; open() }
     return {
       label: `${active.fullLabel} sections`,
       items: kids.map(c => ({ label: c.label, path: c.path, active: c === best, onClick: () => go(c.path) })),
@@ -720,7 +722,7 @@ export function PlatformShell() {
       label: i.fullLabel,
       icon: RAIL_ICONS[i.key] ? dashIcon(RAIL_ICONS[i.key], 18) : React.cloneElement(i.icon as React.ReactElement, { size: 18 }),
       active: scope !== 'admin' && i.key === litKey,
-      onClick: () => { rememberRail(i.key); navigate(i.target) },
+      onClick: () => { rememberRail(i.key, i.target); navigate(i.target) },
     })),
     // Workspace settings open from the Apps page and the profile menu, not from
     // inside a module; the module's own settings are its rail entry above.

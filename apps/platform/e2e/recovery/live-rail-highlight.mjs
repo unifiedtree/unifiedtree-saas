@@ -2,7 +2,9 @@
 // Attendance and Team pages are also tabs of "Me"; clicking Leave used to light
 // Me. Now the item you came through stays lit (Leave → Leave, Me → its Leave
 // tab → Me), a fresh link lights the page's own item, and a refresh keeps it.
-// Read-only: it only opens pages.
+// The click counts only on the page it opened: a dashboard card, a button on a
+// page, search, Back or a new sign-in go by the page alone.
+// Read-only: it only opens pages (and signs out and in once).
 //
 //   RECOVERY_APP_URL=http://demo.localhost:3040 node e2e/recovery/live-rail-highlight.mjs
 //   RAIL_BEFORE_URL=<app with the old code>  also compares the Leave page a Leave click opens
@@ -208,6 +210,50 @@ try {
         const r = await litOnly(page, title)
         check(`${who}: a fresh ${path} lights ${title}`, r.ok, r.detail)
       }
+
+      // Any other way onto a page (a dashboard card, a button on a page, search, Back) goes by the
+      // page: an earlier Me visit does not light Me there.
+      if (has(ME) && has('Leave Management')) {
+        await clickRail(page, ME); await clickTab(page, 'Leave')
+        await page.goto(base + '/dashboard'); await settle(page)
+        const card = page.getByText(/Open leave approvals|Add Time-Off/).filter({ visible: true }).first()
+        if (await card.isVisible().catch(() => false)) {
+          const label = (await card.textContent()).trim()
+          await card.click(); await settle(page)
+          const r = await litOnly(page, 'Leave Management')
+          check(`${who}: Me → Leave, a load of the dashboard, then its "${label}" lights Leave`, r.ok && new URL(page.url()).pathname === '/hrms/leave', r.detail)
+        } else if (who === 'mgr') check(`${who}: the dashboard shows a leave card`, false, 'no "Open leave approvals" or "Add Time-Off"')
+        else console.log(`SKIP  ${who}: no leave card on the dashboard`)
+
+        await clickRail(page, ME)
+        const input = page.locator('input[aria-controls="top-search-results"]').filter({ visible: true }).first()
+        await input.click(); await input.fill('leave')
+        const opts = page.locator('[role=option]').filter({ visible: true })
+        await opts.first().waitFor({ timeout: 15_000 }).catch(() => {})
+        const texts = (await opts.allTextContents()).map((t) => t.trim())
+        const i = texts.findIndex((t) => /^Leave/i.test(t) && !/rule|setting|polic|type|balance|encash|calendar|approv/i.test(t))
+        if (i >= 0) {
+          await opts.nth(i).click(); await settle(page)
+          const r = await litOnly(page, 'Leave Management')
+          check(`${who}: Me, then search "leave" → the Leave page lights Leave`, r.ok && new URL(page.url()).pathname === '/hrms/leave', r.detail)
+        } else check(`${who}: search "leave" offers the Leave page`, false, JSON.stringify(texts.slice(0, 6)))
+        await page.keyboard.press('Escape').catch(() => {})
+
+        await clickRail(page, 'Leave Management'); await clickRail(page, ME)
+        await page.goBack(); await settle(page)
+        const r = await litOnly(page, 'Leave Management')
+        check(`${who}: Leave, Me, then Back to /hrms/leave lights Leave`, r.ok && new URL(page.url()).pathname === '/hrms/leave', r.detail)
+      }
+      if (has(ME) && has('My Team') && has('Attendance & Time')) {
+        await clickRail(page, ME); await clickTab(page, 'Team Attendance')
+        await page.getByRole('button', { name: /Team attendance/ }).first().click(); await settle(page)
+        let r = await litOnly(page, 'Attendance & Time')
+        check(`${who}: Me → Team Attendance, then the page's "Team attendance" button lights Attendance`, r.ok && new URL(page.url()).pathname === '/hrms/attendance', r.detail)
+        await clickRail(page, 'My Team'); await clickRail(page, ME); await clickTab(page, 'Team Attendance')
+        await page.goBack(); await page.goBack(); await settle(page)
+        r = await litOnly(page, 'My Team')
+        check(`${who}: Team, Me → Team Attendance, then Back twice to /team lights Team`, r.ok && new URL(page.url()).pathname === '/team', r.detail)
+      }
       if (who === 'owner') {
         await page.goto(base + '/settings/profile'); await settle(page)
         const r = await rail(page)
@@ -215,6 +261,33 @@ try {
       }
     } catch (e) {
       check(`${who}: run finished`, false, String(e.message || e).slice(0, 300))
+    } finally { await context.close() }
+  }
+
+  // Signing out forgets the remembered rail item: the next person in this browser tab starts from the page alone.
+  {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    try {
+      const page = await login(context, 'mgr@unifiedtree.demo')
+      watch(page, 'sign-out')
+      await page.goto(base + '/profile'); await settle(page)
+      await clickRail(page, ME); await clickTab(page, 'Leave')
+      await page.getByRole('button', { name: 'Account' }).filter({ visible: true }).first().click()
+      await page.getByRole('button', { name: 'Sign out' }).filter({ visible: true }).first().click()
+      await page.waitForURL((u) => u.pathname.startsWith('/login'), { timeout: 30_000 })
+      const kept = await page.evaluate(() => { try { return sessionStorage.getItem('ut:rail-via') } catch { return 'unreadable' } })
+      check('sign out forgets the remembered rail item', kept === null, String(kept))
+      await page.locator('input[type=email]').fill('hrm@unifiedtree.demo')
+      await page.locator('input[type=password]').fill(password)
+      await page.locator('button[type=submit]').click()
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+      await page.goto(base + '/dashboard'); await settle(page)
+      const card = page.getByText(/Open leave approvals|Add Time-Off/).filter({ visible: true }).first()
+      await card.click({ timeout: 15_000 }); await settle(page)
+      const r = await litOnly(page, 'Leave Management')
+      check('the next person signed in to the same tab: the dashboard leave card lights Leave', r.ok, r.detail)
+    } catch (e) {
+      check('sign-out run finished', false, String(e.message || e).slice(0, 300))
     } finally { await context.close() }
   }
 
@@ -258,6 +331,12 @@ try {
         await mobileGo(page, 'My Team')
         const r = await mobileLitIs(page, 'My Team')
         check(`${who} (phone): Team lights Team`, r.ok, r.detail)
+      }
+      if (has(ME) && has('Leave Management')) {
+        await mobileGo(page, 'Leave Management'); await mobileGo(page, ME)
+        await page.goBack(); await settle(page)
+        const r = await mobileLitIs(page, 'Leave Management')
+        check(`${who} (phone): Leave, Me, then Back to /hrms/leave lights Leave`, r.ok && new URL(page.url()).pathname === '/hrms/leave', r.detail)
       }
       await openFresh(page, '/hrms/leave')
       const want = has('Leave Management') ? 'Leave Management' : ME

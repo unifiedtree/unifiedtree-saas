@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { litRailKey, readRailVia, saveRailVia, type ActiveRailItem } from './railLit'
+import { litRailKey, railViaOn, railViaTo, readRailVia, saveRailVia, type ActiveRailItem } from './railLit'
 
 // The rule before this change: the first active item with more than one page, else the first active item.
 const before = (active: ActiveRailItem[]) => (active.find(i => i.tabs > 1) ?? active[0])?.key
@@ -77,6 +77,33 @@ describe('which rail item is lit', () => {
   })
 })
 
+describe('a click counts only on the page it opened', () => {
+  it('holds on that page, its own tabs (?tab=) and pages under it', () => {
+    const meLeave = railViaTo('ess', '/hrms/leave')
+    expect(railViaOn(meLeave, '/hrms/leave')).toBe('ess')
+    expect(railViaOn(railViaTo('ess', '/hrms/leave?tab=my'), '/hrms/leave')).toBe('ess')
+    expect(railViaOn(railViaTo('attendance', '/hrms/attendance'), '/hrms/attendance/manual-entry')).toBe('attendance')
+  })
+
+  it('ends on any other page: a dashboard card, a link on the page, search, a notification, Back', () => {
+    // Me → Leave, then a load of /dashboard: its "Open leave approvals" card lights Leave, not Me.
+    const meLeave = railViaTo('ess', '/hrms/leave')
+    expect(railViaOn(meLeave, '/dashboard')).toBeNull()
+    // Me → Team attendance, then the Team page's "Team attendance" button: Attendance, not Me.
+    expect(litRailKey(ATTENDANCE_PAGE, railViaOn(railViaTo('ess', '/team'), '/hrms/attendance'))).toBe('attendance')
+    // Me, then search, a notification or Back (Leave → Me → Back) opens Leave: Leave.
+    expect(litRailKey(LEAVE_PAGE, railViaOn(railViaTo('ess', '/me'), '/hrms/leave'))).toBe('leave')
+    // A path that only starts the same is another page.
+    expect(railViaOn(railViaTo('ess', '/me'), '/messages')).toBeNull()
+    expect(railViaOn(null, '/hrms/leave')).toBeNull()
+  })
+
+  it('Me → Leave, and a refresh there, keeps Me lit', () => {
+    expect(litRailKey(LEAVE_PAGE, railViaOn(railViaTo('ess', '/hrms/leave'), '/hrms/leave'))).toBe('ess')
+    expect(litRailKey(LEAVE_PAGE, railViaOn(railViaTo('leave', '/hrms/leave'), '/hrms/leave'))).toBe('leave')
+  })
+})
+
 describe('remembering the rail item for this browser tab', () => {
   afterEach(() => { vi.unstubAllGlobals() })
 
@@ -84,15 +111,21 @@ describe('remembering the rail item for this browser tab', () => {
     const store = new Map<string, string>()
     vi.stubGlobal('sessionStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) }, removeItem: (k: string) => { store.delete(k) } })
     expect(readRailVia()).toBeNull()
-    saveRailVia('leave')
-    expect(readRailVia()).toBe('leave')
+    saveRailVia(railViaTo('ess', '/hrms/leave'))
+    expect(readRailVia()).toEqual({ key: 'ess', path: '/hrms/leave' })
     saveRailVia(null)
     expect(readRailVia()).toBeNull()
+    // Anything else stored under the key is ignored.
+    for (const bad of ['leave', '"leave"', '{"key":"leave"}', '42', 'null']) {
+      store.set('ut:rail-via', bad)
+      expect(readRailVia()).toBeNull()
+    }
   })
 
   it('works without storage (private mode, blocked site data)', () => {
     vi.stubGlobal('sessionStorage', { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') }, removeItem: () => { throw new Error('blocked') } })
-    expect(() => saveRailVia('leave')).not.toThrow()
+    expect(() => saveRailVia(railViaTo('leave', '/hrms/leave'))).not.toThrow()
+    expect(() => saveRailVia(null)).not.toThrow()
     expect(readRailVia()).toBeNull()
   })
 })
