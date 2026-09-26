@@ -119,7 +119,7 @@ class AttendanceReviewRulesTest {
                 a, Map.of(YESTERDAY, day("PRESENT", IN, null, null, false, false, false, false, "WFH")),
                 b, Map.of(YESTERDAY, day("LATE", IN, null, 30, false, false, false, false, "WFH")),
                 c, Map.of(YESTERDAY, day("ON_LEAVE", null, null, null, false, false, false, false, null)));
-        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(a, b, c), 0, eff, List.of());
+        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(a, b, c), 3, 0, eff, List.of());
         assertEquals(2, counts.workFromHome(), "everyone who worked from home, the late one too");
         assertEquals(1, counts.late());
         assertEquals(0, counts.present());
@@ -133,9 +133,31 @@ class AttendanceReviewRulesTest {
         assertFalse(counts.weeklyOffDay());
     }
 
+    /**
+     * Someone who comes in on their weekly off is counted as having worked, and
+     * is NOT added to the day's expected total - otherwise fixing the missing
+     * punch would have invented an extra person who owed the company a day.
+     */
+    @Test
+    void someoneWhoWorkedOnTheirWeeklyOffCountsAsWorkedButNotAsExpected() {
+        UUID scheduled = UUID.randomUUID(), dayOff = UUID.randomUUID();
+        var eff = Map.of(
+                scheduled, Map.of(YESTERDAY, day("PRESENT", IN, null, null, false, false, false, false, "OFFICE")),
+                dayOff, Map.of(YESTERDAY, day("PRESENT", IN, null, null, false, false, false, false, "OFFICE")));
+        var counts = AttendanceController.effectiveCounts(
+                YESTERDAY, List.of(scheduled, dayOff), 1, 1, eff, List.of());
+        assertEquals(2, counts.present(), "both punches are counted");
+        assertEquals(2, counts.checkedIn());
+        assertEquals(1, counts.scheduled(), "only the rostered person was expected in");
+        assertEquals(1, counts.weeklyOff());
+        assertEquals(0, counts.absent());
+        assertEquals(0, counts.notMarked());
+        assertFalse(counts.weeklyOffDay(), "somebody was scheduled");
+    }
+
     @Test
     void trendMarksADayEveryoneHasOffAsAWeeklyOff() {
-        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(), 4, Map.of(), List.of());
+        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(), 0, 4, Map.of(), List.of());
         assertEquals(0, counts.scheduled());
         assertEquals(4, counts.weeklyOff());
         assertTrue(counts.weeklyOffDay());

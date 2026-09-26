@@ -3,7 +3,9 @@ package com.hrms.api.attendance;
 import com.hrms.attendance.entity.AttendanceRecord;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AttendanceBucketsTest {
@@ -27,6 +29,32 @@ class AttendanceBucketsTest {
         row.setAttendanceStatus(status == null ? null : com.hrms.attendance.enums.AttendanceStatus.valueOf(status));
         row.setAttendanceType(type == null ? null : com.hrms.attendance.enums.AttendanceType.valueOf(type));
         return row;
+    }
+
+    // A punch on a weekly off used to be invisible: the roster was filtered on
+    // the weekly off before any record was read, so Daily Logs and the team
+    // payload both dropped the person who had actually come in.
+    private static final LocalDate SATURDAY = LocalDate.of(2026, 9, 26);
+    private static final Set<Integer> SAT_SUN = Set.of(6, 7);
+
+    @Test void whoeverPunchedIsOnTheDayRosterEvenOnTheirWeeklyOff() {
+        assertFalse(AttendanceController.onDayRoster(SATURDAY, null, null, SAT_SUN, false), "off and no punch");
+        assertTrue(AttendanceController.onDayRoster(SATURDAY, null, null, SAT_SUN, true), "off but came in");
+        assertTrue(AttendanceController.onDayRoster(SATURDAY, null, null, Set.of(7), false), "a working Saturday");
+        assertTrue(AttendanceController.onDayRoster(SATURDAY, null, null, null, false), "no weekly offs known");
+    }
+
+    @Test void aPunchDoesNotPutAFutureHireOrAPastLeaverOnTheRoster() {
+        assertFalse(AttendanceController.onDayRoster(SATURDAY, SATURDAY.plusDays(5), null, Set.of(7), true), "joins later");
+        assertFalse(AttendanceController.onDayRoster(SATURDAY, null, SATURDAY.minusDays(1), Set.of(7), true), "already left");
+        assertTrue(AttendanceController.onDayRoster(SATURDAY, SATURDAY, SATURDAY, Set.of(7), false), "joins and leaves that day");
+    }
+
+    @Test void theWeeklyOffTallyIgnoresPunchesButNotJoiningAndLeaving() {
+        assertTrue(AttendanceController.onWeeklyOff(SATURDAY, null, null, SAT_SUN));
+        assertFalse(AttendanceController.onWeeklyOff(SATURDAY, null, null, Set.of(7)));
+        assertFalse(AttendanceController.onWeeklyOff(SATURDAY, SATURDAY.plusDays(1), null, SAT_SUN), "not hired yet");
+        assertFalse(AttendanceController.onWeeklyOff(SATURDAY, null, SATURDAY.minusDays(1), SAT_SUN), "already left");
     }
 
     @Test void overlappingLateWfhMustNotSubtractAnUnrelatedPresentEmployee() {

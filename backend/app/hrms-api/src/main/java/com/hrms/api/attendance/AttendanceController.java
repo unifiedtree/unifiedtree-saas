@@ -351,24 +351,35 @@ public class AttendanceController {
         List<Employee> rosterAll = history ? scopedEmployeesOn(jwt, departmentId, selectedDate, selectedDate) : scopedEmployees(jwt, departmentId);
         // Exclude anyone who joined after the date (a 1-Oct hire is not
         // "absent" on 24 Sep) or whose weekly off falls on the date (Sat/Sun
-        // fallback if the employee has no explicit weekly_off_days).
+        // fallback if the employee has no explicit weekly_off_days) - unless
+        // they punched anyway, which is why the day's records are read BEFORE
+        // the roster is filtered. Filtering first dropped everyone whose weekly
+        // off was the selected date even when they had come in and worked, so
+        // their punch was missing from Daily Logs and their name was missing
+        // from the team payload the mobile app resolves requesters against.
         List<UUID> rosterAllIds = rosterAll.stream().map(Employee::getId).toList();
         java.util.Map<UUID, LocalDate> joins = attendanceService.joiningDatesFor(rosterAllIds);
         java.util.Map<UUID, java.util.Set<Integer>> weekOffs = attendanceService.weeklyOffSetsFor(rosterAllIds);
         java.util.Map<UUID, LocalDate> lastDays = history ? lastDaysOf(rosterAllIds) : Map.of();
-        int dow = selectedDate.getDayOfWeek().getValue();
+        List<AttendanceRecord> rosterRecords = attendanceService.getRecordsForEmployeesOnDate(
+                rosterAllIds, selectedDate);
+        Set<UUID> punchedIds = rosterRecords.stream()
+                .filter(record -> record.getCheckInAt() != null)
+                .map(AttendanceRecord::getEmployeeId)
+                .collect(Collectors.toSet());
         List<Employee> employees = rosterAll.stream()
-                .filter(emp -> {
-                    LocalDate joined = joins.get(emp.getId());
-                    if (joined != null && joined.isAfter(selectedDate)) return false;
-                    if (!com.hrms.api.workforce.DashboardAsOf.workedOn(lastDays.get(emp.getId()), selectedDate)) return false;
-                    java.util.Set<Integer> off = weekOffs.get(emp.getId());
-                    return off == null || !off.contains(dow);
-                })
+                .filter(emp -> onDayRoster(selectedDate, joins.get(emp.getId()), lastDays.get(emp.getId()),
+                        weekOffs.get(emp.getId()), punchedIds.contains(emp.getId())))
                 .toList();
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
-        List<AttendanceRecord> records = attendanceService.getRecordsForEmployeesOnDate(
-                employeeIds, selectedDate);
+        // The rows and the tiles have to be the same people, so a record left
+        // over from someone the roster excluded (a future hire, a leaver, or a
+        // weekly off whose row carries no check-in) is dropped here rather than
+        // counted in a tile that has no row to drill into.
+        Set<UUID> rosterIds = Set.copyOf(employeeIds);
+        List<AttendanceRecord> records = rosterRecords.stream()
+                .filter(record -> rosterIds.contains(record.getEmployeeId()))
+                .toList();
         Map<UUID, AttendanceRecord> byEmployee = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getEmployeeId, Function.identity(), (a, b) -> a));
         Map<UUID, String> departmentNames = departmentNames(employees);
@@ -418,6 +429,33 @@ public class AttendanceController {
                         ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
                         : countSummaryFromRows(staff, onLeaveIds),
                 staff));
+    }
+
+    /**
+     * Whether an employee belongs on {@code date}'s attendance roster: they had
+     * joined by then, they had not left, and either the date is not one of their
+     * weekly offs or they punched anyway.
+     *
+     * <p>{@code punched} is the whole point. The roster used to be filtered on
+     * the weekly off alone, and filtered before any attendance record was read,
+     * so a punch made on a day off was invisible: the person was missing from
+     * Daily Logs, from the team payload and from the day's worked counts. They
+     * are put back as a worked day only - pass {@code false} to count who was
+     * *expected* in, which working on a day off does not change.
+     */
+    static boolean onDayRoster(LocalDate date, LocalDate joined, LocalDate lastDay,
+                               java.util.Set<Integer> weeklyOffs, boolean punched) {
+        if (joined != null && joined.isAfter(date)) return false;
+        if (!com.hrms.api.workforce.DashboardAsOf.workedOn(lastDay, date)) return false;
+        return punched || weeklyOffs == null || !weeklyOffs.contains(date.getDayOfWeek().getValue());
+    }
+
+    /** Whether someone on the roll on {@code date} has that day as a weekly off, punch or no punch. */
+    static boolean onWeeklyOff(LocalDate date, LocalDate joined, LocalDate lastDay,
+                               java.util.Set<Integer> weeklyOffs) {
+        if (joined != null && joined.isAfter(date)) return false;
+        if (!com.hrms.api.workforce.DashboardAsOf.workedOn(lastDay, date)) return false;
+        return weeklyOffs != null && weeklyOffs.contains(date.getDayOfWeek().getValue());
     }
 
     /** Effective statuses for one day; empty when the policy service isn't available. */
@@ -513,8 +551,8 @@ public class AttendanceController {
         List<Employee> employees = history ? scopedEmployeesOn(jwt, departmentId, start, end) : scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         // Per-day roster: exclude employees who joined after the day, or whose
-        // weekly off falls on that day. Same rule the KPI tiles use, so tile
-        // and chart never disagree.
+        // weekly off falls on that day and who did not punch. Same rule the KPI
+        // tiles use, so tile and chart never disagree.
         java.util.Map<UUID, LocalDate> trendJoins = attendanceService.joiningDatesFor(employeeIds);
         java.util.Map<UUID, java.util.Set<Integer>> trendOffs = attendanceService.weeklyOffSetsFor(employeeIds);
         java.util.Map<UUID, LocalDate> trendLastDays = history ? lastDaysOf(employeeIds) : Map.of();
@@ -525,6 +563,12 @@ public class AttendanceController {
         Map<LocalDate, List<AttendanceRecord>> recordsByDate = records.stream()
                 .filter(record -> record.getAttendanceDate() != null)
                 .collect(Collectors.groupingBy(AttendanceRecord::getAttendanceDate));
+        // Who actually punched on each day, so anyone who came in on their own
+        // weekly off is counted on that day instead of being filtered out of it.
+        Map<LocalDate, Set<UUID>> punchedByDate = records.stream()
+                .filter(record -> record.getAttendanceDate() != null && record.getCheckInAt() != null)
+                .collect(Collectors.groupingBy(AttendanceRecord::getAttendanceDate,
+                        Collectors.mapping(AttendanceRecord::getEmployeeId, Collectors.toSet())));
 
         // Approved leave for the window, expanded per day. One row can span
         // many days, so it contributes to every date it covers inside [start,end].
@@ -549,42 +593,34 @@ public class AttendanceController {
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             List<AttendanceRecord> dayRecords = recordsByDate.getOrDefault(day, List.of());
             Set<UUID> onLeaveIds = leaveByDate.getOrDefault(day, Set.of());
-            int dayDow = day.getDayOfWeek().getValue();
             LocalDate dayFinal = day;
-            int rosterForDay = (int) employees.stream()
-                    .filter(emp -> {
-                        LocalDate joined = trendJoins.get(emp.getId());
-                        if (joined != null && joined.isAfter(dayFinal)) return false;
-                        if (!com.hrms.api.workforce.DashboardAsOf.workedOn(trendLastDays.get(emp.getId()), dayFinal)) return false;
-                        java.util.Set<Integer> off = trendOffs.get(emp.getId());
-                        return off == null || !off.contains(dayDow);
-                    })
+            Set<UUID> punchedThatDay = punchedByDate.getOrDefault(day, Set.of());
+            // Expected in that day: joined, still employed, and the day is not
+            // their weekly off. Coming in on a day off does not make anyone
+            // expected, so this count deliberately ignores the punches.
+            int scheduledForDay = (int) employees.stream()
+                    .filter(emp -> onDayRoster(dayFinal, trendJoins.get(emp.getId()),
+                            trendLastDays.get(emp.getId()), trendOffs.get(emp.getId()), false))
                     .count();
             // People (already joined) whose own weekly off is this day. When
             // that is everyone, the calendar shows the day as a weekly off.
             int offForDay = (int) employees.stream()
-                    .filter(emp -> {
-                        LocalDate joined = trendJoins.get(emp.getId());
-                        if (joined != null && joined.isAfter(dayFinal)) return false;
-                        if (!com.hrms.api.workforce.DashboardAsOf.workedOn(trendLastDays.get(emp.getId()), dayFinal)) return false;
-                        java.util.Set<Integer> off = trendOffs.get(emp.getId());
-                        return off != null && off.contains(dayDow);
-                    })
+                    .filter(emp -> onWeeklyOff(dayFinal, trendJoins.get(emp.getId()),
+                            trendLastDays.get(emp.getId()), trendOffs.get(emp.getId())))
                     .count();
             if (!effective.isEmpty()) {
+                // Counted: the scheduled people plus whoever punched on their
+                // weekly off - their day is real work and belongs in a bucket,
+                // while scheduledForDay keeps the expected total honest.
                 List<UUID> roster = employees.stream()
-                        .filter(emp -> {
-                            LocalDate joined = trendJoins.get(emp.getId());
-                            if (joined != null && joined.isAfter(dayFinal)) return false;
-                            if (!com.hrms.api.workforce.DashboardAsOf.workedOn(trendLastDays.get(emp.getId()), dayFinal)) return false;
-                            java.util.Set<Integer> off = trendOffs.get(emp.getId());
-                            return off == null || !off.contains(dayDow);
-                        })
+                        .filter(emp -> onDayRoster(dayFinal, trendJoins.get(emp.getId()),
+                                trendLastDays.get(emp.getId()), trendOffs.get(emp.getId()),
+                                punchedThatDay.contains(emp.getId())))
                         .map(Employee::getId).toList();
-                series.add(effectiveCounts(day, roster, offForDay, effective, dayRecords));
+                series.add(effectiveCounts(day, roster, scheduledForDay, offForDay, effective, dayRecords));
                 continue;
             }
-            series.add(dailyCounts(day, rosterForDay, offForDay, dayRecords, onLeaveIds));
+            series.add(dailyCounts(day, scheduledForDay, offForDay, dayRecords, onLeaveIds));
         }
         return ResponseEntity.ok(series);
     }
@@ -648,8 +684,14 @@ public class AttendanceController {
      * One day's counts from effective statuses: each person lands in exactly one
      * bucket, so present + late + half day + work from home is the number who
      * came in. notMarked = absent (no punch, no leave) + on leave.
+     *
+     * <p>{@code roster} is who to count - the scheduled people plus anyone who
+     * punched on their weekly off - and {@code scheduled} is how many were
+     * expected. The two differ exactly when someone worked on a day off: that
+     * person shows up as having worked without pretending more staff were due
+     * in, and a day nobody was scheduled on stays flagged as a weekly off.
      */
-    static DailyAttendanceCounts effectiveCounts(LocalDate date, List<UUID> roster, int weeklyOff,
+    static DailyAttendanceCounts effectiveCounts(LocalDate date, List<UUID> roster, int scheduled, int weeklyOff,
                                                  Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective,
                                                  List<AttendanceRecord> dayRecords) {
         long present = 0, late = 0, halfDay = 0, wfhOnTime = 0, wfhAll = 0, onLeave = 0, absent = 0;
@@ -672,7 +714,7 @@ public class AttendanceController {
         // (late and half-day ones too), as w2f's V143.25 fields define it.
         long checkedIn = present + late + halfDay + wfhOnTime;
         return new DailyAttendanceCounts(date, present, onLeave, late, halfDay, wfhAll, absent + onLeave, absent, overtime,
-                checkedIn, wfhOnTime, roster.size(), weeklyOff, roster.isEmpty() && weeklyOff > 0);
+                checkedIn, wfhOnTime, scheduled, weeklyOff, scheduled == 0 && weeklyOff > 0);
     }
 
     /** One point on the attendance trend chart. */
