@@ -865,3 +865,58 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Employee workspace** (§7): the Goals tile counts open goals only.
 - **Checked:** `e2e/recovery/live-w2i.mjs` (API-level, no browser; written, not run here). It calls every endpoint above as owner, HR, finance, manager and employee, checks the database, the refusals (403) and the day rules, and removes or restores what it touches. Unit tests: `AttendanceCalendarTest`, `CanonicalAttendanceRulesTest`, `AuditResourceNameTest`, `HiringAllCandidatesTest`, and `lettersView.test.ts` (vitest).
 - **Still open from the leftovers:** the trend API's 31-day cap on the dashboard calendar (§2), real integrations (§11.14), deactivated geofence zones (retired with the Geofencing page, D3).
+
+### 11.20 Wave 3 (26 Sep): calendar, dashboard by date, search, settings hub, access step, face features: done
+Deploy notes, the mobile phone test and the choices made are in `docs/production/DEPLOY_2026-09-26_WAVE3.md`. One migration: `V143_40` (assisted face punch).
+- **One shared calendar** (`src/shared/components/calendar`: `DateField`, `MonthField`, `DateRangeField`; usage block at the top of `index.ts`).
+  - Views: day, month and year, plus the "September ▾ 2026 ▾" jump chips.
+  - Also: presets, keyboard support, a bottom sheet on phones, and it works inside drawers and modals.
+  - The design `DatePicker` and the dashboard's `DashCalendar` render it.
+  - Every native date and month input in the app now uses it.
+  - Still native: time inputs (shift start/end, interview and orientation time, manual entry in/out) and the inspector's "Access ends" (datetime-local).
+  - Tests: date fields are now a `role=combobox` trigger with a hidden input, so `fill()` no longer works. Pick through the calendar (see `live-w3-r1.mjs` helpers).
+- **Admin dashboard follows the chosen date** (`?date=`, past dates only, earlier years included).
+  - Each card's endpoint takes an optional `date`; past days use joining/exit dates and the status history.
+  - "As of today" (no history): seats, the Operational insights counts when the viewer can't read alerts, and the Projects drawer.
+  - Upcoming milestones counts from today, and the banner says so.
+  - The headcount export and View reports (`/hrms/reports?asOf=`) follow the date.
+  - The dashboard calendar's side panel only has the last 31 days of attendance. Older days say their numbers load when shown.
+- **Attendance Analytics** has a month and year picker (`?month=`).
+  - Tiles, mix, methods (`/dashboard/sources?from&to`), trend, late marks, "Everyone's month", the calendar and the report link follow the month.
+  - Past-month tiles count working days only; the methods card counts every check-in.
+- **Upcoming milestones:** each list has This month / Next month / Next 3 / Next 6 months / This year / a custom range (≤ 12 months). "View all" follows the range.
+  - On the any-employee endpoint a range reaches only as far as the old windows did: birthdays and anniversaries ±12 months, retirements today → 5 years. This keeps birth years private.
+  - The admin card is `src/design/dc/MilestonesCard.tsx`, mounted by a POST step in `scripts/design-build.mjs`.
+- **Global search** (top bar, `TopBarSearch`, `GET /v1/search/global`):
+  - Covers pages, people, leave, claims, payslips, documents, letters, candidates, offers, job openings and policies, each gated on the server by its list page's permission.
+  - The old palette is "Advanced search" (Ctrl/⌘K).
+  - Not built:
+    - a search box on the leave, documents and expenses lists (those results open the person's workspace tab)
+    - an offer deep link
+    - advances, assets, onboarding, training and departments as record types
+- **HRMS settings hub** (`/hrms/settings`, rail gear "Settings"): every HR setting as tabs.
+  - The card list and permission rules are in `src/shared/navigation/hrmsSettings.ts`.
+  - Workspace settings open from the Apps page and the profile menu (`workspaceSettings.ts`).
+  - Old URLs redirect (list in the deploy notes).
+  - Holidays and punch zones stay on their pages.
+- **Access step when adding a person** (Employee Master drawer; onboarding wizard step "Access"): roles plus single permissions.
+  - Saved through the existing user-role and override APIs after the invite creates the login.
+  - Onboarding applies it only with "Send their login invite" on (off by default).
+  - A login that already existed for that email is never changed from here.
+  - Not built: storing chosen access until a later invite; end dates on the added/removed permissions.
+- **Face enrollment on the web:**
+  - Profile → Face enrollment (self, any time; the server's lock cooldown still applies).
+  - Employee record → Enroll / Re-enroll face (HR/Admin, `attendance.face.admin.reset`).
+  - Uses the phone's flow and the server's face worker.
+  - Checked with a real face photo locally, but not yet with a live person on a webcam.
+- **Assisted face punch** (mobile branch `wave-3/assisted-face-punch`):
+  - Permissions `attendance.assisted_punch.team` and `.any`.
+  - Endpoints `/v1/attendance/assisted-punch` (`/eligible`, `/punched-by`).
+  - "Punched by" shows on the Face Punch tab, in Daily Logs (row and drawer) and in the employee's Recent records.
+  - A real SFace match still needs the phone test.
+- **Greeting:** first name, or the full name when the first name has fewer than 2 letters (`src/shared/hooks/greetingName.ts`).
+- **My Attendance** is hidden for Owner, Admin and Super admin (UI only).
+- **Found, not fixed:** listed in §6 of the deploy notes. They are the face "Reset" button, Daily Logs leaving out people on weekly off who punched, the Muster roll date width, `/me` for admins, and Leave types editable in two places.
+- **Tests failing on `main` before wave 3** (baseline, 26 Sep 04:00, not caused by this wave):
+  - Scripts that crash: `live-modules`, `live-role-matrix`, `live-staff-dashboard`, `live-directory-search`.
+  - 29 checks in `live-att-analytics-calendar`, `live-dead-entrypoints`, `live-design-access`, `-attendance-admin`, `-attendance`, `-hrsetup`, `-learning`, `-master`, `-payroll`, `-performance`, `-reports`, `-settings`, `-workspace` and `live-face-punch-logs`.

@@ -14,6 +14,8 @@ Follow **`docs/production/DEPLOY_2026-09-25.md`** step by step:
 6. Check the production settings (document storage, mail, face worker).
 7. Smoke test each role.
 
+**Wave 3 (26 Sep) adds one more migration, `V143_40`, and a mobile branch:** see **`docs/production/DEPLOY_2026-09-26_WAVE3.md`** (safe to apply before or after the backend).
+
 Production never migrates itself (`SPRING_FLYWAY_ENABLED=false`). The backend won't run on an old database; Cloud Run then quietly keeps the old revision. So do the database first.
 
 ## Then: build what's still static

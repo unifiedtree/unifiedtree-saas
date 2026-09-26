@@ -14,7 +14,11 @@ Priorities:
 
 ## Decisions needed before building
 
-No open decisions (D1-D4 were settled on 25 Sep and built in wave 1).
+No open decisions from waves 1–2 (D1-D4 were settled on 25 Sep and built in wave 1).
+
+From wave 3 (26 Sep), for the client:
+- **My workspace (`/me`) for admins:** it still shows an owner/admin their own month of attendance. Only "My Attendance" was asked to be hidden, so it was left. Hide it too?
+- **Leave types in two places:** HR can edit them on Leave → Leave types and in HRMS settings → Leave rules. Keep both (employees read the Leave tab) or make the Leave tab read-only?
 
 ---
 
@@ -35,11 +39,18 @@ All P0 items are done (wave 1).
 **Workspace settings** (§8)
 - Invoices (Razorpay).
 
+**Found in wave 3, not fixed** (§11.20; `docs/production/DEPLOY_2026-09-26_WAVE3.md` §6)
+- **Reset face enrollment** on the employee record sends the employee id to an endpoint keyed by login id, so for invited employees it probably resets nothing but reports success. Add `POST /v1/attendance/face/admin/employees/{employeeId}/reset` (via `FaceService.requireLoginFor`) and point the button at it. Until then, Re-enroll face works.
+- **Daily Logs** leaves out anyone whose weekly off is the chosen day, even when they punched in.
+
 ---
 
 ## P2: polish
 
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
+- **Global search** (§11.20): a search box (`?q=`) on the leave, documents and expenses lists; an offer deep link (`?offer=`); advances, assets, onboarding, training and departments as record types.
+- **Access step** (§11.20): keep the chosen access until a later invite in onboarding; end dates on added/removed permissions.
+- **Muster roll:** the date box spans the whole toolbar (`.ut-input { width:100% }` comes after the Tailwind utilities).
 
 ---
 
