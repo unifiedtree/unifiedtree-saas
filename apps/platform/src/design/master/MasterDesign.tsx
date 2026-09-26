@@ -573,7 +573,7 @@ return <RecordForm title={isEdit?l.name:'Add leave type'} sub="Monthly and quart
 }
 const POLICY_CATS=['Workplace','HR operations','Compliance','Finance','IT'];
 function PoliciesPage(){
-const {db,d,update,toast,act:ax}=useApp();const [del,setDel]=React.useState(null);const [tab,setTab]=React.useState('Active');const [q,setQ]=React.useState('');const [cat,setCat]=React.useState('');const [form,setForm]=React.useState(null);
+const {db,d,update,toast,act:ax,route}=useApp();const [del,setDel]=React.useState(null);const [tab,setTab]=React.useState(['Active','Draft','Archived'].includes(route.status)?route.status:'Active');const [q,setQ]=React.useState(route.q||'');const [cat,setCat]=React.useState('');const [form,setForm]=React.useState(null);
 const P=db.policies,hc=d.headcount,cnt=s=>P.filter(p=>p.status===s).length;const ql=q.trim().toLowerCase();
 const rows=P.filter(p=>p.status===tab&&(!cat||p.cat===cat)&&(!ql||(p.title+' '+p.cat).toLowerCase().includes(ql)));
 const act=P.filter(p=>p.status==='Active'&&p.ackReq);const pending=act.reduce((s,p)=>s+Math.max(0,hc-p.ack),0);const rate=act.length?Math.round(act.reduce((s,p)=>s+Math.min(1,p.ack/hc),0)/act.length*100):100;
