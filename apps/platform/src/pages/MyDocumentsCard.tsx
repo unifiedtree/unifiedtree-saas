@@ -220,6 +220,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
               className="w-full rounded border border-border-default bg-white px-2 py-1 text-xs"
               size="sm"
               format="short"
+              icon={false}
               clearable
             />
           </div>
@@ -232,6 +233,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
               className="w-full rounded border border-border-default bg-white px-2 py-1 text-xs"
               size="sm"
               format="short"
+              icon={false}
               clearable
               toYear={new Date().getFullYear() + 50}
             />

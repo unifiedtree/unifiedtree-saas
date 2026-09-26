@@ -319,7 +319,7 @@ function AddObligationDrawer({ companyId, onClose }: { companyId: string; onClos
         </FormField>
         <div className="grid grid-cols-2 gap-4">
           <FormField label="Due date" required error={dueError}>
-            {(id) => <DateField id={id} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" format="short" clearable />}
+            {(id) => <DateField id={id} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" format="short" icon={false} clearable />}
           </FormField>
           <FormField label="Frequency">
             {(id) => <input id={id} value={frequency} onChange={(e) => setFrequency(e.target.value)} placeholder="e.g. Monthly" maxLength={30} className="ut-input" />}
@@ -496,7 +496,7 @@ function AddFilingDrawer({ companyId, onClose }: { companyId: string; onClose: (
             )}
           </FormField>
           <FormField label="Due date" required error={dueError}>
-            {(id) => <DateField id={id} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" format="short" clearable />}
+            {(id) => <DateField id={id} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" format="short" icon={false} clearable />}
           </FormField>
         </div>
         <FormField label="Period" hint="Up to 20 characters, e.g. 2026-05">
@@ -730,7 +730,7 @@ function RegisterComplaintDrawer({ companyId, onClose }: { companyId: string; on
         <PoshNotice />
         <div className="grid grid-cols-2 gap-4">
           <FormField label="Filed date" required error={filedError}>
-            {(id) => <DateField id={id} value={filedDate} onChange={(e) => setFiledDate(e.target.value)} className="ut-input" format="short" clearable />}
+            {(id) => <DateField id={id} value={filedDate} onChange={(e) => setFiledDate(e.target.value)} className="ut-input" format="short" icon={false} clearable />}
           </FormField>
           <FormField label="Severity">
             {(id) => (
