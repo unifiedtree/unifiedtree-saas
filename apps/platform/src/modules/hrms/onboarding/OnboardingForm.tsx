@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Camera, Check, CheckCircle2, Copy, FileText, Laptop, Plus, Trash2, Upload, X,
 } from 'lucide-react'
@@ -26,6 +27,9 @@ import { useCreateDocument } from '../api/useDocument'
 import { apiJson } from '@/core/api/client'
 import type { EmployeeBankAccountResponse } from '../api/useEmployeeProfile'
 import { saveOnboardingPayroll } from './saveOnboardingPayroll'
+import { sendInvite } from '../employees/api/useInvitation'
+import { AccessPicker, NoLoginNote } from '@/modules/rbac/components/AccessPicker'
+import { applyNewPersonAccess, emptyAccess, isDefaultAccess, useNewPersonAccessRights, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
 
 /**
  * New-hire wizard: core employee creation, supplementary HR record, document
@@ -39,7 +43,7 @@ import { saveOnboardingPayroll } from './saveOnboardingPayroll'
 
 type StepKey =
   | 'basic' | 'employment' | 'documents' | 'payroll'
-  | 'benefits' | 'policies' | 'assets' | 'joining'
+  | 'benefits' | 'policies' | 'assets' | 'access' | 'joining'
 
 const STEPS: { key: StepKey; label: string }[] = [
   { key: 'basic',      label: 'Basic Details' },
@@ -49,6 +53,8 @@ const STEPS: { key: StepKey; label: string }[] = [
   { key: 'benefits',   label: 'Benefits' },
   { key: 'policies',   label: 'Policies' },
   { key: 'assets',     label: 'Assets' },
+  // Only for people who can give roles or single permissions (see `steps` below).
+  { key: 'access',     label: 'Access' },
   { key: 'joining',    label: 'Joining' },
 ]
 
@@ -80,6 +86,10 @@ const STEP_HEAD: Record<StepKey, { title: string; description: string }> = {
   assets: {
     title: 'Assets',
     description: 'Issue the laptop, devices and accessories the hire needs on day one.',
+  },
+  access: {
+    title: 'Access',
+    description: 'Choose their roles, then add or remove single permissions if needed.',
   },
   joining: {
     title: 'Joining Day',
@@ -261,16 +271,17 @@ function EmployeeIdField({ value, onCopy }: { value: string; onCopy: () => void 
 
 // ── Stepper ──────────────────────────────────────────────────────────────────
 
-function Stepper({ active, reached, onJump }: {
+function Stepper({ steps, active, reached, onJump }: {
+  steps: typeof STEPS
   active: StepKey
   reached: number
   onJump: (key: StepKey) => void
 }) {
-  const activeIndex = STEPS.findIndex((s) => s.key === active)
+  const activeIndex = steps.findIndex((s) => s.key === active)
   return (
     <div className="mb-6 overflow-x-auto scrollbar-hide">
       <ol className="flex w-max min-w-full items-start gap-0 px-1">
-        {STEPS.map((s, i) => {
+        {steps.map((s, i) => {
           const done = i < activeIndex
           const current = i === activeIndex
           const reachable = i <= reached
@@ -304,7 +315,7 @@ function Stepper({ active, reached, onJump }: {
                   aria-hidden
                   className={clsx(
                     'h-0.5 flex-1 rounded-full',
-                    i === STEPS.length - 1 ? 'opacity-0' : done ? 'bg-[var(--interactive-primary)]' : 'bg-border-default',
+                    i === steps.length - 1 ? 'opacity-0' : done ? 'bg-[var(--interactive-primary)]' : 'bg-border-default',
                   )}
                 />
               </div>
@@ -398,8 +409,18 @@ export const OnboardingForm: React.FC = () => {
   const [instanceStarted, setInstanceStarted] = useState(false)
   const [instanceError, setInstanceError] = useState('')
 
-  const stepIndex = STEPS.findIndex((s) => s.key === step)
-  const isLastStep = stepIndex === STEPS.length - 1
+  // Access step: roles and single permissions, only for people who can give them.
+  const qc = useQueryClient()
+  const accessRights = useNewPersonAccessRights()
+  const canInvite = usePermission('hrms.employee.invite')
+  const [access, setAccess] = useState<AccessDraft>(emptyAccess)
+  const [sendLogin, setSendLogin] = useState(false)
+  const [accessOutcome, setAccessOutcome] = useState<{ state: 'saving' | 'done' | 'error'; message: string } | null>(null)
+  const invitedRef = useRef(false)
+  const steps = useMemo(() => (accessRights.visible ? STEPS : STEPS.filter((s) => s.key !== 'access')), [accessRights.visible])
+
+  const stepIndex = steps.findIndex((s) => s.key === step)
+  const isLastStep = stepIndex === steps.length - 1
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }))
@@ -741,7 +762,7 @@ export const OnboardingForm: React.FC = () => {
 
   const goTo = (key: StepKey) => {
     setStep(key)
-    setReached((r) => Math.max(r, STEPS.findIndex((s) => s.key === key)))
+    setReached((r) => Math.max(r, steps.findIndex((s) => s.key === key)))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -761,12 +782,12 @@ export const OnboardingForm: React.FC = () => {
         'info',
       )
     }
-    goTo(STEPS[stepIndex + 1].key)
+    goTo(steps[stepIndex + 1].key)
   }
 
   const handleBack = () => {
     if (stepIndex === 0) { navigate('/hrms/onboarding/instances'); return }
-    goTo(STEPS[stepIndex - 1].key)
+    goTo(steps[stepIndex - 1].key)
   }
 
   const copyEmployeeId = async (value: string) => {
@@ -786,6 +807,35 @@ export const OnboardingForm: React.FC = () => {
   const splitName = (full: string) => {
     const parts = full.trim().split(/\s+/)
     return { firstName: parts[0], lastName: parts.slice(1).join(' ') || undefined }
+  }
+
+  // ── Login and access (the Access step) ─────────────────────────────────────
+  // Roles and single permissions belong to a login, and only the invitation
+  // creates one, so they are saved after it. Like the checklist, a failure here
+  // never reads as "the hire was not created"; it can be retried from the
+  // success card or finished in Users & access.
+  const finishAccess = async (employeeId: string, email: string) => {
+    setAccessOutcome({ state: 'saving', message: '' })
+    if (!invitedRef.current) {
+      try {
+        await sendInvite(employeeId)
+        invitedRef.current = true
+      } catch (e) {
+        setAccessOutcome({ state: 'error', message: `The login invite couldn’t be sent: ${(e as Error)?.message || 'please try again'}.` })
+        toast('Employee created, but the login invite couldn’t be sent', 'error')
+        return
+      }
+    }
+    const out = await applyNewPersonAccess(employeeId, email, access)
+    void qc.invalidateQueries({ queryKey: ['rbac', 'workspace'] })
+    if (out.problems.length) {
+      setAccessOutcome({ state: 'error', message: `The login invite was sent, but ${out.problems.join('; ')}.` })
+      toast('Employee created, but some of their access couldn’t be set', 'error')
+      return
+    }
+    setAccessOutcome({ state: 'done', message: isDefaultAccess(access)
+      ? 'Login invite sent. They start with the Employee role.'
+      : 'Login invite sent, and their roles and permissions are saved.' })
   }
 
   const handleCreate = async () => {
@@ -873,6 +923,7 @@ export const OnboardingForm: React.FC = () => {
         setInstanceStarted(false)
         toast('Employee created', 'success')
       }
+      if (accessRights.visible && canInvite && sendLogin && result?.id) await finishAccess(result.id, result.email || form.email.trim())
       setFinishing(false)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err: unknown) {
@@ -971,6 +1022,18 @@ export const OnboardingForm: React.FC = () => {
             </div>
           )}
 
+          {accessOutcome && (
+            <div role="status" className={clsx('mt-3 rounded-xl border px-4 py-3 text-left text-sm',
+              accessOutcome.state === 'error' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-border-default text-text-secondary')}>
+              {accessOutcome.state === 'saving' ? 'Sending the login invite and saving their access…'
+                : accessOutcome.state === 'done' ? accessOutcome.message
+                  : <>
+                    <p>{accessOutcome.message} You can finish it in <Link to="/users" className="font-semibold underline">Users &amp; access</Link>.</p>
+                    <HrButton variant="ghost" className="mt-2" onClick={() => finishAccess(created.id, created.email || form.email.trim())}>Try again</HrButton>
+                  </>}
+            </div>
+          )}
+
           <div className="mt-6 flex flex-col gap-2.5">
             <HrButton disabled={finishing || recordSaving} className="w-full" onClick={() => navigate(`/hrms/employees/${created.id}`)}>
               Go to Employee Profile
@@ -994,7 +1057,7 @@ export const OnboardingForm: React.FC = () => {
       actions={<HrButton variant="ghost" onClick={() => navigate('/hrms/onboarding/instances')}>Cancel</HrButton>}>
     <div style={{ maxWidth: 1024, minWidth: 0 }}>
 
-      <Stepper active={step} reached={reached} onJump={goTo} />
+      <Stepper steps={steps} active={step} reached={reached} onJump={goTo} />
 
       {/* ── 1. Basic Details ──────────────────────────────────────────────── */}
       {step === 'basic' && (
@@ -1678,6 +1741,27 @@ export const OnboardingForm: React.FC = () => {
         </Card>
       )}
 
+      {/* ── Access (only for people who can give roles or permissions) ─────── */}
+      {step === 'access' && (
+        <Card title="Roles and permissions" description="What they can do once they sign in.">
+          <div className="grid gap-4">
+            {canInvite && (
+              <Toggle
+                label="Send their login invite when the employee is created"
+                hint="They get an email to set a password. Roles and permissions need a login, so they are saved only when this is on."
+                checked={sendLogin}
+                onChange={setSendLogin}
+              />
+            )}
+            {canInvite && sendLogin
+              ? <AccessPicker value={access} onChange={setAccess} />
+              : <NoLoginNote why={canInvite
+                ? 'Turn on the invite above, or send it later from their profile.'
+                : 'You can’t send login invites, so someone who can will need to invite them from their profile.'} />}
+          </div>
+        </Card>
+      )}
+
       {/* ── 8. Joining Day ────────────────────────────────────────────────── */}
       {step === 'joining' && (
         <>
@@ -1800,7 +1884,7 @@ export const OnboardingForm: React.FC = () => {
           phones where the header has scrolled away. */}
       <div className="sticky bottom-3 z-10 mt-6 flex items-center justify-between gap-3 rounded-2xl border border-border-default bg-[var(--bg-surface)]/95 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.35)] backdrop-blur">
         <span className="text-xs font-medium text-text-tertiary">
-          Step {stepIndex + 1} of {STEPS.length}
+          Step {stepIndex + 1} of {steps.length}
         </span>
         <div className="flex items-center gap-2.5">
           <HrButton variant="ghost" onClick={handleBack}>Back</HrButton>
