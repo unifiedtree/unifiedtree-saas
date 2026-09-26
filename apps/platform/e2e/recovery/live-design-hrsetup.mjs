@@ -80,7 +80,7 @@ try {
 
   // ── Notification templates ──
   const o = await session('owner@unifiedtree.demo')
-  await o.page.goto(base + '/hrms/notification-templates'); await settle(o.page)
+  await o.page.goto(base + '/hrms/settings/notifications'); await settle(o.page)
   check('templates: says they aren’t used for sending yet', (await o.page.getByText(/notifications still use their built-in wording/).count()) === 1)
   await o.page.getByRole('button', { name: /New template/ }).click()
   let dlg = o.page.getByRole('dialog')
@@ -102,7 +102,7 @@ try {
   check('templates: deletes it', sql(`select count(*) from notiftemplate_mgmt.notification_templates where name='${tplName}'`) === '0')
 
   // ── Integrations ──
-  await o.page.goto(base + '/hrms/integrations'); await settle(o.page)
+  await o.page.goto(base + '/settings/integrations/register'); await settle(o.page)
   await o.page.getByLabel('Name').fill(intName)
   await o.page.getByLabel('Provider').fill('Slack')
   await o.page.getByRole('button', { name: 'Add', exact: true }).click()

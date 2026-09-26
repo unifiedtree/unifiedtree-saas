@@ -1,6 +1,9 @@
 // Live check of the settings split (wave 3):
-//  - HRMS settings (/hrms/settings): one hub in the HRMS rail listing every HR
-//    setting; each card opens the right page; its own pages sit under its tabs.
+//  - HRMS settings (/hrms/settings): one hub in the HRMS rail holding every HR
+//    setting; each card opens the right page; the settings pages (Master data's
+//    rules and payroll configuration, expense policies too) sit under its tabs,
+//    and the old entry points (Master's, Payroll's and Expenses' tabs) lead there.
+//    Unsaved payroll settings are guarded when a hub tab is clicked (discarded).
 //  - Workspace settings open from the Apps page (and the profile menu), not from
 //    inside a module; each workspace page opens; the HRMS tile links its settings.
 //  - Every old address lands on the new home (?view= and #section kept).
@@ -48,6 +51,12 @@ const here = (page) => { const u = new URL(page.url()); return u.pathname + u.se
 async function open(page, path) { await page.goto(base + path); await settle(page) }
 async function tabs(page, label) { const nav = page.getByRole('navigation', { name: label }); return (await nav.count()) ? nav.locator('a').allInnerTexts() : [] }
 const restricted = (page) => page.getByText('Access Restricted', { exact: true }).count()
+/** The hub's pages, in tab order, with their tab labels. */
+const HUB_TABS = [
+  ['/hrms/settings', 'Overview'], ['/hrms/settings/hr-configuration', 'HR configuration'], ['/hrms/settings/shift-rules', 'Shifts'], ['/hrms/settings/leave-rules', 'Leave'],
+  ['/hrms/settings/payroll', 'Payroll'], ['/hrms/settings/salary-components', 'Components'], ['/hrms/settings/statutory', 'Statutory'], ['/hrms/settings/expense-policies', 'Expenses'],
+  ['/hrms/settings/document-types', 'Documents'], ['/hrms/settings/policies', 'Policies'], ['/hrms/settings/notifications', 'Notifications'], ['/hrms/settings/roles', 'Roles & permissions'],
+]
 
 try {
   // ═══ Owner ═══════════════════════════════════════════════════════════════
@@ -116,20 +125,24 @@ try {
   await h1(p, 'HRMS settings').waitFor({ timeout: 20_000 }).catch(() => {})
   check('hub: page renders', (await h1(p, 'HRMS settings').count()) === 1)
   const hubTabs = await tabs(p, 'HRMS settings sections')
-  check('hub: its tabs are the hub pages', JSON.stringify(hubTabs) === JSON.stringify(['Overview', 'HR configuration', 'Payroll settings', 'Document types', 'Notification templates', 'Roles & permissions']), hubTabs.join(', '))
+  check('hub: its tabs are every hub page, in order', JSON.stringify(hubTabs) === JSON.stringify(HUB_TABS.map(([, t]) => t)), hubTabs.join(', '))
+  const hubRow = await p.getByRole('navigation', { name: 'HRMS settings sections' }).locator('div').first().evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth })).catch(() => null)
+  check('hub: every tab fits one row at 1440 (nothing hidden off the side)', !!hubRow && hubRow.sw <= hubRow.cw, `scrollWidth=${hubRow?.sw} clientWidth=${hubRow?.cw}`)
   const cards = await p.locator('[data-setting]').evaluateAll((els) => els.map((e) => e.getAttribute('data-setting')))
-  const CARDS = ['hr-config', 'late', 'week', 'shift-rules', 'punch-zones', 'leave-rules', 'holidays', 'payroll', 'components', 'statutory', 'document-types', 'policies', 'notifications', 'roles', 'access']
+  const CARDS = ['hr-config', 'late', 'week', 'shift-rules', 'punch-zones', 'leave-rules', 'holidays', 'payroll', 'components', 'statutory', 'expense-policies', 'document-types', 'policies', 'notifications', 'roles', 'access']
   check('hub: the owner sees every HR setting', CARDS.every((k) => cards.includes(k)) && cards.length === CARDS.length, cards.join(','))
-  for (const g of ['Company rules', 'Attendance & shifts', 'Leave & holidays', 'Payroll', 'Documents & policies', 'Notifications', 'Roles & access']) check(`hub: group "${g}"`, (await p.getByRole('heading', { level: 2, name: g, exact: true }).count()) === 1)
+  for (const g of ['Company rules', 'Attendance & shifts', 'Leave & holidays', 'Payroll', 'Expenses', 'Documents & policies', 'Notifications', 'Roles & access']) check(`hub: group "${g}"`, (await p.getByRole('heading', { level: 2, name: g, exact: true }).count()) === 1)
+  check('hub: only Holidays and Punch zones say they open elsewhere', (await p.getByText(/^Opens in /).count()) === 2)
   check('hub: no page errors or failed API calls', o.clean().length === 0)
   await p.screenshot({ path: `${shots}/settings-hub-1440.png`, fullPage: true })
 
   // Each card opens the right place.
   const DEST = {
     'hr-config': ['/hrms/settings/hr-configuration', 'HR Configuration'], late: ['/hrms/settings/hr-configuration#st-late', 'HR Configuration'], week: ['/hrms/settings/hr-configuration#st-week', 'HR Configuration'],
-    'shift-rules': ['/hrms/master/shift-rules'], 'punch-zones': ['/hrms/companies'], 'leave-rules': ['/hrms/master/leave-rules'], holidays: ['/hrms/leave?tab=holidays'],
-    payroll: ['/hrms/settings/payroll', 'Payroll Settings'], components: ['/hrms/payroll/components'], statutory: ['/hrms/master/statutory'],
-    'document-types': ['/hrms/settings/document-types', 'Document types'], policies: ['/hrms/policies'], notifications: ['/hrms/settings/notifications', 'Notification templates'],
+    'shift-rules': ['/hrms/settings/shift-rules', 'Shift Rules'], 'punch-zones': ['/hrms/companies'], 'leave-rules': ['/hrms/settings/leave-rules', 'Leave Rules'], holidays: ['/hrms/leave?tab=holidays'],
+    payroll: ['/hrms/settings/payroll', 'Payroll Settings'], components: ['/hrms/settings/salary-components', 'Salary Components'], statutory: ['/hrms/settings/statutory', 'Statutory Settings'],
+    'expense-policies': ['/hrms/settings/expense-policies', 'Expense policies'],
+    'document-types': ['/hrms/settings/document-types', 'Document types'], policies: ['/hrms/settings/policies', 'Policy Documents'], notifications: ['/hrms/settings/notifications', 'Notification templates'],
     roles: ['/hrms/settings/roles', 'Roles & permissions'], access: ['/hrms/settings/roles?view=assignments', 'Roles & permissions'],
   }
   for (const [key, [path, title]] of Object.entries(DEST)) {
@@ -141,7 +154,7 @@ try {
     check(`hub card "${key}": no page errors or failed API calls`, bad.length === 0, bad.slice(0, 3).join(' | '))
   }
   // The in-hub pages keep the hub's tabs, with the right one lit.
-  for (const [path, tab] of [['/hrms/settings/hr-configuration', 'HR configuration'], ['/hrms/settings/payroll', 'Payroll settings'], ['/hrms/settings/document-types', 'Document types'], ['/hrms/settings/notifications', 'Notification templates'], ['/hrms/settings/roles', 'Roles & permissions']]) {
+  for (const [path, tab] of HUB_TABS.slice(1)) {
     await open(p, path)
     const on = await p.getByRole('navigation', { name: 'HRMS settings sections' }).locator('a[aria-current=page]').allInnerTexts()
     check(`hub ${path}: the "${tab}" tab is lit`, JSON.stringify(on) === JSON.stringify([tab]), on.join(','))
@@ -150,17 +163,74 @@ try {
   await open(p, '/hrms/settings/roles?view=assignments')
   check('hub: HRMS access opens "Who has which role"', (await p.getByRole('group', { name: 'Role views' }).getByRole('button', { name: 'Who has which role' }).getAttribute('aria-pressed')) === 'true')
 
+  // Master data's sections inside the hub: the hub's tabs, not Master's tabs or crumbs.
+  for (const path of ['/hrms/settings/shift-rules', '/hrms/settings/leave-rules', '/hrms/settings/salary-components', '/hrms/settings/statutory', '/hrms/settings/policies']) {
+    await open(p, path)
+    const masterTabs = await p.getByRole('navigation', { name: 'Master sections' }).count()
+    const crumbs = await p.locator('.utm .crumbs').first().isVisible().catch(() => false)
+    const segs = await p.locator('.utm .hero-tabs').first().isVisible().catch(() => false)
+    check(`hub ${path}: no Master tabs, crumbs or section switch`, masterTabs === 0 && !crumbs && !segs, `tabs=${masterTabs} crumbs=${crumbs} seg=${segs}`)
+  }
+  await open(p, '/hrms/settings/shift-rules')
+  await p.screenshot({ path: `${shots}/settings-shiftrules-1440.png`, fullPage: true })
+  await open(p, '/hrms/settings/expense-policies')
+  await p.screenshot({ path: `${shots}/settings-expense-1440.png`, fullPage: true })
+
+  // Master data's own tabs lead into the hub.
+  await open(p, '/hrms/master')
+  const masterNav = p.getByRole('navigation', { name: 'Master sections' })
+  check('master: its tabs still offer Rules & Policies and Payroll Configuration', (await masterNav.getByRole('button', { name: 'Rules & Policies' }).count()) === 1 && (await masterNav.getByRole('button', { name: 'Payroll Configuration' }).count()) === 1)
+  await masterNav.getByRole('button', { name: 'Rules & Policies' }).click(); await settle(p)
+  check('master: Rules & Policies opens Shift rules in HRMS settings', here(p) === '/hrms/settings/shift-rules', here(p))
+  await open(p, '/hrms/master')
+  await masterNav.getByRole('button', { name: 'Payroll Configuration' }).click(); await settle(p)
+  check('master: Payroll Configuration opens Salary components in HRMS settings', here(p) === '/hrms/settings/salary-components', here(p))
+  await open(p, '/hrms/master/departments')
+  check('master: other sections stay in Master data', (await p.getByRole('navigation', { name: 'Master sections' }).count()) === 1 && here(p) === '/hrms/master/departments', here(p))
+  check('master: no page errors or failed API calls', o.clean().length === 0)
+
   // Payroll's own section bar: its Payroll Settings tab leads to the hub.
   await open(p, '/hrms/payroll-dashboard')
   const payTab = p.getByRole('navigation', { name: 'Payroll sections' }).getByRole('button', { name: 'Payroll Settings' })
   if (await payTab.count()) { await payTab.click(); await settle(p); check('payroll: the section bar\'s Payroll Settings opens HRMS settings', here(p) === '/hrms/settings/payroll', here(p)) }
   else check('payroll: the section bar has a Payroll Settings tab', false)
 
+  // Expenses: its Policies tab leads to the hub.
+  await open(p, '/hrms/expenses')
+  const expPolicies = p.getByRole('group', { name: 'Expense views' }).getByRole('button', { name: /^Policies/ })
+  check('expenses: the Policies tab is still offered', (await expPolicies.count()) === 1)
+  if (await expPolicies.count()) { await expPolicies.click(); await settle(p) }
+  check('expenses: Policies opens Expense policies in HRMS settings', here(p) === '/hrms/settings/expense-policies' && (await h1(p, 'Expense policies').count()) === 1, here(p))
+  check('expenses: no page errors or failed API calls', o.clean().length === 0)
+
+  // Unsaved payroll settings: the hub's tabs ask first, as Payroll's own bar does. Nothing is saved.
+  await open(p, '/hrms/settings/payroll')
+  const pf = p.getByRole('switch', { name: /Apply Provident Fund/ })
+  if (await pf.count()) {
+    await pf.click()
+    await p.getByText(/1 change · used by runs processed after saving/).first().waitFor({ timeout: 5000 }).catch(() => {})
+    const hubNav = p.getByRole('navigation', { name: 'HRMS settings sections' })
+    await hubNav.getByRole('link', { name: 'HR configuration', exact: true }).click(); await p.waitForTimeout(500)
+    const asked = (await p.getByText('Discard unsaved changes?').count()) === 1
+    check('guard: a hub tab asks before leaving unsaved payroll settings', asked && here(p) === '/hrms/settings/payroll', here(p))
+    if (asked) {
+      await p.getByRole('button', { name: 'Keep editing', exact: true }).click(); await p.waitForTimeout(300)
+      check('guard: "Keep editing" stays on Payroll settings', here(p) === '/hrms/settings/payroll', here(p))
+      await hubNav.getByRole('link', { name: 'HR configuration', exact: true }).click(); await p.waitForTimeout(500)
+      await p.getByRole('button', { name: 'Discard', exact: true }).click(); await settle(p)
+      check('guard: "Discard" then opens the tab', here(p) === '/hrms/settings/hr-configuration', here(p))
+    }
+  } else check('guard: the Provident Fund switch is there', false)
+  o.clean()
+
   // ── Old addresses land on the new home ──
   const OLD = [
-    ['/hrms/settings/work-time', '/hrms/settings/hr-configuration#st-week'], ['/hrms/payroll/settings', '/hrms/settings/payroll'],
+    ['/hrms/settings/work-time', '/hrms/settings/hr-configuration#st-week'], ['/hrms/settings#st-late', '/hrms/settings/hr-configuration#st-late'], ['/hrms/payroll/settings', '/hrms/settings/payroll'],
     ['/hrms/notification-templates', '/hrms/settings/notifications'], ['/hrms/integrations', '/settings/integrations/register'],
     ['/settings/documents', '/hrms/settings/document-types'], ['/roles', '/hrms/settings/roles'], ['/roles?view=catalogue', '/hrms/settings/roles?view=catalogue'],
+    ['/hrms/master/shift-rules', '/hrms/settings/shift-rules'], ['/hrms/master/leave-rules', '/hrms/settings/leave-rules'], ['/hrms/master/statutory', '/hrms/settings/statutory'],
+    ['/hrms/payroll/components', '/hrms/settings/salary-components'], ['/hrms/policies', '/hrms/settings/policies'],
+    ['/hrms/policies?q=Leave&status=Active', '/hrms/settings/policies?q=Leave&status=Active'], ['/hrms/expenses?tab=policies', '/hrms/settings/expense-policies'],
     ['/settings', '/settings/profile'], ['/settings/profile', '/settings/profile'], ['/settings/branding', '/settings/branding'], ['/settings/security', '/settings/security'],
     ['/settings/notifications', '/settings/notifications'], ['/settings/billing', '/settings/billing'], ['/settings/integrations', '/settings/integrations'],
     ['/settings/danger', '/settings/danger'], ['/users', '/users'], ['/audit-logs', '/audit-logs'], ['/hrms/settings', '/hrms/settings'], ['/profile', '/profile'],
@@ -181,12 +251,16 @@ try {
 
   // ── Phone width ──
   const m = await session('owner@unifiedtree.demo', 390)
-  for (const [path, name] of [['/modules', 'modules'], ['/hrms/settings', 'hub'], ['/settings/profile', 'workspace']]) {
+  for (const [path, name] of [['/modules', 'modules'], ['/hrms/settings', 'hub'], ['/settings/profile', 'workspace'], ['/hrms/settings/shift-rules', 'shiftrules'], ['/hrms/settings/roles', 'roles']]) {
     await open(m.page, path)
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     check(`phone ${path}: no sideways scroll`, overflow <= 1, `overflow=${overflow}`)
     await m.page.screenshot({ path: `${shots}/settings-${name}-390.png`, fullPage: true })
   }
+  // The hub's long tab row scrolls sideways; the lit tab is kept in view.
+  await open(m.page, '/hrms/settings/roles')
+  const litBox = await m.page.getByRole('navigation', { name: 'HRMS settings sections' }).locator('a[aria-current=page]').boundingBox().catch(() => null)
+  check('phone: the lit hub tab is in view', !!litBox && litBox.x >= 0 && litBox.x + litBox.width <= 391, JSON.stringify(litBox))
   check('phone /modules: Workspace settings entry is shown', await (async () => { await open(m.page, '/modules'); return (await m.page.getByRole('button', { name: 'Workspace settings', exact: true }).isVisible()) })())
   check('phone: no page errors or failed API calls', m.clean().length === 0)
   await m.ctx.close()
@@ -205,10 +279,14 @@ try {
   check('reader: no HRMS settings in the menu', (await r.page.locator('button[title="HRMS settings"]').count()) === 0 && (await r.page.getByRole('button', { name: 'HRMS settings' }).count()) === 0)
   await open(r.page, '/hrms/settings')
   check('reader: the hub lists nothing ("No HR settings for your role")', (await r.page.getByText('No HR settings for your role').count()) === 1 && (await r.page.locator('[data-setting]').count()) === 0)
-  for (const path of ['/hrms/settings/hr-configuration', '/hrms/settings/payroll', '/hrms/settings/notifications', '/hrms/settings/roles', '/hrms/settings/document-types', '/roles', '/settings/profile', '/settings/integrations/register']) {
+  for (const path of [...HUB_TABS.slice(1).map(([hp]) => hp), '/roles', '/settings/profile', '/settings/integrations/register']) {
     await open(r.page, path)
     check(`reader: ${path} is not open`, (await restricted(r.page)) === 1 || (await r.page.getByText(/not activated/i).count()) > 0, here(r.page))
   }
+  await open(r.page, '/hrms/policies')
+  check('reader: /hrms/policies stays the page where they read and acknowledge policies', here(r.page) === '/hrms/policies' && (await h1(r.page, 'Policies').count()) === 1 && (await r.page.locator('.utm').count()) === 0, here(r.page))
+  await open(r.page, '/hrms/expenses')
+  check('reader: Expenses opens as before (no Policies tab)', here(r.page).startsWith('/hrms/expenses') && (await r.page.getByRole('group', { name: 'Expense views' }).getByRole('button', { name: /^Policies/ }).count()) === 0, here(r.page))
   await open(r.page, '/settings')
   check('reader: /settings opens Security, not a refusal', here(r.page) === '/settings/security' && (await restricted(r.page)) === 0, here(r.page))
   check('reader: no page errors', r.clean().filter((e) => !/^\d{3} /.test(e)).length === 0)
@@ -226,7 +304,7 @@ try {
   check('manager: workspace settings open at Security', here(g.page) === '/settings/security', here(g.page))
   const gTabs = await tabs(g.page, 'Settings sections')
   check('manager: workspace tabs show only Security', gTabs.length === 0 || JSON.stringify(gTabs) === '["Security"]', gTabs.join(','))
-  for (const path of ['/hrms/settings/roles', '/hrms/settings/payroll', '/users']) {
+  for (const path of ['/hrms/settings/roles', '/hrms/settings/payroll', '/hrms/settings/shift-rules', '/hrms/settings/leave-rules', '/hrms/settings/policies', '/hrms/settings/expense-policies', '/users']) {
     await open(g.page, path)
     check(`manager: ${path} is not open`, (await restricted(g.page)) === 1 || (await g.page.getByText('Access restricted').count()) > 0, here(g.page))
   }
@@ -236,9 +314,17 @@ try {
   const f = await session('fin@unifiedtree.demo')
   await open(f.page, '/hrms/settings')
   const finCards = await f.page.locator('[data-setting]').evaluateAll((els) => els.map((e) => e.getAttribute('data-setting')))
-  check('finance: the hub offers payroll settings and HR configuration, not roles', finCards.includes('payroll') && finCards.includes('hr-config') && !finCards.includes('roles') && !finCards.includes('notifications'), finCards.join(','))
-  await open(f.page, '/hrms/settings/payroll')
-  check('finance: Payroll settings open in the hub', (await h1(f.page, 'Payroll Settings').count()) === 1 && f.clean().length === 0)
+  check('finance: the hub offers payroll, salary components, statutory, expense policies and HR configuration', ['payroll', 'components', 'statutory', 'expense-policies', 'hr-config'].every((k) => finCards.includes(k)), finCards.join(','))
+  check('finance: …not roles, notifications, shift or leave rules, or policy documents', !['roles', 'notifications', 'shift-rules', 'leave-rules', 'policies'].some((k) => finCards.includes(k)), finCards.join(','))
+  for (const [path, title] of [['/hrms/settings/payroll', 'Payroll Settings'], ['/hrms/settings/salary-components', 'Salary Components'], ['/hrms/settings/statutory', 'Statutory Settings'], ['/hrms/settings/expense-policies', 'Expense policies']]) {
+    f.clean()
+    await open(f.page, path)
+    await h1(f.page, title).waitFor({ timeout: 20_000 }).catch(() => {})
+    const bad = f.clean()
+    check(`finance: ${path} opens in the hub`, (await h1(f.page, title).count()) === 1 && bad.length === 0, bad.slice(0, 2).join(' | '))
+  }
+  await open(f.page, '/hrms/settings/shift-rules')
+  check('finance: /hrms/settings/shift-rules is not open', (await restricted(f.page)) === 1, here(f.page))
   await f.ctx.close()
 } catch (e) {
   check('run finished', false, String(e.message || e).slice(0, 300))
