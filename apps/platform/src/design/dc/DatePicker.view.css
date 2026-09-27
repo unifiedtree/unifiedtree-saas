@@ -1,3 +1,4 @@
+/* hand-owned: edited by hand; scripts/design-build.mjs skips this view. */
 /* The design's trigger: 42px, 10px radius, slate-300 border (the shared calendar supplies the rest). */
 .dc-date-picker { display: flex; height: 42px; padding: 0 12px; gap: 10px; border-color: #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 500; }
 .dc-date-picker:not([data-open]):not(:focus-within):hover { border-color: #94a3b8; }

@@ -7,8 +7,16 @@
 // apply the documented PATCHES (prototype-only literals and wiring the real app
 // needs) → convert with scripts/dc-to-tsx.mjs. Logic files (X.tsx) are written
 // by hand and are never touched by this script.
+//
+// Guards:
+//  - A view whose .view.tsx or .view.css starts with a `// hand-owned` line
+//    (`/* hand-owned` in CSS) is maintained by hand: the component is skipped with
+//    a warning and both files are left as they are. Remove the line to regenerate.
+//  - Every view is converted and patched in a scratch folder first. If a patch
+//    anchor is missing, the build stops with an error and nothing in
+//    src/design/dc changes; otherwise the views are copied in at the end.
 /* global Buffer, process, console */
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, readdirSync, copyFileSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { gunzipSync } from 'node:zlib'
@@ -21,13 +29,23 @@ const WORKSPACE_EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree Employ
 const ANALYTICS_EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree Workforce Analytics (offline).html')
 const OUT = resolve(here, '../src/design/dc')
 
+// A generated file edited by hand carries this marker on its first line (the same rule as dc-to-tsx.mjs).
+const HAND_OWNED = /^\s*(?:\/\/|\/\*)\s*hand-owned\b/
+const handOwned = (file) => existsSync(file) && HAND_OWNED.test(readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0])
+
 // ── unpack ───────────────────────────────────────────────────────────────────
 function unpack(file) {
   const src = readFileSync(file, 'utf8')
-  const grab = (type) => { const open = `<script type="${type}">`; const a = src.indexOf(open); const b = src.indexOf('</script>', a); return src.slice(a + open.length, b) }
+  const grab = (type) => {
+    const open = `<script type="${type}">`
+    const a = src.indexOf(open)
+    const b = a < 0 ? -1 : src.indexOf('</script>', a)
+    if (b < 0) throw new Error(`${file}: ${open} not found`)
+    return src.slice(a + open.length, b)
+  }
   const manifest = JSON.parse(grab('__bundler/manifest'))
   const ext = JSON.parse(grab('__bundler/ext_resources'))
-  const text = (uuid) => { const e = manifest[uuid]; let b = Buffer.from(e.data, 'base64'); if (e.compressed) b = gunzipSync(b); return b.toString('utf8') }
+  const text = (uuid) => { const e = manifest[uuid]; if (!e) throw new Error(`${file}: resource not found: ${uuid}`); let b = Buffer.from(e.data, 'base64'); if (e.compressed) b = gunzipSync(b); return b.toString('utf8') }
   const out = {}
   for (const e of ext) if (e.id.endsWith('.dc.html')) out[e.id.replace('./', '').replace('.dc.html', '')] = text(e.uuid)
   return { components: out, template: JSON.parse(grab('__bundler/template')) }
@@ -41,11 +59,18 @@ Object.assign(components, ws.components)
 const analytics = unpack(ANALYTICS_EXPORT)
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-const body = (html) => html.slice(html.indexOf('<x-dc>') + 6, html.lastIndexOf('</x-dc>'))
+// Each helper throws when an anchor it relies on is missing, so a changed export
+// fails the build instead of producing a broken view.
+function body(html) {
+  const a = html.indexOf('<x-dc>'), b = html.lastIndexOf('</x-dc>')
+  if (a < 0 || b < a) throw new Error('<x-dc> block not found')
+  return html.slice(a + 6, b)
+}
 function scIfBlock(src, marker) {
   const i = src.indexOf(marker)
   if (i < 0) throw new Error('marker not found: ' + marker)
   const open = src.lastIndexOf('<sc-if', i), startInner = src.indexOf('>', i) + 1
+  if (open < 0) throw new Error('no <sc-if> around marker: ' + marker)
   let depth = 1
   const re = /<(\/?)sc-if\b[^>]*>/g
   re.lastIndex = startInner
@@ -96,14 +121,18 @@ function wrapCard(s, marker, flag) {
 function wrapTag(s, marker, tag, flag) {
   const i = s.indexOf(marker)
   if (i < 0) throw new Error('wrapTag marker not found: ' + marker)
-  const start = s.lastIndexOf('<' + tag, i), end = s.indexOf('</' + tag + '>', i) + tag.length + 3
+  const start = s.lastIndexOf('<' + tag, i), close = s.indexOf('</' + tag + '>', i)
+  if (start < 0 || close < 0) throw new Error(`wrapTag: no <${tag}> element around ${marker}`)
+  const end = close + tag.length + 3
   return s.slice(0, start) + `<sc-if value="{{ ${flag} }}">` + s.slice(start, end) + '</sc-if>' + s.slice(end)
 }
 /** Wrap the <section> that opens with `marker`. */
 function wrapSection(s, marker, flag) {
   const a = s.indexOf(marker)
   if (a < 0) throw new Error('wrapSection marker not found: ' + marker)
-  const b = s.indexOf('</section>', a) + '</section>'.length
+  const close = s.indexOf('</section>', a)
+  if (close < 0) throw new Error('wrapSection: no </section> after ' + marker)
+  const b = close + '</section>'.length
   return s.slice(0, a) + `<sc-if value="{{ ${flag} }}">` + s.slice(a, b) + '</sc-if>' + s.slice(b)
 }
 /** Replace every occurrence of `{{ token }}`, in order, with the matching key. */
@@ -121,13 +150,17 @@ const DERIVED = {
   // system; the app supplies both.
   WorkforceAnalytics() {
     const tpl = analytics.template
-    let t = tpl.slice(tpl.indexOf('<x-dc>'), tpl.indexOf('</x-dc>') + 7)
+    const from = tpl.indexOf('<x-dc>'), to = tpl.indexOf('</x-dc>')
+    if (from < 0 || to < from) throw new Error('WorkforceAnalytics: <x-dc> block not found')
+    let t = tpl.slice(from, to + 7)
     t = t.replace(/<helmet>[\s\S]*?<\/helmet>\n?/, '')
     // Each chart shows only for people allowed to read its report (the page opens with any one of them).
     const section = (marker, flag) => {
       const a = t.indexOf(marker)
       if (a < 0) throw new Error('WorkforceAnalytics: section not found: ' + marker)
-      const b = t.indexOf('</section>', a) + '</section>'.length
+      const close = t.indexOf('</section>', a)
+      if (close < 0) throw new Error('WorkforceAnalytics: no </section> after ' + marker)
+      const b = close + '</section>'.length
       t = t.slice(0, a) + `<sc-if value="{{ ${flag} }}">` + t.slice(a, b) + '</sc-if>' + t.slice(b)
     }
     section('<section style="flex:2 1 520px', 'canHead')
@@ -410,7 +443,9 @@ const PATCH = {
   PayBank(html) {
     const i = html.indexOf('<sc-for list="{{ batches }}"')
     if (i < 0) throw new Error('PayBank: batches list not found')
-    const j = html.indexOf('</sc-for>', i) + '</sc-for>'.length
+    const close = html.indexOf('</sc-for>', i)
+    if (close < 0) throw new Error('PayBank: batches list is not closed')
+    const j = close + '</sc-for>'.length
     return html.slice(0, j) + '\n{{ excludedBlock }}' + html.slice(j)
   },
   // The design drew only a loaded payslip; while it loads, or if it can't be
@@ -485,20 +520,36 @@ const SKIP = new Set(['HrmsPrototype', 'PlaceholderPage', 'EmployeeBodyOffline']
 const all = [...Object.keys(components).filter((n) => !SKIP.has(n)), ...Object.keys(DERIVED)]
 const list = wanted.length ? wanted : all
 const work = mkdtempSync(join(tmpdir(), 'design-build-'))
-mkdirSync(OUT, { recursive: true })
-for (const name of list) {
-  let html = DERIVED[name] ? DERIVED[name]() : components[name]
-  if (!html) { console.warn('unknown component', name); continue }
-  for (const [from, to] of LITERALS[name] || []) {
-    if (!html.includes(from)) throw new Error(`${name}: literal not found: ${from}`)
-    html = html.split(from).join(to)
+// Views are converted and patched here first, and copied into OUT only when all of them succeed.
+const stage = join(work, 'out')
+mkdirSync(stage)
+const handOwnedViews = []
+try {
+  for (const name of list) {
+    // A hand-owned view keeps both of its files: .view.tsx and .view.css share generated class names.
+    const marked = [`${name}.view.tsx`, `${name}.view.css`].filter((f) => handOwned(join(OUT, f)))
+    if (marked.length) { handOwnedViews.push(`${name} (${marked.join(', ')})`); continue }
+    let html = DERIVED[name] ? DERIVED[name]() : components[name]
+    if (!html) { console.warn('unknown component', name); continue }
+    for (const [from, to] of LITERALS[name] || []) {
+      if (!html.includes(from)) throw new Error(`${name}: literal not found: ${from}`)
+      html = html.split(from).join(to)
+    }
+    if (PATCH[name]) html = PATCH[name](html)
+    const f = join(work, name + '.html')
+    writeFileSync(f, html)
+    execFileSync(process.execPath, [join(here, 'dc-to-tsx.mjs'), name, f, stage], { stdio: 'inherit' })
+    if (POST[name]) {
+      const vf = join(stage, name + '.view.tsx')
+      writeFileSync(vf, POST[name](readFileSync(vf, 'utf8')))
+    }
   }
-  if (PATCH[name]) html = PATCH[name](html)
-  const f = join(work, name + '.html')
-  writeFileSync(f, html)
-  execFileSync(process.execPath, [join(here, 'dc-to-tsx.mjs'), name, f, OUT], { stdio: 'inherit' })
-  if (POST[name]) {
-    const vf = join(OUT, name + '.view.tsx')
-    writeFileSync(vf, POST[name](readFileSync(vf, 'utf8')))
-  }
+} catch (e) {
+  console.error(`design-build: ${e.message}\nNothing in src/design/dc was changed.`)
+  process.exit(1)
 }
+mkdirSync(OUT, { recursive: true })
+const written = readdirSync(stage)
+for (const f of written) copyFileSync(join(stage, f), join(OUT, f))
+for (const v of handOwnedViews) console.warn(`design-build: skipped ${v}: marked hand-owned (remove its first line to regenerate it)`)
+console.log(`design-build: ${written.length} file(s) written to src/design/dc, ${handOwnedViews.length} hand-owned view(s) skipped`)

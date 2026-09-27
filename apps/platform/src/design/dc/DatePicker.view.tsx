@@ -1,3 +1,4 @@
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
 // The DatePicker's view: the shared calendar field with the design's 42px trigger
 // (DatePicker.view.css). Everything else — popover, views, keyboard — is shared.
 import { DateField } from '@/shared/components/calendar'
