@@ -131,6 +131,61 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
         nativeQuery = true)
     Page<LeaveRequest> findAllDecided(Pageable pageable);
 
+    // ── Decided tab filter and counts (HRMS redesign, BW-40) ─────────────────
+    // The same rows as findAllDecided / findDecidedForManager, narrowed to one
+    // status, and the per-status counts of those same rows, so the segment
+    // counts always add up to what the list shows. {@code status} is never
+    // PENDING (the controller refuses it).
+
+    /** {@link #findAllDecided} with one status. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = :status AND lr.status <> 'PENDING' ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = :status AND lr.status <> 'PENDING'",
+        nativeQuery = true)
+    Page<LeaveRequest> findAllDecidedByStatus(@Param("status") String status, Pageable pageable);
+
+    /** {@link #findDecidedForManager} with one status. */
+    @Query(value = """
+        SELECT lr.* FROM leave_mgmt.leave_requests lr
+        LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
+        LEFT JOIN hrms.departments d ON d.id = e.department_id
+        WHERE lr.status = :status AND lr.status <> 'PENDING'
+          AND ( lr.approver_id = :managerEmpId
+             OR e.reporting_manager_id = :managerEmpId
+             OR d.department_head_employee_id = :managerEmpId )
+        ORDER BY lr.updated_at DESC
+        """,
+        countQuery = """
+        SELECT COUNT(*) FROM leave_mgmt.leave_requests lr
+        LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
+        LEFT JOIN hrms.departments d ON d.id = e.department_id
+        WHERE lr.status = :status AND lr.status <> 'PENDING'
+          AND ( lr.approver_id = :managerEmpId
+             OR e.reporting_manager_id = :managerEmpId
+             OR d.department_head_employee_id = :managerEmpId )
+        """,
+        nativeQuery = true)
+    Page<LeaveRequest> findDecidedForManagerByStatus(@Param("managerEmpId") UUID managerEmpId,
+                                                     @Param("status") String status, Pageable pageable);
+
+    /** Rows of {@link #findAllDecided}, counted per status: [status, count]. */
+    @Query(value = "SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING' GROUP BY lr.status",
+        nativeQuery = true)
+    List<Object[]> countAllDecidedByStatus();
+
+    /** Rows of {@link #findDecidedForManager}, counted per status: [status, count]. */
+    @Query(value = """
+        SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr
+        LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
+        LEFT JOIN hrms.departments d ON d.id = e.department_id
+        WHERE lr.status <> 'PENDING'
+          AND ( lr.approver_id = :managerEmpId
+             OR e.reporting_manager_id = :managerEmpId
+             OR d.department_head_employee_id = :managerEmpId )
+        GROUP BY lr.status
+        """,
+        nativeQuery = true)
+    List<Object[]> countDecidedForManagerByStatus(@Param("managerEmpId") UUID managerEmpId);
+
     /**
      * Overlap detection for the apply-leave path. Returns every leave request
      * for {@code employeeId} that is still "live" (PENDING, PENDING_L2, or
