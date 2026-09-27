@@ -4,9 +4,9 @@
 //  B. hrm applies for leave on reader's behalf: reader's approver chain, the
 //     preview agrees, reader is told, then reader cancels and every balance is
 //     back to its value before
-//  C. mgr approves two of reader's requests in one call, takes one back (undo
-//     journal), plus one they can't
-//     decide: reported, not fatal); the Decided counts and stats see them
+//  C. mgr approves two of reader's requests in one call (a third they can't
+//     decide is reported, not fatal); the Decided counts and stats see them,
+//     and one is taken back through the undo journal
 //  D. a holiday is added, edited (the leave count follows it), restored, archived
 //  E. reader sees colleagues off: first names of approved leave in the same
 //     department only (reader and mgr are put in a fresh department for this
