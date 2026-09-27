@@ -135,35 +135,22 @@ public class AttendanceReminderService {
         return out;
     }
 
-    private ReminderResult sendOne(UUID tenantId, UUID employeeId, LocalDate day, String reason,
-                                   UUID senderEmployee, String senderName) {
+    /** What decides whether one person is reminded: a login, today's punch, leave, weekly off, holiday. */
+    record PersonFacts(boolean hasLogin, boolean checkedIn, boolean onLeave, boolean weeklyOff, boolean holiday) {
+    }
+
+    /**
+     * One person, in its own transaction, holding a lock for that person, day
+     * and reason so a second sender waits and then sees this reminder.
+     */
+    ReminderResult sendOne(UUID tenantId, UUID employeeId, LocalDate day, String reason,
+                           UUID senderEmployee, String senderName) {
         jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", (ResultSetExtractor<Void>) rs -> null,
                 "checkin-reminder:" + tenantId + ":" + employeeId + ":" + day + ":" + reason);
 
-        Map<String, Object> person = jdbc.query("""
-                SELECT e.company_id,
-                       EXISTS (SELECT 1 FROM auth.user_credentials uc
-                                WHERE uc.tenant_id = e.tenant_id AND uc.employee_id = e.id AND uc.is_active = TRUE) AS has_login,
-                       EXISTS (SELECT 1 FROM attendance.records r
-                                WHERE r.tenant_id = e.tenant_id AND r.employee_id = e.id AND r.attendance_date = ?
-                                  AND r.check_in_at IS NOT NULL) AS checked_in,
-                       EXISTS (SELECT 1 FROM leave_mgmt.leave_requests l
-                                WHERE l.tenant_id = e.tenant_id AND l.employee_id = e.id AND l.status = 'APPROVED'
-                                  AND l.start_date <= ? AND l.end_date >= ?) AS on_leave,
-                       EXISTS (SELECT 1 FROM settings.holiday_calendar h
-                                WHERE h.tenant_id = e.tenant_id AND h.company_id = e.company_id
-                                  AND h.holiday_date = ? AND h.is_active = TRUE) AS holiday
-                  FROM hrms.employees e
-                 WHERE e.id = ? AND e.tenant_id = ?
-                """, rs -> rs.next() ? Map.of(
-                        "hasLogin", rs.getBoolean("has_login"), "checkedIn", rs.getBoolean("checked_in"),
-                        "onLeave", rs.getBoolean("on_leave"), "holiday", rs.getBoolean("holiday")) : null,
-                day, day, day, day, employeeId, tenantId);
+        PersonFacts person = facts(tenantId, employeeId, day);
         if (person == null) return new ReminderResult(employeeId, "SKIPPED", "Not in your team.");
-        boolean weeklyOff = AttendanceCalendar.resolveWeeklyOffDays(jdbc, List.of(employeeId), day)
-                .getOrDefault(employeeId, AttendanceCalendar.DEFAULT_OFF_DAYS).contains(day.getDayOfWeek().getValue());
-        String skip = skipReason((Boolean) person.get("hasLogin"), (Boolean) person.get("checkedIn"),
-                (Boolean) person.get("onLeave"), weeklyOff, (Boolean) person.get("holiday"));
+        String skip = skipReason(person.hasLogin(), person.checkedIn(), person.onLeave(), person.weeklyOff(), person.holiday());
         if (skip != null) return new ReminderResult(employeeId, "SKIPPED", skip);
 
         SentReminder earlier = sentFor(tenantId, List.of(employeeId), day, reason).get(employeeId);
@@ -195,6 +182,34 @@ public class AttendanceReminderService {
             log.warn("Audit of a check-in reminder failed (non-fatal): {}", e.getMessage());
         }
         return new ReminderResult(employeeId, "SENT", null);
+    }
+
+    /** The person's facts for the day, or null when they aren't in this tenant. */
+    PersonFacts facts(UUID tenantId, UUID employeeId, LocalDate day) {
+        Map<String, Object> person = jdbc.query("""
+                SELECT e.company_id,
+                       EXISTS (SELECT 1 FROM auth.user_credentials uc
+                                WHERE uc.tenant_id = e.tenant_id AND uc.employee_id = e.id AND uc.is_active = TRUE) AS has_login,
+                       EXISTS (SELECT 1 FROM attendance.records r
+                                WHERE r.tenant_id = e.tenant_id AND r.employee_id = e.id AND r.attendance_date = ?
+                                  AND r.check_in_at IS NOT NULL) AS checked_in,
+                       EXISTS (SELECT 1 FROM leave_mgmt.leave_requests l
+                                WHERE l.tenant_id = e.tenant_id AND l.employee_id = e.id AND l.status = 'APPROVED'
+                                  AND l.start_date <= ? AND l.end_date >= ?) AS on_leave,
+                       EXISTS (SELECT 1 FROM settings.holiday_calendar h
+                                WHERE h.tenant_id = e.tenant_id AND h.company_id = e.company_id
+                                  AND h.holiday_date = ? AND h.is_active = TRUE) AS holiday
+                  FROM hrms.employees e
+                 WHERE e.id = ? AND e.tenant_id = ?
+                """, rs -> rs.next() ? Map.of(
+                        "hasLogin", rs.getBoolean("has_login"), "checkedIn", rs.getBoolean("checked_in"),
+                        "onLeave", rs.getBoolean("on_leave"), "holiday", rs.getBoolean("holiday")) : null,
+                day, day, day, day, employeeId, tenantId);
+        if (person == null) return null;
+        boolean weeklyOff = AttendanceCalendar.resolveWeeklyOffDays(jdbc, List.of(employeeId), day)
+                .getOrDefault(employeeId, AttendanceCalendar.DEFAULT_OFF_DAYS).contains(day.getDayOfWeek().getValue());
+        return new PersonFacts((Boolean) person.get("hasLogin"), (Boolean) person.get("checkedIn"),
+                (Boolean) person.get("onLeave"), weeklyOff, (Boolean) person.get("holiday"));
     }
 
     /**
