@@ -133,6 +133,55 @@ public class ExpenseService {
         return toResponse(claim, items);
     }
 
+    /**
+     * HR, finance or an admin raises a claim in an employee's name (redesign
+     * BW-61). It is the claim the employee could submit themselves: the same
+     * checks and category caps, routed to {@code approverId} (the employee's
+     * usual approver), then decided and paid as usual. The approver is told as
+     * for any claim, and the employee is told it was raised for them. The
+     * caller has already checked that the employee is active, belongs to
+     * {@code companyId} and is not the raiser.
+     */
+    @Transactional
+    public ExpenseClaimResponse submitClaimOnBehalf(UUID employeeId, UUID companyId, ExpenseClaimRequest request,
+                                                    UUID approverId, UUID raisedBy) {
+        if (raisedBy == null || raisedBy.equals(employeeId)) {
+            throw new BusinessRuleException("To claim your own expenses, use your own claim.", "EXPENSE_ON_BEHALF_SELF");
+        }
+        ExpenseClaimResponse claim = submitClaim(employeeId, companyId, request, approverId);
+        log.info("Expense claim {} raised for employee={} by {}", claim.id(), employeeId, raisedBy);
+        publishSafely(new com.unifiedtree.notifications.events.ExpenseClaimRaisedForYouEvent(
+                claim.id(), employeeId, raisedBy, TenantContext.getTenantId(),
+                claim.title(), claim.totalAmount(), claim.currency()));
+        return claim;
+    }
+
+    /**
+     * What the company's active policies allow per category (the caps the
+     * submit step enforces), in category order. Readable by claimants, who
+     * don't hold the policy permission (redesign BW-60).
+     */
+    @Transactional(readOnly = true)
+    public List<com.hrms.expense.dto.ExpenseCategoryCap> categoryCaps(UUID companyId) {
+        if (companyId == null) return List.of();
+        return List.copyOf(ExpensePolicyEvaluator.caps(
+                policyRepository.findByCompanyIdAndActiveTrueOrderByName(companyId)).values());
+    }
+
+    /** {@link #categoryCaps} per company, for a page of claims. */
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, java.util.Map<com.hrms.expense.enums.ExpenseCategory, com.hrms.expense.dto.ExpenseCategoryCap>> capsByCompany(
+            java.util.Collection<UUID> companyIds) {
+        java.util.Map<UUID, java.util.Map<com.hrms.expense.enums.ExpenseCategory, com.hrms.expense.dto.ExpenseCategoryCap>> out =
+                new java.util.HashMap<>();
+        if (companyIds == null) return out;
+        for (UUID companyId : companyIds) {
+            if (companyId == null || out.containsKey(companyId)) continue;
+            out.put(companyId, ExpensePolicyEvaluator.caps(policyRepository.findByCompanyIdAndActiveTrueOrderByName(companyId)));
+        }
+        return out;
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<ExpenseClaimResponse> getMyClaims(UUID employeeId, Pageable pageable) {
         return toPage(claimRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));
