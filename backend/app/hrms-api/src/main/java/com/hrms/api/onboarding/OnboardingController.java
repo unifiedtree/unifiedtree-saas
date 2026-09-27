@@ -31,18 +31,49 @@ public class OnboardingController {
 
     private final OnboardingService onboardingService;
     private final OnboardingHireDetailsService hireDetails;
+    private final OnboardingOverviewService overview;
+    private final AssetCareService assetCare;
 
-    public OnboardingController(OnboardingService onboardingService, OnboardingHireDetailsService hireDetails) {
+    public OnboardingController(OnboardingService onboardingService, OnboardingHireDetailsService hireDetails,
+                                OnboardingOverviewService overview, AssetCareService assetCare) {
         this.onboardingService = onboardingService;
         this.hireDetails = hireDetails;
+        this.overview = overview;
+        this.assetCare = assetCare;
     }
 
 
+    /**
+     * The asset records as before, plus (redesign BW-69, BW-70) who has each
+     * one and who had it last (only for callers who may read employee records),
+     * the holder's confirmation and any open problem report.
+     */
     @GetMapping("/assets")
     @Operation(summary = "List onboarding and employee assets")
     @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.read','hrms.onboarding.instance.write')")
-    public List<OnboardingAsset> listAssets(@RequestParam(required = false) UUID companyId) {
-        return onboardingService.listAssets(companyId);
+    public List<OnboardingViews.AssetView> listAssets(@RequestParam(required = false) UUID companyId,
+                                                      @AuthenticationPrincipal Jwt jwt) {
+        return assetCare.listAssets(companyId, holds(jwt, "hrms.employee.read"));
+    }
+
+    @GetMapping("/assets/issues")
+    @Operation(summary = "Problems employees reported with their assets (OPEN by default, RESOLVED or ALL)")
+    @PreAuthorize("hasAuthority('hrms.onboarding.asset.write')")
+    public List<AssetCareService.Issue> assetIssues(@RequestParam(required = false) String status,
+                                                    @RequestParam(required = false) UUID companyId,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        return assetCare.issues(status, companyId, holds(jwt, "hrms.employee.read"));
+    }
+
+    @PostMapping("/assets/issues/{issueId}/resolve")
+    @Operation(summary = "Mark a reported asset problem as resolved")
+    @PreAuthorize("hasAuthority('hrms.onboarding.asset.write')")
+    public AssetCareService.Issue resolveAssetIssue(@PathVariable UUID issueId,
+                                                    @RequestBody(required = false) ResolveIssueRequest req,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        String email = jwt == null ? null : jwt.getClaimAsString("email");
+        return assetCare.resolve(issueId, req == null ? null : req.note(),
+                assetCare.actorName(employeeIdOrNull(jwt), email), holds(jwt, "hrms.employee.read"));
     }
 
     @PostMapping("/assets")
@@ -77,8 +108,13 @@ public class OnboardingController {
     @GetMapping("/templates")
     @Operation(summary = "List active onboarding templates (optionally filtered by company)")
     @PreAuthorize("@perm.check('hrms.onboarding.template.read')")
-    public List<OnboardingTemplate> listTemplates(@RequestParam(required = false) UUID companyId) {
-        return onboardingService.listTemplates(companyId);
+    public List<OnboardingViews.TemplateView> listTemplates(@RequestParam(required = false) UUID companyId) {
+        // The templates as before, plus usedBy: onboardings started from each (redesign BW-69).
+        List<OnboardingTemplate> templates = onboardingService.listTemplates(companyId);
+        java.util.Map<UUID, Long> usage = templates.isEmpty() ? java.util.Map.of() : overview.usageByTemplate();
+        return templates.stream()
+                .map(t -> new OnboardingViews.TemplateView(t, usage.getOrDefault(t.getId(), 0L)))
+                .toList();
     }
 
     @GetMapping("/templates/{id}")
@@ -157,6 +193,27 @@ public class OnboardingController {
                                                   @AuthenticationPrincipal Jwt jwt) {
         if (isHrOrAdmin(jwt)) return onboardingService.listInstances(status);
         return onboardingService.listInstancesForEmployee(extractEmployeeId(jwt), status);
+    }
+
+    /**
+     * The New hires page in one call (redesign BW-69): each onboarding with the
+     * new hire's name, department, joining date, checklist name and task
+     * counts, and the page's counts. Same scope as the list: everyone's for
+     * people who manage onboarding, otherwise the caller's own.
+     */
+    @GetMapping("/instances/overview")
+    @Operation(summary = "New hires: each onboarding with name, department, joining date, checklist and task counts, plus the counts")
+    @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
+    public OnboardingOverviewService.Overview instancesOverview(@RequestParam(required = false) String status,
+                                                               @RequestParam(required = false) UUID companyId,
+                                                               @AuthenticationPrincipal Jwt jwt) {
+        java.time.LocalDate today = java.time.LocalDate.now(OnboardingOverviewService.IST);
+        if (isHrOrAdmin(jwt)) return overview.overview(null, status, companyId, today);
+        UUID mine = employeeIdOrNull(jwt);
+        if (mine == null) {
+            return new OnboardingOverviewService.Overview(OnboardingOverviewService.count(List.of(), today), List.of());
+        }
+        return overview.overview(mine, status, companyId, today);
     }
 
     @GetMapping("/instances/{instanceId}")
@@ -267,6 +324,24 @@ public class OnboardingController {
         return perms != null && perms.contains("hrms.onboarding.instance.write");
     }
 
+    /** True when the token carries {@code permission} (what hasAuthority checks). */
+    static boolean holds(Jwt jwt, String permission) {
+        if (jwt == null) return false;
+        List<String> perms = jwt.getClaimAsStringList("permissions");
+        return perms != null && perms.contains(permission);
+    }
+
+    /** The caller's employee record, or null for an account without one. */
+    private static UUID employeeIdOrNull(Jwt jwt) {
+        String empId = jwt == null ? null : jwt.getClaimAsString("employee_id");
+        if (empId == null || empId.isBlank()) return null;
+        try {
+            return UUID.fromString(empId);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     private static UUID extractEmployeeId(Jwt jwt) {
         String empId = jwt.getClaimAsString("employee_id");
         return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());
@@ -286,6 +361,8 @@ public class OnboardingController {
     public record AssignAssetRequest(@NotNull UUID employeeId, UUID onboardingInstanceId, LocalDate assignedAt) {}
 
     public record ReturnAssetRequest(String notes) {}
+
+    public record ResolveIssueRequest(String note) {}
 
     public record CreateInstanceRequest(
             @NotNull UUID employeeId,
