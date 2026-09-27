@@ -12,6 +12,7 @@
 // Reader (employee): My attendance → Fix requests → "New request" (HrDrawer "Ask for a fix"),
 //   Cancel closes it.
 // Both: no page errors and no failed API calls.
+/* global process, console, document, getComputedStyle */
 import { chromium } from '@playwright/test'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'

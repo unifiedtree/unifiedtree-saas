@@ -111,14 +111,27 @@ export function Toast({ tone = 'success', message, detail, duration, undo, actio
   )
 }
 
+/** The one bottom-centre column every toast goes into, so toasts from different places stack instead of overlapping. */
+function toastColumn(): HTMLElement {
+  let el = document.querySelector<HTMLElement>('body > .uko-toasts[data-shared]')
+  if (!el) {
+    el = document.createElement('div')
+    el.className = 'uko-toasts'
+    el.setAttribute('data-shared', '')
+    document.body.appendChild(el)
+  }
+  return el
+}
+
 /**
- * One toast pinned bottom centre (portalled to <body>). What the page-level toast hooks
- * (useDesignToast, useReportToast, the settings page toast) render; give it a new `key`
- * per message so its timer restarts.
+ * One toast, bottom centre, in the shared toast column. What the page-level toast hooks
+ * (useDesignToast, useReportToast, the settings page toast) render; give it a new `key` per
+ * message so its timer restarts. A custom `bottom` (e.g. above a sticky bar) gets its own column.
  */
-export function ToastSlot({ bottom = 24, ...toast }: ToastProps & { bottom?: number }) {
+export function ToastSlot({ bottom, ...toast }: ToastProps & { bottom?: number }) {
   if (typeof document === 'undefined') return null
-  return createPortal(<div className="uko-toasts" style={{ bottom }}><Toast {...toast} /></div>, document.body)
+  if (bottom != null && bottom !== 24) return createPortal(<div className="uko-toasts" style={{ bottom }}><Toast {...toast} /></div>, document.body)
+  return createPortal(<Toast {...toast} />, toastColumn())
 }
 
 // ── Stack + useToast ─────────────────────────────────────────────────────────
@@ -193,7 +206,7 @@ function ToastStack({ fallback = false, host = 0 }: { fallback?: boolean; host?:
   if (fallback ? hosts.length > 0 : hosts[0] !== host) return null
   if (!list.length || typeof document === 'undefined') return null
   return createPortal(
-    <div className="uko-toasts">
+    <>
       {list.map(({ id, key, onExpire, ...t }) => (
         <Toast
           key={key}
@@ -201,8 +214,8 @@ function ToastStack({ fallback = false, host = 0 }: { fallback?: boolean; host?:
           onDone={(reason) => { remove(id); if (reason === 'timeout') onExpire?.() }}
         />
       ))}
-    </div>,
-    document.body,
+    </>,
+    toastColumn(),
   )
 }
 

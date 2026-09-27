@@ -527,7 +527,8 @@
   .uko-grid { grid-template-columns: minmax(0, 1fr); }
   .uko-appr { flex-wrap: wrap; }
   .uko-appr-main { flex-basis: calc(100% - 50px); }
-  .uko-appr-when { margin-left: 50px; margin-right: auto; }
+  .uko-appr > .uko-appr-when { margin-left: 50px; margin-right: auto; }
+  .uko-apprc-note { flex-basis: 100%; }
 }
 
 /* ── Motion ────────────────────────────────────────────────────────────── */

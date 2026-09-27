@@ -444,6 +444,20 @@ describe('Toast', () => {
     await t.done()
   }, T)
 
+  it('toasts from useToast and from a page hook share one column and never overlap', async () => {
+    const t = await open('toast')
+    await t.page.click('#undo')
+    await t.page.click('#design-ok')
+    const toasts = t.page.locator('.uko-toast')
+    await eventually(() => toasts.count(), 2)
+    await settle(toasts.first())
+    await settle(toasts.last())
+    const [a, b] = [await toasts.first().boundingBox(), await toasts.last().boundingBox()]
+    expect(a!.y + a!.height <= b!.y || b!.y + b!.height <= a!.y).toBe(true)
+    expect(await t.page.locator('body > .uko-toasts').count()).toBe(1)
+    await t.done()
+  }, T)
+
   it('useDesignToast keeps its call signature and renders the kit toast (success 2.6s, error 7s, Dismiss)', async () => {
     const t = await open('toast', { clock: true })
     await freeze(t.page)
