@@ -19,6 +19,12 @@ public record WfhRequestResponse(
         UUID approverId,
         String decisionNote,
         Instant decidedAt,
-        Instant createdAt
+        Instant createdAt,
+        /**
+         * Who the request is with: the approver it was sent to while it waits,
+         * then the person who decided it. Filled in by WfhController; null when
+         * unknown. Added for the redesign (BW-35); older clients ignore it.
+         */
+        String approverName
 ) {
 }

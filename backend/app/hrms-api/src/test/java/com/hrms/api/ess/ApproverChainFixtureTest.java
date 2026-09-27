@@ -154,7 +154,7 @@ class ApproverChainFixtureTest {
         WfhService wfhService = mock(WfhService.class);
         when(wfhService.apply(any(), any(), any())).thenAnswer(i -> new WfhRequestResponse(UUID.randomUUID(), applicant.getId(),
                 null, null, null, LocalDate.now().plusDays(2), LocalDate.now().plusDays(2), "x", ApprovalStatus.PENDING,
-                i.getArgument(2), null, null, Instant.now()));
+                i.getArgument(2), null, null, Instant.now(), null));
         WfhController controller = new WfhController(wfhService, employees, departments, fallback);
         try {
             controller.apply(new WfhRequestRequest(LocalDate.now().plusDays(2), LocalDate.now().plusDays(2), "Plumber visit"), tokenFor(applicant));

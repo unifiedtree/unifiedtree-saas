@@ -20,8 +20,16 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hrms.leave.dto.WfhBatchRequest;
+
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -43,6 +51,18 @@ public class WfhService {
                       ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
+    }
+
+    /**
+     * Takes a per-person lock for {@link #applyBatch}, so a double-clicked send
+     * can't slip two overlapping batches past the overlap check. Optional: the
+     * batch still works (as single requests always have) without it.
+     */
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setJdbcTemplate(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     @Transactional
@@ -119,6 +139,136 @@ public class WfhService {
             log.warn("Failed to publish WfhRequestSubmittedEvent for {}: {}", saved.getId(), ex.getMessage());
         }
         return toResponse(saved);
+    }
+
+    /**
+     * Several days from home in one send (BW-35). The days are split into runs
+     * of consecutive calendar days, and each run is stored as one request, as if
+     * sent on its own: the same rules, the same approver and the same overlap
+     * check. Everything happens in one transaction, so either every day is
+     * requested or none is, and the approver gets one notification for the lot.
+     * A batch that is a single run is announced exactly like a single request.
+     *
+     * @param dates      the days asked for, in any order (repeats are ignored)
+     * @param approverId resolved by the controller (ApproverChainService), never null
+     * @return the requests created, earliest first
+     */
+    @Transactional
+    public List<WfhRequestResponse> applyBatch(UUID employeeId, Collection<LocalDate> dates,
+                                               String reason, UUID approverId) {
+        if (employeeId == null) {
+            throw new BusinessRuleException("Employee id is required", "EMPLOYEE_REQUIRED");
+        }
+        List<LocalDate> days = dates == null ? List.of()
+                : dates.stream().filter(Objects::nonNull).distinct().sorted().toList();
+        if (days.isEmpty()) {
+            throw new BusinessRuleException("Pick at least one day", "INVALID_DATES");
+        }
+        if (days.size() > WfhBatchRequest.MAX_DAYS) {
+            throw new BusinessRuleException("Pick at most 31 days in one request.", "WFH_TOO_MANY_DAYS");
+        }
+        // The single request's planning horizon, for every run.
+        if (days.get(days.size() - 1).isAfter(LocalDate.now(java.time.ZoneOffset.UTC).plusDays(365))) {
+            throw new BusinessRuleException(
+                    "Start date must be within one year from today.",
+                    "WFH_START_TOO_FAR");
+        }
+        if (approverId == null) {
+            throw new BusinessRuleException(
+                    "No approver available — assign this employee a reporting manager, "
+                            + "set a department head, or add an HR manager before applying for WFH",
+                    "NO_APPROVER_AVAILABLE");
+        }
+        lockRequestsOf(employeeId);
+
+        List<LocalDate[]> runs = runsOf(days);
+        for (LocalDate[] run : runs) {
+            List<WfhRequest> overlaps = repository
+                    .findByEmployeeIdAndStatusInAndFromDateLessThanEqualAndToDateGreaterThanEqual(
+                            employeeId,
+                            List.of(ApprovalStatus.PENDING, ApprovalStatus.APPROVED),
+                            run[1],
+                            run[0]);
+            if (!overlaps.isEmpty()) {
+                throw new BusinessRuleException(
+                        "You already have a WFH request that overlaps " + describe(run) + ".",
+                        "WFH_OVERLAP");
+            }
+        }
+
+        List<WfhRequest> saved = new ArrayList<>();
+        for (LocalDate[] run : runs) {
+            WfhRequest entity = new WfhRequest();
+            entity.setTenantId(TenantContext.getTenantId());
+            entity.setEmployeeId(employeeId);
+            entity.setFromDate(run[0]);
+            entity.setToDate(run[1]);
+            entity.setReason(reason);
+            entity.setStatus(ApprovalStatus.PENDING);
+            entity.setApproverId(approverId);
+            saved.add(repository.save(entity));
+        }
+        log.info("WFH batch requested employee={} approver={} days={} requests={}",
+                employeeId, approverId, days.size(), saved.size());
+
+        // One notification for the whole send (AFTER_COMMIT; a fan-out failure never fails the send).
+        try {
+            WfhRequest first = saved.get(0);
+            if (saved.size() == 1) {
+                eventPublisher.publishEvent(new WfhRequestSubmittedEvent(
+                        first.getId(), employeeId, approverId, first.getTenantId(),
+                        first.getFromDate(), first.getToDate()));
+            } else {
+                eventPublisher.publishEvent(new BatchSubmitted(
+                        saved.stream().map(WfhRequest::getId).toList(), employeeId, approverId,
+                        first.getTenantId(), runs));
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to publish the WFH batch notification for employee {}: {}", employeeId, ex.getMessage());
+        }
+        return saved.stream().map(this::toResponse).toList();
+    }
+
+    /**
+     * Published once when a batch makes more than one request. The approver is
+     * told about every day in one notification (the API's WfhBatchNotificationListener,
+     * with the usual "wfh.submitted" wording).
+     *
+     * @param requestIds the requests created, earliest first
+     * @param runs       each request's first and last day, in the same order
+     */
+    public record BatchSubmitted(List<UUID> requestIds, UUID employeeId, UUID approverId, UUID tenantId,
+                                 List<LocalDate[]> runs) {}
+
+    /** Sorted, distinct days → runs of consecutive calendar days, each as {first, last}. */
+    public static List<LocalDate[]> runsOf(List<LocalDate> sortedDistinctDays) {
+        List<LocalDate[]> runs = new ArrayList<>();
+        LocalDate start = null;
+        LocalDate end = null;
+        for (LocalDate d : sortedDistinctDays) {
+            if (start != null && d.equals(end.plusDays(1))) {
+                end = d;
+                continue;
+            }
+            if (start != null) runs.add(new LocalDate[] {start, end});
+            start = d;
+            end = d;
+        }
+        if (start != null) runs.add(new LocalDate[] {start, end});
+        return runs;
+    }
+
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
+
+    /** "30 Sep 2026", or "30 Sep 2026 to 2 Oct 2026". */
+    public static String describe(LocalDate[] run) {
+        return run[0].equals(run[1]) ? DAY.format(run[0]) : DAY.format(run[0]) + " to " + DAY.format(run[1]);
+    }
+
+    /** One batch per person at a time (released at commit); skipped when JDBC isn't wired. */
+    private void lockRequestsOf(UUID employeeId) {
+        if (jdbc == null) return;
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", rs -> null, "wfh-batch:" + employeeId);
     }
 
     /** The employee who filed a WFH request, or null if it isn't in this tenant. */
@@ -231,6 +381,7 @@ public class WfhService {
                 w.getApproverId(),
                 w.getDecisionNote(),
                 w.getDecidedAt(),
-                w.getCreatedAt());
+                w.getCreatedAt(),
+                null);      // approverName — filled in by WfhController.enrich*
     }
 }
