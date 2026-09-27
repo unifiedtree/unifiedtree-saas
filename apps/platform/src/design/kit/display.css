@@ -669,7 +669,7 @@ a.uk-row__main { cursor: pointer; }
 .uk-chip--soft { height: 28px; padding: 0 10px; border-radius: 999px; background: var(--u-hv, #F0F4F2); font-size: 12.5px; color: var(--u-ink2, #4A5A54); }
 .uk-chip--outline { height: 34px; padding: 0 12px; border-radius: 999px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); font-size: 13px; color: var(--u-ink2, #4A5A54); }
 .uk-chip__value { font-weight: 500; color: var(--u-ink, #0E1B16); font-variant-numeric: tabular-nums; }
-.uk-chip--code { padding: 3px 8px; border-radius: 8px; background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 500; }
+.uk-chip--code { padding: 3px 8px; border-radius: 8px; background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); font-family: var(--u-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); font-size: 12px; font-weight: 500; }
 
 .uk-sdot { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
 .uk-sdot__dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; }
@@ -1017,19 +1017,14 @@ a.uk-row__main { cursor: pointer; }
 .uk-fpills--sm .uk-fpill { height: 32px; padding: 0 12px; font-size: 12.5px; }
 .uk-fpill__n { font-size: 12px; opacity: .8; font-variant-numeric: tabular-nums; }
 
-/* ── Keyboard focus (README: brand border + 3px brand-soft ring) ─────────── */
+/* ── Keyboard focus (README: brand border + 3px brand-soft ring; the theme's --u-focus is visible in dark) ── */
 :is(.uk-stat.uk-stat--link, .uk-qa, .uk-ptab, .uk-fpill, .uk-sact, .uk-retry, .uk-search):focus-visible {
   border-color: var(--u-br, #0F6E56);
-  box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE);
+  box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs, #E8F3EE));
 }
 .uk-ptab.is-on:focus-visible,
-.uk-fpill.is-on:focus-visible { box-shadow: 0 0 0 3px var(--u-brs2, #D2EADF); }
-:is(.uk-row__main, .uk-barlist__row--btn, .uk-slink, .uk-seg__opt):focus-visible { box-shadow: inset 0 0 0 1.5px var(--u-brt, #0F6E56), 0 0 0 3px var(--u-brs, #E8F3EE); }
-/* Dark: the soft ring disappears on dark surfaces, so add a visible brand-text outline. */
-[data-theme='dark'] :is(.uk-stat.uk-stat--link, .uk-qa, .uk-ptab, .uk-fpill, .uk-sact, .uk-retry, .uk-search, .uk-row__main, .uk-barlist__row--btn, .uk-slink, .uk-seg__opt):focus-visible {
-  outline: 2px solid var(--u-brt, #5CC4A3);
-  outline-offset: 2px;
-}
+.uk-fpill.is-on:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs2, #D2EADF)); }
+:is(.uk-row__main, .uk-barlist__row--btn, .uk-slink, .uk-seg__opt):focus-visible { box-shadow: inset 0 0 0 1.5px var(--u-brt, #0F6E56), var(--u-focus, 0 0 0 3px var(--u-brs, #E8F3EE)); }
 
 /* ── Dark-only adjustments ───────────────────────────────────────────────── */
 /* The dark theme brightens the info/holiday solids for dark surfaces, so the
