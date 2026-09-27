@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { accessState, type AccessContext } from './access'
-import { PAGE_REGISTRY, menuRule, visibleEntries, firstOpenIn } from './pageRegistry'
+import { PAGE_REGISTRY, MENU_RULES, menuRule, visibleEntries, firstOpenIn } from './pageRegistry'
 
 // Built-in role grants as seeded (local recovery DB, 25 Sep), trimmed to the codes the rules read.
 const EMPLOYEE = ['attendance.checkin.self', 'hrms.advance.request.self', 'hrms.department.read', 'hrms.designation.read', 'hrms.document.read.self', 'hrms.document.write.self',
@@ -40,7 +40,8 @@ describe('page registry', () => {
   it('tabs use the query parameter their page reads', () => {
     const param: Record<string, string> = {
       'att-analytics': 'tab', 'att-daily': 'tab', 'att-shifts': 'tab', leave: 'tab', hiring: 'tab', expenses: 'tab', fnf: 'tab',
-      onboarding: 'view', documents: 'view', performance: 'view', learning: 'view', compliance: 'view', roles: 'view',
+      exit: 'tab', 'workforce-analytics': 'tab',
+      onboarding: 'view', documents: 'view', performance: 'view', learning: 'view', compliance: 'view', roles: 'view', team: 'view',
     }
     for (const e of PAGE_REGISTRY.filter((x) => x.parent)) {
       expect(param[e.parent!], e.id).toBeTruthy()
@@ -76,7 +77,9 @@ describe('menu and search access (permission-only)', () => {
   it('a department manager gets My team and the team views, not the directory', () => {
     const c = ctx(DEPT_MANAGER)
     expect(open(c, '/team')).toBe(true)
-    expect(open(c, '/dashboard')).toBe(true)
+    // Managers' Home is the self-service Home now (DECISIONS 12): no company-wide read, no admin dashboard.
+    expect(open(c, '/dashboard')).toBe(false)
+    expect(open(c, '/me', 'home')).toBe(true)
     expect(open(c, '/hrms/attendance', 'attendance')).toBe(true)
     expect(open(c, '/hrms/employees')).toBe(false)
     expect(ids(c).has('att-shifts:myshift')).toBe(false)
@@ -122,5 +125,93 @@ describe('menu and search access (permission-only)', () => {
   it('an area opens the first page the person may open', () => {
     expect(firstOpenIn('attendance', visibleEntries(ctx(HR_MANAGER)))?.path).toBe('/hrms/att-analytics')
     expect(firstOpenIn('attendance', visibleEntries(ctx(EMPLOYEE)))?.path).toBe('/hrms/attendance')
+  })
+})
+
+describe('the redesign rail rules (DECISIONS 11, 12)', () => {
+  const FIN = [...EMPLOYEE, 'attendance.team.read', 'hrms.employee.read', 'payroll.runs.read', 'hrms.report.headcount', 'hrms.report.leave', 'hrms.expense.claim.read',
+    'hrms.advance.read', 'hrms.advance.disburse', 'hrms.pli.read', 'hrms.fnf.read', 'settings.read']
+  const OWNER = ctx(['*'], { adminRole: true, planAdmin: true })
+  const MY_WORK: [string, string][] = [
+    ['mytime', '/hrms/attendance'], ['mytime', '/me/wfh'], ['mytime', '/me/shift-change'], ['myleave', '/hrms/leave'],
+    ['mypay', '/me/payslips'], ['mypay', '/me/salary'], ['mypay', '/hrms/expenses?tab=my'], ['mypay', '/hrms/advances?tab=my'], ['mypay', '/hrms/pli'],
+    ['mydocs', '/hrms/letters/my'], ['mydocs', '/hrms/documents?view=my'], ['mydocs', '/me/assets'], ['mydocs', '/hrms/policies?view=documents'],
+    ['mygrowth', '/hrms/performance?view=my-reviews'], ['mygrowth', '/hrms/learning?view=my'], ['mygrowth', '/me/interviews'],
+  ]
+
+  it('every My work link has its own rule (none falls back to a wider one)', () => {
+    for (const [group, path] of MY_WORK) expect(MENU_RULES[`${group}:${path}`], `${group}:${path}`).toBeTruthy()
+    expect(MENU_RULES['home:/me']).toBeTruthy()
+  })
+
+  it('My work never shows for the roles that run the workspace; staff keep it', () => {
+    for (const [group, path] of MY_WORK) expect(open(OWNER, path, group), `${group}:${path}`).toBe(false)
+    const reader = ctx(EMPLOYEE)
+    for (const [group, path] of [['mytime', '/hrms/attendance'], ['myleave', '/hrms/leave'], ['mypay', '/me/payslips'], ['mypay', '/hrms/expenses?tab=my'],
+      ['mydocs', '/hrms/letters/my'], ['mygrowth', '/hrms/performance?view=my-reviews']] as [string, string][]) expect(open(reader, path, group), `${group}:${path}`).toBe(true)
+    // An HR manager is staff too (not an admin role): they keep their own time and leave.
+    expect(open(ctx(HR_MANAGER), '/hrms/leave', 'myleave')).toBe(true)
+    expect(open(ctx(HR_MANAGER), '/hrms/attendance', 'mytime')).toBe(true)
+  })
+
+  it('My work copies the self-service rules: it needs the person’s own employee record', () => {
+    const noRecord = ctx(EMPLOYEE, { self: false })
+    expect(open(noRecord, '/hrms/attendance', 'mytime')).toBe(false)
+    expect(open(noRecord, '/hrms/leave', 'myleave')).toBe(false)
+    expect(open(noRecord, '/me', 'home')).toBe(false)
+  })
+
+  it('Home (the self-service Home) is for people without the admin dashboard', () => {
+    expect(open(ctx(EMPLOYEE), '/me', 'home')).toBe(true)
+    expect(open(ctx(DEPT_MANAGER), '/me', 'home')).toBe(true)
+    expect(open(ctx(HR_MANAGER), '/me', 'home')).toBe(false)
+    expect(open(ctx(FIN), '/me', 'home')).toBe(false)
+    expect(open(OWNER, '/me', 'home')).toBe(false)
+  })
+
+  it('the Dashboard link and the registry entry use the admin-home rule', () => {
+    const dash = PAGE_REGISTRY.find((e) => e.id === 'dashboard')!
+    for (const perms of [HR_MANAGER, FIN, ['*']]) {
+      expect(open(ctx(perms), '/dashboard')).toBe(true)
+      expect(accessState(dash.access, ctx(perms))).toBe('open')
+    }
+    for (const perms of [EMPLOYEE, DEPT_MANAGER]) {
+      expect(open(ctx(perms), '/dashboard')).toBe(false)
+      expect(accessState(dash.access, ctx(perms))).toBe('hidden')
+    }
+  })
+
+  it('admin links that My work covers show only with an admin permission (as Attendance and Leave do)', () => {
+    const reader = ctx(EMPLOYEE)
+    expect(open(reader, '/hrms/expenses', 'expense')).toBe(false)
+    expect(open(reader, '/hrms/advances', 'payroll-hr')).toBe(false)
+    expect(open(reader, '/hrms/performance', 'performance')).toBe(false)
+    expect(open(reader, '/hrms/learning', 'performance')).toBe(false)
+    const mgr = ctx(DEPT_MANAGER)
+    expect(open(mgr, '/hrms/expenses', 'expense')).toBe(true)
+    expect(open(mgr, '/hrms/advances', 'payroll-hr')).toBe(true)
+    expect(open(mgr, '/hrms/performance', 'performance')).toBe(true)
+    expect(open(ctx(['hrms.learning.skill.approve']), '/hrms/learning', 'performance')).toBe(true)
+    // Nothing becomes unreachable: the pages still open (their registry entries are unchanged).
+    for (const id of ['expenses', 'pay-advances', 'performance', 'learning']) expect(ids(reader).has(id), id).toBe(true)
+  })
+
+  it('the new tabs are registered with their own rules', () => {
+    const hr = ids(ctx([...HR_MANAGER, 'hrms.leave.employee.read']))
+    expect(hr.has('att-daily:timesheet')).toBe(true)
+    expect(hr.has('att-analytics:punctuality')).toBe(true)
+    expect(hr.has('leave:all-balances')).toBe(true)
+    expect(hr.has('exit:notice') && hr.has('exit:exited') && hr.has('exit:terminated')).toBe(true)
+    expect(hr.has('workforce-analytics:headcount')).toBe(true)
+    // Timesheet is personal, like My Attendance: not for admin roles.
+    expect(ids(OWNER).has('att-daily:timesheet')).toBe(false)
+    // Each workforce analytics tab needs its own report.
+    const headcountOnly = ids(ctx(['hrms.report.headcount']))
+    expect(headcountOnly.has('workforce-analytics:headcount')).toBe(true)
+    expect(headcountOnly.has('workforce-analytics:attrition')).toBe(false)
+    // My team's views: the schedule needs the team read; the approvals any approve permission.
+    const mgr = ids(ctx(DEPT_MANAGER))
+    expect(mgr.has('team:schedule') && mgr.has('team:approvals')).toBe(true)
+    expect(ids(ctx(EMPLOYEE)).has('team:approvals')).toBe(false)
   })
 })

@@ -1,13 +1,17 @@
 // Which rail item is lit (PlatformShell).
 //
-// Some pages belong to two rail items: a manager's Leave, Attendance and Team
-// pages are both their own rail item and a tab of "Me" (Employee Self Service).
-// The rail item the person came through stays lit: Leave → Leave, Me → its
-// Leave tab → Me. With nothing to go on (a link, search, a notification, a
-// fresh tab) the page's own rail item is lit, not "Me".
+// Some pages belong to two rail items: a manager's Leave and Attendance pages
+// are both their own admin rail item and a page of "My work" (My leave, My
+// time). The rail item the person came through stays lit: Leave → Leave,
+// My leave → My leave. With nothing to go on (a link, search, a notification,
+// a fresh tab) the page's own admin item is lit, not the My work item.
+//
+// The More button stands in for what the rail doesn't show: settings pages,
+// My profile and All apps (all reached through More), and a module that didn't
+// fit the rail's height and moved into More.
 
-/** The "Me" rail items: the self-service group and the flat My workspace link. */
-export const SELF_SERVICE_RAIL: ReadonlySet<string> = new Set(['ess', 'myworkspace'])
+/** The self-service rail items: My work (and the old "Me" keys, for a session remembered from before). */
+export const SELF_SERVICE_RAIL: ReadonlySet<string> = new Set(['mytime', 'myleave', 'mypay', 'mydocs', 'mygrowth', 'ess', 'myworkspace'])
 
 /** A rail item that owns the current page, in rail order, with how many pages it lists. */
 export interface ActiveRailItem { key: string; tabs: number }
@@ -22,6 +26,27 @@ export function litRailKey(active: readonly ActiveRailItem[], via?: string | nul
   const pool = others.length ? others : active
   // Several match: prefer the one whose pages show as tabs (an employee's /me).
   return (pool.find(i => i.tabs > 1) ?? pool[0])?.key
+}
+
+export interface LitRail {
+  /** The rail item to light, when it shows on the rail. */
+  key: string | undefined
+  /** The module the page belongs to, even when it sits in More (its Pages panel). */
+  module: string | undefined
+  /** Light More instead: a page reached through More, or a module that moved into More. */
+  more: boolean
+}
+
+/**
+ * The lit rail item, or More.
+ * `morePage`: the page is reached through More (settings, My profile, All apps).
+ * `overflow`: the modules that didn't fit the rail and show in More.
+ */
+export function litRail(active: readonly ActiveRailItem[], via: string | null | undefined, opts: { morePage: boolean; overflow: ReadonlySet<string> }): LitRail {
+  if (opts.morePage) return { key: undefined, module: undefined, more: true }
+  const key = litRailKey(active, via)
+  if (key && opts.overflow.has(key)) return { key: undefined, module: key, more: true }
+  return { key, module: key, more: false }
 }
 
 /** A rail click (or a tab in its row, or the phone menu): the rail item and the page it opened. */

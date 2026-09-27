@@ -1,4 +1,5 @@
 import { accessState, type Access, type AccessContext, type AccessState } from './access'
+import { ADMIN_HOME_CODES, TEAM_APPROVE_CODES } from './shellCodes'
 
 /**
  * Every page and sub-tab of the workspace, with who may open it.
@@ -52,7 +53,7 @@ const planAdminOnly = (ctx: AccessContext) => ctx.planAdmin
 
 export const SLASH_MODULES: SlashModule[] = [
   { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', aliases: ['home'] },
-  { key: 'me', label: 'My workspace', icon: 'userCheck', aliases: ['my', 'self', 'ess', 'myself'] },
+  { key: 'me', label: 'Home', icon: 'userCheck', aliases: ['my', 'self', 'ess', 'myself'] },
   { key: 'team', label: 'My team', icon: 'users', aliases: ['myteam'] },
   { key: 'company', label: 'Companies & Branches', icon: 'building', aliases: ['companies', 'branches', 'branch'] },
   { key: 'master', label: 'Master data', icon: 'database', aliases: ['masterdata', 'setup'] },
@@ -91,12 +92,13 @@ function tab(parentId: string, key: string, label: string, query: string, slash:
 function iconOf(slash: string) { const m = SLASH_MODULES.find((x) => x.key === slash.split('/')[0]); return m ? m.icon : 'fileText' }
 
 // ── Home ───────────────────────────────────────────────────────────────────
-page('dashboard', 'Dashboard', '/dashboard', 'Home', 'dashboard', [], { keywords: ['home', 'overview', 'today', 'summary'] })
+// The admin dashboard is the Home of people with a company-wide read (DECISIONS 12); everyone else's /dashboard opens /me.
+page('dashboard', 'Dashboard', '/dashboard', 'Home', 'dashboard', [{ anyOf: [...ADMIN_HOME_CODES] }], { keywords: ['home', 'overview', 'today', 'summary'] })
 page('apps', 'All apps', '/modules', 'Home', 'apps', [], { keywords: ['launcher', 'modules', 'my apps'] })
 page('plan', 'Manage plan', '/plan', 'Home', 'apps/plan', [{ when: planAdminOnly }], { aliases: ['plan'], keywords: ['plan', 'subscription', 'add module', 'upgrade', 'seats'] })
 
 // ── My workspace (self-service) ────────────────────────────────────────────
-page('me', 'My workspace', '/me', 'Me', 'me', [{ ...any('hrms.ess.read', 'attendance.checkin.self'), module: HR, self: true }], { aliases: ['me/overview', 'me/home'], keywords: ['self service', 'ess', 'my home'] })
+page('me', 'Home', '/me', 'Me', 'me', [{ ...any('hrms.ess.read', 'attendance.checkin.self'), module: HR, self: true }], { aliases: ['me/overview', 'me/home'], keywords: ['self service', 'ess', 'my home', 'my workspace'] })
 page('me-attendance', 'My attendance', '/hrms/attendance?tab=my', 'Me', 'me/attendance', [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }], { keywords: ['punch', 'check in', 'my days', 'present'] })
 page('me-leave', 'My leave', '/hrms/leave?tab=my', 'Me', 'me/leave', [{ allOf: ['leave.request.self'], module: HR, self: true, when: notAdminRole }], { keywords: ['time off', 'my requests', 'leave status'] })
 page('me-payslips', 'My payslips', '/me/payslips', 'Me', 'me/payslips', [{ ...any('payroll.payslip.read.self'), module: PAY, self: true }], { aliases: ['payslips', 'payslip'], keywords: ['salary slip', 'pay slip', 'download payslip'] })
@@ -116,6 +118,9 @@ page('me-training', 'My training', '/hrms/learning?view=my', 'Me', 'me/training'
 page('me-onboarding', 'My onboarding', '/hrms/onboarding/instances?view=hires', 'Me', 'me/onboarding', [{ ...any('hrms.onboarding.instance.read'), noneOf: ['hrms.onboarding.instance.write'], module: HR }], { keywords: ['joining', 'checklist', 'tasks'] })
 page('profile', 'My profile', '/profile', 'Me', 'me/profile', [], { aliases: ['profile', 'settings/profile'], keywords: ['account', 'my details', 'personal', 'password', 'photo'] })
 page('team', 'My team', '/team', 'Me', 'team', [{ ...any('attendance.team.read', 'hrms.leave.approve.l1'), noneOf: ['hrms.employee.read'], module: HR }], { keywords: ['team', 'reports', 'my people', 'who is in'] })
+// My team's views (?view=); Team today is the page itself.
+tab('team', 'schedule', 'Team schedule', 'view=schedule', 'team/schedule', [any('attendance.team.read')], { keywords: ['roster', 'who works when', 'shifts', 'week'] })
+tab('team', 'approvals', 'Team approvals', 'view=approvals', 'team/approvals', [any(...TEAM_APPROVE_CODES)], { keywords: ['approve', 'requests', 'inbox', 'pending', 'waiting'] })
 
 // ── Company ────────────────────────────────────────────────────────────────
 page('companies', 'Companies & Branches', '/hrms/companies', 'Company', 'company', [{ ...any('hrms.branch.read'), module: HR }], {
@@ -144,6 +149,7 @@ page('m-statutory', 'Statutory settings', '/hrms/master/statutory', 'Master data
 // ── Attendance & Time ──────────────────────────────────────────────────────
 page('att-analytics', 'Attendance Analytics', '/hrms/att-analytics', 'Attendance & Time', 'attendance/analytics', [{ ...any('attendance.team.read'), module: HR }], { keywords: ['attendance report', 'trend', 'charts'] })
 tab('att-analytics', 'overview', 'Attendance overview', 'tab=overview', 'attendance/overview')
+tab('att-analytics', 'punctuality', 'Punctuality', 'tab=punctuality', 'attendance/punctuality', [], { keywords: ['late', 'late marks', 'delay', 'on time'] })
 tab('att-analytics', 'calendar', 'Attendance calendar', 'tab=calendar', 'attendance/calendar', [], { keywords: ['month', 'days'] })
 page('att-daily', 'Daily Tracking', '/hrms/attendance', 'Attendance & Time', 'attendance/daily-tracking', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/daily', 'attendance/tracking'], keywords: ['today', 'check-ins', 'punches'] })
 tab('att-daily', 'team', 'Daily Logs', 'tab=team', 'attendance/daily-logs', [any('attendance.team.read')], { aliases: ['attendance/logs', 'attendance/today', 'attendance/roster-today'], keywords: ['who is in', 'present', 'late', 'absent', 'not marked'] })
@@ -151,6 +157,7 @@ tab('att-daily', 'face', 'Face Punch', 'tab=face', 'attendance/face-punch', [{ a
 tab('att-daily', 'corrections', 'Regularization', 'tab=corrections', 'attendance/regularization', [], { aliases: ['attendance/corrections', 'attendance/fix', 'attendance/fixes'], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'fix'] })
 tab('att-daily', 'review', 'Review', 'tab=review', 'attendance/review', [{ allOf: ['attendance.team.read', 'attendance.status.review'] }], { aliases: ['attendance/exceptions', 'attendance/status-review'], keywords: ['excuse', 'change status', 'late', 'half day', 'absent', 'no check-out', 'outside zone'] })
 tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['attendance/my', 'attendance/mine'] })
+tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'] })
 page('att-shifts', 'Shifts & Overtime', '/hrms/shifts', 'Attendance & Time', 'attendance/shifts', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/shifts-overtime', 'shifts'], keywords: ['shift', 'overtime', 'ot', 'roster'] })
 tab('att-shifts', 'schedules', 'Shift Schedules', 'tab=schedules', 'attendance/shift-schedules', [any('attendance.team.read')], { aliases: ['attendance/schedules'], keywords: ['shift timings', 'general shift', 'night shift'] })
 tab('att-shifts', 'roster', 'Shift Roster', 'tab=roster', 'attendance/roster', [any('attendance.team.read')], { keywords: ['assign shift', 'change shift', 'who works when'] })
@@ -167,6 +174,7 @@ tab('leave', 'apply', 'Apply for leave', 'tab=apply', 'leave/apply', [{ allOf: [
 tab('leave', 'balances', 'Leave balances', 'tab=balances', 'leave/balances', [{ allOf: ['leave.request.self'], when: notAdminRole }], { aliases: ['leave/balance'], keywords: ['remaining', 'quota', 'entitlement'] })
 tab('leave', 'approvals', 'Leave approvals', 'tab=approvals', 'leave/approvals', [any('hrms.leave.approve.l1')], { aliases: ['leave/approve', 'leave/pending'], keywords: ['approve', 'pending', 'reject'] })
 tab('leave', 'history', 'Decided leave requests', 'tab=history', 'leave/decided', [any('hrms.leave.approve.l1')], { aliases: ['leave/history'] })
+tab('leave', 'all-balances', 'All leave balances', 'tab=all-balances', 'leave/all-balances', [any('hrms.leave.employee.read', 'hrms.report.leave')], { keywords: ['everyone', 'balance report', 'remaining leave'] })
 tab('leave', 'encash', 'Leave encashment', 'tab=encash', 'leave/encash', [{ anyOf: ['hrms.leave.encash.approve', 'leave.request.self'] }], { keywords: ['encash', 'cash out leave'] })
 tab('leave', 'yearend', 'Leave year end', 'tab=yearend', 'leave/year-end', [any('hrms.leave.yearend.run')], { keywords: ['carry forward', 'accrual', 'lapse'] })
 tab('leave', 'calendar', 'Leave calendar', 'tab=calendar', 'leave/calendar', [], { keywords: ['who is off', 'out of office'] })
@@ -234,6 +242,9 @@ tab('compliance', 'inspector', 'Inspector access', 'view=inspector', 'compliance
 // ── Reports & analytics ────────────────────────────────────────────────────
 page('reports', 'Reports Center', '/hrms/reports', 'Reports & Analytics', 'reports', [{ anyOf: REPORTS, module: HR }], { keywords: ['report', 'export', 'csv', 'download'] })
 page('workforce-analytics', 'Workforce Analytics', '/hrms/workforce-analytics', 'Reports & Analytics', 'reports/workforce-analytics', [{ ...any('hrms.report.headcount', 'hrms.report.attrition', 'hrms.report.diversity'), module: HR }], { aliases: ['analytics', 'reports/analytics'], keywords: ['headcount trend', 'charts', 'insights'] })
+tab('workforce-analytics', 'headcount', 'Workforce headcount', 'tab=headcount', 'reports/analytics-headcount', [any('hrms.report.headcount')], { keywords: ['headcount trend', 'joiners', 'leavers'] })
+tab('workforce-analytics', 'attrition', 'Workforce attrition', 'tab=attrition', 'reports/analytics-attrition', [any('hrms.report.attrition')], { keywords: ['exits', 'turnover rate'] })
+tab('workforce-analytics', 'diversity', 'Workforce diversity', 'tab=diversity', 'reports/analytics-diversity', [any('hrms.report.diversity')], { keywords: ['gender', 'age mix'] })
 page('r-headcount', 'Headcount report', '/hrms/reports/headcount', 'Reports & Analytics', 'reports/headcount', [{ ...any('hrms.report.headcount'), module: HR }], { keywords: ['employees by department'] })
 page('r-attrition', 'Attrition report', '/hrms/reports/attrition', 'Reports & Analytics', 'reports/attrition', [{ ...any('hrms.report.attrition'), module: HR }], { keywords: ['exits', 'turnover'] })
 page('r-attendance', 'Attendance summary report', '/hrms/reports/attendance-summary', 'Reports & Analytics', 'reports/attendance-summary', [{ ...any('hrms.report.attendance'), module: HR }], { aliases: ['reports/attendance'] })
@@ -243,6 +254,9 @@ page('r-diversity', 'Diversity report', '/hrms/reports/diversity', 'Reports & An
 
 // ── Employee exit ──────────────────────────────────────────────────────────
 page('exit', 'Resignation & Exit', '/hrms/exit', 'Employee Exit', 'exit', [{ ...any('hrms.employee.write'), module: HR }], { aliases: ['exit/resignations', 'resignations'], keywords: ['resignation', 'notice period', 'leaver', 'offboarding'] })
+tab('exit', 'notice', 'Serving notice', 'tab=notice', 'exit/on-notice', [], { keywords: ['notice period', 'resigned'] })
+tab('exit', 'exited', 'Exited employees', 'tab=exited', 'exit/exited', [], { keywords: ['left', 'former employees'] })
+tab('exit', 'terminated', 'Terminated employees', 'tab=terminated', 'exit/terminated', [], { keywords: ['dismissed', 'termination'] })
 page('fnf', 'Full & Final Settlement', '/hrms/fnf', 'Employee Exit', 'exit/full-and-final', [{ ...any('hrms.fnf.read', 'hrms.fnf.process', 'hrms.fnf.approve'), module: PAY }], { aliases: ['exit/fnf', 'fnf', 'full-and-final'], keywords: ['fnf', 'settlement', 'final pay'] })
 tab('fnf', 'pending-approval', 'Settlements pending approval', 'tab=pending-approval', 'exit/fnf-pending-approval', [any('hrms.fnf.read')])
 tab('fnf', 'pending-payment', 'Settlements pending payment', 'tab=pending-payment', 'exit/fnf-pending-payment', [any('hrms.fnf.read')])
@@ -284,7 +298,15 @@ export const PAGE_REGISTRY: readonly PageEntry[] = entries
  * than the route (e.g. Daily Tracking under Attendance & Time is the team
  * view; under Me it is your own attendance), else just the path. Anything not
  * listed uses the registry entry for the same path. */
-const DASHBOARD_MENU: Access[] = [{ anyOf: ['hrms.employee.read', 'attendance.team.read', 'org.company.write', 'payroll.runs.read', ...REPORTS] }]
+/** The admin dashboard: the same rule as the registry's dashboard entry (DECISIONS 12). */
+const DASHBOARD_MENU: Access[] = [{ anyOf: [...ADMIN_HOME_CODES] }]
+const entry = (id: string): PageEntry => {
+  const e = entries.find((x) => x.id === id)
+  if (!e) throw new Error('pageRegistry: unknown page ' + id)
+  return e
+}
+/** A My work link: the page's self-service rule, never for the roles that run the workspace (as "Me" was). */
+const mine = (id: string): Access[] => [...entry(id).access, { when: notAdminRole }]
 export const MENU_RULES: Record<string, Access[]> = {
   '/dashboard': DASHBOARD_MENU,
   'ess:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true }],
@@ -298,6 +320,34 @@ export const MENU_RULES: Record<string, Access[]> = {
   '/profile': [],
   // The Settings app's own entry (PlatformShell's platform items).
   '/settings': [{ anyOf: SETTINGS }],
+
+  // ── The redesign's rail (design/shell/navModel.ts): one explicit rule per new key, so none falls
+  //    back to a wider one. Home is the self-service Home, for people without the admin dashboard.
+  'home:/me': [...entry('me').access, { noneOf: [...ADMIN_HOME_CODES], when: notAdminRole }],
+  // My work: today's self-service rules, page by page, with the admin-role exclusion.
+  'mytime:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }],
+  'mytime:/me/wfh': mine('me-wfh'),
+  'mytime:/me/shift-change': mine('me-shift'),
+  'myleave:/hrms/leave': [{ ...any('leave.request.self'), module: HR, self: true, when: notAdminRole }],
+  'mypay:/me/payslips': mine('me-payslips'),
+  'mypay:/me/salary': mine('me-salary'),
+  'mypay:/hrms/expenses?tab=my': mine('me-claims'),
+  'mypay:/hrms/advances?tab=my': mine('me-advances'),
+  'mypay:/hrms/pli': mine('me-incentives'),
+  'mydocs:/hrms/letters/my': mine('me-letters'),
+  'mydocs:/hrms/documents?view=my': mine('me-documents'),
+  'mydocs:/me/assets': mine('me-assets'),
+  'mydocs:/hrms/policies?view=documents': mine('policies'),
+  'mygrowth:/hrms/performance?view=my-reviews': mine('me-reviews'),
+  'mygrowth:/hrms/learning?view=my': mine('me-training'),
+  'mygrowth:/me/interviews': mine('me-interviews'),
+  // Admin links that open the same page as a My work link show for the admin permissions only, as
+  // Attendance and Leave already do above: someone who only has the self-service permission reaches
+  // the page through My work.
+  'expense:/hrms/expenses': [{ anyOf: ['hrms.expense.claim.read', 'hrms.expense.claim.approve', 'hrms.expense.policy.read', 'hrms.expense.reimbursement', 'hrms.reimb_batch.read'], module: HR }],
+  'payroll-hr:/hrms/advances': [{ anyOf: ['hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse', 'hrms.advance.request.others'], module: HR }],
+  'performance:/hrms/performance': [{ anyOf: ['hrms.performance.read', 'hrms.performance.write'], module: HR }],
+  'performance:/hrms/learning': [{ anyOf: ['hrms.learning.write', 'hrms.learning.skill.read', 'hrms.learning.skill.approve'], module: HR }],
 }
 
 /** The rule for a menu link; undefined when neither the menu rules nor the registry know the path. */
