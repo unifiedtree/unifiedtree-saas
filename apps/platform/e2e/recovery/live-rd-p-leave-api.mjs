@@ -4,7 +4,8 @@
 //  B. hrm applies for leave on reader's behalf: reader's approver chain, the
 //     preview agrees, reader is told, then reader cancels and every balance is
 //     back to its value before
-//  C. mgr approves two of reader's requests in one call (plus one they can't
+//  C. mgr approves two of reader's requests in one call, takes one back (undo
+//     journal), plus one they can't
 //     decide: reported, not fatal); the Decided counts and stats see them
 //  D. a holiday is added, edited (the leave count follows it), restored, archived
 //  E. reader sees colleagues off: first names of approved leave in the same
@@ -189,9 +190,14 @@ try {
   check('decided: filtered to approved, with counts and who decided', decided.status === 200 && (decided.json?.content || []).every((x) => x.status === 'APPROVED') && dRow?.decidedByName === 'Dept Manager' && decided.json?.counts?.APPROVED >= 2, `counts=${JSON.stringify(decided.json?.counts)} decidedBy=${dRow?.decidedByName}`)
   const statsAfter = await mgr.call('/v1/leave/approvals/stats')
   check('approval stats: this month\'s approvals include them', statsAfter.json?.approvedThisMonth >= 2, `approvedThisMonth=${statsAfter.json?.approvedThisMonth}`)
+  // Every bulk decision reached the undo journal (P-TEAM): the decider can take one back.
+  const undo = await mgr.call(`/v1/leave/${r1.json?.id}/decision/undo`, 'POST')
+  const afterUndo = await balancesOf(reader)
+  check('approve all: a bulk decision can be taken back (it was journaled)', undo.status === 200 && undo.json?.status === 'PENDING', `status=${undo.status} ${JSON.stringify(undo.json).slice(0, 160)}`)
+  check('approve all: taking it back returns its day to pending', afterUndo[typeId]?.used === readerBefore[typeId].used + 1 && afterUndo[typeId]?.pending === readerBefore[typeId].pending + 1, JSON.stringify(afterUndo[typeId]))
   for (const r of [r1, r2]) {
     const c = await reader.call(`/v1/leave/${r.json?.id}/cancel?reason=${encodeURIComponent('Local QA cleanup')}`, 'POST')
-    check('approve all cleanup: reader cancels the approved leave', c.status === 204, `status=${c.status}`)
+    check('approve all cleanup: reader cancels the leave', c.status === 204, `status=${c.status}`)
   }
   const afterBulkCancel = await balancesOf(reader)
   check('approve all cleanup: balances back to before', afterBulkCancel[typeId]?.used === readerBefore[typeId].used && afterBulkCancel[typeId]?.available === readerBefore[typeId].available, JSON.stringify(afterBulkCancel[typeId]))

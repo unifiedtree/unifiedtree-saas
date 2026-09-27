@@ -88,6 +88,14 @@ class LeaveBulkDecisionTest {
                 argThat(a -> a.status() == ApprovalStatus.APPROVED && "Enjoy".equals(a.comment())));
     }
 
+    @Test void thisAdviceUsesTheUndoJournalsOwnPointcut() throws Exception {
+        var field = Class.forName("com.hrms.api.approvals.DecisionJournalAspect").getDeclaredField("LEAVE_DECISION");
+        field.setAccessible(true);
+        String journal = (String) field.get(null);
+        String ours = RecordingJournal.class.getMethod("record", ProceedingJoinPoint.class).getAnnotation(Around.class).value();
+        assertEquals(journal, ours);
+    }
+
     @Test void theJournalPointcutMatchesTheDecideMethod() throws Exception {
         // If approveLeave is renamed or its signature changes, the journal's pointcut (and this one) stop matching.
         assertNotNull(LeaveService.class.getMethod("approveLeave", UUID.class, UUID.class, LeaveApprovalRequest.class));
