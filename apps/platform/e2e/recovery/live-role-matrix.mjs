@@ -1,8 +1,8 @@
 ﻿import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-const base='http://127.0.0.1:8080/api',tenant='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',company='cccccccc-cccc-cccc-cccc-cccccccccccc'
-const sql=q=>execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d','unifiedtree_recovery','-v','ON_ERROR_STOP=1','-At','-c',q],{encoding:'utf8'})
+const base=process.env.RECOVERY_API_URL||'http://127.0.0.1:8080/api',tenant='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',company='cccccccc-cccc-cccc-cccc-cccccccccccc'
+const sql=q=>execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d',process.env.RECOVERY_DB||'unifiedtree_recovery','-v','ON_ERROR_STOP=1','-At','-c',q],{encoding:'utf8',env:{...process.env,PGPASSWORD:'postgres'}})
 const roleRows=JSON.parse(sql("SELECT json_agg(row_to_json(r)) FROM (SELECT id,code FROM rbac.roles WHERE code <> 'PLATFORM_SUPER_ADMIN' ORDER BY code) r"))
 let checked=0
 for(const role of roleRows){
@@ -19,8 +19,17 @@ for(const role of roleRows){
    ['/v1/ess/timesheets?from=2026-01-01&to=2026-01-02',['attendance.checkin.self']],
    ['/v1/compliance/inspector-sessions',['hrms.compliance.inspector.read','hrms.compliance.read']],
    ['/v1/hiring/offers',['hrms.hiring.offer.read','hrms.hiring.read']],
+   // My team (redesign P-TEAM). '*' = anyone signed in (the caller's own rows).
+   ['/v1/team/summary',['attendance.team.read','hrms.leave.approve.l1']],
+   ['/v1/team/time-off?from=2026-09-21&to=2026-09-27',['attendance.team.read','hrms.leave.approve.l1','wfh.approve']],
+   ['/v1/team/approvals',['hrms.leave.approve.l1','wfh.approve','attendance.regularization.approve','hrms.expense.claim.approve']],
+   ['/v1/team/probation?days=30',['attendance.team.read']],
+   ['/v1/attendance/reminders?date=2026-09-27',['attendance.team.read']],
+   ['/v1/approvals/recent-decisions',['*']],
+   ['/v1/team/messages/mine',['*']],
+   ['/v1/team/messages/sent',['*']],
   ]
-  for(const [path,permissions] of checks){const response=await fetch(base+path,{headers:{Authorization:`Bearer ${session.accessToken}`,'X-Tenant-ID':tenant}});const expected=permissions.some(code=>p.has(code))?200:403;assert.equal(response.status,expected,`${role.code} ${path}`);checked++}
+  for(const [path,permissions] of checks){const response=await fetch(base+path,{headers:{Authorization:`Bearer ${session.accessToken}`,'X-Tenant-ID':tenant}});const expected=permissions.some(code=>code==='*'||p.has(code))?200:403;assert.equal(response.status,expected,`${role.code} ${path}`);checked++}
   console.log(`PASS ${role.code}: ${checks.length} endpoint grants/denials match real JWT permissions`)
  }finally{sql(`BEGIN;DELETE FROM auth.user_credentials WHERE id='${user}' AND tenant_id='${tenant}';DELETE FROM hrms.employees WHERE id='${employee}' AND tenant_id='${tenant}';COMMIT;`)}
 }
