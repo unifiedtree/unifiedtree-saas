@@ -15,6 +15,7 @@ import { SkeletonBlock, SkeletonRow } from '@/shared/components/SkeletonCard'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { apiBlob } from '@/core/api/client'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
+import { ToastSlot, TOAST_MS } from '@/design/kit/Toast'
 import { saveAndRecord, saveServerFile, svgToPng, xlsxBlob, type ExportFilters, type ExportReportKey, type Sheet } from '@/shared/export/fileExport'
 import { EXPORT_SPEC, type ReportKey } from './reportSpec'
 import { slug, type useReportCompany } from './useReportCompany'
@@ -58,16 +59,14 @@ export interface ReportExports {
   csvParams: Record<string, string>
 }
 
-/** The design's dark toast, bottom centre. */
+/** The design's toast, bottom centre (the shared kit Toast). Success goes after 2.6s, errors after 6s. */
 export function useReportToast() {
-  const [toast, set] = useState<null | { msg: string; err?: boolean }>(null)
-  const t = useRef<ReturnType<typeof setTimeout>>()
-  useEffect(() => () => clearTimeout(t.current), [])
-  const show = (msg: string, err?: boolean) => { clearTimeout(t.current); set({ msg, err }); t.current = setTimeout(() => set(null), err ? 6000 : 3200) }
+  const [toast, set] = useState<null | { msg: string; err?: boolean; n: number }>(null)
+  const seq = useRef(0)
+  const show = (msg: string, err?: boolean) => set({ msg, err, n: ++seq.current })
   const node = toast ? (
-    <div role={toast.err ? 'alert' : 'status'} style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 10, width: 'max-content', maxWidth: 'calc(100% - 32px)', padding: '11px 16px', borderRadius: 12, background: toast.err ? '#be123c' : '#0f172a', color: '#fff', fontSize: 13.5, fontWeight: 600, boxShadow: '0 18px 40px -14px rgba(15,23,42,.5)', boxSizing: 'border-box' }}>
-      {!toast.err && <span style={{ color: '#6ee7b7', display: 'inline-flex' }}><Ico d={PATH.check} size={17} width={2.2} /></span>}{toast.msg}
-    </div>
+    <ToastSlot key={toast.n} tone={toast.err ? 'error' : 'success'} message={toast.msg} duration={toast.err ? 6000 : TOAST_MS.success}
+      onDone={() => set((cur) => (cur && cur.n === toast.n ? null : cur))} />
   ) : null
   return { show, node }
 }

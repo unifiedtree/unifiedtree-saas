@@ -11,6 +11,7 @@ import { SkeletonBlock } from '@/shared/components/SkeletonCard'
 import { Field, Input, Modal } from '@unifiedtree/ui-kit'
 import { dashIcon, dashIconComponent } from '@/design/dc/icons'
 import { useIsMobile } from '@/design/dc/DesignFrame'
+import { ToastSlot, TOAST_MS } from '@/design/kit/Toast'
 
 const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
 const CARD: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 }
@@ -24,12 +25,12 @@ function scrollerOf(el: HTMLElement | null): HTMLElement | null {
   return null
 }
 
-/** Toast state for a settings page: success disappears after 3.2 s, errors after 8 s. */
+/** Toast state for a settings page (shown with the shared kit Toast): success disappears after 2.6 s, errors after 8 s. */
 export function useSettingsToast() {
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; title: string; msg?: string } | null>(null)
   const t = useRef<ReturnType<typeof setTimeout>>()
   const show = useCallback((kind: 'ok' | 'error', title: string, msg?: string) => {
-    clearTimeout(t.current); setToast({ kind, title, msg }); t.current = setTimeout(() => setToast(null), kind === 'error' ? 8000 : 3200)
+    clearTimeout(t.current); setToast({ kind, title, msg }); t.current = setTimeout(() => setToast(null), kind === 'error' ? 8000 : TOAST_MS.success)
   }, [])
   useEffect(() => () => clearTimeout(t.current), [])
   return { toast, show, dismiss: () => setToast(null) }
@@ -236,15 +237,9 @@ export function SettingsPage({
         </div>
       </div>
       {toast && (
-        <div role={toast.kind === 'error' ? 'alert' : 'status'} aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
-          style={{ position: 'fixed', left: '50%', bottom: toast.kind === 'error' && dirty ? 132 : 24, transform: 'translateX(-50%)', zIndex: 1400, display: 'flex', alignItems: toast.kind === 'error' ? 'flex-start' : 'center', gap: 10, width: 'max-content', maxWidth: 'min(460px,calc(100vw - 32px))', boxSizing: 'border-box', padding: '12px 12px 12px 14px', borderRadius: 14, background: '#0f172a', color: '#fff', boxShadow: '0 18px 36px -14px rgba(15,23,42,.6)' }}>
-          <span aria-hidden="true" style={{ flex: '0 0 auto', display: 'inline-flex', marginTop: toast.kind === 'error' ? 1 : 0, color: toast.kind === 'error' ? '#fca5a5' : '#34d399' }}>{dashIcon(toast.kind === 'error' ? 'alertTriangle' : 'check', 18)}</span>
-          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 3 }}>
-            <strong style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35 }}>{toast.title}</strong>
-            {toast.msg && <span style={{ fontSize: 12.5, lineHeight: 1.45, color: '#cbd5e1' }}>{toast.msg}</span>}
-          </div>
-          <button type="button" aria-label="Dismiss" onClick={onDismissToast} style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, margin: '-4px -4px -4px 0', border: 0, borderRadius: 8, background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}>{dashIcon('x', 16)}</button>
-        </div>
+        // useSettingsToast owns the lifetime (duration 0 = no second timer); errors sit above the unsaved-changes bar.
+        <ToastSlot tone={toast.kind === 'error' ? 'error' : 'success'} message={toast.title} detail={toast.msg} duration={0}
+          bottom={toast.kind === 'error' && dirty ? 132 : 24} onDone={onDismissToast} />
       )}
     </div>
   )

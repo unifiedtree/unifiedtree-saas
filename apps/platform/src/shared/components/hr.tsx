@@ -1,9 +1,9 @@
 import React from 'react'
-import { createPortal } from 'react-dom'
 import { clsx } from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { DateField } from './calendar'
+import { SidePanel } from '@/design/kit/SidePanel'
 
 /**
  * Reusable building blocks shared by every HR list/detail screen so they all
@@ -637,6 +637,11 @@ export function HrSelect({
 }
 
 // ── Right-hand slide-over drawer ─────────────────────────────────────────────
+// The design's side panel (kit SidePanel): square edges, 1px left border, the gradient-blur
+// backdrop as a sibling of the panel, round close button, sticky footer. Same props and
+// behaviour as before: role="dialog" named by the title (an h3), close button "Close panel",
+// Escape / backdrop / close call onClose, Tab stays inside, focus goes back on unmount.
+// `width` is still a max-width class (full width on phones).
 export function HrDrawer({
   title, onClose, footer, children, width = 'max-w-lg',
 }: {
@@ -646,69 +651,9 @@ export function HrDrawer({
   children: React.ReactNode
   width?: string
 }) {
-  const panelRef = React.useRef<HTMLDivElement>(null)
-  const titleId = React.useId()
-
-  React.useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    panelRef.current?.focus()
-    return () => previousFocus?.focus()
-  }, [])
-
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  return createPortal(
-    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="fixed inset-0 z-[1000]">
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        onClick={onClose}
-        aria-hidden
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-      />
-      <motion.div
-        ref={panelRef}
-        tabIndex={-1}
-        onKeyDown={(event) => {
-          if (event.key !== 'Tab') return
-          const elements = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? []).filter(element => element.offsetParent !== null)
-          const first = elements[0], last = elements[elements.length - 1]
-          if (!first) { event.preventDefault(); return }
-          if (event.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) { event.preventDefault(); last.focus() }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
-        }}
-        initial={{ x: '100%', opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: '100%', opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 36 }}
-        className={clsx(
-          'absolute bottom-0 right-0 top-0 flex w-full flex-col bg-white shadow-2xl focus:outline-none border-l border-gray-200/60',
-          width,
-        )}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-7 py-6">
-          <h3 id={titleId} className="text-xl font-bold text-gray-900">{title}</h3>
-          <button
-            onClick={onClose}
-            aria-label="Close panel"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 bg-gray-50 transition-colors hover:bg-gray-100 hover:text-gray-700"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-7">{children}</div>
-        {footer && (
-          <div className="flex shrink-0 justify-end gap-3 border-t border-gray-100 bg-gray-50/80 px-7 py-5 backdrop-blur-md">
-            {footer}
-          </div>
-        )}
-      </motion.div>
-    </div>, document.body
+  return (
+    <SidePanel open onClose={onClose} title={title} titleAs="h3" closeLabel="Close panel" panelClassName={clsx('w-full', width)} footer={footer}>
+      {children}
+    </SidePanel>
   )
 }
