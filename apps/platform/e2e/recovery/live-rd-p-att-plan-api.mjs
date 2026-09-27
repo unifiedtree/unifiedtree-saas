@@ -19,6 +19,7 @@
 //
 // Run from apps/platform (API on :8080, DB ut_w3_dev), e.g. inside live-slot.sh:
 //   RECOVERY_DB=ut_w3_dev RECOVERY_API_URL=http://127.0.0.1:8080/api node e2e/recovery/live-rd-p-att-plan-api.mjs
+/* global process, console, fetch, Buffer */
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -30,7 +31,7 @@ const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const headers = { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, 'X-Tenant-Subdomain': 'demo' }
 const psql = 'C:/Program Files/PostgreSQL/18/bin/psql.exe'
 const sql = (q) => execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', DB, '-v', 'ON_ERROR_STOP=1', '-Atc', q],
-  { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+  { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().replace(/\r/g, '').trim() // psql on Windows ends lines with CRLF
 
 const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)
 const plus = (iso, n) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
@@ -289,7 +290,7 @@ try {
   await run('people per shift', async () => {
     const list = await call(U.reader, 'GET', `/v1/shifts?companyId=${company}`)
     check('every shift carries employeeCount', list.status === 200 && list.json.length > 0 && list.json.every((s) => Number.isInteger(s.employeeCount)), list.json?.map((s) => `${s.name}:${s.employeeCount}`).join(', '))
-    const bySql = Object.fromEntries(sql(`select a.shift_policy_id||'|'||count(*) from hrms.employees e join lateral (select x.shift_policy_id from attendance.employee_shift_assignments x where x.tenant_id=e.tenant_id and x.employee_id=e.id and x.effective_from<='${today}' and (x.effective_to is null or x.effective_to>='${today}') order by x.effective_from desc, x.created_at desc limit 1) a on true where e.tenant_id='${tenant}' and e.company_id='${company}' and e.employment_status not in ('TERMINATED','RESIGNED','RETIRED','EXITED') group by 1`)
+    const bySql = Object.fromEntries(sql(`select a.shift_policy_id||'|'||count(*) from hrms.employees e join lateral (select x.shift_policy_id from attendance.employee_shift_assignments x where x.tenant_id=e.tenant_id and x.employee_id=e.id and x.effective_from<='${today}' and (x.effective_to is null or x.effective_to>='${today}') order by x.effective_from desc, x.created_at desc limit 1) a on true where e.tenant_id='${tenant}' and e.company_id='${company}' and e.employment_status not in ('TERMINATED','RESIGNED','RETIRED','EXITED') group by a.shift_policy_id`)
       .split('\n').filter(Boolean).map((l) => l.split('|')))
     check('the counts match the assignments in force today', (list.json || []).every((s) => s.employeeCount === Number(bySql[s.id] || 0)), JSON.stringify(bySql))
   })

@@ -1,6 +1,7 @@
 ﻿import { chromium, expect } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
+/* global process, console */
 const record=randomUUID(),tenant='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const sql=q=>execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d',process.env.RECOVERY_DB||'unifiedtree_recovery','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8'})
 sql(`INSERT INTO attendance.records(id,tenant_id,employee_id,company_id,attendance_date,check_in_at,check_out_at,overtime_minutes,remarks) VALUES('${record}','${tenant}','22222222-2222-2222-2222-222222222222','cccccccc-cccc-cccc-cccc-cccccccccccc','2026-09-15','2026-09-15T04:00:00Z','2026-09-15T14:00:00Z',77,'Isolated browser overtime fixture')`)
