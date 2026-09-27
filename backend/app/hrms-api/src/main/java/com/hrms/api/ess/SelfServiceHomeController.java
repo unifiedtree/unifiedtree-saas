@@ -1,5 +1,7 @@
 package com.hrms.api.ess;
 
+import com.hrms.api.ess.around.AroundItem;
+import com.hrms.api.ess.around.AroundMeService;
 import com.hrms.api.ess.requests.MyRequest;
 import com.hrms.api.ess.requests.MyRequestsService;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -35,11 +37,13 @@ import java.time.ZoneId;
 public class SelfServiceHomeController {
 
     private final MyRequestsService myRequests;
+    private final AroundMeService aroundMe;
     /** "Today" is the India business date. Tests fix it. */
     Clock clock = Clock.system(ZoneId.of("Asia/Kolkata"));
 
-    public SelfServiceHomeController(MyRequestsService myRequests) {
+    public SelfServiceHomeController(MyRequestsService myRequests, AroundMeService aroundMe) {
         this.myRequests = myRequests;
+        this.aroundMe = aroundMe;
     }
 
     @Operation(summary = "My requests: leave, work from home, fixes, shift changes, expense claims and advances, waiting ones first")
@@ -48,6 +52,14 @@ public class SelfServiceHomeController {
     public MyRequest.Response myRequests(@RequestParam(required = false) Integer limit,
                                          @AuthenticationPrincipal Jwt jwt, Authentication auth) {
         return myRequests.myRequests(caller(jwt, auth), limit);
+    }
+
+    @Operation(summary = "Around you: birthdays, work anniversaries, holidays, notices, payday and your team's probation ends, from today to `days` ahead")
+    @GetMapping("/around-me")
+    @PreAuthorize("isAuthenticated()")
+    public AroundItem.Response aroundMe(@RequestParam(required = false) Integer days,
+                                        @AuthenticationPrincipal Jwt jwt, Authentication auth) {
+        return aroundMe.aroundMe(caller(jwt, auth), days);
     }
 
     private EssCaller caller(Jwt jwt, Authentication auth) {
