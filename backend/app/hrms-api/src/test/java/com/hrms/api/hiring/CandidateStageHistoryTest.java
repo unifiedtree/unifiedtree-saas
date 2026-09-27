@@ -159,6 +159,19 @@ class CandidateStageHistoryTest {
 
     // ── the JDBC writer ─────────────────────────────────────────────────────
 
+    @Test void everyNewBeanHasOneConstructorSpringCanUse() {
+        for (Class<?> bean : List.of(JdbcCandidateStageLog.class, JdbcOfferEmailBook.class, HiringService.class,
+                HiringInsightsService.class, HiringInsightsController.class,
+                com.hrms.api.onboarding.AssetCareService.class, com.hrms.api.onboarding.OnboardingOverviewService.class,
+                com.hrms.api.onboarding.AssetIssueNotifier.class, com.hrms.api.onboarding.OnboardingController.class,
+                com.hrms.api.me.MyAssetsController.class)) {
+            var ctors = bean.getDeclaredConstructors();
+            long marked = java.util.Arrays.stream(ctors)
+                    .filter(c -> c.isAnnotationPresent(org.springframework.beans.factory.annotation.Autowired.class)).count();
+            assertTrue(ctors.length == 1 || marked == 1, bean.getSimpleName() + ": " + ctors.length + " constructors, " + marked + " marked @Autowired");
+        }
+    }
+
     @Test void theWriterRequiresTheCallersTransaction() throws Exception {
         Transactional tx = JdbcCandidateStageLog.class
                 .getMethod("record", UUID.class, CandidateStage.class, CandidateStage.class, CandidateStageLog.Kind.class)

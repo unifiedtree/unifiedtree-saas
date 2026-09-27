@@ -37,6 +37,7 @@ public class JdbcCandidateStageLog implements CandidateStageLog {
     @PersistenceContext
     private EntityManager entityManager;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public JdbcCandidateStageLog(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }

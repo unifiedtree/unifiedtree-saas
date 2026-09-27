@@ -31,6 +31,7 @@ public class JdbcOfferEmailBook implements OfferEmailBook {
     @PersistenceContext
     private EntityManager entityManager;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public JdbcOfferEmailBook(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
