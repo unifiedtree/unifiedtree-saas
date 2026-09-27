@@ -2,6 +2,8 @@ package com.hrms.api.ess;
 
 import com.hrms.api.ess.around.AroundItem;
 import com.hrms.api.ess.around.AroundMeService;
+import com.hrms.api.ess.needs.NeedsYouItem;
+import com.hrms.api.ess.needs.NeedsYouService;
 import com.hrms.api.ess.requests.MyRequest;
 import com.hrms.api.ess.requests.MyRequestsService;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -38,12 +40,14 @@ public class SelfServiceHomeController {
 
     private final MyRequestsService myRequests;
     private final AroundMeService aroundMe;
+    private final NeedsYouService needsYou;
     /** "Today" is the India business date. Tests fix it. */
     Clock clock = Clock.system(ZoneId.of("Asia/Kolkata"));
 
-    public SelfServiceHomeController(MyRequestsService myRequests, AroundMeService aroundMe) {
+    public SelfServiceHomeController(MyRequestsService myRequests, AroundMeService aroundMe, NeedsYouService needsYou) {
         this.myRequests = myRequests;
         this.aroundMe = aroundMe;
+        this.needsYou = needsYou;
     }
 
     @Operation(summary = "My requests: leave, work from home, fixes, shift changes, expense claims and advances, waiting ones first")
@@ -52,6 +56,13 @@ public class SelfServiceHomeController {
     public MyRequest.Response myRequests(@RequestParam(required = false) Integer limit,
                                          @AuthenticationPrincipal Jwt jwt, Authentication auth) {
         return myRequests.myRequests(caller(jwt, auth), limit);
+    }
+
+    @Operation(summary = "Needs you: the things only you can do, with how many there are")
+    @GetMapping("/needs-you")
+    @PreAuthorize("isAuthenticated()")
+    public NeedsYouItem.Response needsYou(@AuthenticationPrincipal Jwt jwt, Authentication auth) {
+        return needsYou.needsYou(caller(jwt, auth));
     }
 
     @Operation(summary = "Around you: birthdays, work anniversaries, holidays, notices, payday and your team's probation ends, from today to `days` ahead")
