@@ -16,7 +16,7 @@
 //   the frame is 1440 wide (1320 on self-service pages); the phone bar at 390 with no sideways scroll.
 // HR manager and employee: their pages render in both themes; HR configuration is editable
 //   only with the right, otherwise view-only (no text boxes) or closed.
-/* global process, console, document, window, getComputedStyle, location, WheelEvent */
+/* global process, console, document, window, getComputedStyle, location, Event, URL, setTimeout */
 import { chromium } from '@playwright/test'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
