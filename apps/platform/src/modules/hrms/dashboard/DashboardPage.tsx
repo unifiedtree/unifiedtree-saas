@@ -94,7 +94,9 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
     : (
       <span className="ud-greet-sub">
         {g.inN != null && g.sched != null
-          ? <><b>{g.inN} of {g.sched}</b> {isToday ? 'people are in' : `people were in on ${g.past}`}, and </>
+          ? g.sched === 0
+            ? <>Nobody is scheduled {isToday ? 'today' : `on ${g.past}`}, and </>
+            : <><b>{g.inN} of {g.sched}</b> {isToday ? 'people are in' : `people were in on ${g.past}`}, and </>
           : null}
         {g.inN != null
           ? <><b>{g.needN} {g.needN === 1 ? 'thing' : 'things'}</b> {isToday ? (g.needN === 1 ? 'needs you today.' : 'need you today.') : 'were waiting that day.'}</>
@@ -102,7 +104,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
       </span>
     )
 
-  const statCard = (props: Parameters<typeof StatCard>[0]) => <StatCard {...props} loading={vm.liveLoading} />
+  const statCard = (props: Parameters<typeof StatCard>[0]) => <StatCard key={props.label} {...props} loading={vm.liveLoading} />
   const cards = [
     s.showTotal && statCard({ label: 'Total employees', aniIcon: 'users', accent: 'people', value: liveDisabled ? null : s.total, note: s.totalNote, onClick: () => go('/hrms/employees') }),
     s.showAtt && statCard({ label: 'Present', aniIcon: 'present', accent: 'present', value: liveDisabled ? null : c.present, note: s.presentNote, spark: s.spark.present, sparkDot: s.sparkDot, sparkLabel: `Present over the last ${s.spark.present?.length ?? 0} working days`, onClick: () => go(att('PRESENT')) }),
@@ -110,7 +112,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
     s.showAtt && statCard({ label: 'Late arrivals', aniIcon: 'late', accent: 'late', value: liveDisabled ? null : c.late, note: s.lateNote, spark: s.spark.late, sparkDot: s.sparkDot, onClick: () => go(att('LATE')) }),
     s.showAtt && statCard({ label: 'Half day', aniIcon: 'half', accent: 'half', value: liveDisabled ? null : c.halfDay, note: `${c.total ? Math.round((c.halfDay / c.total) * 100) : 0}% of roster`, spark: s.spark.half, sparkDot: s.sparkDot, onClick: () => go(att('HALF_DAY')) }),
     s.showAtt && statCard({ label: 'Work from home', aniIcon: 'wfh', accent: 'wfh', value: liveDisabled ? null : c.wfh, note: `${c.total ? Math.round((c.wfh / c.total) * 100) : 0}% of roster`, spark: s.spark.wfh, sparkDot: s.sparkDot, onClick: () => go(att('WORK_FROM_HOME')) }),
-    s.showAtt && statCard({ label: 'Not marked', aniIcon: 'none', accent: 'none', value: liveDisabled ? null : c.notMarked, note: isToday ? 'No punch recorded' : 'Counts as absent once the day is over', spark: s.spark.none, sparkDot: s.sparkDot, onClick: () => go(att('NOT_MARKED')) }),
+    s.showAtt && statCard({ label: 'Not marked', aniIcon: 'none', accent: 'none', value: liveDisabled ? null : c.notMarked, note: 'No punch recorded', spark: s.spark.none, sparkDot: s.sparkDot, onClick: () => go(att('NOT_MARKED')) }),
     s.showAtt && statCard({ label: 'Absence', aniIcon: 'absent', accent: 'absent', value: liveDisabled ? null : c.absent, note: 'Unplanned, no leave', spark: s.spark.absent, sparkDot: s.sparkDot, onClick: () => go(att('ABSENT')) }),
   ].filter(Boolean) as JSX.Element[]
   const pairs: JSX.Element[][] = []
@@ -185,7 +187,9 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
           <SectionHeading title="Upcoming" sub="Notices, milestones and probation reviews" icon="calendar"
             actions={vm.compliance ? (
               <button type="button" className="ud-compliance" style={{ border: 0, background: 'transparent', cursor: 'pointer', font: 'inherit' }} onClick={() => go('/hrms/compliance')}>
-                Compliance: <b>{vm.compliance.due ? `${vm.compliance.done} of ${vm.compliance.due}` : 'nothing'}</b> due {isToday ? 'this month' : `this month through ${fmtShort(sel)}`}{vm.compliance.due ? ' done' : ''}
+                {vm.compliance.due
+                  ? <>Compliance {isToday ? 'this month' : `through ${fmtShort(sel)}`}: <b>{vm.compliance.done} of {vm.compliance.due}</b> done</>
+                  : <>Compliance: nothing due {isToday ? 'this month' : `this month through ${fmtShort(sel)}`}</>}
               </button>
             ) : undefined} />
           {vm.showNotices && (
@@ -240,7 +244,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
             <SectionHeading title="Payroll & activity" sub="Monthly spend and what changed recently" icon="rupee"
               actions={vm.showPayroll ? <Button variant="plain" size={32} trailingIcon="arrowRight" onClick={() => go('/hrms/payroll-dashboard')}>Open payroll</Button> : undefined} />
             <div className="ud-row">
-              {vm.showPayroll && <PayrollCard months6={vm.months6} months12={vm.months12} range={vm.payRange} isPast={isPast} headline={vm.payHeadline}
+              {vm.showPayroll && <PayrollCard months6={vm.months6} months12={vm.months12} range={vm.payRange} headline={vm.payHeadline}
                 loading={vm.payLoading} error={vm.payError} onRetry={refetch.payroll} onBar={(m) => go(m.path)} style={flex(7, 460)} />}
               {vm.showActivity && <ActivityCard rows={vm.activity} title={isToday ? 'Live activity feed' : `Activity up to ${fmtShort(sel)}`}
                 loading={vm.activityLoading} error={vm.activityError} onRetry={refetch.activity} onAll={() => go('/audit-logs')} onOpen={(p) => go(p)} style={flex(5, 360)} />}

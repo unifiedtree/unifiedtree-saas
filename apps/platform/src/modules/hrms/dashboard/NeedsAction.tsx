@@ -126,7 +126,7 @@ export function NeedsAction(props: NeedsActionProps & { inbox: Inbox }) {
       variant="dashboard" title={isPast ? `Waiting on ${fmtShort(sel)}` : 'Needs your action'} count={total ? total : null} countTone="gold" countLabel={`${total} need you`}
       sub={isPast ? 'The queues as they stood that day. Pick a tile to filter.' : 'Attendance follow-ups and approvals. Pick a tile to filter.'}
       body="flush" style={style}
-      footerLink={{ label: footTotal ? `View all ${footTotal} ${footTotal === 1 ? 'item' : 'items'}` : 'Open approvals', onClick: () => onNavigate(target(filter)) }}
+      footerLink={{ label: footTotal ? `View all ${footTotal} ${footTotal === 1 ? 'item' : 'items'}` : canLeave || canFix ? 'Open approvals' : 'Open daily tracking', onClick: () => onNavigate(target(filter)) }}
     >
       <div className="ud-tiles" role="group" aria-label="Filter the items">
         {tiles.map((t) => (

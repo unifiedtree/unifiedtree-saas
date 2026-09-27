@@ -269,7 +269,8 @@ export function AdminDashboardContainer() {
       greetSub: canReadTeam && team.data
         ? { inN: c.present, sched, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null }
         : { inN: null, sched: null, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null },
-      emptyWorkspace: canReadEmployees && !isPast && total === 0 && !team.isLoading && !directory.isLoading && (team.data != null || directory.data != null),
+      // Nobody on the roll yet (the company's active count, or the directory's when that isn't readable).
+      emptyWorkspace: !isPast && (st ? st.activeEmployees === 0 : canReadEmployees && !canReadTeam && directory.data?.totalElements === 0),
       sections,
       daily, holidays: hol,
       // ── stat cards ──
@@ -285,7 +286,7 @@ export function AdminDashboardContainer() {
           if (active == null) return 'Employee directory'
           return isPast && st?.joinedInMonth != null ? `${active} active · ${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${monthToDate(sel)}` : `${active} active · employee directory`
         })(),
-        presentNote: `${pctOf(c.present, sched)}% of ${sched} scheduled`,
+        presentNote: sched ? `${pctOf(c.present, sched)}% of ${sched} scheduled` : isPast ? 'Nobody was scheduled' : 'Nobody scheduled today',
         leaveNote: `Approved leave · ${pctOf(c.onLeave, c.total)}%`,
         lateNote: lateNote(staff, c.late),
         spark: { present: series('present'), leave: series('onLeave'), late: series('late'), half: series('halfDay'), wfh: series('wfh'), none: isPast ? null : series('notMarked'), absent: series('absent') },

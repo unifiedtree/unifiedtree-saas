@@ -140,8 +140,8 @@ export function ProjectsCard({ rows, isPast, sel, onManage, ...c }: Common & {
 }
 
 // ── Payroll & activity ───────────────────────────────────────────────────────
-export function PayrollCard({ months6, months12, range, isPast, headline, onBar, ...c }: Common & {
-  months6: PayMonth[]; months12: PayMonth[]; range: string; isPast: boolean
+export function PayrollCard({ months6, months12, range, headline, onBar, ...c }: Common & {
+  months6: PayMonth[]; months12: PayMonth[]; range: string
   /** From the dashboard summary: the month's finalized payroll (null = not finalized); undefined when not readable. */
   headline?: { month: string; gross: number | null }
   onBar: (m: PayMonth) => void
@@ -149,10 +149,13 @@ export function PayrollCard({ months6, months12, range, isPast, headline, onBar,
   const [n, setN] = useState<'6' | '12'>('6')
   const ms = n === '6' ? months6 : months12
   const max = Math.max(1, ...ms.map((m) => m.gross))
-  const last = ms[ms.length - 1], prev = ms.length > 1 ? ms[ms.length - 2] : undefined
-  const delta = last && prev && prev.gross ? ((last.gross - prev.gross) / prev.gross) * 100 : null
+  const last = ms[ms.length - 1]
   const now = headline ? headline.gross : last ? last.gross : null
   const nowMonth = headline ? headline.month : last?.month
+  // The change against the month before the headline month, when both are finalized.
+  const all = months12, at = nowMonth ? all.findIndex((m) => m.month === nowMonth) : -1
+  const cur = at >= 0 ? all[at] : undefined, prev = at > 0 ? all[at - 1] : undefined
+  const delta = now != null && cur?.finalized && prev?.finalized && prev.gross ? ((now - prev.gross) / prev.gross) * 100 : null
   return (
     <Section variant="dashboard" level={3} title="Monthly payroll expense" sub="Gross payroll from locked and paid runs, and runs in review. Amounts in INR." body="flush" {...c}
       actions={<SegmentedControl<'6' | '12'> label="Range" size="sm" value={n} onChange={setN} options={[{ value: '6', label: '6 months' }, { value: '12', label: '12 months' }]} />}
@@ -163,7 +166,7 @@ export function PayrollCard({ months6, months12, range, isPast, headline, onBar,
           <span className="ud-pay__meta">
             {nowMonth ? `Finalized payroll · ${nowMonth}` : ''}
             {nowMonth && now == null ? ` · ${monthName(nowMonth)} isn’t locked yet` : ''}
-            {delta != null && !isPast ? <> · <b className={delta < 0 ? 'is-down' : ''}>{delta >= 0 ? '↑' : '↓'} {Math.abs(delta).toFixed(1)}%</b> vs {prev!.label}</> : null}
+            {delta != null && prev ? <> · <b className={delta < 0 ? 'is-down' : ''}>{delta >= 0 ? '↑' : '↓'} {Math.abs(delta).toFixed(1)}%</b> vs {prev!.label}</> : null}
             {last && !last.finalized ? ` · ${monthName(last.month).split(' ')[0]} is in review` : ''}
           </span>
         </div>
