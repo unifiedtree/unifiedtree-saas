@@ -1,4 +1,5 @@
-// hand-owned (F2d). The DatePicker's view: the shared calendar field with the
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
+// F2d: the DatePicker's view — the shared calendar field with the
 // design's 42px trigger (DatePicker.view.css, tokens only). Everything else —
 // popover, views, keyboard — is the shared calendar's.
 import { DateField } from '@/shared/components/calendar'

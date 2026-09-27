@@ -1,4 +1,5 @@
-// hand-owned — rebuilt by hand on the redesign kit (F2d). Never regenerate this file.
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
+// Rebuilt by hand on the redesign kit (F2d).
 //
 // The design's inline view pills (kit FilterPills look: 36px outlined pills, the
 // chosen one solid brand green), with this bar's own semantics kept exactly:

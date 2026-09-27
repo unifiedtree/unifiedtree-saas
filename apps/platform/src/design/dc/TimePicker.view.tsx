@@ -1,4 +1,5 @@
-// hand-owned — rebuilt by hand on the redesign tokens (F2d). Never regenerate this file.
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
+// Rebuilt by hand on the redesign tokens (F2d).
 //
 // The TimePicker's view: the design's 42px field trigger and a popover (12px
 // corners, hairline, the popover shadow) with hour, minute and AM/PM lists,

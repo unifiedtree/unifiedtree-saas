@@ -1,4 +1,5 @@
-// hand-owned — rebuilt by hand on the redesign kit (F2d). Never regenerate this file.
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
+// Rebuilt by hand on the redesign kit (F2d).
 //
 // The StatTile's view, and LegacyStatCard: the design's stat card (prototype
 // UtStat = the kit StatCard "stat" variant) for the older tile APIs, which pass

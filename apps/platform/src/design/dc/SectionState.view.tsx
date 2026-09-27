@@ -1,4 +1,5 @@
-// hand-owned — rebuilt by hand on the redesign kit (F2d). Never regenerate this file.
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
+// Rebuilt by hand on the redesign kit (F2d).
 //
 // A section's quiet states in the redesign's look: loading = the soft shimmer
 // bars, empty = the design's empty state, error = the kit ErrorState (red badge,

@@ -10,7 +10,12 @@
 // rail and top bar, the tweaks panel), applies the documented PATCHES (real
 // dates, real codes, backend limits) and writes one module. The real data and
 // the API calls live in the hand-written MasterContainer.tsx.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+//
+// Guards: an output whose first line is a `// hand-owned` marker (`/* hand-owned`
+// in CSS) is maintained by hand and is skipped with a warning; a missing anchor
+// in the export stops the build before anything is written.
+/* global Buffer, console */
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
@@ -23,11 +28,18 @@ const OUT = resolve(here, '../src/design/master')
 
 // ── unpack ───────────────────────────────────────────────────────────────────
 const src = readFileSync(EXPORT, 'utf8')
-const grab = (type) => { const open = `<script type="${type}">`; const a = src.indexOf(open); const b = src.indexOf('</script>', a); return src.slice(a + open.length, b) }
+const grab = (type) => {
+  const open = `<script type="${type}">`
+  const a = src.indexOf(open)
+  const b = a < 0 ? -1 : src.indexOf('</script>', a)
+  if (b < 0) throw new Error(`export anchor not found: ${open}`)
+  return src.slice(a + open.length, b)
+}
 const manifest = JSON.parse(grab('__bundler/manifest'))
 const template = JSON.parse(grab('__bundler/template'))
-const text = (uuid) => { const e = manifest[uuid]; let b = Buffer.from(e.data, 'base64'); if (e.compressed) b = gunzipSync(b); return b.toString('utf8') }
+const text = (uuid) => { const e = manifest[uuid]; if (!e) throw new Error('export resource not found: ' + uuid); let b = Buffer.from(e.data, 'base64'); if (e.compressed) b = gunzipSync(b); return b.toString('utf8') }
 const styles = [...template.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1])
+if (styles.length < 3) throw new Error(`export anchor not found: expected 3 <style> blocks in the template, found ${styles.length}`)
 const scripts = [...template.matchAll(/<script type="text\/babel" src="([0-9a-f-]+)"><\/script>/g)].map((m) => ({ id: m[1].slice(0, 8), code: text(m[1]) }))
 const byId = Object.fromEntries(scripts.map((s) => [s.id, s.code]))
 
@@ -123,7 +135,12 @@ import * as ReactDOM from 'react-dom'
 import { portalHost, TODAY, TODAY_ISO, NEXT_MONTH, NONE, orNone, pl } from './masterRuntime'
 `
 const module = header + body + `export { ${EXPORTS.join(', ')} }\n`
+// A generated file edited by hand carries this marker on its first line (the same rule as dc-to-tsx.mjs).
+const HAND_OWNED = /^\s*(?:\/\/|\/\*)\s*hand-owned\b/
+const handOwned = (file) => existsSync(file) && HAND_OWNED.test(readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0])
 mkdirSync(OUT, { recursive: true })
-writeFileSync(resolve(OUT, 'master.css'), css)
-writeFileSync(resolve(OUT, 'MasterDesign.tsx'), module)
+for (const [file, content] of [['master.css', css], ['MasterDesign.tsx', module]]) {
+  if (handOwned(resolve(OUT, file))) { console.warn(`master-build: skipped ${file}: marked hand-owned (remove its first line to regenerate it)`); continue }
+  writeFileSync(resolve(OUT, file), content)
+}
 console.log(`master.css ${css.length} bytes · MasterDesign.tsx ${module.length} bytes · ${kept.length} declarations`)

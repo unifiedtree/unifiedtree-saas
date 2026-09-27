@@ -1,4 +1,5 @@
-// hand-owned — rebuilt by hand on the redesign kit (F2d). Never regenerate this file.
+// hand-owned: edited by hand; scripts/design-build.mjs skips this view.
+// Rebuilt by hand on the redesign kit (F2d).
 //
 // An approval request as the design's approval card (prototype TeamApprovals /
 // kit ApprovalRow "card": 18px corners, hairline, the facts in a grey inset
