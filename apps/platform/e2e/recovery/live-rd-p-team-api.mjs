@@ -288,6 +288,11 @@ async function main() {
   sql(`UPDATE hrms.approval_decisions SET undo_until = now() - interval '1 minute' WHERE tenant_id='${tenant}' AND request_id='${L0.id}' AND undone_at IS NULL`)
   r = await hrm.call(`/v1/leave/${L0.id}/decision/undo`, 'POST')
   check('undo: refused once the 10 minutes have passed (422)', r.status === 422 && r.json?.errorCode === 'UNDO_WINDOW_PASSED', `${r.status} ${r.json?.errorCode}`)
+  const journalled = (id) => num(`select count(*) from hrms.approval_decisions where tenant_id='${tenant}' and request_id='${id}'`)
+  const beforeRefusal = journalled(L0.id)
+  r = await mgr.call(`/v1/leave/${L0.id}/decision`, 'POST', { status: 'REJECTED', comment: 'QA too late' })
+  check('recorder: a decision the service refuses answers as before and is not journalled', r.status === 422 && r.json?.errorCode === 'LEAVE_NOT_PENDING'
+    && journalled(L0.id) === beforeRefusal && status('leave_mgmt.leave_requests', L0.id) === 'APPROVED', `${r.status} ${r.json?.errorCode}`)
 
   // changed since: the employee cancels after the approval
   const dL2 = pick(addDays(today, 9), 1, (d) => working(d) && !locked(d))
@@ -386,6 +391,14 @@ async function main() {
   sql(`DELETE FROM attendance.records WHERE id='${recToday}' AND attendance_date='${today}'`)
   r = await mgr.call(`/v1/shifts/change-requests/${S1.id}/decision/undo`, 'POST')
   check('undo shift: starting today but not yet used, it is taken back', r.status === 200 && assignments() === before)
+  // The service rejects a request whose start date passed and then reports SHIFT_CHANGE_EXPIRED; it keeps
+  // that rejection on purpose (noRollbackFor). Through the recorder it must still be kept, and not journalled.
+  sql(`UPDATE attendance.shift_change_requests SET requested_effective_date = '${addDays(today, -1)}' WHERE id='${S1.id}'`)
+  const s1Journal = num(`select count(*) from hrms.approval_decisions where tenant_id='${tenant}' and request_id='${S1.id}'`)
+  r = await mgr.call(`/v1/shifts/change-requests/${S1.id}/decision`, 'POST', { approved: true, comment: 'QA expired' })
+  check('recorder: an expired shift change is still rejected and reported as before', r.status === 422 && r.json?.errorCode === 'SHIFT_CHANGE_EXPIRED'
+    && status('attendance.shift_change_requests', S1.id) === 'REJECTED' && assignments() === before
+    && num(`select count(*) from hrms.approval_decisions where tenant_id='${tenant}' and request_id='${S1.id}'`) === s1Journal, `${r.status} ${r.json?.errorCode}`)
 
   // ── 9. Undo: expense claim ───────────────────────────────────────────────
   r = await owner.call(`/v1/expense/claims/${E0.id}/decision`, 'POST', { approved: true, comment: 'QA owner ok' })

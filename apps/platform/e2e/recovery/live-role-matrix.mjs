@@ -18,7 +18,8 @@ for(const role of roleRows){
    ['/v1/team/schedule?from=2026-09-21&to=2026-09-27',['attendance.team.read']],
    ['/v1/ess/timesheets?from=2026-01-01&to=2026-01-02',['attendance.checkin.self']],
    ['/v1/compliance/inspector-sessions',['hrms.compliance.inspector.read','hrms.compliance.read']],
-   ['/v1/hiring/offers',['hrms.hiring.offer.read','hrms.hiring.read']],
+   // offers carry salary: offer.read only, not general hiring.read (HiringController.listOffers, since V143_1)
+   ['/v1/hiring/offers',['hrms.hiring.offer.read']],
    // My team (redesign P-TEAM). '*' = anyone signed in (the caller's own rows).
    ['/v1/team/summary',['attendance.team.read','hrms.leave.approve.l1']],
    ['/v1/team/time-off?from=2026-09-21&to=2026-09-27',['attendance.team.read','hrms.leave.approve.l1','wfh.approve']],
