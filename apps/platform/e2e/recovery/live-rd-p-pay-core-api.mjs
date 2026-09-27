@@ -23,7 +23,6 @@ const q1 = (s) => s.replace(/'/g, "''")
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const istToday = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10)
-const num = (v) => (v === null || v === undefined ? null : Number(v))
 const same = (a, b) => Math.abs(Number(a) - Number(b)) < 0.005
 
 let notReadyAllowed = false
@@ -35,7 +34,7 @@ async function session(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (res.status >= 500 && !(res.status === 503 && json?.errorCode === 'FEATURE_NOT_READY' && notReadyAllowed)) {
       unexpected.push(`${email} ${method} ${path} → ${res.status} ${json?.errorCode ?? ''}`)
@@ -55,7 +54,6 @@ const readerId = reader.employeeId || '22222222-2222-2222-2222-222222222222'
 const finId = fin.employeeId || '55555555-5555-5555-5555-555555555555'
 const startedAt = sql('select now()')
 
-const cleanup = []
 let draftRunId = null, questionId = null, renamed = false
 try {
   // ── Runs: employer contributions and the paid date (BW-53) ──────────────────
