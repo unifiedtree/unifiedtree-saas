@@ -1,0 +1,7617 @@
+{
+ "note": "Captured 27 Sep 2026 from rd/int (33cc0d41, before the redesign shell) on the stable demo data: what each settings address showed. live-settings-restored.mjs compares against it.",
+ "accounts": {
+  "owner@1440": {
+   "rail": [
+    "Dashboard",
+    "Company Profile",
+    "Master",
+    "Attendance & Time",
+    "Leave Management",
+    "Recruitment & Onboarding",
+    "Payroll",
+    "Expense Management",
+    "Performance & Learning",
+    "Compliance",
+    "Reports & Analytics",
+    "Employee Exit",
+    "HR Setup"
+   ],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "Branding - UnifiedTree Demo",
+     "heading": [
+      "Branding"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Branding"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Workspace logo",
+        "Upload and edit"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions",
+        "Workspace rule"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "Notifications - UnifiedTree Demo",
+     "heading": [
+      "Notifications"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Notifications"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "What reaches you",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/billing": {
+     "at": "/settings/billing",
+     "title": "Billing & Plan - UnifiedTree Demo",
+     "heading": [
+      "Billing & Plan"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Billing & Plan"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your plan",
+        "Invoices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Slack",
+        "GitHub",
+        "Jira",
+        "Zapier",
+        "Stripe",
+        "Salesforce"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Document Types"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "Danger Zone - UnifiedTree Demo",
+     "heading": [
+      "Danger Zone"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Danger Zone"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Export all data",
+        "Reset workspace",
+        "Delete organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "Users & Access - UnifiedTree Demo",
+     "heading": [
+      "Users & access"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Users & Access"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "User filters",
+       "items": [
+        "Everyone6",
+        "Active6",
+        "Invited",
+        "No access"
+       ],
+       "lit": [
+        "Everyone6"
+       ]
+      }
+     ]
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "Audit Logs - UnifiedTree Demo",
+     "heading": [
+      "Audit logs"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Audit Logs"
+      ]
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "Roles & Perms - UnifiedTree Demo",
+     "heading": [
+      "Roles & permissions"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Roles & Permissions"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "Role views",
+       "items": [
+        "Roles",
+        "Who has which role",
+        "Permission catalogue"
+       ],
+       "lit": [
+        "Roles"
+       ]
+      }
+     ]
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "Roles & Perms - UnifiedTree Demo",
+     "heading": [
+      "Roles & permissions"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Roles & Permissions"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "Role views",
+       "items": [
+        "Roles",
+        "Who has which role",
+        "Permission catalogue"
+       ],
+       "lit": [
+        "Who has which role"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Rules & Policies - UnifiedTree Demo",
+     "heading": [
+      "Shift Rules"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Shift Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Leave Rules"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Leave Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Statutory Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Statutory Settings"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "Payroll Configuration - UnifiedTree Demo",
+     "heading": [
+      "Salary Components"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Salary Components"
+       ]
+      }
+     ]
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policy Documents"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Policy Documents"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/hrms/payroll-dashboard",
+     "title": "Payroll Dashboard - UnifiedTree Demo",
+     "heading": [
+      "Payroll Dashboard"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Dashboard"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "Payroll Settings - UnifiedTree Demo",
+     "heading": [
+      "Payroll Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Settings"
+       ]
+      },
+      {
+       "bar": "On this page",
+       "items": [
+        "PFOff",
+        "ESIOff",
+        "PTOff",
+        "LWFOff",
+        "Cycle & LOP",
+        "TDSSoon"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "Notification Templates - UnifiedTree Demo",
+     "heading": [
+      "Notification templates"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Notification Templates"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": []
+    }
+   }
+  },
+  "admin@1440": {
+   "rail": [
+    "Dashboard",
+    "Company Profile",
+    "Master",
+    "Attendance & Time",
+    "Leave Management",
+    "Recruitment & Onboarding",
+    "Payroll",
+    "Expense Management",
+    "Performance & Learning",
+    "Compliance",
+    "Reports & Analytics",
+    "Employee Exit",
+    "HR Setup"
+   ],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "Branding - UnifiedTree Demo",
+     "heading": [
+      "Branding"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Branding"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Workspace logo",
+        "Upload and edit"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions",
+        "Workspace rule"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "Notifications - UnifiedTree Demo",
+     "heading": [
+      "Notifications"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Notifications"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "What reaches you",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/billing": {
+     "at": "/settings/billing",
+     "title": "Billing & Plan - UnifiedTree Demo",
+     "heading": [
+      "Billing & Plan"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Billing & Plan"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your plan",
+        "Invoices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Slack",
+        "GitHub",
+        "Jira",
+        "Zapier",
+        "Stripe",
+        "Salesforce"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Document Types"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "Danger Zone - UnifiedTree Demo",
+     "heading": [
+      "Danger Zone"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Danger Zone"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Export all data",
+        "Reset workspace",
+        "Delete organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "Users & Access - UnifiedTree Demo",
+     "heading": [
+      "Users & access"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Users & Access"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "User filters",
+       "items": [
+        "Everyone6",
+        "Active6",
+        "Invited",
+        "No access"
+       ],
+       "lit": [
+        "Everyone6"
+       ]
+      }
+     ]
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "Audit Logs - UnifiedTree Demo",
+     "heading": [
+      "Audit logs"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Audit Logs"
+      ]
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "Roles & Perms - UnifiedTree Demo",
+     "heading": [
+      "Roles & permissions"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Roles & Permissions"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "Role views",
+       "items": [
+        "Roles",
+        "Who has which role",
+        "Permission catalogue"
+       ],
+       "lit": [
+        "Roles"
+       ]
+      }
+     ]
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "Roles & Perms - UnifiedTree Demo",
+     "heading": [
+      "Roles & permissions"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Roles & Permissions"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "Role views",
+       "items": [
+        "Roles",
+        "Who has which role",
+        "Permission catalogue"
+       ],
+       "lit": [
+        "Who has which role"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Rules & Policies - UnifiedTree Demo",
+     "heading": [
+      "Shift Rules"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Shift Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Leave Rules"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Leave Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Statutory Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Statutory Settings"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "Payroll Configuration - UnifiedTree Demo",
+     "heading": [
+      "Salary Components"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Salary Components"
+       ]
+      }
+     ]
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policy Documents"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Policy Documents"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/hrms/payroll-dashboard",
+     "title": "Payroll Dashboard - UnifiedTree Demo",
+     "heading": [
+      "Payroll Dashboard"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Dashboard"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "Payroll Settings - UnifiedTree Demo",
+     "heading": [
+      "Payroll Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Settings"
+       ]
+      },
+      {
+       "bar": "On this page",
+       "items": [
+        "PFOff",
+        "ESIOff",
+        "PTOff",
+        "LWFOff",
+        "Cycle & LOP",
+        "TDSSoon"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "Notification Templates - UnifiedTree Demo",
+     "heading": [
+      "Notification templates"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Notification Templates"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": []
+    }
+   }
+  },
+  "hrm@1440": {
+   "rail": [
+    "Dashboard",
+    "Company Profile",
+    "Master",
+    "Attendance & Time",
+    "Leave Management",
+    "Recruitment & Onboarding",
+    "Payroll",
+    "Expense Management",
+    "Employee Self Service",
+    "Performance & Learning",
+    "Compliance",
+    "Reports & Analytics",
+    "Employee Exit",
+    "HR Setup"
+   ],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Branding"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Workspace logo",
+        "Upload and edit"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "Notifications - UnifiedTree Demo",
+     "heading": [
+      "Notifications"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Notifications"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "What reaches you",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/billing": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, HR"
+     ],
+     "restricted": false,
+     "lit": [
+      "Employee Self Service"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Slack",
+        "GitHub",
+        "Jira",
+        "Zapier",
+        "Stripe",
+        "Salesforce"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Document Types"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Rules & Policies - UnifiedTree Demo",
+     "heading": [
+      "Shift Rules"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Shift Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Leave Rules"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Leave Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Statutory Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Statutory Settings"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "Payroll Configuration - UnifiedTree Demo",
+     "heading": [
+      "Salary Components"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Salary Components"
+       ]
+      }
+     ]
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policy Documents"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Policy Documents"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/hrms/payroll-dashboard",
+     "title": "Payroll Dashboard - UnifiedTree Demo",
+     "heading": [
+      "Payroll Dashboard"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Dashboard"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "Payroll Settings - UnifiedTree Demo",
+     "heading": [
+      "Payroll Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Settings"
+       ]
+      },
+      {
+       "bar": "On this page",
+       "items": [
+        "PFOff",
+        "ESIOff",
+        "PTOff",
+        "LWFOff",
+        "Cycle & LOP",
+        "TDSSoon"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "Notification Templates - UnifiedTree Demo",
+     "heading": [
+      "Notification templates"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Notification Templates"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": []
+    }
+   }
+  },
+  "fin@1440": {
+   "rail": [
+    "Dashboard",
+    "Master",
+    "Attendance & Time",
+    "Leave Management",
+    "Recruitment & Onboarding",
+    "Payroll",
+    "Expense Management",
+    "Employee Self Service",
+    "Performance & Learning",
+    "Compliance",
+    "Reports & Analytics",
+    "Employee Exit",
+    "HR Setup"
+   ],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Branding"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Workspace logo",
+        "Upload and edit"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "Notifications - UnifiedTree Demo",
+     "heading": [
+      "Notifications"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Notifications"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "What reaches you",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/billing": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Finance"
+     ],
+     "restricted": false,
+     "lit": [
+      "Employee Self Service"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Slack",
+        "GitHub",
+        "Jira",
+        "Zapier",
+        "Stripe",
+        "Salesforce"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Document Types"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [
+      "HR Setup"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Payroll Configuration"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Payroll Configuration"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Statutory Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Statutory Settings"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "Payroll Configuration - UnifiedTree Demo",
+     "heading": [
+      "Salary Components"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Salary Components"
+       ]
+      }
+     ]
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policies"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/hrms/payroll-dashboard",
+     "title": "Payroll Dashboard - UnifiedTree Demo",
+     "heading": [
+      "Payroll Dashboard"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Dashboard"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "Payroll Settings - UnifiedTree Demo",
+     "heading": [
+      "Payroll Settings"
+     ],
+     "restricted": false,
+     "lit": [
+      "Payroll"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Settings"
+       ]
+      },
+      {
+       "bar": "On this page",
+       "items": [
+        "PFOff",
+        "ESIOff",
+        "PTOff",
+        "LWFOff",
+        "Cycle & LOP",
+        "TDSSoon"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    }
+   }
+  },
+  "mgr@1440": {
+   "rail": [
+    "Dashboard",
+    "My Team",
+    "Master",
+    "Attendance & Time",
+    "Leave Management",
+    "Recruitment & Onboarding",
+    "Payroll",
+    "Expense Management",
+    "Employee Self Service",
+    "Performance & Learning",
+    "Compliance"
+   ],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/billing": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Dept"
+     ],
+     "restricted": false,
+     "lit": [
+      "Employee Self Service"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters",
+       "Team Attendance"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [],
+     "restricted": false,
+     "lit": [
+      "Master"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Rules & policies"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Policy views",
+       "items": [
+        "Policies",
+        "Shift Rules"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Dept"
+     ],
+     "restricted": false,
+     "lit": [
+      "Employee Self Service"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters",
+       "Team Attendance"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    }
+   }
+  },
+  "reader@1440": {
+   "rail": [
+    "Payroll",
+    "Expense Management",
+    "Employee Self Service",
+    "Performance & Learning"
+   ],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/billing": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Reader"
+     ],
+     "restricted": false,
+     "lit": [
+      "Employee Self Service"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "lit",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policies"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Reader"
+     ],
+     "restricted": false,
+     "lit": [
+      "Employee Self Service"
+     ],
+     "gear": "shown",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "My claims",
+        "Submit a claim"
+       ],
+       "lit": [
+        "My claims"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [
+      "Expense Management"
+     ],
+     "gear": "shown",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "My claims",
+        "Submit a claim"
+       ],
+       "lit": [
+        "My claims"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "shown",
+     "row": null,
+     "bars": []
+    }
+   }
+  },
+  "owner@390": {
+   "rail": [],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "Branding - UnifiedTree Demo",
+     "heading": [
+      "Branding"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Branding"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Workspace logo",
+        "Upload and edit"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions",
+        "Workspace rule"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "Notifications - UnifiedTree Demo",
+     "heading": [
+      "Notifications"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Notifications"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "What reaches you",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/billing": {
+     "at": "/settings/billing",
+     "title": "Billing & Plan - UnifiedTree Demo",
+     "heading": [
+      "Billing & Plan"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Billing & Plan"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your plan",
+        "Invoices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Slack",
+        "GitHub",
+        "Jira",
+        "Zapier",
+        "Stripe",
+        "Salesforce"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Document Types"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "Danger Zone - UnifiedTree Demo",
+     "heading": [
+      "Danger Zone"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Danger Zone"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Export all data",
+        "Reset workspace",
+        "Delete organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "Users & Access - UnifiedTree Demo",
+     "heading": [
+      "Users & access"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Users & Access"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "User filters",
+       "items": [
+        "Everyone6",
+        "Active6",
+        "Invited",
+        "No access"
+       ],
+       "lit": [
+        "Everyone6"
+       ]
+      }
+     ]
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "Audit Logs - UnifiedTree Demo",
+     "heading": [
+      "Audit logs"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Audit Logs"
+      ]
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "Roles & Perms - UnifiedTree Demo",
+     "heading": [
+      "Roles & permissions"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Roles & Permissions"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "Role views",
+       "items": [
+        "Roles",
+        "Who has which role",
+        "Permission catalogue"
+       ],
+       "lit": [
+        "Roles"
+       ]
+      }
+     ]
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "Roles & Perms - UnifiedTree Demo",
+     "heading": [
+      "Roles & permissions"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Branding",
+       "Security",
+       "Notifications",
+       "Billing & Plan",
+       "Integrations",
+       "Users & Access",
+       "Roles & Permissions",
+       "Audit Logs",
+       "Danger Zone"
+      ],
+      "lit": [
+       "Roles & Permissions"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "Role views",
+       "items": [
+        "Roles",
+        "Who has which role",
+        "Permission catalogue"
+       ],
+       "lit": [
+        "Who has which role"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Rules & Policies - UnifiedTree Demo",
+     "heading": [
+      "Shift Rules"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Shift Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Leave Rules"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Leave Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Statutory Settings"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Statutory Settings"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "Payroll Configuration - UnifiedTree Demo",
+     "heading": [
+      "Salary Components"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Salary Components"
+       ]
+      }
+     ]
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policy Documents"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Policy Documents"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/hrms/payroll-dashboard",
+     "title": "Payroll Dashboard - UnifiedTree Demo",
+     "heading": [
+      "Payroll Dashboard"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Dashboard"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "Payroll Settings - UnifiedTree Demo",
+     "heading": [
+      "Payroll Settings"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Settings"
+       ]
+      },
+      {
+       "bar": "On this page",
+       "items": [
+        "PFOff",
+        "ESIOff",
+        "PTOff",
+        "LWFOff",
+        "Cycle & LOP",
+        "TDSSoon"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "Notification Templates - UnifiedTree Demo",
+     "heading": [
+      "Notification templates"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Notification Templates"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": []
+    }
+   }
+  },
+  "hrm@390": {
+   "rail": [],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Your account",
+        "Organisation"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Branding"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Workspace logo",
+        "Upload and edit"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "Notifications - UnifiedTree Demo",
+     "heading": [
+      "Notifications"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Notifications"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "What reaches you",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/billing": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, HR"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Slack",
+        "GitHub",
+        "Jira",
+        "Zapier",
+        "Stripe",
+        "Salesforce"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Document Types"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "Configuration - UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security",
+       "Notifications",
+       "Integrations"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "HR Configuration - UnifiedTree Demo",
+     "heading": [
+      "HR Configuration"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "HR Configuration"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Employee IDs",
+        "Probation",
+        "Notice & exit",
+        "Work week",
+        "Late arrival",
+        "Attendance rules",
+        "Fiscal year"
+       ],
+       "lit": []
+      },
+      {
+       "bar": "Weekly off days",
+       "items": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "lit": [
+        "Sat",
+        "Sun"
+       ]
+      }
+     ]
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Master data"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Overview"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "Rules & Policies - UnifiedTree Demo",
+     "heading": [
+      "Shift Rules"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Shift Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Leave Rules"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Leave Rules"
+       ]
+      }
+     ]
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Statutory Settings"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Statutory Settings"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "Payroll Configuration - UnifiedTree Demo",
+     "heading": [
+      "Salary Components"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Payroll Configuration"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Salary Components",
+        "Statutory Settings"
+       ],
+       "lit": [
+        "Salary Components"
+       ]
+      }
+     ]
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policy Documents"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Master sections",
+       "items": [
+        "Overview",
+        "Workforce Directory",
+        "Organization Setup",
+        "Rules & Policies",
+        "Payroll Configuration"
+       ],
+       "lit": [
+        "Rules & Policies"
+       ]
+      },
+      {
+       "bar": "Master inner sections",
+       "items": [
+        "Shift Rules",
+        "Leave Rules",
+        "Policy Documents"
+       ],
+       "lit": [
+        "Policy Documents"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/hrms/payroll-dashboard",
+     "title": "Payroll Dashboard - UnifiedTree Demo",
+     "heading": [
+      "Payroll Dashboard"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Dashboard"
+       ]
+      }
+     ]
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "Payroll Settings - UnifiedTree Demo",
+     "heading": [
+      "Payroll Settings"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Payroll sections",
+       "items": [
+        "Payroll Dashboard",
+        "Salary Structure",
+        "Processing & Payslips",
+        "Payroll Settings",
+        "Production-Linked Incentive",
+        "Advances & Loans",
+        "Bank Disbursement"
+       ],
+       "lit": [
+        "Payroll Settings"
+       ]
+      },
+      {
+       "bar": "On this page",
+       "items": [
+        "PFOff",
+        "ESIOff",
+        "PTOff",
+        "LWFOff",
+        "Cycle & LOP",
+        "TDSSoon"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Approvals"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "Approvals",
+        "My claims",
+        "Submit a claim",
+        "Reimbursement batches",
+        "Policies"
+       ],
+       "lit": [
+        "Policies"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "Notification Templates - UnifiedTree Demo",
+     "heading": [
+      "Notification templates"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Notification Templates"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "Integrations - UnifiedTree Demo",
+     "heading": [
+      "Integrations"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "HR Setup sections",
+      "items": [
+       "HR Configuration",
+       "Notification Templates",
+       "Integrations"
+      ],
+      "lit": [
+       "Integrations"
+      ]
+     },
+     "bars": []
+    }
+   }
+  },
+  "reader@390": {
+   "rail": [],
+   "pages": {
+    "/settings": {
+     "at": "/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": [
+       "Profile"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/profile": {
+     "at": "/settings/profile",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/branding": {
+     "at": "/settings/branding",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/security": {
+     "at": "/settings/security",
+     "title": "Security - UnifiedTree Demo",
+     "heading": [
+      "Security"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": [
+       "Security"
+      ]
+     },
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Password",
+        "Two-factor",
+        "Active sessions"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/settings/notifications": {
+     "at": "/settings/notifications",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/billing": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Reader"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/settings/integrations": {
+     "at": "/settings/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/documents": {
+     "at": "/settings/documents",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/settings/danger": {
+     "at": "/settings/danger",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/profile": {
+     "at": "/profile",
+     "title": "Profile - UnifiedTree Demo",
+     "heading": [
+      "Profile"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "On this page",
+       "items": [
+        "Photo & contact",
+        "Face enrollment",
+        "Employment",
+        "Personal details",
+        "Approval delegation",
+        "My documents",
+        "Notifications",
+        "Email choices",
+        "In-app choices",
+        "Phone push choices"
+       ],
+       "lit": []
+      }
+     ]
+    },
+    "/users": {
+     "at": "/users",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/audit-logs": {
+     "at": "/audit-logs",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles": {
+     "at": "/roles",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/roles?view=assignments": {
+     "at": "/roles?view=assignments",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Settings sections",
+      "items": [
+       "Profile",
+       "Security"
+      ],
+      "lit": []
+     },
+     "bars": []
+    },
+    "/hrms/settings": {
+     "at": "/hrms/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/settings#st-week": {
+     "at": "/hrms/settings#st-week",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/settings/work-time": {
+     "at": "/hrms/settings/work-time",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master": {
+     "at": "/hrms/master",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master/shift-rules": {
+     "at": "/hrms/master/shift-rules",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master/leave-rules": {
+     "at": "/hrms/master/leave-rules",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/master/statutory": {
+     "at": "/hrms/master/statutory",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/payroll/components": {
+     "at": "/hrms/payroll/components",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/policies": {
+     "at": "/hrms/policies",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Policies"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/payroll-dashboard": {
+     "at": "/me",
+     "title": "Overview - UnifiedTree Demo",
+     "heading": [
+      "Good morning, Reader"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": {
+      "bar": "Employee Self Service sections",
+      "items": [
+       "Overview",
+       "Attendance",
+       "Leave",
+       "Payslips",
+       "Salary",
+       "Work from home",
+       "Shift change",
+       "My assets",
+       "Letters"
+      ],
+      "lit": [
+       "Overview"
+      ]
+     },
+     "bars": []
+    },
+    "/hrms/payroll/settings": {
+     "at": "/hrms/payroll/settings",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/expenses": {
+     "at": "/hrms/expenses",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "My claims",
+        "Submit a claim"
+       ],
+       "lit": [
+        "My claims"
+       ]
+      }
+     ]
+    },
+    "/hrms/expenses?tab=policies": {
+     "at": "/hrms/expenses?tab=policies",
+     "title": "Expense Center - UnifiedTree Demo",
+     "heading": [
+      "Expenses"
+     ],
+     "restricted": false,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": [
+      {
+       "bar": "Expense views",
+       "items": [
+        "My claims",
+        "Submit a claim"
+       ],
+       "lit": [
+        "My claims"
+       ]
+      }
+     ]
+    },
+    "/hrms/notification-templates": {
+     "at": "/hrms/notification-templates",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    },
+    "/hrms/integrations": {
+     "at": "/hrms/integrations",
+     "title": "UnifiedTree Demo",
+     "heading": [
+      "Access Restricted"
+     ],
+     "restricted": true,
+     "lit": [],
+     "gear": "none",
+     "row": null,
+     "bars": []
+    }
+   }
+  }
+ }
+}

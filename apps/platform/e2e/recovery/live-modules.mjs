@@ -1,3 +1,4 @@
+/* global console, process, fetch */
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'

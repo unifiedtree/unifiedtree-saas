@@ -1,29 +1,40 @@
-// Settings are back where they were before 26 Sep 2026 (the "HRMS settings" hub is undone).
-// Compares the app under test with the app as it was before that night (commit 5f45946),
-// page by page, for every role: the rail (items, short labels, the lit one), the header gear
-// (shown, lit, where it leads), the profile menu (entries, where each leads), the Apps page's
-// buttons, and for every settings address: where it ends up, the page title and heading, the
-// shell's tab row and every section/tab bar on the page (Master's tabs and its inner
-// sections, Payroll's section bar, Expenses' views, Roles' views, Settings' tabs) with the lit
-// one. They must match exactly. The hub's own addresses (live for a few hours) must open the
-// original page, the same as opening that page directly on the old app. The app under test
-// may show no page error or API 4xx/5xx the old app doesn't show.
+// Settings stay where they were (the "HRMS settings" hub of 26 Sep 2026 stays undone) now that the
+// redesign shell is in: the header gear and the profile menu are gone and More holds their entries.
+//
+// For every role, at 1440 and on a phone, every settings address (and the pages around them) is
+// compared with what it showed before the redesign shell (live-settings-restored.baseline.json,
+// captured from rd/int 33cc0d41 on the stable demo data): where it ends up, the browser title, the
+// heading, "Access Restricted" or not, and every section/tab bar on the page (Master's tabs and inner
+// sections, Payroll's section bar, Expenses' views, Roles' views, the settings tabs) with the lit one.
+// The shell's old "<Module> sections" row is now the Pages panel: the settings row is the "Settings
+// pages" panel (the same pages, plus Document types after Integrations for people who can open it),
+// HR Setup's row is the "HR setup pages" panel, with the same page lit. The rail lights what it lit
+// then, under its new name (Master → Workforce…); what the gear lit, More lights now.
+// The gear and the profile menu become More: My workspace (the person's Home), My profile, All apps,
+// Preferences (the first settings page the person can open), Help & support and Sign out. On a phone
+// the drawer holds the same. The hub's own addresses still open the original page. No module shows
+// on the rail or in More that the person's rail didn't have before (renamed, or their own My work).
 // Read-only: it only signs in and opens pages.
 //
-//   RECOVERY_APP_URL=<app under test> SETTINGS_BEFORE_URL=<app at 5f45946> node e2e/recovery/live-settings-restored.mjs
-//   SETTINGS_ONLY=owner,hrm   runs only those accounts
+//   RECOVERY_APP_URL=<app under test> node e2e/recovery/live-settings-restored.mjs
+//   SETTINGS_ONLY=owner,hrm            runs only those accounts
+//   SETTINGS_BASELINE=<file.json>      another baseline (same shape)
 /* global console, process, URL, document, location, getComputedStyle */
 import { chromium } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
-const ref = process.env.SETTINGS_BEFORE_URL || 'http://demo.localhost:3050'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const only = (process.env.SETTINGS_ONLY || '').split(',').filter(Boolean)
+const BASELINE = JSON.parse(readFileSync(process.env.SETTINGS_BASELINE || new URL('./live-settings-restored.baseline.json', import.meta.url), 'utf8')).accounts
 const ACCOUNTS = [
   ['owner', 'owner@unifiedtree.demo'], ['admin', 'admin@unifiedtree.demo'], ['hrm', 'hrm@unifiedtree.demo'],
   ['fin', 'fin@unifiedtree.demo'], ['mgr', 'mgr@unifiedtree.demo'], ['reader', 'reader@unifiedtree.demo'],
 ].filter(([who]) => !only.length || only.includes(who))
 const PHONE = new Set(['owner', 'hrm', 'reader'])
+// Home by permission (DECISIONS 12): the admin dashboard, or the self-service Home.
+const HOME = { owner: '/dashboard', admin: '/dashboard', hrm: '/dashboard', fin: '/dashboard', mgr: '/me', reader: '/me' }
+const PLAN_ADMINS = new Set(['owner', 'admin'])
 
 // Every settings address as it was before the hub, and the pages around them.
 const PAGES = [
@@ -53,32 +64,49 @@ const HUB = [
   ['/settings/integrations/register', '/hrms/integrations'],
 ]
 
-// What other changes of that night (kept) add to these pages; left out of the comparison and reported.
-const KEPT = [
-  { path: '/profile', bar: 'On this page', item: 'Face enrollment', why: 'face enrollment on the web' },
-]
+// The old rail's names and what each is called now (an admin module, or the person's own My work item).
+const MY_WORK = ['My time', 'My leave', 'My pay', 'My documents', 'My growth']
+const RENAMED = {
+  'Dashboard': ['Dashboard', 'Home'], 'Company Profile': ['Company'], 'Master': ['Workforce'], 'Attendance & Time': ['Attendance & time', 'My time'],
+  'Leave Management': ['Leave', 'My leave'], 'Recruitment & Onboarding': ['Hiring & onboarding'], 'Payroll': ['Payroll', 'My pay'],
+  'Expense Management': ['Expenses', 'My pay'], 'Performance & Learning': ['Performance', 'My growth'], 'Compliance': ['Compliance'],
+  'Reports & Analytics': ['Reports'], 'Employee Exit': ['Employee exit'], 'HR Setup': ['HR setup'], 'My Team': ['My team'],
+  'Employee Self Service': ['Home', ...MY_WORK],
+}
+const BUSINESS_APPS = ['CRM', 'Accounts', 'Projects', 'Inventory', 'Purchase']
+// The shell's old rows and the Pages panel that replaced them.
+const PANEL_FOR_ROW = { 'Settings sections': 'Settings pages', 'HR Setup sections': 'HR setup pages' }
+// Bars whose lit item is the chosen tab (the "On this page" jump bars light what is scrolled into view).
+const LIT_BARS = /(sections|views|Master inner sections)$/
+// API answers expected here: the session refresh probe (nothing to refresh), the admin contacts behind
+// Help & support (its endpoint is not built yet: the panel says so), and Billing & Plan's current plan
+// on the demo data (the owner's workspace has no billing account linked; the same before the redesign,
+// see live-design-settings on main).
+const EXPECTED_API = [/^422 POST .*\/canonical-auth\/refresh$/, /^404 GET .*\/admin-contacts$/, /^403 GET .*\/workspace\/plan\/current$/]
 
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
+const note = (msg) => console.log(`NOTE  ${msg}`)
+const show = (v) => JSON.stringify(v)
 
 const browser = await chromium.launch()
 
-async function session(url, email, width, who) {
+async function session(email, width, who) {
   const context = await browser.newContext({ viewport: { width, height: 900 } })
   const page = await context.newPage()
   const errors = new Set(), failed = new Set()
   page.on('pageerror', (e) => errors.add(String(e.message || e).slice(0, 160)))
-  // The session refresh probe answers 422 when there is nothing to refresh (as in the other live tests).
   page.on('response', (r) => {
-    if (!r.url().includes('/api/') || r.status() < 400 || (r.status() === 422 && r.url().includes('/canonical-auth/refresh'))) return
-    failed.add(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`)
+    if (!r.url().includes('/api/') || r.status() < 400) return
+    const line = `${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`
+    if (!EXPECTED_API.some((re) => re.test(line))) failed.add(line)
   })
-  await page.goto(url + '/login')
+  await page.goto(base + '/login')
   await page.locator('input[type=email]').fill(email)
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
-  return { context, page, url, errors, failed, who }
+  await page.waitForURL((u) => !u.pathname.startsWith('/login') && u.pathname !== '/', { timeout: 60_000 })
+  return { context, page, errors, failed, who }
 }
 
 async function settle(page) {
@@ -88,130 +116,113 @@ async function settle(page) {
   await page.waitForTimeout(700)
 }
 
-// What the person sees of the shell and the page's own section bars.
+// What the person sees: where they are, title, heading, the page's own bars (a bar the page put in
+// the top bar counts: it is the page's), and the rail's lit item or More.
 const snap = (page) => page.evaluate(() => {
   const vis = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'
   const txt = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim()
-  const lit = (el) => el.getAttribute('aria-current') === 'page' || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' || /(^|\s)(on|active)(\s|$)/.test(typeof el.className === 'string' ? el.className : '')
-  const railNav = [...document.querySelectorAll('nav[aria-label="Primary"]')].find(vis)
-  const railBtns = railNav ? [...railNav.querySelectorAll('button[title]:not([aria-label])')] : []
-  const gear = [...document.querySelectorAll('button[aria-label="Settings"]')].find(vis)
-  const shellRow = document.querySelector('nav[aria-label$=" sections"]:has(> .ds-subnav-scroll)')
+  const lit = (el) => el.getAttribute('aria-current') === 'page' || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' || /(^|\s)(on|active|is-on)(\s|$)/.test(typeof el.className === 'string' ? el.className : '')
+  const shell = (n) => n.getAttribute('aria-label') === 'Primary' || !!n.closest('[aria-label="Primary"], .ut-more, .ut-drawer, .ut-pages, .ut-pages-layer') || /\spages$/.test(n.getAttribute('aria-label') || '')
   const bars = [...document.querySelectorAll('nav[aria-label], [role=navigation][aria-label], [role=tablist], [role=group][aria-label], .hero-tabs .seg')]
-    .filter((n) => vis(n) && n.getAttribute('aria-label') !== 'Primary' && n !== shellRow && !n.closest('[aria-label="Primary"]'))
+    .filter((n) => vis(n) && !shell(n))
     .map((n) => { const items = [...n.querySelectorAll('a, button, [role=tab]')].filter(vis); return { bar: n.getAttribute('aria-label') || (n.matches('.seg') ? 'Master inner sections' : n.getAttribute('role')), items: items.map(txt), lit: items.filter(lit).map(txt) } })
   const h1 = [...document.querySelectorAll('h1')].filter(vis)
   const head = h1.length ? h1.map(txt) : [...document.querySelectorAll('h2, h3')].filter(vis).slice(0, 1).map(txt)
-  const eyebrow = h1[0]?.previousElementSibling ? txt(h1[0].previousElementSibling).slice(0, 80) : ''
-  const restricted = /Access Restricted/i.test(document.body.innerText)
+  const rail = document.querySelector('.ut-railwrap nav[aria-label="Primary"]')
+  const railLinks = rail ? [...rail.querySelectorAll('a.ut-rail__item')] : []
   return {
     at: location.pathname + location.search + location.hash,
     title: document.title,
-    heading: head, eyebrow, restricted,
-    rail: railBtns.map((b) => `${b.title} [${txt(b)}]`),
-    lit: railBtns.filter((b) => b.getAttribute('aria-current') === 'page').map((b) => b.title),
-    gear: gear ? (/ds-hdr-active/.test(gear.className) ? 'lit' : 'shown') : 'none',
-    row: shellRow ? { bar: shellRow.getAttribute('aria-label'), items: [...shellRow.querySelectorAll('a')].map(txt), lit: [...shellRow.querySelectorAll('a[aria-current=page]')].map(txt) } : null,
+    heading: head,
+    restricted: /Access Restricted/i.test(document.body.innerText),
     bars,
+    lit: railLinks.filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.title),
+    more: rail?.querySelector('.ut-rail__more')?.getAttribute('aria-current') === 'page',
+    pagesButton: [...document.querySelectorAll('button[aria-label^="Show pages: "]')].filter(vis).map((b) => b.getAttribute('aria-label').slice('Show pages: '.length))[0] ?? null,
   }
 })
 
-// Phone: the navigation drawer's entries and the lit one (the rail is hidden).
-async function drawer(page) {
-  const open = page.getByRole('button', { name: 'Open navigation' })
-  if (!(await open.isVisible().catch(() => false))) return null
-  await open.click()
-  const nav = page.locator('nav[aria-label="Primary"]').last()
-  await nav.waitFor({ timeout: 10_000 }).catch(() => {})
-  const items = (await nav.locator('button:not([aria-label])').allTextContents()).map((t) => t.trim())
-  const lit = (await nav.locator('button[aria-current="page"]').allTextContents()).map((t) => t.trim())
-  await page.getByRole('button', { name: 'Close navigation' }).click().catch(() => {})
-  await page.waitForTimeout(200)
+// The Pages panel for this page: opened with the top bar's Pages button when it isn't showing, read, then put back.
+async function pagesPanel(page) {
+  const read = () => page.evaluate(() => {
+    const nav = [...document.querySelectorAll('nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
+    if (!nav) return null
+    const label = (a) => a.querySelector('.ut-pages__label')?.textContent.trim()
+    const links = [...nav.querySelectorAll('a')]
+    return { bar: nav.getAttribute('aria-label'), items: links.map(label), lit: links.filter((a) => a.getAttribute('aria-current') === 'page').map(label) }
+  })
+  let p = await read()
+  if (p) return p
+  const button = page.locator('button[aria-label^="Show pages: "]').filter({ visible: true }).first()
+  if (!(await button.count())) return null
+  // A pointer left over the rail keeps it widened over the top bar's left end: move it off first.
+  await page.mouse.move(900, 500)
+  await button.click({ timeout: 10_000 })
+  await page.locator('nav[aria-label$=" pages"]').filter({ visible: true }).first().waitFor({ timeout: 5_000 }).catch(() => {})
+  p = await read()
+  const hide = page.getByRole('button', { name: 'Hide pages' }).filter({ visible: true }).first()
+  if (await hide.count()) await hide.click()
+  return p
+}
+
+async function look(s, path) {
+  await s.page.goto(base + path)
+  await settle(s.page)
+  return snap(s.page)
+}
+
+const digits = (t) => t.replace(/\d+/g, '').trim()
+// Time of day in the greeting ("Good morning, …") is not a difference.
+const heading = (h) => h.map((t) => t.replace(/^Good (morning|afternoon|evening)/, 'Good <time of day>'))
+const barsOf = (bars) => bars.map((b) => ({ bar: b.bar, items: b.items.map(digits), ...(LIT_BARS.test(b.bar) ? { lit: b.lit.map(digits) } : {}) }))
+
+// What the old settings row becomes in the Settings pages panel: Document types after Integrations,
+// for people who could open /settings/documents.
+function settingsPanelWant(row, at, docsOpen) {
+  const items = [...row.items]
+  if (docsOpen && !items.includes('Document types')) {
+    const i = items.indexOf('Integrations')
+    const j = i >= 0 ? i + 1 : items.indexOf('Users & Access') >= 0 ? items.indexOf('Users & Access') : items.length
+    items.splice(j, 0, 'Document types')
+  }
+  const lit = at.split(/[?#]/)[0] === '/settings/documents' && docsOpen ? ['Document types'] : row.lit
   return { items, lit }
 }
 
-async function look(s, path, phone) {
-  await s.page.goto(s.url + path)
-  await settle(s.page)
-  const v = await snap(s.page)
-  if (phone) v.drawer = await drawer(s.page)
-  return v
-}
-// Leaves out what a kept change of that night adds to the page (KEPT), saying so once.
-const noted = new Set()
-function withoutKept(v) {
-  for (const k of KEPT) {
-    if (v.at !== k.path) continue
-    for (const b of v.bars) {
-      if (b.bar !== k.bar || !b.items.includes(k.item)) continue
-      b.items = b.items.filter((i) => i !== k.item)
-      if (!noted.has(k.item)) { noted.add(k.item); console.log(`NOTE  ${k.path}: "${k.item}" in "${k.bar}" is new from ${k.why} (kept), not compared`) }
-    }
-  }
-  return v
+// The rail's lit item now, from what it lit then: settings (the gear, and My profile) light More;
+// a module under its new name, or More when that module sits in More for lack of room, or nothing
+// when the person has no such item now (HR's and Finance's old "Employee Self Service" item for /me:
+// their Home is the dashboard). A page nothing lit before may now light the person's own My work
+// item it belongs to (Policies is in My documents), or More when that item sits in More.
+const LIT_AS = { ...RENAMED, 'Employee Self Service': ['Home'] }
+function railOk(was, now, onRail, inMore) {
+  const path = now.at.split(/[?#]/)[0]
+  if (was.gear === 'lit' || /^\/(settings|users|roles|audit-logs|profile|modules)(\/|$)/.test(path)) return { ok: !now.lit.length && now.more, want: 'More' }
+  if (!was.lit.length) return { ok: now.lit.length === 0 || (now.lit.length === 1 && [...MY_WORK, 'Home'].includes(now.lit[0]) && !now.more), want: 'nothing, or their own My work item' }
+  const names = LIT_AS[was.lit[0]] ?? [was.lit[0]]
+  const name = names.find((n) => onRail.includes(n))
+  if (name) return { ok: show(now.lit) === show([name]) && !now.more, want: name }
+  if (names.some((n) => inMore.includes(n))) return { ok: !now.lit.length && now.more, want: `More (${names.join('/')} is in More)` }
+  return { ok: !now.lit.length && !now.more, want: 'nothing (no such item now)' }
 }
 
-const show = (v) => JSON.stringify(v)
-function differences(a, b) {
-  const out = []
-  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) if (show(a[k]) !== show(b[k])) out.push(`${k}: before ${show(a[k])}, now ${show(b[k])}`)
-  return out
+// More (the gear's and the profile menu's successor): its groups and rows.
+async function openMore(s) {
+  await s.page.locator('.ut-railwrap .ut-rail__more').click()
+  const dialog = s.page.getByRole('dialog', { name: 'More' })
+  await dialog.waitFor({ timeout: 10_000 })
+  return dialog
 }
+const moreGroups = (dialog) => dialog.locator('.ut-more__sec').evaluateAll((els) => els.map((g) => ({ group: g.getAttribute('aria-label'), rows: [...g.querySelectorAll('.ut-more__row')].map((r) => r.querySelector('.ut-more__rowlabel')?.textContent.trim()) })))
+// A More row's full module name (My work's rows may carry the short name).
+const moduleName = (group, label) => (group === 'My work' && !/^My /.test(label) ? `My ${label.toLowerCase()}` : label)
 
-// Both apps, same address, compared; one more look after a pause if they differ (a slow load).
-async function same(was, now, wasPath, nowPath, phone) {
-  let [a, b] = await Promise.all([look(was, wasPath, phone), look(now, nowPath, phone).then(withoutKept)])
-  let diff = differences(a, b)
-  if (diff.length) {
-    await Promise.all([was.page.waitForTimeout(2500), now.page.waitForTimeout(2500)])
-    ;[a, b] = await Promise.all([look(was, wasPath, phone), look(now, nowPath, phone).then(withoutKept)])
-    diff = differences(a, b)
-  }
-  return { a, b, diff }
-}
-
-// The profile menu: its entries, and where each leads (Sign out excepted).
-async function profileMenu(s, phone) {
-  const button = () => s.page.getByRole('button', { name: phone ? 'Profile' : 'Account' }).filter({ visible: true }).first()
-  const menu = () => s.page.locator('.z-dropdown.w-56').filter({ visible: true }).first()
-  await s.page.goto(s.url + '/profile'); await settle(s.page)
-  await button().click()
-  await menu().waitFor({ timeout: 10_000 })
-  const entries = (await menu().locator('button').allTextContents()).map((t) => t.trim())
-  const leads = {}
-  for (const entry of entries.filter((e) => e !== 'Sign out')) {
-    await s.page.goto(s.url + '/profile'); await settle(s.page)
-    await button().click()
-    await menu().getByRole('button', { name: entry, exact: true }).click()
-    await settle(s.page)
-    leads[entry] = new URL(s.page.url()).pathname
-  }
-  return { entries, leads }
-}
-
-// The header gear (desktop): shown or not, and where it leads.
-async function gear(s) {
-  await s.page.goto(s.url + '/profile'); await settle(s.page)
-  const g = s.page.locator('button[aria-label="Settings"]').filter({ visible: true }).first()
-  if (!(await g.count())) return 'none'
-  await g.click(); await settle(s.page)
-  return new URL(s.page.url()).pathname
-}
-// The phone drawer's Settings entry (the phone header has no gear): where it leads.
-async function drawerSettings(s) {
-  await s.page.goto(s.url + '/profile'); await settle(s.page)
+// The phone drawer: its modules (full names), and its own More rows.
+async function openDrawer(s) {
   await s.page.getByRole('button', { name: 'Open navigation' }).click()
-  const entry = s.page.locator('nav[aria-label="Primary"]').last().getByRole('button', { name: 'Settings', exact: true })
-  if (!(await entry.count())) { await s.page.getByRole('button', { name: 'Close navigation' }).click(); return 'none' }
-  await entry.click(); await settle(s.page)
-  return new URL(s.page.url()).pathname
-}
-
-// The Apps page: every button and link on it.
-async function apps(s) {
-  await s.page.goto(s.url + '/modules'); await settle(s.page)
-  await s.page.waitForTimeout(800)
-  return s.page.evaluate(() => [...document.querySelectorAll('button, a')].filter((el) => el.getClientRects().length > 0).map((el) => (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean))
+  const dialog = s.page.getByRole('dialog', { name: 'Navigation' })
+  await dialog.waitFor({ timeout: 10_000 })
+  return dialog
 }
 
 try {
@@ -219,42 +230,126 @@ try {
   for (const [who, email, width] of runs) {
     const phone = width < 700
     const tag = `${who}${phone ? ' (phone)' : ''}`
-    let was, now
+    const before = BASELINE[`${who}@${width}`]
+    const oldRail = BASELINE[`${who}@1440`]?.rail ?? []
+    if (!before) { check(`${tag}: a baseline to compare with`, false, `no ${who}@${width} in the baseline`); continue }
+    let s
     try {
-      ;[was, now] = await Promise.all([session(ref, email, width, tag), session(base, email, width, tag)])
+      s = await session(email, width, tag)
 
-      // ── the shell: rail, gear, profile menu, Apps page ──
-      const [a, b] = await Promise.all([look(was, '/profile', phone), look(now, '/profile', phone)])
-      if (phone) check(`${tag}: the navigation drawer's entries are as before`, show(a.drawer?.items) === show(b.drawer?.items), `before ${show(a.drawer?.items)}, now ${show(b.drawer?.items)}`)
-      else check(`${tag}: the rail's items and labels are as before`, show(a.rail) === show(b.rail) && b.rail.length > 0, `before ${show(a.rail)}, now ${show(b.rail)}`)
-      if (!phone) check(`${tag}: the rail has "HR Setup" exactly when it did before, and no "HRMS settings"`, a.rail.some((r) => r.startsWith('HR Setup ')) === b.rail.some((r) => r.startsWith('HR Setup ')) && !b.rail.some((r) => /HRMS settings/.test(r)))
-      const [ga, gb] = phone ? await Promise.all([drawerSettings(was), drawerSettings(now)]) : await Promise.all([gear(was), gear(now)])
-      check(`${tag}: the ${phone ? 'drawer\'s Settings entry' : 'header gear'} is ${ga === 'none' ? 'absent' : `there and opens ${ga}`}, as before`, ga === gb, `before ${ga}, now ${gb}`)
-      const [ma, mb] = await Promise.all([profileMenu(was, phone), profileMenu(now, phone)])
-      check(`${tag}: the profile menu has the same entries, each leading where it did`, show(ma) === show(mb), `before ${show(ma)}, now ${show(mb)}`)
-      const [aa, ab] = await Promise.all([apps(was), apps(now)])
-      check(`${tag}: the Apps page has the same buttons (no "Workspace settings")`, show(aa) === show(ab) && !ab.includes('Workspace settings'), `before ${show(aa)}, now ${show(ab)}`)
+      // ── the shell: the modules, More (gear + profile menu), the Apps page ──
+      await s.page.goto(base + '/profile'); await settle(s.page)
+      let modules, groups, inMore = []
+      if (phone) {
+        const drawer = await openDrawer(s)
+        modules = await drawer.getByRole('navigation', { name: 'Primary' }).locator('a').evaluateAll((els) => els.map((a) => a.getAttribute('aria-label') || a.querySelector('.ut-rail__label')?.textContent.trim() || ''))
+        groups = await moreGroups(drawer)
+        await s.page.getByRole('button', { name: 'Close navigation' }).click()
+      } else {
+        const rail = await snap(s.page)
+        const railNames = await s.page.locator('.ut-railwrap nav[aria-label="Primary"] a.ut-rail__item').evaluateAll((els) => els.map((a) => a.title))
+        const more = await openMore(s)
+        groups = await moreGroups(more)
+        const overflow = groups.filter((g) => g.group !== 'My space' && g.group !== 'Settings').flatMap((g) => g.rows.map((r) => moduleName(g.group, r)))
+        modules = [...railNames, ...overflow]
+        inMore = overflow
+        check(`${tag}: /profile lights More, not a rail item (More holds My profile now)`, rail.more && !rail.lit.length, show(rail.lit))
+        await s.page.keyboard.press('Escape')
+      }
+      // Every module of the old rail is still there, under its new name; nothing new but the person's own My work (and the business apps for plan admins).
+      const allowed = new Set(oldRail.flatMap((n) => RENAMED[n] ?? [n]))
+      if (oldRail.includes('Employee Self Service') || oldRail.includes('Dashboard')) for (const n of ['Home', ...MY_WORK]) allowed.add(n)
+      if (PLAN_ADMINS.has(who)) for (const n of BUSINESS_APPS) allowed.add(n)
+      const missing = oldRail.filter((n) => !(RENAMED[n] ?? [n]).some((m) => modules.includes(m)))
+      const extra = modules.filter((m) => !allowed.has(m))
+      check(`${tag}: every module of the old rail is still there under its new name`, !missing.length, `missing ${show(missing)}; now ${show(modules)}`)
+      check(`${tag}: no module the person's rail didn't have before`, !extra.length, `new ${show(extra)}`)
+      check(`${tag}: "HR setup" exactly when "HR Setup" was on the rail, and no "HRMS settings"`, oldRail.includes('HR Setup') === modules.includes('HR setup') && !modules.some((m) => /HRMS settings/i.test(m)), show(modules))
+
+      const mySpace = groups.find((g) => g.group === 'My space')?.rows ?? []
+      const settingsRows = groups.find((g) => g.group === 'Settings')?.rows ?? []
+      check(`${tag}: More has My workspace, My profile, All apps; Preferences, Help & support (the gear and profile menu)`, show(mySpace) === show(['My workspace', 'My profile', 'All apps']) && show(settingsRows) === show(['Preferences', 'Help & support']), show(groups))
+      const lead = async (row, kind = 'link') => {
+        await s.page.goto(base + '/profile'); await settle(s.page)
+        const box = phone ? await openDrawer(s) : await openMore(s)
+        await box.getByRole(kind, { name: row, exact: true }).click()
+        await settle(s.page)
+        return new URL(s.page.url()).pathname
+      }
+      const leads = { 'My workspace': await lead('My workspace'), 'My profile': await lead('My profile'), 'All apps': await lead('All apps') }
+      check(`${tag}: My workspace opens their Home (${HOME[who]}), My profile /profile, All apps /modules`, show(leads) === show({ 'My workspace': HOME[who], 'My profile': '/profile', 'All apps': '/modules' }), show(leads))
+      // Preferences: /settings when the person could open it before, else the first settings page they can open.
+      const rowBefore = before.pages['/settings']?.row?.items ?? []
+      const openBefore = (p) => before.pages[p] && !before.pages[p].restricted && before.pages[p].at.split(/[?#]/)[0] === p
+      const pathOf = { 'Branding': '/settings/branding', 'Security': '/settings/security', 'Notifications': '/settings/notifications', 'Billing & Plan': '/settings/billing', 'Integrations': '/settings/integrations', 'Document types': '/settings/documents', 'Users & Access': '/users', 'Roles & Permissions': '/roles', 'Audit Logs': '/audit-logs', 'Danger Zone': '/settings/danger' }
+      const prefWant = openBefore('/settings') ? '/settings' : rowBefore.filter((r) => r !== 'Profile').map((r) => pathOf[r]).find((p) => p && openBefore(p))
+      const pref = await lead('Preferences', 'link')
+      const prefSnap = await snap(s.page)
+      const prefPanel = await pagesPanel(s.page)
+      check(`${tag}: Preferences opens ${prefWant} (a settings page they can open) with the Settings pages lit on it`, pref === prefWant && !prefSnap.restricted && prefPanel?.bar === 'Settings pages' && prefPanel.lit.length === 1, `at ${pref}, restricted ${prefSnap.restricted}, panel ${show(prefPanel)}`)
+      // Help & support: its panel opens (the contacts come later; it says so).
+      await s.page.goto(base + '/profile'); await settle(s.page)
+      await (phone ? await openDrawer(s) : await openMore(s)).getByRole('button', { name: 'Help & support', exact: true }).click()
+      const help = s.page.getByRole('dialog', { name: 'Help & support' })
+      check(`${tag}: Help & support opens its panel`, await help.isVisible({ timeout: 10_000 }).catch(() => false))
+      await s.page.keyboard.press('Escape')
+      const signOut = await (async () => { const box = phone ? await openDrawer(s) : await openMore(s); const n = await box.getByRole('button', { name: 'Sign out', exact: true }).count(); await s.page.keyboard.press('Escape'); return n })()
+      check(`${tag}: Sign out is in ${phone ? 'the drawer' : 'More'}`, signOut === 1)
+
+      // The Apps page: no "Workspace settings" (the hub's button), the apps, and Manage plan for plan admins.
+      await s.page.goto(base + '/modules'); await settle(s.page)
+      const appButtons = await s.page.locator('#workspace-content').locator('button, a').evaluateAll((els) => els.filter((el) => el.getClientRects().length > 0).map((el) => (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean))
+      const tiles = await s.page.locator('button.ut-app').count()
+      check(`${tag}: the Apps page has the apps, no "Workspace settings"${PLAN_ADMINS.has(who) ? ', and Manage plan' : ''}`, tiles > 0 && !appButtons.includes('Workspace settings') && appButtons.includes('Manage plan') === PLAN_ADMINS.has(who), show(appButtons))
 
       // ── every settings address, and the pages around them ──
-      for (const path of PAGES) {
-        const r = await same(was, now, path, path, phone)
-        check(`${tag}: ${path} → ${r.b.at} "${r.b.heading.join(' / ')}"${r.b.lit.length ? ` (rail: ${r.b.lit.join(', ')})` : ''} as before`, !r.diff.length, r.diff.slice(0, 3).join(' | '))
+      const docsOpen = openBefore('/settings/documents')
+      const compare = async (label, path, was) => {
+        let now = await look(s, path)
+        let diff = []
+        const run = async () => {
+          diff = []
+          if (now.at !== was.at) diff.push(`at: before ${was.at}, now ${now.at}`)
+          if (now.title !== was.title) diff.push(`title: before ${show(was.title)}, now ${show(now.title)}`)
+          if (show(heading(now.heading)) !== show(heading(was.heading))) diff.push(`heading: before ${show(was.heading)}, now ${show(now.heading)}`)
+          if (now.restricted !== was.restricted) diff.push(`restricted: before ${was.restricted}, now ${now.restricted}`)
+          if (show(barsOf(now.bars)) !== show(barsOf(was.bars))) diff.push(`bars: before ${show(barsOf(was.bars))}, now ${show(barsOf(now.bars))}`)
+          if (!phone) {
+            const railNames = await s.page.locator('.ut-railwrap nav[aria-label="Primary"] a.ut-rail__item').evaluateAll((els) => els.map((a) => a.title))
+            const r = railOk(was, now, railNames, inMore)
+            if (!r.ok) diff.push(`rail: before ${show(was.lit)}${was.gear === 'lit' ? ' + gear' : ''}, now ${show(now.lit)}${now.more ? ' + More' : ''} (want ${r.want})`)
+          }
+          // The old row → its Pages panel, same pages (Document types added), same one lit.
+          if (was.row && PANEL_FOR_ROW[was.row.bar]) {
+            const want = was.row.bar === 'Settings sections' ? settingsPanelWant(was.row, now.at, docsOpen) : { items: was.row.items, lit: was.row.lit }
+            const panel = await pagesPanel(s.page)
+            if (!panel || panel.bar !== PANEL_FOR_ROW[was.row.bar] || show(panel.items) !== show(want.items) || show(panel.lit) !== show(want.lit)) diff.push(`pages: before ${show(was.row)}, now ${show(panel)} (want ${show({ bar: PANEL_FOR_ROW[was.row.bar], ...want })})`)
+          } else if (was.row) note(`${tag}: ${path}: the old "${was.row.bar}" row is My work on the rail now (not compared)`)
+        }
+        await run()
+        if (diff.length) { await s.page.waitForTimeout(2500); now = await look(s, path); await run() }
+        check(`${tag}: ${label} → ${now.at} "${now.heading.join(' / ')}"${now.lit.length ? ` (rail: ${now.lit.join(', ')})` : now.more ? ' (More)' : ''} as before`, !diff.length, diff.slice(0, 3).join(' | '))
+        return now
       }
+      for (const path of PAGES) await compare(path, path, before.pages[path])
       // ── the hub's addresses open the original page ──
       for (const [hub, page] of HUB) {
-        const r = await same(was, now, page, hub, phone)
-        check(`${tag}: ${hub} opens ${page} as it was`, r.b.at === page && !r.diff.length, [`at ${r.b.at}`, ...r.diff.slice(0, 3)].join(' | '))
+        if (before.pages[page]) await compare(`${hub} (the hub's address for ${page})`, hub, before.pages[page])
+        else {
+          const [a, b] = [await look(s, page), await look(s, hub)]
+          const same = a.at === page && show({ ...a, bars: barsOf(a.bars) }) === show({ ...b, bars: barsOf(b.bars) })
+          check(`${tag}: ${hub} opens ${page}, the same as opening it directly`, same, `direct ${show({ at: a.at, heading: a.heading })}, hub ${show({ at: b.at, heading: b.heading })}`)
+        }
       }
 
-      const newErrors = [...now.errors].filter((e) => !was.errors.has(e))
-      check(`${tag}: no page error the old app doesn't show`, !newErrors.length, newErrors.slice(0, 3).join(' | '))
-      const newFailed = [...now.failed].filter((f) => !was.failed.has(f))
-      check(`${tag}: no API 4xx/5xx the old app doesn't show`, !newFailed.length, newFailed.slice(0, 6).join(' | '))
+      check(`${tag}: no page errors`, !s.errors.size, [...s.errors].slice(0, 3).join(' | '))
+      check(`${tag}: no API 4xx/5xx`, !s.failed.size, [...s.failed].slice(0, 6).join(' | '))
     } catch (e) {
-      check(`${tag}: run finished`, false, String(e.message || e).slice(0, 300))
+      // The first line and, from Playwright's call log, why an element could not be used.
+      const lines = String(e.message || e).split('\n').map((l) => l.trim()).filter(Boolean)
+      check(`${tag}: run finished`, false, [lines[0], ...lines.filter((l) => /intercepts|not stable|not visible|not enabled|detached/.test(l)).slice(-2)].join(' / ').slice(0, 500))
     } finally {
-      await was?.context.close().catch(() => {})
-      await now?.context.close().catch(() => {})
+      await s?.context.close().catch(() => {})
     }
   }
 } catch (e) {

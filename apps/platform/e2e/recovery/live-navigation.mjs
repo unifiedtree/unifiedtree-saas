@@ -3,6 +3,7 @@
 // switching is quick once the idle preload has run.
 //
 //   node e2e/recovery/live-navigation.mjs
+/* global console, process, document, window, MutationObserver */
 import { chromium } from '@playwright/test'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'

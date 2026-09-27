@@ -1,6 +1,7 @@
 // Phone width (390): no page scrolls sideways, and the navigation drawer (the rail expanded plus More)
 // opens and closes without widening the page.
 //   RECOVERY_APP_URL=http://demo.localhost:3115 node e2e/recovery/live-mobile-layout.mjs
+/* global console, process, document */
 import { chromium, expect } from '@playwright/test'
 const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:390,height:844}}),base=process.env.RECOVERY_APP_URL||'http://demo.localhost:3002',errors=[]
 page.on('pageerror',e=>errors.push(e.message))

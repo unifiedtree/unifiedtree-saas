@@ -10,7 +10,7 @@
 // Read-only except the role block, which removes everything it adds.
 //
 //   RECOVERY_APP_URL=http://demo.localhost:3115 node e2e/recovery/live-rd-f3a-shell.mjs
-/* global console, process, URL, document, window, localStorage, sessionStorage, getComputedStyle, fetch */
+/* global console, process, URL, document, localStorage, sessionStorage, fetch */
 import { chromium } from '@playwright/test'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3115'
@@ -270,6 +270,18 @@ for (const who of ['reader', 'owner']) {
     await page.getByRole('button', { name: 'Search' }).click()
     const sheet = await page.getByRole('dialog', { name: 'Search' }).isVisible().catch(() => false)
     check(`${who} (phone): the search icon opens today's search`, sheet)
+    await page.keyboard.press('Escape')
+    // The drawer's Preferences: the settings page, and the top bar's Pages button lists the settings pages over it.
+    await page.goto(base + HOME[who]); await settle(page)
+    await page.getByRole('button', { name: 'Open navigation' }).click()
+    await page.getByRole('dialog', { name: 'Navigation' }).getByRole('link', { name: 'Preferences', exact: true }).click(); await settle(page)
+    const pagesBtn = page.getByRole('button', { name: 'Show pages: Settings' })
+    const hasBtn = await pagesBtn.isVisible().catch(() => false)
+    if (hasBtn) await pagesBtn.click()
+    const list = page.getByRole('dialog', { name: 'Settings pages' })
+    const listed = hasBtn && await list.isVisible({ timeout: 5_000 }).catch(() => false)
+    const lit3 = listed ? (await list.locator('a[aria-current="page"]').allTextContents()).map((t) => t.trim()) : []
+    check(`${who} (phone): Preferences in the drawer keeps the Pages button, which lists the settings pages with this one lit`, listed && lit3.length === 1, `${at(page)}; button ${hasBtn}, lit ${JSON.stringify(lit3)}`)
   } catch (e) {
     check(`${who} (phone): run finished`, false, String(e.message || e).slice(0, 300))
   } finally {
