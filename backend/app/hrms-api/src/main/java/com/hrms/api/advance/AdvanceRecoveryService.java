@@ -51,9 +51,51 @@ public class AdvanceRecoveryService {
             BigDecimal scheduledAmount, String status,
             UUID payrollRunId, BigDecimal recoveredAmount, String recoveredAt) {}
 
+    /**
+     * One ledger entry. The redesign (BW-62) added {@code payrollPeriod} (the
+     * month of the payroll run that recovered it, "May 2026"),
+     * {@code paymentReference} (the bank reference finance gave at payout, if
+     * any) and {@code label}, the entry in plain words ("Recovered · May 2026
+     * payroll", "Disbursed · NEFT 1234").
+     */
     public record LedgerRowDto(
             UUID id, String entryType, BigDecimal amount, BigDecimal balanceAfter,
-            UUID payrollRunId, String reference, String notes, String createdAt) {}
+            UUID payrollRunId, String reference, String notes, String createdAt,
+            String payrollPeriod, String paymentReference, String label) {}
+
+    /** The DISBURSE row's reference when finance gave no payment reference (today's literal). */
+    static final String NO_PAYMENT_REFERENCE = "disbursement";
+
+    /** The payment reference finance gave at payout, or null (a DISBURSE row with today's literal has none). */
+    static String paymentReference(String entryType, String reference) {
+        if (!"DISBURSE".equals(entryType) || reference == null || reference.isBlank()
+                || NO_PAYMENT_REFERENCE.equals(reference)) return null;
+        return reference;
+    }
+
+    /** A ledger entry in plain words, for the advance's history. */
+    static String ledgerLabel(String entryType, String reference, String payrollPeriod) {
+        if (entryType == null) return null;
+        return switch (entryType) {
+            case "DISBURSE" -> {
+                String ref = paymentReference(entryType, reference);
+                yield ref == null ? "Disbursed" : "Disbursed · " + ref;
+            }
+            case "REPAYMENT" -> payrollPeriod == null ? "Recovered in payroll" : "Recovered · " + payrollPeriod + " payroll";
+            case "FORECLOSE" -> reference != null && reference.startsWith("fnf-settlement:")
+                    ? "Recovered in the full & final settlement" : "Full repayment recorded";
+            case "WRITE_OFF" -> "Balance written off";
+            case "SKIP_MONTH" -> reference != null && reference.startsWith("installment:")
+                    ? "Installment " + reference.substring("installment:".length()) + " deferred" : "Installment deferred";
+            default -> entryType;
+        };
+    }
+
+    /** "May 2026" for a payroll run's month. */
+    static String periodLabel(int month, int year) {
+        return java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)
+                + " " + year;
+    }
 
     public record ForecloseRequest(
             @jakarta.validation.constraints.NotNull BigDecimal lumpSumAmount,
@@ -95,18 +137,29 @@ public class AdvanceRecoveryService {
     public List<LedgerRowDto> listLedger(UUID tenantId, UUID advanceRequestId) {
         bindTenant(tenantId);
         return jdbc.query("""
-                SELECT * FROM advance_mgmt.advance_ledger_entries
-                 WHERE advance_request_id = ?
-                 ORDER BY created_at ASC
-                """, (rs, i) -> new LedgerRowDto(
-                    rs.getObject("id", UUID.class),
-                    rs.getString("entry_type"),
-                    rs.getBigDecimal("amount"),
-                    rs.getBigDecimal("balance_after"),
-                    rs.getObject("payroll_run_id", UUID.class),
-                    rs.getString("reference"),
-                    rs.getString("notes"),
-                    ts(rs.getTimestamp("created_at"))), advanceRequestId);
+                SELECT l.*, r.period_month, r.period_year
+                  FROM advance_mgmt.advance_ledger_entries l
+                  LEFT JOIN payroll.runs r ON r.id = l.payroll_run_id
+                 WHERE l.tenant_id = ? AND l.advance_request_id = ?
+                 ORDER BY l.created_at ASC
+                """, (rs, i) -> {
+                    String entryType = rs.getString("entry_type");
+                    String reference = rs.getString("reference");
+                    int month = rs.getInt("period_month");
+                    String period = rs.wasNull() || month < 1 || month > 12 ? null : periodLabel(month, rs.getInt("period_year"));
+                    return new LedgerRowDto(
+                        rs.getObject("id", UUID.class),
+                        entryType,
+                        rs.getBigDecimal("amount"),
+                        rs.getBigDecimal("balance_after"),
+                        rs.getObject("payroll_run_id", UUID.class),
+                        reference,
+                        rs.getString("notes"),
+                        ts(rs.getTimestamp("created_at")),
+                        period,
+                        paymentReference(entryType, reference),
+                        ledgerLabel(entryType, reference, period));
+                }, tenantId, advanceRequestId);
     }
 
     @Transactional
@@ -426,6 +479,17 @@ public class AdvanceRecoveryService {
     @Transactional
     public void initSchedule(UUID tenantId, UUID advanceRequestId,
                             int startMonth, int startYear) {
+        initSchedule(tenantId, advanceRequestId, startMonth, startYear, null);
+    }
+
+    /**
+     * As {@link #initSchedule(UUID, UUID, int, int)}, recording the bank
+     * payment reference finance gave at payout on the DISBURSE ledger row
+     * (BW-62). Without one the row keeps today's literal reference.
+     */
+    @Transactional
+    public void initSchedule(UUID tenantId, UUID advanceRequestId,
+                            int startMonth, int startYear, String paymentReference) {
         bindTenant(tenantId);
         lockDisbursedBalance(advanceRequestId);
         Integer existing = jdbc.queryForObject("""
@@ -468,10 +532,11 @@ public class AdvanceRecoveryService {
                 INSERT INTO advance_mgmt.advance_ledger_entries
                     (tenant_id, advance_request_id, entry_type,
                      amount, balance_after, reference, notes)
-                VALUES (?, ?, 'DISBURSE', ?, ?, 'disbursement',
+                VALUES (?, ?, 'DISBURSE', ?, ?, ?,
                         'Advance disbursed; recovery schedule seeded')
                 """,
-                tenantId, advanceRequestId, principal, principal);
+                tenantId, advanceRequestId, principal, principal,
+                paymentReference == null || paymentReference.isBlank() ? NO_PAYMENT_REFERENCE : paymentReference.trim());
 
         // Emit N monthly rows starting at (startMonth, startYear).
         LocalDate m = LocalDate.of(startYear, startMonth, 1);
