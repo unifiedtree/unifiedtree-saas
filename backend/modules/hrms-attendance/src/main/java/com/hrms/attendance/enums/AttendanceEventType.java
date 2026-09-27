@@ -8,5 +8,11 @@ public enum AttendanceEventType {
     MANUAL_ENTRY,
     CORRECTION_REQUESTED,
     CORRECTION_APPROVED,
-    CORRECTION_REJECTED
+    CORRECTION_REJECTED,
+    /**
+     * A change to a punch that isn't a new punch, a manual entry or a fix
+     * (the event_logs check has always allowed it): the employee took back
+     * their own check-out within 10 minutes (V143.53, undo check-out).
+     */
+    MANUAL_OVERRIDE
 }

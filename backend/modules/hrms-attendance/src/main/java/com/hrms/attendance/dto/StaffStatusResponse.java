@@ -63,8 +63,39 @@ public record StaffStatusResponse(
         // Minutes before the shift end the person left (early leave), else null.
         Integer earlyByMinutes,
         // Minutes between check-in and check-out, else null.
-        Integer workedMinutes
+        Integer workedMinutes,
+        // ── Roster row facts (V143.53 redesign, BW-13). Additive: every field
+        // above keeps its meaning; the mobile app ignores these.
+        // The employee's branch, or null when they have none.
+        String branchName,
+        // How the day's check-in was made (FACE_RECOGNITION, GPS, WEB,
+        // MANAGER_OVERRIDE …); null without a check-in.
+        String checkInMethod,
+        // The APPROVED leave that covers the date (the one `onLeave` counts):
+        // its type and first and last day. Null when not on approved leave.
+        String leaveTypeName,
+        java.time.LocalDate leaveFrom,
+        java.time.LocalDate leaveTo,
+        // True when a leave request still waiting for approval covers the date.
+        // Pending leave never counts as "on leave".
+        boolean pendingLeave
 ) {
+    /** The shape before BW-13 (the new roster facts left empty). */
+    public StaffStatusResponse(UUID employeeId, String employeeCode, String fullName, String jobTitle, UUID departmentId,
+                               String departmentName, String profilePhotoUrl, String status, Instant checkInAt,
+                               Instant checkOutAt, String locationName, Double latitude, Double longitude,
+                               boolean earlyCheckout, String attendanceType, boolean onLeave, String shiftName,
+                               Instant expectedCheckInAt, Integer graceMinutes, Integer lateByMinutes,
+                               String effectiveStatus, String statusNote, boolean statusManual, boolean lossOfPay,
+                               boolean withinAllowance, boolean outsideGeofence, boolean punchRejected,
+                               Integer earlyByMinutes, Integer workedMinutes) {
+        this(employeeId, employeeCode, fullName, jobTitle, departmentId, departmentName, profilePhotoUrl, status,
+                checkInAt, checkOutAt, locationName, latitude, longitude, earlyCheckout, attendanceType, onLeave,
+                shiftName, expectedCheckInAt, graceMinutes, lateByMinutes, effectiveStatus, statusNote, statusManual,
+                lossOfPay, withinAllowance, outsideGeofence, punchRejected, earlyByMinutes, workedMinutes,
+                null, null, null, null, null, false);
+    }
+
     /** Minutes late for a LATE record against its scheduled start; null otherwise. */
     public static Integer lateBy(String status, Instant checkInAt, Instant expectedCheckInAt) {
         if (!"LATE".equals(status) || checkInAt == null || expectedCheckInAt == null) return null;
