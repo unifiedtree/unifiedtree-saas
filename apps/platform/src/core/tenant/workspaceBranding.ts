@@ -184,7 +184,7 @@ function xmlEscape(s: string) {
  */
 export function monogramFaviconUrl(letter: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0c5a45"/>`
-    + `<text x="32" y="45" text-anchor="middle" font-family="'Plus Jakarta Sans',Inter,Arial,sans-serif" font-size="38" font-weight="800" fill="#ffffff">${xmlEscape(letter || '')}</text></svg>`
+    + `<text x="32" y="45" text-anchor="middle" font-family="'Plus Jakarta Sans',Arial,sans-serif" font-size="38" font-weight="800" fill="#ffffff">${xmlEscape(letter || '')}</text></svg>`
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 

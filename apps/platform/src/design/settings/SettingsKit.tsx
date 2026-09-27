@@ -12,7 +12,7 @@ import { Field, Input, Modal } from '@unifiedtree/ui-kit'
 import { dashIcon, dashIconComponent } from '@/design/dc/icons'
 import { useIsMobile } from '@/design/dc/DesignFrame'
 
-const FONT = 'Inter,-apple-system,sans-serif'
+const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
 const CARD: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 }
 
 export interface SettingsNavItem { key: string; label: string; state: 'on' | 'off' | 'soon' | 'none'; errors?: number; meta?: string }
@@ -279,7 +279,7 @@ export function SettingsSection({ id, icon, title, summary, on, onToggle, locked
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
         <span aria-hidden="true" style={{ flex: '0 0 auto', width: 40, height: 40, boxSizing: 'border-box', borderRadius: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${active ? '#d1fae5' : '#e2e8f0'}`, background: active ? '#ecfdf5' : '#f8fafc', color: active ? '#0f6e56' : '#94a3b8' }}>{dashIcon(icon, 20)}</span>
         <div style={{ flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 3 }}>
-          <h2 id={`st-${id}-h`} tabIndex={-1} style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: '-.01em', lineHeight: 1.3, outline: 'none' }}>{title}</h2>
+          <h2 id={`st-${id}-h`} tabIndex={-1} style={{ margin: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: 16, fontWeight: 700, letterSpacing: '-.01em', lineHeight: 1.3, outline: 'none' }}>{title}</h2>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: '#64748b', textWrap: 'pretty' as any }}>{summary}</p>
         </div>
         {soon ? <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 999, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Coming soon</span>

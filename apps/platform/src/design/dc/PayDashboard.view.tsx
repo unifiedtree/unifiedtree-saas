@@ -11,7 +11,7 @@ import './PayDashboard.view.css'
 export function PayDashboardView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
           <span aria-hidden="true" style={{position: "absolute", right: "-60px", top: "-150px", width: "380px", height: "320px", borderRadius: "999px", background: "rgba(16,185,129,.10)", filter: "blur(60px)", pointerEvents: "none"}} />
           <div style={{position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px 24px", padding: "clamp(18px,2.4vw,26px) clamp(18px,2.6vw,30px)"}}>
@@ -19,7 +19,7 @@ export function PayDashboardView({ v }: { v: any }) {
               <p style={{margin: "0", fontSize: "12.5px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#0f6e56"}}>
                 {"Payroll / Payroll Dashboard"}
               </p>
-              <h1 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "clamp(22px,2.4vw,28px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
+              <h1 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "clamp(22px,2.4vw,28px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
                 {"Payroll Dashboard"}
               </h1>
               <p style={{margin: "0", fontSize: "14px", lineHeight: "1.5", color: "#475569", textWrap: "pretty"}}>
@@ -70,7 +70,7 @@ export function PayDashboardView({ v }: { v: any }) {
             <div style={{display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: "16px"}}>
               <section style={{flex: "3 1 440px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "18px", alignContent: "start"}}>
                 <div style={{display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "4px 12px"}}>
-                  <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "700"}}>
+                  <h2 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                     {"Payroll cost · last 6 months"}
                   </h2>
                   <span style={{fontSize: "12.5px", color: "#64748b"}}>
@@ -105,7 +105,7 @@ export function PayDashboardView({ v }: { v: any }) {
                       {"This month’s run"}
                     </span>
                     <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                      <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "20px", fontWeight: "800", letterSpacing: "-.01em"}}>
+                      <h2 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "20px", fontWeight: "800", letterSpacing: "-.01em"}}>
                         {txt(v.runLabel)}
                       </h2>
                       <HrStatusPill tone={v.pillTone}>
@@ -128,7 +128,7 @@ export function PayDashboardView({ v }: { v: any }) {
             </div>
             <div style={{display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: "16px"}}>
               <section style={{flex: "1 1 360px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "4px", alignContent: "start"}}>
-                <h2 style={{margin: "0 0 8px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "700"}}>
+                <h2 style={{margin: "0 0 8px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                   {"Statutory dues"}
                 </h2>
                 {arr(v.dues).map((d: any, $index: number) => (
@@ -161,7 +161,7 @@ export function PayDashboardView({ v }: { v: any }) {
               </section>
               <section style={{flex: "1 1 360px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "4px", alignContent: "start"}}>
                 <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px"}}>
-                  <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "700"}}>
+                  <h2 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                     {"Recent runs"}
                   </h2>
                   <button type="button" onClick={v.goRuns} data-tip="Opens Processing & Payslips" style={{padding: "0", border: "0", background: "none", font: "inherit", fontSize: "13px", fontWeight: "700", color: "#0f6e56", cursor: "pointer"}} className="dc-pay-dashboard-0">

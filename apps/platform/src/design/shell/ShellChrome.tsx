@@ -8,7 +8,7 @@ import { preloadPath } from '@/shared/routing/lazyPage'
 import { useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
 import './shell.css'
 
-export const CHROME_FONT = 'Inter,-apple-system,sans-serif'
+export const CHROME_FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
 
 export interface RailEntry {
   key: string
@@ -58,7 +58,7 @@ export function BrandMark({ size = 23, dot = 8 }: { size?: number; dot?: number 
       style={{ height: `${h}px`, width: 'auto', maxWidth: b.markUrl ? `${h}px` : `${Math.round(h * 2.4)}px`, objectFit: 'contain', display: 'block' }} />
   }
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: 800, fontSize: `${size}px`, letterSpacing: '-.05em', lineHeight: '.9', color: '#fff' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: 800, fontSize: `${size}px`, letterSpacing: '-.05em', lineHeight: '.9', color: '#fff' }}>
       {b.monogram}
       <i style={{ width: `${dot}px`, height: `${dot}px`, borderRadius: '999px', background: '#6ee7b7', display: 'inline-block', marginBottom: '3px' }} />
     </span>
@@ -103,7 +103,7 @@ export function HeaderSearch({ onOpen }: { onOpen: () => void }) {
         onFocus={() => { ref.current?.blur(); onOpen() }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
         style={{ flex: '1', minWidth: '0', border: '0', outline: 'none', font: 'inherit', fontSize: '14px', color: '#0f172a', background: 'transparent', cursor: 'text' }} />
-      <kbd style={{ fontFamily: 'Inter,sans-serif', fontSize: '11px', fontWeight: 600, color: '#475569', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 6px', whiteSpace: 'nowrap' }}>⌘ K</kbd>
+      <kbd style={{ fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: '11px', fontWeight: 600, color: '#475569', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 6px', whiteSpace: 'nowrap' }}>⌘ K</kbd>
     </label>
   )
 }

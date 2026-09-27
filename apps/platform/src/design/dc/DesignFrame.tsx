@@ -1,5 +1,5 @@
 // The page frame every redesigned screen sits in (the prototype's content
-// container): 1320px max width, Inter body text, and the design's desktop /
+// container): 1320px max width, the app font, and the design's desktop /
 // mobile padding.
 import { useEffect, useState, type ReactNode } from 'react'
 
@@ -19,7 +19,7 @@ export function useIsMobile() {
 export function DesignFrame({ children }: { children: ReactNode }) {
   const mobile = useIsMobile()
   return (
-    <div style={{ maxWidth: '1320px', margin: '0 auto', padding: mobile ? '16px 16px 40px' : '24px clamp(16px,2.5vw,28px) 48px', minWidth: 0, boxSizing: 'border-box', fontFamily: 'Inter,-apple-system,sans-serif' }}>
+    <div style={{ maxWidth: '1320px', margin: '0 auto', padding: mobile ? '16px 16px 40px' : '24px clamp(16px,2.5vw,28px) 48px', minWidth: 0, boxSizing: 'border-box', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>
       {children}
     </div>
   )

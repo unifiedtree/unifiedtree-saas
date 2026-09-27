@@ -9,7 +9,7 @@ import { arr, txt } from './dc-runtime'
 export function PayrollEmployeesView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "12px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "grid", gap: "12px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         {v.isDraft ? (
           <>
             <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>

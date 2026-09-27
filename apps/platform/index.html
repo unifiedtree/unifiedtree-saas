@@ -17,21 +17,22 @@
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Sign in to your workspace" />
     <meta name="twitter:description" content="HR, attendance, payroll and more." />
+    <!-- One typeface for the whole app: Plus Jakarta Sans, 400/500/600 only
+         (nothing heavier can render). Codes and IDs use the system monospace. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <!-- Tabler Icons webfont — client HR design uses ti ti-* icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css" />
-    <!-- No-flash theme script: reads ut.theme from localStorage and sets data-theme BEFORE paint -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- No-flash theme: applies the saved light/dark choice ('ut.theme', default
+         light; the sign-in pages always light) and the default motion level
+         BEFORE paint. Same rules as src/design/theme/theme.ts — keep the two in step. -->
     <script>
       (function () {
-        try {
-          var t = localStorage.getItem('ut.theme') || 'system';
-          var resolved = t === 'system'
-            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-            : t;
-          document.documentElement.setAttribute('data-theme', resolved);
-        } catch (_) {}
+        var d = document.documentElement, t = 'light';
+        try { if (localStorage.getItem('ut.theme') === 'dark') t = 'dark'; } catch (_) {}
+        if (/^\/(login|forgot-password|reset-password|accept-invite|pending-approval)(\/|$)/.test(location.pathname)) t = 'light';
+        d.setAttribute('data-theme', t);
+        d.style.colorScheme = t;
+        if (!d.hasAttribute('data-ufx')) d.setAttribute('data-ufx', 'full');
       })();
     </script>
   </head>

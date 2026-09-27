@@ -6,7 +6,7 @@ import { arr } from './dc-runtime'
 export function ShiftBarView({ v }: { v: any }) {
   return (
     <>
-      <div role="img" aria-label={v.aria} style={{display: "grid", gap: "5px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif"}}>
+      <div role="img" aria-label={v.aria} style={{display: "grid", gap: "5px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"}}>
         <div style={{position: "relative", height: "12px", borderRadius: "999px", overflow: "hidden", background: "#f1f5f9"}}>
           <span aria-hidden="true" style={{position: "absolute", left: "0", top: "0", bottom: "0", width: "25%", background: "#e4e9f2"}} />
           <span aria-hidden="true" style={{position: "absolute", right: "0", top: "0", bottom: "0", width: "16.667%", background: "#e4e9f2"}} />

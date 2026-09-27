@@ -7,7 +7,7 @@ import './ProcessSteps.view.css'
 export function ProcessStepsView({ v }: { v: any }) {
   return (
     <>
-      <ol aria-label={v.label} style={{listStyle: "none", margin: "0", padding: "0", width: "100%", display: "flex", alignItems: "flex-start", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif"}}>
+      <ol aria-label={v.label} style={{listStyle: "none", margin: "0", padding: "0", width: "100%", display: "flex", alignItems: "flex-start", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"}}>
         {arr(v.items).map((s: any, $index: number) => (
           <Fragment key={$index}>
             <li aria-current={s?.ariaCurrent} style={{flex: "1 1 0", minWidth: "0", display: "grid", gap: "10px", justifyItems: "center", textAlign: "center"}}>

@@ -7,7 +7,7 @@ import './TimePicker.view.css'
 export function TimePickerView({ v }: { v: any }) {
   return (
     <>
-      <div ref={v.rootRef} style={{position: "relative", width: "100%", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div ref={v.rootRef} style={{position: "relative", width: "100%", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         <button ref={v.triggerRef} type="button" onClick={v.toggle} onKeyDown={v.triggerKey} aria-haspopup="dialog" aria-expanded={v.open} aria-label={v.triggerAria} style={{position: "relative", width: "100%", height: "42px", display: "flex", alignItems: "center", gap: "10px", padding: "0 12px", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: "10px", background: "#fff", font: "inherit", fontSize: "14px", fontWeight: "500", color: "#0f172a", textAlign: "left", cursor: "pointer", outline: "none", transition: "border-color .15s,box-shadow .15s"}} className="dc-time-picker-0 dc-time-picker-1">
           {v.open ? (
             <>
@@ -38,12 +38,12 @@ export function TimePickerView({ v }: { v: any }) {
         {v.open ? (
           <>
             <UTPortal>
-              <div ref={v.setPop} role="dialog" aria-label={v.heading} onMouseDown={v.keepFocus} style={{position: "fixed", top: "0", left: "0", zIndex: "1200", width: "276px", boxSizing: "border-box", padding: "12px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 24px 48px -16px rgba(15,23,42,.32),0 2px 6px rgba(15,23,42,.06)", display: "grid", gap: "10px", fontFamily: "Inter,-apple-system,sans-serif", fontSize: "13px", fontWeight: "500", color: "#0f172a", textAlign: "left", userSelect: "none"}}>
+              <div ref={v.setPop} role="dialog" aria-label={v.heading} onMouseDown={v.keepFocus} style={{position: "fixed", top: "0", left: "0", zIndex: "1200", width: "276px", boxSizing: "border-box", padding: "12px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 24px 48px -16px rgba(15,23,42,.32),0 2px 6px rgba(15,23,42,.06)", display: "grid", gap: "10px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "13px", fontWeight: "500", color: "#0f172a", textAlign: "left", userSelect: "none"}}>
                 <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "2px 4px 0"}}>
                   <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
                     {txt(v.heading)}
                   </span>
-                  <strong style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "20px", fontWeight: "800", letterSpacing: "-.01em", fontVariantNumeric: "tabular-nums", color: "#0f172a"}}>
+                  <strong style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "20px", fontWeight: "800", letterSpacing: "-.01em", fontVariantNumeric: "tabular-nums", color: "#0f172a"}}>
                     {txt(v.big)}
                   </strong>
                 </div>

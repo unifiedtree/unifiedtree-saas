@@ -61,7 +61,7 @@ export function EssDashboard() {
     <ModulePage crumb="My workspace" title={`${greeting}, ${greetingName(user?.firstName, user?.lastName) || 'there'}`} subtitle={today}
       actions={canLeave ? <HrButton onClick={() => navigate('/hrms/leave?tab=apply')}>{dashIcon('plus', 15)} Apply for leave</HrButton> : undefined}>
       <div style={{ display: 'grid', gap: 12 }}>
-        <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: 16, fontWeight: 800 }}>This month</h2>
+        <h2 style={{ margin: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: 16, fontWeight: 800 }}>This month</h2>
         {stats.isLoading ? <State kind="loading" height={96} />
           : stats.error ? <State kind="error" title="Couldn’t load this month’s attendance" description="Check your connection and try again." onRetry={() => stats.refetch()} />
             : m ? <StatRow min={150} tiles={[
@@ -88,7 +88,7 @@ export function EssDashboard() {
         </Panel>
         <div style={{ ...CARD, overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px 12px', display: 'grid', gap: 2, borderBottom: '1px solid #f1f5f9' }}>
-            <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: 16, fontWeight: 700 }}>Requests and records</h3>
+            <h3 style={{ margin: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: 16, fontWeight: 700 }}>Requests and records</h3>
             <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Things you can ask for or look up yourself</p>
           </div>
             {canWfh && <Shortcut icon="home" title="Work from home" sub="Ask to work from home on some days" cta="Request" onClick={() => navigate('/me/wfh')} />}

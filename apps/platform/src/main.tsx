@@ -1,11 +1,13 @@
 import '@unifiedtree/design-system/tokens.css'
+import './design/theme/tokens.css'
 import './globals.css'
+import './design/theme/base.css'
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import { ThemeProvider } from './providers/ThemeProvider'
+import { ThemeProvider, ThemeRoute } from './design/theme'
 import { QueryProvider } from './providers/QueryProvider'
 import { AuthProvider } from './providers/AuthProvider'
 import { NotificationProvider } from './core/notifications/NotificationProvider'
@@ -30,6 +32,7 @@ enableMocking().then(() => {
       <ThemeProvider>
         <QueryProvider>
           <BrowserRouter>
+            <ThemeRoute />
             <AuthProvider>
               <NotificationProvider>
                 <ConfirmDialogProvider>

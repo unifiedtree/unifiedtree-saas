@@ -10,7 +10,7 @@ export function NewRunModalView({ v }: { v: any }) {
   return (
     <>
       <Modal open={v.isOpen} onOpenChange={v.onOpenChange} title="New payroll run" description="Choose the company and month to pay. You’ll process it on the next screen." size="md" preventOutsideClose={v.busy}>
-        <div style={{display: "grid", gap: "18px", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+        <div style={{display: "grid", gap: "18px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
           <div style={{display: "grid", gap: "6px"}}>
             <span style={{fontSize: "13px", fontWeight: "600"}}>
               {"Company"}

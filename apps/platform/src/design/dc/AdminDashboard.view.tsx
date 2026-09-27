@@ -50,7 +50,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <>
             <section aria-labelledby="sec-live">
               <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-                <h2 id="sec-live" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                <h2 id="sec-live" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
                   <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icClock)}
                   </span>
@@ -85,7 +85,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <>
             <section aria-labelledby="sec-summary">
               <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-                <h2 id="sec-summary" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                <h2 id="sec-summary" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
                   <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icBuilding)}
                   </span>
@@ -116,7 +116,7 @@ export function AdminDashboardView({ v }: { v: any }) {
         <section aria-label="Quick actions and seats" style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
           <div style={{flex: "1.5 1 340px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-              <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+              <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
                 {"Quick actions"}
               </h3>
               <span style={{fontSize: "12px", color: "#64748b"}}>
@@ -138,7 +138,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           </div>
           <div style={{flex: "1.2 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 18px 16px", display: "flex", flexDirection: "column", gap: "12px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
-              <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+              <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
                 {txt(v.urgentPulse)}{txt(v.alertsTitle)}
               </h3>
               {v.alertsList ? (
@@ -261,7 +261,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <>
             <section aria-labelledby="sec-att">
               <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-                <h2 id="sec-att" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                <h2 id="sec-att" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
                   <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icActivity)}
                   </span>
@@ -274,7 +274,7 @@ export function AdminDashboardView({ v }: { v: any }) {
               <div style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
                 <div style={{flex: "1.4 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
                   <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
                       {"Weekly Attendance Trend"}
                     </h3>
                     <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap"}}>
@@ -297,7 +297,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 </div>
                 <div style={{flex: "1 1 320px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
                   <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
                       {txt(v.todayTitle)}
                     </h3>
                     <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums"}}>
@@ -319,7 +319,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                             </Fragment>
                           ))}
                           <div style={{position: "absolute", inset: "0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center"}}>
-                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
+                            <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "26px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
                               {txt(v.presentCount)}
                             </span>
                             <span style={{fontSize: "11px", color: "#64748b", marginTop: "3px"}}>
@@ -366,7 +366,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <>
             <section aria-labelledby="sec-emp">
               <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-                <h2 id="sec-emp" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                <h2 id="sec-emp" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
                   <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icUsers)}
                   </span>
@@ -384,7 +384,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 {v.show?.dept ? (
                   <>
                     <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-                      <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                      <h3 style={{margin: "0 0 4px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
                         {"Dept Distribution"}
                       </h3>
                       <p style={{margin: "0 0 16px", fontSize: "12px", color: "#64748b"}}>
@@ -448,7 +448,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 {v.show?.performers ? (
                   <>
                     <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-                      <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
+                      <h3 style={{margin: "0 0 4px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
                         {"Top performers"}
                       </h3>
                       <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
@@ -486,7 +486,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 {v.show?.onboarding ? (
                   <>
                     <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "flex", flexDirection: "column"}}>
-                      <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                      <h3 style={{margin: "0 0 4px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
                         {"Onboarding tracker"}
                       </h3>
                       <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
@@ -550,7 +550,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 <>
                   <div style={{flex: "1.4 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
                     <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                      <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
                         <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                           {txt(v.icBriefcase)}
                         </span>
@@ -564,7 +564,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                       <>
                         <div style={{display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "10px", marginBottom: "18px"}}>
                           <button type="button" onClick={v.goOpenRoles} data-tip={v.tips?.goOpenRoles} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
-                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
+                            <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
                               {txt(v.hiring?.openJobs)}
                             </span>
                             <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
@@ -572,7 +572,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                             </span>
                           </button>
                           <button type="button" onClick={v.goCandidates} data-tip={v.tips?.goCandidates} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
-                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#1d4ed8", fontVariantNumeric: "tabular-nums"}}>
+                            <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#1d4ed8", fontVariantNumeric: "tabular-nums"}}>
                               {txt(v.hiring?.pipeline)}
                             </span>
                             <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
@@ -580,7 +580,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                             </span>
                           </button>
                           <button type="button" onClick={v.goInterviews} data-tip={v.tips?.goInterviews} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
-                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#047857", fontVariantNumeric: "tabular-nums"}}>
+                            <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#047857", fontVariantNumeric: "tabular-nums"}}>
                               {txt(v.hiring?.interviews)}
                             </span>
                             <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
@@ -624,7 +624,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 <>
                   <div style={{flex: "1 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
                     <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "12px"}}>
-                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
+                      <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
                         {"Projects & Productivity"}
                       </h3>
                       <button type="button" onClick={v.goProjects} data-tip={v.tips?.goProjects} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
@@ -640,7 +640,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                               <circle cx="21" cy="21" r="15.915" fill="none" stroke={v.ringColor} strokeWidth="4" strokeLinecap="round" strokeDasharray={v.ringDash} />
                             </svg>
                             <div style={{position: "absolute", inset: "0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center"}}>
-                              <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "22px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
+                              <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "22px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
                                 {txt(v.projects?.completion)}{"%"}
                               </span>
                               <span style={{fontSize: "10px", color: "#64748b", marginTop: "3px"}}>
@@ -695,7 +695,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 <>
                   <div style={{flex: "2 1 420px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
                     <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "4px"}}>
-                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                      <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
                         <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                           {txt(v.icRupee)}
                         </span>
@@ -728,7 +728,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 <>
                   <div style={{flex: "1 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
                     <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                      <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
                         <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                           {txt(v.icActivity)}
                         </span>
@@ -780,7 +780,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <>
             <section aria-labelledby="sec-notices" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
               <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "6px"}}>
-                <h2 id="sec-notices" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                <h2 id="sec-notices" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
                   <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icMegaphone)}
                   </span>
@@ -850,7 +850,7 @@ export function AdminDashboardView({ v }: { v: any }) {
             <>
               <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px 12px"}}>
                 <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px 12px", marginBottom: "10px"}}>
-                  <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <h2 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
                     <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                       {txt(v.icCalendarClock)}
                     </span>
@@ -883,7 +883,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <>
             <section aria-labelledby="sec-ops">
               <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-                <h2 id="sec-ops" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                <h2 id="sec-ops" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
                   <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icInbox)}
                   </span>
@@ -897,7 +897,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                       <p style={{margin: "0", fontSize: "11px", fontWeight: "700", letterSpacing: ".1em", textTransform: "uppercase", color: "#6ee7b7", fontVariantNumeric: "tabular-nums"}}>
                         {txt(o?.eyebrow)}
                       </p>
-                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", lineHeight: "1.3", color: "#fff"}}>
+                      <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: "700", fontSize: "17px", lineHeight: "1.3", color: "#fff"}}>
                         {txt(o?.title)}
                       </h3>
                       <p style={{margin: "0", fontSize: "13px", color: "rgba(255,255,255,.82)", lineHeight: "1.55", flex: "1", textWrap: "pretty"}}>

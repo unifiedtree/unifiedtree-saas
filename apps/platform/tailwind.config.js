@@ -48,8 +48,10 @@ export default {
         'warning-light': '#FEF3C7',
         info: '#3B82F6',
         'info-light': '#DBEAFE',
-        border: '#E5E5E5',
-        'border-light': '#F5F5F5',
+        // Theme-aware lines (redesign --u-ln / --u-ln2, as RGB channels so
+        // `border-border/60` style opacity still works); dark theme flips them.
+        border: 'rgb(var(--u-ln-rgb, 227 233 230) / <alpha-value>)',
+        'border-light': 'rgb(var(--u-ln2-rgb, 237 241 239) / <alpha-value>)',
         divider: '#E5E5E5',
         // ── Literal semantic aliases (palette source of truth = Attendance app).
         //    These mirror the var-backed *-text-*/*-bg-* tokens above so that
@@ -77,16 +79,28 @@ export default {
           cream: '#ECFDF5',
         },
       },
+      // One typeface for the whole app (redesign --u-font), loaded in index.html.
       fontFamily: {
-        heading: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'sans-serif'],
-        body: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'monospace'],
-        display: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        heading: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        body: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+      },
+      // Weights 400/500/600 only: nothing heavier than 600 renders.
+      fontWeight: {
+        bold: '600',
+        extrabold: '600',
+        black: '600',
+      },
+      // Border colour of a bare `border` / `divide-*` class follows the theme.
+      borderColor: {
+        DEFAULT: 'var(--border-default, #E3E9E6)',
       },
       fontSize: {
-        'display': ['clamp(2.8rem, 5vw, 4.5rem)', { lineHeight: '1.1', fontWeight: '800' }],
-        'h2': ['clamp(2rem, 3.5vw, 3rem)', { lineHeight: '1.2', fontWeight: '700' }],
-        'h3': ['1.5rem', { lineHeight: '1.3', fontWeight: '700' }],
+        'display': ['clamp(2.8rem, 5vw, 4.5rem)', { lineHeight: '1.1', fontWeight: '600' }],
+        'h2': ['clamp(2rem, 3.5vw, 3rem)', { lineHeight: '1.2', fontWeight: '600' }],
+        'h3': ['1.5rem', { lineHeight: '1.3', fontWeight: '600' }],
       },
       animation: {
         'float': 'float 4s ease-in-out infinite',

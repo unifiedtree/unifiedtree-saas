@@ -7,7 +7,7 @@ import './SubTabs.view.css'
 export function SubTabsView({ v }: { v: any }) {
   return (
     <>
-      <div role="group" aria-label={v.label} style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", fontFamily: "Inter,-apple-system,sans-serif"}}>
+      <div role="group" aria-label={v.label} style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"}}>
         {arr(v.items).map((it: any, $index: number) => (
           <Fragment key={$index}>
             {it?.active ? (

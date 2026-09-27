@@ -17,7 +17,7 @@ export function MonogramTile({ letter, size, tone = 'light', radius }: { letter:
         borderRadius: radius ?? Math.round(size * 0.3),
         background: ground ? 'rgba(255,255,255,0.62)' : '#059669',
         color: ground ? '#04503A' : '#fff',
-        fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: 800, fontSize: Math.round(size * 0.5), lineHeight: 1,
+        fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: 800, fontSize: Math.round(size * 0.5), lineHeight: 1,
         boxShadow: ground ? '0 1px 2px rgba(4,80,58,.12)' : undefined,
       }}>
       {letter}

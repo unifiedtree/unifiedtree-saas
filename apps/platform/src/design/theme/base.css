@@ -1,0 +1,29 @@
+/* ============================================================================
+ * Global rules of the redesign theme (loaded once, after globals.css, in
+ * main.tsx). The dark-theme bridge for older screens is in dark-bridge.css.
+ * ========================================================================== */
+
+/* ── Type: one typeface, nothing heavier than 600 ────────────────────────── */
+/* The font is loaded at 400/500/600 only, so a 700/800 request renders the
+   600 face; never let the browser fake a bolder one. */
+html {
+  font-synthesis-weight: none;
+}
+/* The browser defaults for these are bold (700). Headings already inherit
+   (Tailwind's reset). */
+b,
+strong,
+th {
+  font-weight: 600;
+}
+
+/* Figures that must line up (the design's tabular numbers). */
+.u-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Page background of the app shell (globals.css hardcodes #F8FAFC) ───── */
+.company-workspace,
+.workspace-content {
+  background-color: var(--bg-canvas, #F3F6F4);
+}
