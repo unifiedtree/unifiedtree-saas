@@ -38,10 +38,15 @@ export function ModulePage({ crumb, title, subtitle, actions, children, gap = 20
 }
 
 export interface ViewTab { key: string; label: string; count?: number | string | null; urgent?: boolean; icon?: string; tip?: string }
-/** The design's view pills. The active one is kept in ?view= (or the given param) so links and Back work. */
-export function Views({ items, active, onChange, label = 'Views' }: { items: ViewTab[]; active: string; onChange: (k: string) => void; label?: string }) {
+/**
+ * The design's view pills. The active one is kept in ?view= (or the given param) so links and Back work.
+ * `placement="header"` puts a page's top-level bar into the shell's top bar (SHELL CONTRACT 1);
+ * the default `'inline'` keeps it where it stands.
+ */
+export function Views({ items, active, onChange, label = 'Views', placement = 'inline' }: { items: ViewTab[]; active: string; onChange: (k: string) => void; label?: string; placement?: 'header' | 'inline' }) {
   return h(SubTabs as any, {
     label,
+    placement,
     items: items.map((t) => ({ key: t.key, label: t.label, count: t.count === 0 ? undefined : t.count ?? undefined, urgent: t.urgent, icon: t.icon ? dashIcon(t.icon, 15) : null, tip: t.tip, active: t.key === active, onClick: () => onChange(t.key) })),
   })
 }

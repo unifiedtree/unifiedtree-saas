@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { HeaderSections, HeaderSlotProvider, HeaderTabs } from './HeaderTabs'
+import { SubTabs, subTabsHeaderProps } from '@/design/dc/SubTabs'
+import { Views } from '@/design/module/ModuleKit'
 
 const items = [
   { key: 'my', label: 'My leave' },
@@ -41,5 +43,45 @@ describe('HeaderTabs (shell contract 1)', () => {
     const html = renderToString(createElement(HeaderSections, { label: 'Dashboard sections', items: [{ key: 'overview', label: 'Overview' }, { key: 'people', label: 'People' }], active: 'people', onSelect: () => {} }))
     expect(html).toContain('<nav aria-label="Dashboard sections"')
     expect(html).toContain('aria-current="location"')
+  })
+})
+
+describe('placement on the legacy bars (ModuleKit Views, design/dc SubTabs)', () => {
+  const sub = [
+    { key: 'p', label: 'Pending', count: 2, urgent: true, active: true, onClick: () => {} },
+    { key: 'd', label: 'Decided', count: '', onClick: () => {} },
+  ]
+
+  it('inline (the default) is today’s bar, unchanged', () => {
+    const html = renderToString(createElement(SubTabs, { label: 'Overtime views', items: sub }))
+    expect(html).toContain('dcsub')
+    expect(html).not.toContain('ut-htabs')
+    const views = renderToString(createElement(Views, { label: 'Leave views', items: [{ key: 'a', label: 'A' }], active: 'a', onChange: () => {} }))
+    expect(views).toContain('dcsub')
+  })
+
+  it('header: the HeaderTabs bar with the same group/pressed semantics and counts (in place outside the shell)', () => {
+    const html = renderToString(createElement(SubTabs, { label: 'Overtime views', items: sub, placement: 'header' }))
+    expect(html).toContain('ut-htabs')
+    expect(html).toContain('role="group"')
+    expect(html).toContain('aria-label="Overtime views"')
+    expect(html.match(/aria-pressed="true"/g)?.length).toBe(1)
+    expect(html).toMatch(/<span>Pending<\/span><span class="ut-htab-n is-on">2<\/span>/)
+    expect(html).not.toMatch(/Decided<\/span><span class="ut-htab-n/)
+  })
+
+  it('header inside the shell waits for the top bar’s slot (Views passes placement through)', () => {
+    const html = renderToString(createElement(HeaderSlotProvider, null,
+      createElement(Views, { label: 'Leave views', items: [{ key: 'a', label: 'A' }, { key: 'b', label: 'B', count: 4 }], active: 'b', onChange: () => {}, placement: 'header' })))
+    expect(html).not.toContain('Leave views')
+  })
+
+  it('a header pill runs the item’s own onClick; the active item is the one flagged active', () => {
+    const hits: string[] = []
+    const props = subTabsHeaderProps({ label: 'X', items: [{ key: 'a', label: 'A', onClick: () => hits.push('a') }, { key: 'b', label: 'B', active: true, onClick: () => hits.push('b') }] })
+    expect(props.active).toBe('b')
+    props.onChange('a')
+    expect(hits).toEqual(['a'])
+    expect(subTabsHeaderProps({ items: [] }).label).toBe('Views')
   })
 })
