@@ -1,0 +1,53 @@
+/* ModuleKit (F2d): the pieces the kit has no exact component for, in the kit's look.
+   Tokens only (var(--u-*, light value)); the tone classes (uk-tone--*) and the kv text
+   classes (uk-kv__k / uk-kv__v) come from the kit's display.css. */
+
+/* ── List rows (RowList / Row): the design's divided rows ─────────────────── */
+.umk-row {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 12px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--u-ln2, #EDF1EF);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--u-ink, #0E1B16);
+  text-align: left;
+}
+.umk-rows > .umk-row:last-child { border-bottom: 0; }
+button.umk-row { cursor: pointer; transition: background .15s; }
+button.umk-row:hover { background: var(--u-sf2, #F7F9F8); }
+button.umk-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--u-brt, #0F6E56); }
+.umk-row__text { flex: 1 1 220px; min-width: 0; display: grid; gap: 2px; font-size: 13px; }
+.umk-row__title { font-size: 13.5px; font-weight: 500; color: var(--u-ink, #0E1B16); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.umk-row__meta { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.umk-row__note { font-size: 12.5px; color: var(--u-ink2, #4A5A54); font-style: italic; }
+.umk-row__trail { flex: 0 0 auto; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+
+/* ── Notes: the design's tinted note box (kit Callout colours, text flows normally) ── */
+.umk-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tone-bg, var(--u-hv, #F0F4F2));
+  color: var(--tone-fg, var(--u-ink2, #4A5A54));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.umk-note :is(a) { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Facts: grey inset tiles, a quiet label over the figure ─────────────────── */
+.umk-facts { margin: 0; display: grid; gap: 10px; }
+.umk-fact { min-width: 0; padding: 10px 12px; border-radius: 12px; background: var(--u-sf2, #F7F9F8); border: 1px solid var(--u-ln2, #EDF1EF); }
+.umk-fact .uk-kv__v { font-variant-numeric: tabular-nums; }
+
+/* ── Sub-heading: the inline heading lets its actions wrap on phones ────────── */
+.uk-shead.umk-subhead .uk-shead__acts { flex-wrap: wrap; flex-shrink: 1; min-width: 0; }

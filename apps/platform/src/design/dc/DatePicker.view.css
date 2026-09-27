@@ -1,4 +1,5 @@
 /* hand-owned: edited by hand; scripts/design-build.mjs skips this view. */
-/* The design's trigger: 42px, 10px radius, slate-300 border (the shared calendar supplies the rest). */
-.dc-date-picker { display: flex; height: 42px; padding: 0 12px; gap: 10px; border-color: #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 500; }
-.dc-date-picker:not([data-open]):not(:focus-within):hover { border-color: #94a3b8; }
+/* F2d: the design's 42px date trigger on the shared calendar field (calendar.css draws
+   the rest, including the brand focus ring and the open state). Tokens only. */
+.dcdp { display: flex; height: 42px; padding: 0 12px; gap: 10px; border-color: var(--u-ln, #E3E9E6); border-radius: 12px; font-size: 14px; font-weight: 500; }
+.dcdp:not([data-open]):not(:focus-within):hover { border-color: var(--u-gy, #C9D2CE); }
