@@ -324,24 +324,14 @@ public class LeaveService {
             }
         }
 
-        LeaveRequestResponse response = leaveRequestMapper.toResponse(leaveRequest);
-        return new LeaveRequestResponse(
-                response.id(),
-                response.employeeId(),
-                response.employeeName(),
-                response.employeeCode(),
-                response.departmentName(),
-                response.leaveTypeId(),
-                leaveType.getName(),
-                response.startDate(),
-                response.endDate(),
-                response.totalDays(),
-                response.reason(),
-                response.status(),
-                response.approverComment(),
-                response.approvedAt(),
-                response.createdAt()
-        );
+        return leaveRequestMapper.toResponse(leaveRequest).withLeaveTypeName(leaveType.getName());
+    }
+
+    /** The company a leave type belongs to, or null when there is no such type (applying then says so). */
+    @Transactional(readOnly = true)
+    public UUID companyOfLeaveType(UUID leaveTypeId) {
+        if (leaveTypeId == null) return null;
+        return leaveTypeRepository.findById(leaveTypeId).map(LeaveType::getCompanyId).orElse(null);
     }
 
     /** The employee who filed a leave request, or null if it isn't in this tenant. */
@@ -456,28 +446,10 @@ public class LeaveService {
             }
         }
 
-        LeaveRequestResponse response = leaveRequestMapper.toResponse(leaveRequest);
         String leaveTypeName = leaveTypeRepository.findById(leaveRequest.getLeaveTypeId())
                 .map(LeaveType::getName)
                 .orElse(null);
-
-        return new LeaveRequestResponse(
-                response.id(),
-                response.employeeId(),
-                response.employeeName(),
-                response.employeeCode(),
-                response.departmentName(),
-                response.leaveTypeId(),
-                leaveTypeName,
-                response.startDate(),
-                response.endDate(),
-                response.totalDays(),
-                response.reason(),
-                response.status(),
-                response.approverComment(),
-                response.approvedAt(),
-                response.createdAt()
-        );
+        return leaveRequestMapper.toResponse(leaveRequest).withLeaveTypeName(leaveTypeName);
     }
 
     @Transactional
@@ -641,6 +613,157 @@ public class LeaveService {
         log.debug("Fetching decided approvals history for manager={}", managerId);
         Page<LeaveRequest> page = leaveRequestRepository.findDecidedForManager(managerId, pageable);
         return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    // ── Decided tab: one status, and counts per status (HRMS redesign, BW-40) ──
+
+    /** {@link #getAllDecided} narrowed to one status (never PENDING). */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getAllDecided(ApprovalStatus status, Pageable pageable) {
+        Page<LeaveRequest> page = leaveRequestRepository.findAllDecidedByStatus(status.name(), pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /** {@link #getDecidedApprovalsForManager} narrowed to one status (never PENDING). */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getDecidedApprovalsForManager(UUID managerId, ApprovalStatus status,
+                                                                            Pageable pageable) {
+        Page<LeaveRequest> page = leaveRequestRepository.findDecidedForManagerByStatus(managerId, status.name(), pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /**
+     * How many decided requests there are per status, over the same rows as the
+     * history list: the tenant's ({@code managerId} null) or a manager's.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Long> decidedCounts(UUID managerId) {
+        List<Object[]> rows = managerId == null
+                ? leaveRequestRepository.countAllDecidedByStatus()
+                : leaveRequestRepository.countDecidedForManagerByStatus(managerId);
+        java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        for (Object[] row : rows) {
+            if (row == null || row.length < 2 || row[0] == null) continue;
+            counts.put(row[0].toString(), row[1] == null ? 0L : ((Number) row[1]).longValue());
+        }
+        return counts;
+    }
+
+    // ── Leave preview (HRMS redesign, BW-48) ─────────────────────────────────
+
+    /**
+     * What {@link #applyLeave} would do with this request, without saving it:
+     * the working days, the balance before and after, and every reason it would
+     * be refused. It runs applyLeave's checks in applyLeave's order with the same
+     * codes and messages, so the first reason is the one applying answers with
+     * (LeavePreviewMatchesApplyTest runs both on the same fixtures). Where
+     * applying would stop before it can count or pick a balance year (unknown
+     * type, end before start, a half day over several days, a request across two
+     * years) the preview stops there too; otherwise it goes on and lists the rest.
+     *
+     * <p>Like applying (and like reading your balances) it first tops up any
+     * monthly / quarterly credit due today, so the balance matches. It never
+     * creates a request or a missing balance row.
+     *
+     * <p><b>Keep in step with {@link #applyLeave}:</b> a check added there must be
+     * added here, in the same place.
+     */
+    @Transactional
+    public LeavePreviewResponse previewLeave(UUID employeeId, UUID companyId, LeaveRequestRequest request) {
+        List<LeavePreviewResponse.Refusal> reasons = new java.util.ArrayList<>();
+        LocalDate startDate = request.startDate();
+        LocalDate endDate = request.endDate();
+
+        LeaveType leaveType = leaveTypeRepository.findById(request.leaveTypeId()).orElse(null);
+        if (leaveType == null) {
+            ResourceNotFoundException missing = new ResourceNotFoundException("LeaveType", request.leaveTypeId());
+            reasons.add(refusal(missing.getErrorCode(), missing.getMessage()));
+            return preview(request, null, null, null, reasons);
+        }
+        if (!leaveType.isActive()) {
+            reasons.add(refusal("LEAVE_TYPE_INACTIVE", "Leave type '%s' is not active".formatted(leaveType.getName())));
+        }
+        if (endDate.isBefore(startDate)) {
+            reasons.add(refusal("INVALID_LEAVE_DATES", "End date must not be before start date"));
+            return preview(request, leaveType, null, null, reasons);
+        }
+        boolean isHalfDay = request.duration() == com.hrms.leave.enums.LeaveDuration.HALF_DAY_MORNING
+                || request.duration() == com.hrms.leave.enums.LeaveDuration.HALF_DAY_AFTERNOON;
+        if (isHalfDay && !startDate.equals(endDate)) {
+            reasons.add(refusal("HALF_DAY_MULTI_DAY", "HALF_DAY leave must be a single day (startDate must equal endDate)."));
+            return preview(request, leaveType, null, null, reasons);
+        }
+        if (startDate.getYear() != endDate.getYear()) {
+            reasons.add(refusal("LEAVE_CROSS_YEAR",
+                    "Cross-year leave is not supported yet — split this into two requests "
+                            + "(one ending Dec 31, one starting Jan 1) so each year's balance is charged correctly."));
+            return preview(request, leaveType, null, null, reasons);
+        }
+        if (startDate.isBefore(LocalDate.now())) {
+            reasons.add(refusal("LEAVE_START_IN_PAST", "Leave start date cannot be in the past"));
+        }
+        List<LeaveRequest> overlapping = leaveRequestRepository.findOverlapping(
+                employeeId,
+                List.of(ApprovalStatus.PENDING, ApprovalStatus.PENDING_L2, ApprovalStatus.APPROVED),
+                startDate,
+                endDate);
+        if (!overlapping.isEmpty()) {
+            reasons.add(refusal("LEAVE_DATES_OVERLAP", "Overlapping leave request already exists"));
+        }
+        long noticeDays = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), startDate);
+        if (noticeDays < leaveType.getMinNoticeDays()) {
+            reasons.add(refusal("INSUFFICIENT_NOTICE",
+                    "Minimum notice of %d day(s) required before leave start date".formatted(leaveType.getMinNoticeDays())));
+        }
+
+        Set<LocalDate> holidays = fetchHolidayDates(companyId, startDate, endDate);
+        Set<Integer> offDays = resolveOffDays(companyId);
+        Double workingDays;
+        try {
+            double counted = calculateWorkingDays(startDate, endDate, request.duration(), holidays, offDays);
+            workingDays = counted;
+            if (counted <= 0) {
+                reasons.add(refusal("NO_WORKING_DAYS", "Leave request contains no working days"));
+            }
+        } catch (BusinessRuleException e) {
+            // LEAVE_START_ON_NON_WORKING_DAY: applying stops here with this answer.
+            reasons.add(refusal(e.getErrorCode(), e.getMessage()));
+            workingDays = 0.0;
+        }
+        double totalDays = workingDays;
+        if (leaveType.getMaxConsecutiveDays() > 0 && totalDays > leaveType.getMaxConsecutiveDays()) {
+            reasons.add(refusal("EXCEEDS_CONSECUTIVE_DAYS",
+                    "Leave cannot exceed %d consecutive day(s) for type '%s'"
+                            .formatted(leaveType.getMaxConsecutiveDays(), leaveType.getName())));
+        }
+
+        int year = startDate.getYear();
+        if (accrualService != null) accrualService.topUpEmployee(employeeId, year);
+        double available = leaveBalanceRepository
+                .findByEmployeeIdAndLeaveTypeIdAndYear(employeeId, request.leaveTypeId(), year)
+                .map(LeaveBalance::getAvailable)
+                // Applying would create this balance from the type's entitlement to date.
+                .orElseGet(() -> LeaveAccrualMath.entitlementToDate(leaveType.getAccrualFrequency(),
+                        leaveType.getAnnualEntitlement(), null, year, LeaveAccrualService.todayIst()));
+        if (available < totalDays) {
+            reasons.add(refusal("INSUFFICIENT_LEAVE_BALANCE",
+                    "Insufficient leave balance. Available: %.1f, Requested: %.1f".formatted(available, totalDays)));
+        }
+        return preview(request, leaveType, workingDays, available, reasons);
+    }
+
+    private static LeavePreviewResponse.Refusal refusal(String code, String message) {
+        return new LeavePreviewResponse.Refusal(code, message);
+    }
+
+    private static LeavePreviewResponse preview(LeaveRequestRequest request, LeaveType type, Double workingDays,
+                                                Double available, List<LeavePreviewResponse.Refusal> reasons) {
+        Double after = workingDays != null && available != null
+                ? LeaveAccrualMath.round2(available - workingDays) : null;
+        return new LeavePreviewResponse(request.leaveTypeId(), type != null ? type.getName() : null,
+                request.startDate(), request.endDate(), request.duration(), workingDays,
+                available == null ? null : LeaveAccrualMath.round2(available), after, null,
+                reasons.isEmpty(), List.copyOf(reasons));
     }
 
     @Transactional
@@ -807,13 +930,17 @@ public class LeaveService {
     public List<LeaveBalanceResponse> getMyBalances(UUID employeeId, int year) {
         log.debug("Fetching leave balances for employee={} year={}", employeeId, year);
         List<LeaveBalance> balances = leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, year);
+        if (balances.isEmpty()) return new java.util.ArrayList<>();
+        // Balance notes (redesign BW-49): the joining date and whether the
+        // nightly credit still runs for this person decide the next credit.
+        CreditHolder holder = creditHolder(employeeId);
+        LocalDate today = LeaveAccrualService.todayIst();
         return balances.stream()
                 .map(balance -> {
-                    String leaveTypeName = leaveTypeRepository.findById(balance.getLeaveTypeId())
-                            .map(LeaveType::getName)
-                            .orElse(null);
+                    LeaveType type = leaveTypeRepository.findById(balance.getLeaveTypeId()).orElse(null);
+                    String leaveTypeName = type != null ? type.getName() : null;
                     LeaveBalanceResponse response = leaveBalanceMapper.toResponse(balance);
-                    return new LeaveBalanceResponse(
+                    LeaveBalanceResponse named = new LeaveBalanceResponse(
                             response.id(),
                             response.employeeId(),
                             response.leaveTypeId(),
@@ -825,8 +952,29 @@ public class LeaveService {
                             response.carryForward(),
                             response.available()
                     );
+                    if (type == null) return named;
+                    return named.withNotes(
+                            LeaveBalanceNotes.nextCredit(type.getAccrualFrequency(), type.getAnnualEntitlement(),
+                                    holder.joined(), balance.getYear(), today, holder.credited()),
+                            LeaveBalanceNotes.resetsOn(balance.getYear()),
+                            LeaveBalanceNotes.carryForwardCap(type.isCarryForwardAllowed(), type.getMaxCarryForwardDays()));
                 })
                 .collect(Collectors.toList());
+    }
+
+    /** What the next-credit note needs about the balance holder. */
+    private record CreditHolder(LocalDate joined, boolean credited) {}
+
+    private CreditHolder creditHolder(UUID employeeId) {
+        List<CreditHolder> rows = jdbcTemplate.query(
+                "SELECT date_of_joining, employment_status, is_active FROM hrms.employees WHERE id = ?",
+                (rs, i) -> {
+                    java.sql.Date joined = rs.getDate("date_of_joining");
+                    return new CreditHolder(joined == null ? null : joined.toLocalDate(),
+                            LeaveBalanceNotes.creditedStatus(rs.getString("employment_status"), rs.getBoolean("is_active")));
+                },
+                employeeId);
+        return rows.isEmpty() ? new CreditHolder(null, false) : rows.get(0);
     }
 
     @Transactional
@@ -980,23 +1128,6 @@ public class LeaveService {
         String leaveTypeName = leaveTypeRepository.findById(request.getLeaveTypeId())
                 .map(LeaveType::getName)
                 .orElse(null);
-        LeaveRequestResponse base = leaveRequestMapper.toResponse(request);
-        return new LeaveRequestResponse(
-                base.id(),
-                base.employeeId(),
-                base.employeeName(),
-                base.employeeCode(),
-                base.departmentName(),
-                base.leaveTypeId(),
-                leaveTypeName,
-                base.startDate(),
-                base.endDate(),
-                base.totalDays(),
-                base.reason(),
-                base.status(),
-                base.approverComment(),
-                base.approvedAt(),
-                base.createdAt()
-        );
+        return leaveRequestMapper.toResponse(request).withLeaveTypeName(leaveTypeName);
     }
 }

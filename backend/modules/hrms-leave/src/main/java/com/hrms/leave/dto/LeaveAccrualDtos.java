@@ -125,4 +125,18 @@ public final class LeaveAccrualDtos {
             double days,
             BigDecimal perDayRate,
             BigDecimal amount) {}
+
+    /**
+     * "Can encash now" for the Encash tab (HRMS redesign, BW-45): what everyone
+     * still working here could ask to encash this year, by the same rule as each
+     * person's options ({@code canRequest}: the balance, capped by what is left
+     * of the type's yearly limit, in half days), summed.
+     *
+     * @param days   the total across people and encashable types
+     * @param people how many people could encash something
+     * @param types  the same per encashable leave type, by name
+     */
+    public record EncashmentSummary(int year, UUID companyId, double days, int people, List<EncashmentSummaryType> types) {}
+
+    public record EncashmentSummaryType(UUID leaveTypeId, String leaveTypeName, double days, int people) {}
 }

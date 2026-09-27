@@ -52,7 +52,15 @@ public class LeaveRequestMapperImpl implements LeaveRequestMapper {
         String employeeCode = null;
         String departmentName = null;
 
-        LeaveRequestResponse leaveRequestResponse = new LeaveRequestResponse( id, employeeId, employeeName, employeeCode, departmentName, leaveTypeId, leaveTypeName, startDate, endDate, totalDays, reason, status, approverComment, approvedAt, createdAt );
+        // Redesign fields read straight from the row (27 Sep 2026, BW-38). The
+        // latest decision is the second-level one when there was one. Names,
+        // the type's code, the balance and conflicts are looked up by the API
+        // layer (LeaveRequestDetails), so they start out null here.
+        Instant l2ApprovedAt = leaveRequest.getL2ApprovedAt();
+        Instant decidedAt = l2ApprovedAt != null ? l2ApprovedAt : approvedAt;
+
+        LeaveRequestResponse leaveRequestResponse = new LeaveRequestResponse( id, employeeId, employeeName, employeeCode, departmentName, leaveTypeId, leaveTypeName, startDate, endDate, totalDays, reason, status, approverComment, approvedAt, createdAt,
+                null, null, leaveRequest.getDuration(), null, null, null, null, decidedAt, null, l2ApprovedAt, null, null );
 
         return leaveRequestResponse;
     }

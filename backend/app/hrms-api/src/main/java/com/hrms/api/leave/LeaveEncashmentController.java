@@ -4,6 +4,7 @@ import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentCreateRequest;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentDecisionRequest;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentOption;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentResponse;
+import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentSummary;
 import com.hrms.leave.dto.LeaveAccrualDtos.PayableEncashment;
 import com.hrms.leave.service.LeaveEncashmentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -84,6 +85,13 @@ public class LeaveEncashmentController {
     public ResponseEntity<List<EncashmentResponse>> list(@RequestParam(defaultValue = "PENDING") String status,
                                                          @RequestParam(defaultValue = "200") int limit) {
         return ResponseEntity.ok(encashments.list(!"DECIDED".equalsIgnoreCase(status), limit));
+    }
+
+    @Operation(summary = "Can encash now: what everyone could encash this year, in total and per encashable leave type")
+    @GetMapping("/summary")
+    @PreAuthorize("hasAuthority('hrms.leave.encash.approve')")
+    public ResponseEntity<EncashmentSummary> summary(@RequestParam(required = false) UUID companyId) {
+        return ResponseEntity.ok(encashments.summary(companyId));
     }
 
     @Operation(summary = "What an employee can encash this year")
