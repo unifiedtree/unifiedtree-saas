@@ -31,6 +31,7 @@ import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { useHome } from '@/design/shell/useHome'
 import { TEAM_APPROVE_CODES } from '@/shared/navigation/shellCodes'
+import { READY_PAGES } from '@/shared/navigation/pageRegistry'
 
 //   // route disabled — see /module-workspace redirect below
 
@@ -41,6 +42,10 @@ import { TEAM_APPROVE_CODES } from '@/shared/navigation/shellCodes'
 // admin surface (payroll, reports, letters with @tiptap, bulk import, roles,
 // audit-log viewer). The Routes tree is wrapped in <React.Suspense> so a lazy
 // chunk fetching in flight shows a spinner instead of the last route flashing.
+// /team: today's codes. The approvers (leave, WFH, regularization, expense, timesheet) join when My
+// team's Approvals view ships (P-TEAM in READY_PAGES); until then /team is today's page for today's people.
+const TEAM_ROUTE_CODES: string[] = [P.ATTENDANCE_TEAM_READ, P.HRMS_LEAVE_APPROVE_L1, ...(READY_PAGES.has('P-TEAM') ? TEAM_APPROVE_CODES : [])]
+
 const Dashboard = lazyPage(() => import('@/modules/hrms/HrmsDashboard').then(m => ({ default: m.HrmsDashboard })))
 const Settings = lazyPage(() => import('@/pages/Settings').then(m => ({ default: m.Settings })))
 const Profile = lazyPage(() => import('@/pages/Profile').then(m => ({ default: m.Profile })))
@@ -332,7 +337,7 @@ const ROUTE_TREE = (
         <Route
           path="/team"
           element={
-            <RouteGuard anyOf={[P.ATTENDANCE_TEAM_READ, P.HRMS_LEAVE_APPROVE_L1, ...TEAM_APPROVE_CODES]}>
+            <RouteGuard anyOf={TEAM_ROUTE_CODES}>
               <ModuleGate moduleKey="hrms"><TeamDashboard /></ModuleGate>
             </RouteGuard>
           }
