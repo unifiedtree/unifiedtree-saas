@@ -141,6 +141,7 @@
   --u-rds: #FCEDEB;
 
   --u-success: #12805F;
+  --u-ok: var(--u-success); /* alias used by the kit (ProgressBar, ApprovalRow); follows the theme */
   --u-success-text: #0B5A46;
   --u-success-soft: #E3F2EA;
   --u-success-2: #1F9D6E;
