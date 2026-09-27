@@ -55,6 +55,9 @@ public class WfhController {
     /** Per-company "Allow work from home" rule (HR Configuration → Attendance rules). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.unifiedtree.settings.service.HrConfigurationService hrConfiguration;
+    /** The approver chain, in one place (BW-122); the batch uses it. {@link #apply} keeps its own copy, unchanged. */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrms.api.ess.ApproverChainService approverChain;
 
     public WfhController(WfhService service,
                          EmployeeRepository employeeRepository,
@@ -135,6 +138,31 @@ public class WfhController {
         }
     }
 
+    /** What a batch send answers: the requests it made, earliest first, and how many days they cover. */
+    public record BatchResult(List<WfhRequestResponse> requests, int days) {}
+
+    @Operation(summary = "Apply for several separate days of Work From Home in one send")
+    @PostMapping("/batch")
+    @PreAuthorize("hasAuthority('wfh.request.self')")
+    public ResponseEntity<BatchResult> applyBatch(
+            @Valid @RequestBody com.hrms.leave.dto.WfhBatchRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID employeeId = extractEmployeeId(jwt);
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee", employeeId));
+        if (!companyAllowsWfh(employee.getCompanyId())) {
+            throw new BusinessRuleException(
+                    "Work from home is turned off for your company, so you can't request it here. "
+                            + "Talk to HR if you need to work from home.",
+                    "WFH_NOT_ALLOWED");
+        }
+        // The same approver a single request would get (the chain in apply, via the shared service).
+        UUID approverId = approverChain.requestApprover(employee, com.hrms.api.ess.ApproverChainService.Kind.WFH).approverId();
+        List<WfhRequestResponse> created = service.applyBatch(employeeId, request.dates(), request.reason(), approverId);
+        int days = (int) request.dates().stream().filter(Objects::nonNull).distinct().count();
+        return ResponseEntity.status(HttpStatus.CREATED).body(new BatchResult(enrichList(created), days));
+    }
+
     @Operation(summary = "Get my WFH requests")
     @GetMapping("/my")
     @PreAuthorize("hasAuthority('wfh.request.self')")
@@ -212,21 +240,29 @@ public class WfhController {
     // here at the API layer and folded into the response DTO.
 
     private PageResponse<WfhRequestResponse> enrichPage(PageResponse<WfhRequestResponse> page) {
-        List<UUID> employeeIds = page.content().stream()
-                .map(WfhRequestResponse::employeeId)
+        return new PageResponse<>(
+                enrichList(page.content()), page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
+    }
+
+    /** Requesters and approvers are read in one query for the whole list. */
+    private List<WfhRequestResponse> enrichList(List<WfhRequestResponse> rows) {
+        List<UUID> peopleIds = rows.stream()
+                .flatMap(r -> java.util.stream.Stream.of(r.employeeId(), r.approverId()))
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        Map<UUID, Employee> employeeMap = employeeIds.isEmpty()
+        Map<UUID, Employee> employeeMap = peopleIds.isEmpty()
                 ? Map.of()
-                : employeeRepository.findAllById(employeeIds).stream()
+                : employeeRepository.findAllById(peopleIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
-        Map<UUID, String> departmentNames = departmentNames(employeeMap.values());
-        List<WfhRequestResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap.get(r.employeeId()), departmentNames))
+        Map<UUID, String> departmentNames = departmentNames(rows.stream()
+                .map(r -> employeeMap.get(r.employeeId()))
+                .filter(Objects::nonNull)
+                .toList());
+        return rows.stream()
+                .map(r -> enrich(r, employeeMap.get(r.employeeId()), departmentNames,
+                        r.approverId() == null ? null : employeeMap.get(r.approverId())))
                 .toList();
-        return new PageResponse<>(
-                enriched, page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
     }
 
     private WfhRequestResponse enrichOne(WfhRequestResponse r) {
@@ -236,16 +272,24 @@ public class WfhController {
         Map<UUID, String> departmentNames = employee != null
                 ? departmentNames(List.of(employee))
                 : Map.of();
-        return enrich(r, employee, departmentNames);
+        Employee approver = r.approverId() == null ? null
+                : r.approverId().equals(r.employeeId()) ? employee
+                : employeeRepository.findById(r.approverId()).orElse(null);
+        return enrich(r, employee, departmentNames, approver);
     }
 
     private WfhRequestResponse enrich(WfhRequestResponse r,
                                       Employee employee,
-                                      Map<UUID, String> departmentNames) {
+                                      Map<UUID, String> departmentNames,
+                                      Employee approver) {
         String employeeName = employee != null
                 ? (safe(employee.getFirstName()) + " " + safe(employee.getLastName())).trim()
                 : null;
         if (employeeName != null && employeeName.isBlank()) employeeName = null;
+        String approverName = approver != null
+                ? (safe(approver.getFirstName()) + " " + safe(approver.getLastName())).trim()
+                : null;
+        if (approverName != null && approverName.isBlank()) approverName = null;
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
         String departmentName = employee != null && employee.getDepartmentId() != null
                 ? departmentNames.get(employee.getDepartmentId())
@@ -263,7 +307,8 @@ public class WfhController {
                 r.approverId(),
                 r.decisionNote(),
                 r.decidedAt(),
-                r.createdAt());
+                r.createdAt(),
+                approverName);
     }
 
     private static String safe(String s) {
