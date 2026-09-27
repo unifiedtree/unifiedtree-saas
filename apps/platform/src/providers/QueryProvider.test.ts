@@ -42,4 +42,20 @@ describe('isRetryable', () => {
     expect(isRetryable(2, undefined)).toBe(false)
     expect(isRetryable(1, 'a string')).toBe(true)
   })
+
+  // DECISIONS 18: a feature whose migration isn't applied yet answers 503
+  // FEATURE_NOT_READY. That is an answer, not a blip: the block shows "not
+  // available yet" at once instead of after a retry.
+  it('never retries FEATURE_NOT_READY, from apiJson or the SDK', () => {
+    const body = { status: 503, errorCode: 'FEATURE_NOT_READY', message: 'This isn’t switched on yet.' }
+    expect(isRetryable(0, new HttpError(body.message, 503, body))).toBe(false)
+    expect(isRetryable(1, new HttpError(body.message, 503, body))).toBe(false)
+    expect(isRetryable(1, { response: { status: 503, data: body } })).toBe(false)
+  })
+
+  it('still retries any other 503 once', () => {
+    expect(isRetryable(1, new HttpError('unavailable', 503))).toBe(true)
+    expect(isRetryable(1, new HttpError('unavailable', 503, { errorCode: 'INTERNAL_ERROR' }))).toBe(true)
+    expect(isRetryable(2, new HttpError('unavailable', 503))).toBe(false)
+  })
 })

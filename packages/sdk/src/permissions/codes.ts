@@ -31,6 +31,16 @@ export const P = {
   HRMS_PROBATION_CONFIG_READ:      'hrms.probation.config.read',
   HRMS_PROBATION_CONFIG_UPDATE:    'hrms.probation.config.update',
   HRMS_PROBATION_REMINDERS_READ:   'hrms.probation.reminders.read',
+  /**
+   * Confirm or extend probation for people in your own team, from Team today
+   * (POST /v1/team/probation/{employeeId}/confirm|extend, BW-11). Managers only
+   * SEE their team's probation dates without it (DECISIONS 15). Seeded by
+   * V143_55 (P-TEAM), granted to OWNER and SUPER_ADMIN only; admins can give it
+   * to managers in Roles & permissions. Catalogue: module `hrms`, "Confirm or
+   * extend team probation", "Confirm or extend probation for people in your own
+   * team, from Team today."
+   */
+  HRMS_PROBATION_TEAM_DECIDE:      'hrms.probation.team.decide',
 
   // ── Payroll (config foundation) ───────────────────────────────────────────
   PAYROLL_SETTINGS_READ:           'payroll.settings.read',
@@ -85,6 +95,17 @@ export const P = {
   HRMS_LEAVE_APPROVE_L1:           'hrms.leave.approve.l1',
   HRMS_LEAVE_APPROVE_L2:           'hrms.leave.approve.l2',
   HRMS_LEAVE_READ:                 'hrms.leave.read',
+  /**
+   * Apply for leave in another employee's name
+   * (POST /v1/leave/apply/for/{employeeId}, BW-43). Same validation and
+   * approver chain as applying for yourself; the employee is told
+   * (LEAVE_APPLIED_ON_BEHALF). Seeded by V143_56 (P-LEAVE), granted to OWNER,
+   * SUPER_ADMIN, ADMIN, HR_MANAGER and FINANCE_LEAD (the roles that hold
+   * `hrms.advance.request.others` today). Catalogue: module `leave`, "Apply for
+   * leave for others", "Apply for leave in another employee's name. It goes to
+   * their usual approver, and they are told."
+   */
+  HRMS_LEAVE_APPLY_OTHERS:         'hrms.leave.apply.others',
 
   // ── HRMS: Work From Home ─────────────────────────────────────────────────
   // WfhController gates on these (wfh.approve for approve/reject/pending).
@@ -110,6 +131,41 @@ export const P = {
   // ── HRMS: Hiring ──────────────────────────────────────────────────────────
   HRMS_HIRING_READ:                'hrms.hiring.read',
   HRMS_HIRING_WRITE:               'hrms.hiring.write',
+
+  // ── HRMS: Expenses ────────────────────────────────────────────────────────
+  /**
+   * Raise an expense claim in another employee's name
+   * (POST /v1/expense/claims/for/{employeeId}, BW-61), like advance on behalf.
+   * It goes through the employee's normal approval chain and they are told
+   * (EXPENSE_CLAIM_RAISED_FOR_YOU). Seeded by V143_57 (P-EXP), granted to OWNER,
+   * SUPER_ADMIN, ADMIN, HR_MANAGER and FINANCE_LEAD (the roles that hold
+   * `hrms.advance.request.others` today). Catalogue: module `expense`, "Raise
+   * expense claims for others", "Raise an expense claim in another employee's
+   * name. It goes to their usual approver, and they are told."
+   */
+  HRMS_EXPENSE_CLAIM_OTHERS:       'hrms.expense.claim.others',
+
+  // ── HRMS: My team ─────────────────────────────────────────────────────────
+  /**
+   * Post a short message to everyone in your team (POST /v1/team/messages,
+   * BW-12). Recipients are only the sender's team (TeamEmployeeScope); it shows
+   * in their notifications (TEAM_MESSAGE) and their Home's Around you. Seeded by
+   * V143_55 (P-TEAM), granted to OWNER, SUPER_ADMIN, DEPT_MANAGER and MANAGER.
+   * Catalogue: module `hrms`, "Message your team", "Post a short message to
+   * everyone in your team. They see it in their notifications and on their Home."
+   */
+  HRMS_TEAM_MESSAGE:               'hrms.team.message',
+
+  // ── HRMS: Timesheets ──────────────────────────────────────────────────────
+  /**
+   * Approve or reject the timesheet weeks people in your team submit
+   * (GET /v1/timesheets/approvals, POST /v1/timesheets/weeks/{id}/decision,
+   * BW-36; team-scoped). Seeded by V143_65 (P-ATT-DAY), granted to OWNER,
+   * SUPER_ADMIN, HR_MANAGER and DEPT_MANAGER. Catalogue: module `attendance`,
+   * "Approve timesheets", "Approve or reject the timesheet weeks people in your
+   * team submit."
+   */
+  HRMS_TIMESHEET_APPROVE:          'hrms.timesheet.approve',
 
   // ── HRMS: ESS ─────────────────────────────────────────────────────────────
   HRMS_ESS_READ:                   'hrms.ess.read',
