@@ -1,3 +1,4 @@
+/* global console, process, fetch */
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -42,7 +43,7 @@ try {
   await page.screenshot({ path: 'test-results/recovery/modules-loaded-live.png', fullPage: true })
   await hr().click()
   await expect(page).toHaveURL(/\/dashboard$/)
-  await expect(page.getByRole('heading', { name: 'Live overview', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^Live overview$/i })).toBeVisible({ timeout: 15000 })
   console.log('PASS: login lands on loaded catalog; company owner opens HR dashboard; empty search is explicit')
 
   simulateOutage = true
@@ -54,7 +55,7 @@ try {
   await page.screenshot({ path: 'test-results/recovery/modules-outage-live.png', fullPage: true })
   await page.getByRole('button', { name: 'HRMS', exact: true }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
-  await expect(page.getByRole('heading', { name: 'Live overview', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^Live overview$/i })).toBeVisible({ timeout: 15000 })
   await page.goto(ui + '/modules')
   await expect(outage).toBeVisible({ timeout: 30000 })
   simulateOutage = false

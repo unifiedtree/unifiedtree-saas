@@ -3,6 +3,7 @@
 // switching is quick once the idle preload has run.
 //
 //   node e2e/recovery/live-navigation.mjs
+/* global console, process, document, window, MutationObserver */
 import { chromium } from '@playwright/test'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
@@ -21,7 +22,7 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
   await page.goto(base + '/dashboard')
-  await page.locator('nav[aria-label="Primary"]').waitFor({ timeout: 30000 })
+  await page.locator('nav[aria-label="Primary"]').first().waitFor({ timeout: 30000 })
   // Tag the rail's DOM node: if the shell remounts, the tag is gone.
   await page.evaluate(() => { document.querySelector('nav[aria-label="Primary"]').dataset.keep = '1' })
 
@@ -33,10 +34,11 @@ try {
   })
   await page.waitForTimeout(6000) // let the idle preload fetch the reachable pages
 
-  const RAIL = ['Master', 'Attendance', 'Leave', 'Hiring', 'Payroll', 'Expenses', 'Performance', 'Compliance', 'Reports', 'Company', 'Dashboard']
+  // The rail's modules (the redesign's labels); each is a link that opens the module's page.
+  const RAIL = ['Workforce', 'Attendance & time', 'Leave', 'Hiring & onboarding', 'Payroll', 'Expenses', 'Performance', 'Compliance', 'Reports', 'Company', 'Dashboard']
   const times = []
   for (const label of RAIL) {
-    const btn = page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: label, exact: true })
+    const btn = page.getByRole('navigation', { name: 'Primary' }).first().getByRole('link', { name: label, exact: true })
     if (!(await btn.count())) continue
     const t0 = Date.now()
     await btn.click()
@@ -44,6 +46,7 @@ try {
     times.push([label, Date.now() - t0])
   }
   console.log('open times (ms):', times.map(([l, t]) => `${l} ${t}`).join(' · '))
+  check('the rail opened the modules', times.length >= 8, `${times.length} opened`)
   check('the shell is never remounted between pages', await page.evaluate(() => document.querySelector('nav[aria-label="Primary"]')?.dataset.keep === '1'))
   check('no bare "Loading…" screen at any point', (await page.evaluate(() => window.__bareLoading)) === 0)
   const slow = times.filter(([, t]) => t > 2500)

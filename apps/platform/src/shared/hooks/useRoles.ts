@@ -21,9 +21,11 @@ import { useAuthStore } from '@unifiedtree/sdk'
  *  EMPLOYEE  — anything else (bare EMPLOYEE, or no elevated role at all)
  *
  * A single principal can hold roles from multiple buckets; the boolean flags
- * return true whenever ANY held role belongs to that bucket, and `isEmployee`
- * is defined as "none of the elevated buckets" so the four flags never all
- * fire together (except for the empty state where isEmployee is true alone).
+ * return true whenever ANY held role belongs to that bucket.
+ *
+ * Which Home a person gets is NOT decided here: it is a permission rule
+ * (design/shell/useHome.ts, DECISIONS 12). The old role-name `isEmployee` flag
+ * that chose the dashboard is gone.
  */
 export interface RoleBuckets {
   /** OWNER / SUPER_ADMIN / COMPANY_ADMIN / ADMIN */
@@ -34,8 +36,6 @@ export interface RoleBuckets {
   isManager: boolean
   /** FINANCE_LEAD — holds hrms.employee.read + 5 report perms via backend seed */
   isFinance: boolean
-  /** No elevated role — bare EMPLOYEE, or a principal with no roles at all */
-  isEmployee: boolean
   /** Raw roles array from the JWT (may be empty) */
   roles: string[]
 }
@@ -64,9 +64,6 @@ export function useRoles(): RoleBuckets {
   const isHR      = has(HR_ROLES)
   const isManager = has(MANAGER_ROLES)
   const isFinance = has(FINANCE_ROLES)
-  // "Employee" = no elevated bucket. Keeps the four flags mutually exclusive
-  // for the common case where the JWT carries exactly one role string.
-  const isEmployee = !isAdmin && !isHR && !isManager && !isFinance
 
-  return { isAdmin, isHR, isManager, isFinance, isEmployee, roles }
+  return { isAdmin, isHR, isManager, isFinance, roles }
 }

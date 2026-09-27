@@ -194,8 +194,10 @@ try {
     await o.ctx.close()
 
     const r = await signIn('reader@unifiedtree.demo')
+    // An employee's Home is the self-service Home (DECISIONS 12): /dashboard opens /me.
     const rg = await greetingOn(r.page, '/dashboard')
-    check(`first name "R.": staff dashboard greets with the full name "${readerFull}"`, fullIn(rg, readerFull), rg)
+    const home = r.page.url().replace(/^https?:\/\/[^/]+/, '').split(/[?#]/)[0]
+    check(`first name "R.": /dashboard opens their Home (/me), which greets with the full name "${readerFull}"`, home === '/me' && fullIn(rg, readerFull), `${home}: ${rg}`)
     const mg = await greetingOn(r.page, '/me')
     check(`first name "R.": My workspace greets with the full name "${readerFull}"`, fullIn(mg, readerFull), mg)
     await r.page.screenshot({ path: `${shots}/greeting-myatt-reader-initial.png` })
