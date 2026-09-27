@@ -120,6 +120,11 @@ public final class NotificationEventCatalog {
     private static final Placeholder MODE = ph("mode", "In person, Video call or Phone call");
     private static final Placeholder LOCATION = ph("location", "The place or the video link");
 
+    // HRMS redesign events (27 Sep 2026)
+    private static final Placeholder RAISED_BY = ph("raisedBy", "Who raised it, for example Priya Rao (HR when unknown)");
+    private static final Placeholder PAYSLIP_PERIOD = ph("period", "The payslip's month, for example Sep 2026");
+    private static final Placeholder WEEK_START = ph("weekStart", "The Monday the week starts, for example 28 Sep 2026");
+
     private static final Map<String, EventDef> BY_KEY = new LinkedHashMap<>();
     private static final Map<AppNotificationType, EventDef> BY_TYPE = new EnumMap<>(AppNotificationType.class);
 
@@ -141,6 +146,10 @@ public final class NotificationEventCatalog {
                 "Sent to the approver when someone cancels their leave request.",
                 "Leave request cancelled", "{{employeeName}} cancelled their {{leaveType}} from {{startDate}} to {{endDate}}.",
                 EMPLOYEE_NAME, LEAVE_TYPE, START_DATE, END_DATE));
+        add(inApp("leave.applied_on_behalf", AppNotificationType.LEAVE_APPLIED_ON_BEHALF, "Leave", "Leave applied for you", "Employee",
+                "Sent to the employee when HR or an admin applies for leave in their name. It still goes to their usual approver.",
+                "Leave applied for you", "{{raisedBy}} applied for {{leaveType}} for you from {{startDate}} to {{endDate}}. It is waiting for approval.",
+                RAISED_BY, LEAVE_TYPE, START_DATE, END_DATE));
 
         // Leave encashment (V143.23)
         add(inApp("leave.encashment_submitted", AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED, "Leave", "Leave encashment requested", "HR",
@@ -213,6 +222,19 @@ public final class NotificationEventCatalog {
                 ph("message", "What happened, as a sentence, for example \"Your attendance for 5 Jul 2026 was changed from Late to Present by Priya.\""),
                 DATE, ph("fromStatus", "The status before the change, for example Late"), ph("toStatus", "The status now, for example Present"),
                 ph("changedBy", "Who made the change (empty when unknown)"), REASON, REASON_TEXT));
+        // In the app and on the phone only (DECISIONS 15): a reminder a person sends by hand, never by email.
+        add(appOnly("attendance.checkin_reminder", AppNotificationType.CHECKIN_REMINDER, "Attendance", "Reminder to check in", "Employee",
+                "Sent to an employee when their manager or HR reminds them that they haven't checked in yet that day. At most one reminder a day.",
+                "Please check in", "{{sentBy}} is reminding you to check in for {{date}}. If you're away that day, apply for leave.",
+                ph("sentBy", "Who sent the reminder, for example Priya Rao"), DATE));
+        add(inApp("attendance.timesheet_submitted", AppNotificationType.TIMESHEET_SUBMITTED, "Attendance", "Timesheet week submitted", "Approver",
+                "Sent to the approver when someone submits a week of their timesheet.",
+                "Timesheet to review", "{{employeeName}} submitted their timesheet for the week of {{weekStart}} ({{totalHours}}).",
+                EMPLOYEE_NAME, WEEK_START, ph("totalHours", "Hours logged that week, for example 38.5h")));
+        add(inApp("attendance.timesheet_decided", AppNotificationType.TIMESHEET_DECIDED, "Attendance", "Timesheet week approved or rejected", "Employee",
+                "Sent to the employee when their submitted timesheet week is approved or rejected.",
+                "Timesheet {{decision}}", "Your timesheet for the week of {{weekStart}} was {{decision}}.{{reasonText}}",
+                ph("decision", "approved or rejected"), WEEK_START, REASON, REASON_TEXT));
 
         // ── Shifts ───────────────────────────────────────────────────────────
         add(inApp("shift.change_submitted", AppNotificationType.SHIFT_CHANGE_SUBMITTED, "Shifts", "Shift change requested", "Approver",
@@ -259,12 +281,36 @@ public final class NotificationEventCatalog {
                 "Salary advance raised for you", "{{raisedBy}} raised a salary advance of {{amount}} for you, recovered from your salary over {{months}}. It is waiting for approval.",
                 ph("raisedBy", "Who raised it, for example Priya Rao (HR when unknown)"), AMOUNT,
                 ph("months", "\"1 month\" or \"3 months\"")));
+        add(inApp("expense.raised_for_you", AppNotificationType.EXPENSE_CLAIM_RAISED_FOR_YOU, "Expenses and advances", "Expense claim raised for you", "Employee",
+                "Sent to the employee when HR or finance raises an expense claim in their name. It still goes to their usual approver.",
+                "Expense claim raised for you", "{{raisedBy}} raised an expense claim for you: {{claimTitle}} ({{amount}}). It is waiting for approval.",
+                RAISED_BY, CLAIM_TITLE, AMOUNT));
+
+        // ── Approvals ────────────────────────────────────────────────────────
+        // One entry for the five kinds that can be undone (leave, work from home,
+        // attendance correction, shift change, expense claim).
+        add(inApp("approvals.decision_undone", AppNotificationType.DECISION_UNDONE, "Approvals", "Decision taken back", "Employee",
+                "Sent to the employee when the person who approved or rejected their request takes the decision back, which they can do for 10 minutes. The request is waiting for a decision again.",
+                "Your request is waiting again", "{{decidedBy}} took back their decision on your {{requestText}}. It is waiting for a decision again.",
+                ph("decidedBy", "Who took the decision back, for example Priya Rao"),
+                ph("requestText", "The request, for example \"leave request for 5 Jul 2026 to 7 Jul 2026\""),
+                ph("requestType", "The kind of request: leave request, work-from-home request, attendance correction, shift change or expense claim"),
+                ph("previousDecision", "What was taken back: approval or rejection")));
 
         // ── Payroll ──────────────────────────────────────────────────────────
         add(inApp("payroll.salary_revised", AppNotificationType.SALARY_REVISED, "Payroll", "Salary revised", "Employee",
                 "Sent to each person when a bulk salary revision gives them a new salary structure. It never includes amounts, because push notifications show on lock screens.",
                 "Your salary has been revised", "Your salary structure has been revised with effect from {{effectiveFrom}}. Open My Salary to see the new breakdown.",
                 ph("effectiveFrom", "The day the new structure starts, for example 1 Oct 2026")));
+        // Neither carries the question or the answer: push notifications show on lock screens.
+        add(inApp("payroll.payslip_query_raised", AppNotificationType.PAYSLIP_QUERY_RAISED, "Payroll", "Payslip question", "Payroll team",
+                "Sent to the people who run payroll when an employee asks a question about one of their payslips. The question itself is not in the notification.",
+                "Payslip question from {{employeeName}}", "{{employeeName}} asked a question about their {{period}} payslip. Open Payroll to answer it.",
+                EMPLOYEE_NAME, PAYSLIP_PERIOD));
+        add(inApp("payroll.payslip_query_answered", AppNotificationType.PAYSLIP_QUERY_ANSWERED, "Payroll", "Payslip question answered", "Employee",
+                "Sent to the employee when the payroll team answers their question about a payslip. The answer is shown with the payslip, not in the notification.",
+                "Your payslip question was answered", "{{answeredBy}} answered your question about your {{period}} payslip. Open My payslips to read it.",
+                ph("answeredBy", "Who answered, for example Priya Rao (the payroll team when unknown)"), PAYSLIP_PERIOD));
 
         // ── Documents ────────────────────────────────────────────────────────
         add(inApp("document.uploaded", AppNotificationType.DOCUMENT_UPLOADED, "Documents", "Document uploaded for checking", "HR",
@@ -279,6 +325,15 @@ public final class NotificationEventCatalog {
                 "Sent to the employee when HR rejects their document and asks for a new one.",
                 "Document needs re-upload", "Your {{documentType}} was rejected.{{reasonText}} Please re-upload.",
                 DOCUMENT_TYPE, REASON, REASON_TEXT));
+
+        // ── Assets ───────────────────────────────────────────────────────────
+        add(inApp("assets.issue_reported", AppNotificationType.ASSET_ISSUE_REPORTED, "Assets", "Asset problem reported", "HR",
+                "Sent to the people who manage company assets when an employee reports that an asset issued to them is lost, damaged or not working.",
+                "Asset problem reported", "{{employeeName}} reported a problem with {{assetName}}: {{problem}}.{{noteText}}",
+                EMPLOYEE_NAME, ph("assetName", "The asset, for example Dell Latitude 5440 (LAP-0042)"),
+                ph("problem", "What is wrong: lost, damaged, not working or something else"),
+                ph("note", "What the employee wrote (empty when nothing)"),
+                ph("noteText", "\" Note: …\" when the employee wrote something, otherwise nothing")));
 
         // ── Policies (V143.23) ───────────────────────────────────────────────
         // In the app and on the phone only: the policy notice queue sends the
@@ -326,6 +381,25 @@ public final class NotificationEventCatalog {
                 ph("decidedByText", "\" by Priya Rao\" style text, or nothing"), ph("note", "The note they gave"),
                 ph("noteText", "\" Note: …\" when a note was given, otherwise nothing")));
 
+        // ── Performance ──────────────────────────────────────────────────────
+        add(inApp("performance.review_reminder", AppNotificationType.PERFORMANCE_REVIEW_REMINDER, "Performance", "Review reminder", "Reviewers",
+                "Sent to someone who still has a review to write when HR presses Remind on it. At most once a day for each review.",
+                "A review is waiting for you", "Please finish {{reviewText}} in {{cycleName}}{{dueText}}.",
+                ph("reviewText", "The review, for example \"your self-review\" or \"your review of Priya Rao\""),
+                ph("revieweeName", "The person the review is about"),
+                ph("cycleName", "The review cycle, for example Q3 2026 reviews"),
+                ph("dueDate", "When it is due (empty when the cycle has no date for it)"),
+                ph("dueText", "\" by 30 Sep 2026\" when the cycle has a due date, otherwise nothing")));
+
+        // ── Team ─────────────────────────────────────────────────────────────
+        // In the app and on the phone only: the message itself is the notification.
+        add(appOnly("team.message", AppNotificationType.TEAM_MESSAGE, "Team", "Team message", "Team members",
+                "Sent to everyone in a manager's team when the manager posts a message to the team.",
+                "Message from {{senderName}}", "{{message}}",
+                ph("senderName", "Who posted it, for example Priya Rao"),
+                ph("message", "What they wrote, up to 500 characters"),
+                ph("teamName", "The team it went to, for example Engineering")));
+
         // ── People ───────────────────────────────────────────────────────────
         add(inApp("people.welcome", AppNotificationType.WELCOME, "People", "Welcome", "Employee",
                 "Sent to a new employee when they activate their account.",
@@ -365,6 +439,14 @@ public final class NotificationEventCatalog {
                 EMPLOYEE_NAME, ph("endDate", "The day probation ends, for example 2026-10-01"),
                 ph("daysRemaining", "Days left, for example 7"), link("recordLink", "Link to the employee's record"),
                 WORKSPACE_NAME));
+        // One entry for both readers: the sender writes {{message}} for each (the employee, or HR).
+        add(inApp("people.probation_team_decision", AppNotificationType.PROBATION_TEAM_DECISION, "People", "Probation confirmed or extended", "Employee and HR",
+                "Sent to the employee and to HR when a manager confirms or extends the employee's probation from Team today.",
+                "Probation {{decision}}", "{{message}}",
+                ph("decision", "confirmed or extended"),
+                ph("message", "What happened, as a sentence for the reader, for example \"Priya Rao confirmed your probation.\" or \"Priya Rao extended Arjun Nair's probation to 5 Nov 2026.\""),
+                EMPLOYEE_NAME, ph("decidedBy", "The manager who decided, for example Priya Rao"),
+                ph("newEndDate", "The new last day when it was extended, for example 5 Nov 2026 (empty when confirmed)")));
 
         // ── Account (always sent) ────────────────────────────────────────────
         add(email("account.invitation", "Account", "Invitation to join", "New member",
@@ -410,6 +492,13 @@ public final class NotificationEventCatalog {
                 "Hi {{firstName}},\n\n{{message}}\n\nPlease find your document attached.",
                 FIRST_NAME, EMPLOYEE_NAME, ph("documentTitle", "The distribution's title"),
                 new Placeholder("message", "The message HR typed on the distribution", false, true)));
+        // Not always sent, unlike the two above: this is the nudge to sign a letter,
+        // and it follows each person's notification choices.
+        add(inApp("letters.signature_requested", AppNotificationType.LETTER_SIGNATURE_REQUESTED, "Letters", "Letter to sign", "Employee",
+                "Sent to the employee when HR sends them a letter that asks for their signature. They read and sign it in My letters.",
+                "A letter needs your signature", "Please read and sign your {{letterSubject}} in My letters.",
+                ph("letterSubject", "The letter's subject, for example Offer letter"),
+                ph("requestedBy", "Who asked for the signature, for example Priya Rao")));
 
         // ── Billing (always sent, fixed wording) ─────────────────────────────
         add(fixed("billing.payment_failed", AppNotificationType.SUBSCRIPTION_HALTED, "Billing", "Autopay payment failed", "Admins",
