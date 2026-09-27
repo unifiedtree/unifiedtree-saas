@@ -1,7 +1,9 @@
+// The design's stat card (prototype UtStat = the kit StatCard "stat" variant):
+// round tone icon, label, figure (counts up), then the change and a note.
+// Same props as before; the icon colour classes pick the nearest design tone.
 import React from 'react'
-import { motion } from 'framer-motion'
-import { clsx } from 'clsx'
 import type { LucideIcon } from 'lucide-react'
+import { StatCard as KitStatCard, type StatTone } from '@/design/kit/StatCard'
 
 interface StatCardProps {
   title: string
@@ -14,6 +16,15 @@ interface StatCardProps {
   subtitle?: string
 }
 
+/** The icon's old colour classes → the design's four stat tones (brand, gold, red, gray). */
+function toneOf(...classes: (string | undefined)[]): StatTone {
+  const c = classes.filter(Boolean).join(' ')
+  if (/\b(?:text|bg)-(?:red|rose)-/.test(c)) return 'red'
+  if (/\b(?:text|bg)-(?:amber|orange|yellow|peach)-/.test(c)) return 'gold'
+  if (/\b(?:text|bg)-(?:gray|slate|zinc|neutral)-/.test(c)) return 'gray'
+  return 'brand'
+}
+
 export const StatCard: React.FC<StatCardProps> = ({
   title,
   value,
@@ -24,32 +35,17 @@ export const StatCard: React.FC<StatCardProps> = ({
   iconBg = 'bg-brand-soft',
   subtitle,
 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 14 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-    className="ut-card ut-card-sm ut-card-hover group p-5 transition-all duration-300"
-  >
-    <div className="mb-4 flex items-start justify-between">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{title}</p>
-        <p className="mt-2 font-display text-3xl font-bold tracking-tight text-[var(--text-primary)]">{value}</p>
-        {subtitle && <p className="mt-1 text-xs font-medium text-[var(--text-tertiary)]">{subtitle}</p>}
-      </div>
-      <div className={clsx('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl shadow-2xs transition-transform duration-200 group-hover:scale-105', iconBg)}>
-        <Icon size={20} className={iconColor} />
-      </div>
-    </div>
-    {change && (
-      <div className={clsx(
-        'flex items-center gap-1.5 text-xs font-bold',
-        changeType === 'positive' && 'text-emerald-600 dark:text-emerald-400',
-        changeType === 'negative' && 'text-rose-600 dark:text-rose-400',
-        changeType === 'neutral'  && 'text-[var(--text-tertiary)]',
-      )}>
-        <span>{change}</span>
-        <span className="font-medium text-[var(--text-disabled)]">vs last month</span>
-      </div>
-    )}
-  </motion.div>
+  <KitStatCard
+    variant="stat"
+    label={title}
+    // Shown at once and exactly as given, as before (no count-up, no regrouping).
+    value={String(value)}
+    countUp={false}
+    icon={<Icon size={20} aria-hidden="true" />}
+    tone={toneOf(iconColor, iconBg)}
+    delta={change}
+    trend={changeType === 'negative' ? 'down' : changeType === 'positive' ? 'up' : 'flat'}
+    mood={changeType === 'positive' ? 'good' : changeType === 'negative' ? 'bad' : 'flat'}
+    note={subtitle ?? (change ? 'vs last month' : undefined)}
+  />
 )

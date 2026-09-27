@@ -1,10 +1,11 @@
 ﻿import { chromium, expect } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
+/* global process, console */
 const record=randomUUID(),tenant='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-const sql=q=>execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d','unifiedtree_recovery','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8'})
+const sql=q=>execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d',process.env.RECOVERY_DB||'unifiedtree_recovery','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8'})
 sql(`INSERT INTO attendance.records(id,tenant_id,employee_id,company_id,attendance_date,check_in_at,check_out_at,overtime_minutes,remarks) VALUES('${record}','${tenant}','22222222-2222-2222-2222-222222222222','cccccccc-cccc-cccc-cccc-cccccccccccc','2026-09-15','2026-09-15T04:00:00Z','2026-09-15T14:00:00Z',77,'Isolated browser overtime fixture')`)
-const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}}),base='http://demo.localhost:3002'
+const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}}),base=process.env.RECOVERY_APP_URL||'http://demo.localhost:3002'
 // Month fields use the shared calendar: open it ("Choose month"), then pick the year and the month.
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December']
 async function pickMonth(page,trigger,ym){const [y,m]=ym.split('-').map(Number);await trigger.click();const calendar=page.getByRole('dialog',{name:'Choose month'});await calendar.getByRole('button',{name:'Choose year'}).click();await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click();await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m-1]} ${y}"]`).click();await calendar.waitFor({state:'hidden'})}

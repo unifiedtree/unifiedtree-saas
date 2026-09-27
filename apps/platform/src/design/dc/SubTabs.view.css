@@ -1,1 +1,6 @@
-.dc-sub-tabs-0:hover{border-color:#cbd5e1 !important;background:#f8fafc !important;color:#0f172a !important}
+/* hand-owned (F2d). SubTabs = the kit filter pills (display.css) + an urgent count badge. */
+.dcsub .dcsub-n { font-weight: 500; }
+.dcsub .dcsub-n.is-urgent {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; box-sizing: border-box;
+  padding: 0 6px; border-radius: 999px; background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); font-size: 11.5px; opacity: 1;
+}
