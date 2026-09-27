@@ -1,5 +1,6 @@
-// The display half of the redesign kit: everything that shows data.
-//   import { PageHeader, StatCard, Section, StatusPill, … } from '@/design/kit/display'
+// The display half of the redesign kit: everything that shows data, plus the
+// page-level Button and the Table.
+//   import { PageHeader, StatCard, Section, StatusPill, Button, Table, … } from '@/design/kit/display'
 // The overlay/form half (SidePanel, Dialog, Popover/Menu, Dropdown, Toast,
 // FormField, ApprovalRow) lives next to it. Motion hooks: '@/design/theme/motion'.
 //
@@ -56,7 +57,7 @@ export { ProgressRing, DonutRing, GeofenceRing, geofenceRadius, donutArcs } from
 export type { ProgressRingProps, DonutRingProps, GeofenceRingProps } from './Ring'
 
 export { MonthCalendar, CalendarLegend, monthWeeks, calendarKeyTarget } from './MonthCalendar'
-export type { MonthCalendarProps, CalendarDay, CalendarTone, CalendarVariant, CalendarLegendItem } from './MonthCalendar'
+export type { MonthCalendarProps, CalendarDay, CalendarTag, CalendarTone, CalendarVariant, CalendarLegendItem } from './MonthCalendar'
 
 export { SegmentedControl } from './SegmentedControl'
 export type { SegmentedControlProps, SegmentOption } from './SegmentedControl'
@@ -66,3 +67,21 @@ export type { FilterPillsProps, FilterPillOption } from './FilterPills'
 
 export { Sparkline, sparkShape, smoothPath } from './Sparkline'
 export type { SparklineProps, SparklineVariant, SparkShape } from './Sparkline'
+
+export { Button } from './Button'
+export type { ButtonProps, ButtonVariant, ButtonSize } from './Button'
+
+export { Table, CellPerson, CellStack, CellActions } from './Table'
+export type { TableProps, TableColumn, TableSort, RowKey, CellPersonProps } from './Table'
+
+export { ColumnChart, columnHeight } from './ColumnChart'
+export type { ColumnChartProps, ColumnBar, ColumnTone } from './ColumnChart'
+
+export { Ledger, LedgerNet } from './Ledger'
+export type { LedgerProps, LedgerGroup, LedgerLine, LedgerNetProps } from './Ledger'
+
+export { StepTrack } from './StepTrack'
+export type { StepTrackProps, StepItem, StepState } from './StepTrack'
+
+export { Callout } from './Callout'
+export type { CalloutProps } from './Callout'
