@@ -66,8 +66,11 @@ public class OvertimeRules {
         this.jdbc = jdbc;
     }
 
-    /** True when the table and every column this class reads exist (a catalog read; never fails). */
-    boolean tableReady() {
+    /**
+     * True when the table and every column this class reads exist (a catalog read; never fails). Public: the
+     * overtime controller calls it through this bean's proxy.
+     */
+    public boolean tableReady() {
         Integer n = jdbc.queryForObject("""
                 SELECT count(*) FROM pg_attribute
                  WHERE attrelid = to_regclass('attendance.overtime_rules') AND attnum > 0 AND NOT attisdropped
