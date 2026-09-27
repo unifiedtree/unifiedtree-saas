@@ -3,7 +3,7 @@
 // the performers' average rating (BW-114), onboarding department / joining date (BW-115), candidates "this
 // quarter" and stage conversion (BW-116 / BW-66), project owner, due date and health (BW-117).
 import { useState, type CSSProperties } from 'react'
-import { Avatar, Section, SegmentedControl, StatusPill, Button, type StatusTone } from '@/design/kit/display'
+import { Avatar, Button, EmptyState, Section, SegmentedControl, StatusPill, type StatusTone } from '@/design/kit/display'
 import { dashIcon } from '@/design/dc/icons'
 import { fmtShort } from '@/design/dc/dates'
 import { inr, lakh, monthName, type PayMonth } from './dashboardModel'
@@ -159,7 +159,7 @@ export function PayrollCard({ months6, months12, range, headline, onBar, ...c }:
   return (
     <Section variant="dashboard" level={3} title="Monthly payroll expense" sub="Gross payroll from locked and paid runs, and runs in review. Amounts in INR." body="flush" {...c}
       actions={<SegmentedControl<'6' | '12'> label="Range" size="sm" value={n} onChange={setN} options={[{ value: '6', label: '6 months' }, { value: '12', label: '12 months' }]} />}
-      empty={!ms.length && headline?.gross == null ? { title: 'No finalized payroll runs.', hint: range ? `${range}. Totals appear here once a pay run is locked.` : 'Totals appear here once a pay run is locked.', icon: 'rupee' } : undefined}>
+      empty={!ms.length && !headline ? { title: 'No finalized payroll runs.', hint: range ? `${range}. Totals appear here once a pay run is locked.` : 'Totals appear here once a pay run is locked.', icon: 'rupee' } : undefined}>
       <div className="ud-pay">
         <div className="ud-pay__head">
           <span className="ud-pay__now">{now != null ? inr(now) : 'Not finalized'}</span>
@@ -171,6 +171,9 @@ export function PayrollCard({ months6, months12, range, headline, onBar, ...c }:
           </span>
         </div>
         <div className="ud-pay__meta" style={{ marginTop: 2 }}>{range}</div>
+        {!ms.length ? (
+          <EmptyState icon="rupee" minHeight={200} title="No payroll runs in these months." hint="Totals appear here once a pay run is locked." />
+        ) : <>
         <div className="ud-pay__bars" role="group" aria-label="Payroll by month">
           {ms.map((m) => (
             <button key={m.month} type="button" className="ud-pay__col" onClick={() => onBar(m)} title={`${m.title} · ${inr(m.gross)} · ${m.finalized ? 'locked or paid' : 'in review'}`}
@@ -182,6 +185,7 @@ export function PayrollCard({ months6, months12, range, headline, onBar, ...c }:
         </div>
         <div className="ud-pay__months" aria-hidden="true">{ms.map((m) => <span key={m.month}>{m.label}</span>)}</div>
         <div className="ud-pay__legend"><span><i />Locked or paid</span><span><i className="is-rev" />In review</span><span style={{ marginLeft: 'auto' }}>₹ lakh</span></div>
+        </>}
       </div>
     </Section>
   )

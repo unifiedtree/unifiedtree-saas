@@ -57,7 +57,7 @@ try {
   // A notice chip opens its panel; Archive is there, behind the confirmation.
   for (let guard = 0; guard < 10 && (await page.getByText(/^Design check notice \d+$/).count()) > 0; guard++) {
     const t = (await page.getByText(/^Design check notice \d+$/).first().textContent()) || ''
-    await page.getByRole('button', { name: new RegExp('^' + t + '\.') }).click()
+    await page.getByRole('button', { name: new RegExp('^' + t + '\\.') }).click()
     await page.getByRole('dialog', { name: t }).getByRole('button', { name: 'Archive notice' }).click()
     await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Archive', exact: true }).click()
     await page.getByText(t, { exact: true }).first().waitFor({ state: 'detached', timeout: 10000 }).catch(() => {})

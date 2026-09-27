@@ -183,24 +183,28 @@ try {
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
   pageErrors.length = 0; failed.length = 0
 
+  // A stat card's figure and note. The redesign moved Active employees into the Total employees note (AUDIT §5.5).
   const tileValue = async (label) => {
-    const tile = page.getByRole('button', { name: new RegExp(label) }).first()
+    const tile = page.getByRole('button', { name: new RegExp('^\\s*' + label, 'i') }).first()
     await tile.waitFor({ timeout: 20000 })
-    return ((await tile.textContent()) || '').replace(/\s+/g, ' ')
+    await page.waitForTimeout(1200) // the figure counts up
+    const v = ((await tile.locator('.uk-stat__value').textContent()) || '').trim()
+    const n = ((await tile.locator('.uk-stat__note').textContent()) || '').replace(/\s+/g, ' ').trim()
+    return { v, n }
   }
   calls.length = 0
   await page.goto(base + '/dashboard')
   await page.waitForLoadState('networkidle')
-  await page.getByRole('button', { name: /Active employees/ }).first().waitFor({ timeout: 20000 })
-  const todayTile = await tileValue('Active employees')
-  check('today: Active employees tile shows the database count', new RegExp(`Active employees\\s*${todayActive}(?!\\d)`).test(todayTile), todayTile.slice(0, 80))
+  const todayTile = await tileValue('Total employees')
+  check('today: Active employees (the Total employees note) shows the database count', todayTile.n.startsWith(`${todayActive} active`), todayTile.n.slice(0, 80))
   check('today: no past-date banner', (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0)
   check('today: no "As of today" label', (await page.getByText('As of today', { exact: false }).count()) === 0)
   const dated = calls.filter((c) => c.includes('includeLeavers') || (/^\/v1\/(admin\/dashboard|hrms\/projects|probation\/upcoming|audit\/events|reports\/headcount)/.test(c) && /[?&](date|asOf|to)=/.test(c)))
   check('today: the same requests as before (no date, no includeLeavers)', dated.length === 0, dated.join(' | ').slice(0, 200))
   check('today: weekly trend says Last 7 days', (await page.getByText('Last 7 days · IST').count()) > 0)
-  // Today's payroll chart: the last six finalized months, whatever they are (as before the date work).
-  const finalMonths = sql(`SELECT DISTINCT period_year || '-' || lpad(period_month::text, 2, '0') FROM payroll.runs WHERE tenant_id='${tenant}' AND company_id='${company}' AND status IN ('LOCKED','PAID') ORDER BY 1`).split('\n').map((x) => x.trim()).filter(Boolean).slice(-6)
+  // Today's payroll chart: the last six months with a run, whatever they are. The redesign also draws months still
+  // in review (paid vs in review, G16), so every run but a cancelled one counts.
+  const finalMonths = sql(`SELECT DISTINCT period_year || '-' || lpad(period_month::text, 2, '0') FROM payroll.runs WHERE tenant_id='${tenant}' AND company_id='${company}' AND status <> 'CANCELLED' ORDER BY 1`).split('\n').map((x) => x.trim()).filter(Boolean).slice(-6)
   if (finalMonths.length && (await page.getByText('Finalized payroll', { exact: false }).count()) > 0) {
     const MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], title = (m) => `${MONS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
     const first = finalMonths[0], last = finalMonths[finalMonths.length - 1]
@@ -216,16 +220,17 @@ try {
   await page.getByRole('status').filter({ hasText: 'Viewing' }).first().waitFor({ timeout: 20000 }).catch(() => {})
   check(`${PAST}: the banner names the day`, (await page.getByRole('status').filter({ hasText: `Viewing Fri, ${PAST_LABEL}` }).count()) > 0)
   await page.waitForTimeout(1500)
-  const pastTile = await tileValue('Active employees')
-  // The value is followed by the sub-line "<joined> joined · <left> left, 1–14 Mar 2025".
-  check(`${PAST}: Active employees tile shows that day's count (${pastActive})`, pastTile.trim().startsWith(`Active employees${pastActive}${statsPast.body.joinedInMonth} joined · ${statsPast.body.leftInMonth} left`), pastTile.slice(0, 90))
-  check(`${PAST}: the tile tells the month's joiners and leavers`, /joined · \d+ left, 1–14 Mar 2025/.test(pastTile), pastTile.slice(0, 120))
-  const payTile = await page.getByRole('button', { name: /Finalized payroll/ }).first().textContent().catch(() => '')
+  const pastTile = await tileValue('Total employees')
+  // The Total employees note reads "<active> active · <joined> joined · <left> left, 1–14 Mar 2025".
+  check(`${PAST}: Active employees (the Total employees note) shows that day's count (${pastActive})`, pastTile.n.startsWith(`${pastActive} active · ${statsPast.body.joinedInMonth} joined · ${statsPast.body.leftInMonth} left`), pastTile.n.slice(0, 90))
+  check(`${PAST}: the tile tells the month's joiners and leavers`, /joined · \d+ left, 1–14 Mar 2025/.test(pastTile.n), pastTile.n.slice(0, 120))
+  // The finalized payroll figure is now the payroll card's headline.
+  const payTile = await page.getByRole('region', { name: 'Monthly payroll expense' }).textContent().catch(() => '')
   check(`${PAST}: payroll tile is that month's`, /Finalized payroll · 2025-03/.test(payTile || '') && (pastRun !== '0' || /Not finalized/.test(payTile || '')), (payTile || '').slice(0, 80))
   const asOf = page.getByText('As of today', { exact: false })
   const seatsShown = (await page.getByText('Seats used', { exact: false }).count()) > 0
   check('"As of today" labels the seats (no history)', seatsShown ? (await asOf.count()) > 0 : (await asOf.count()) === 0, seatsShown ? 'seats tile shown' : 'no seats tile for this workspace')
-  const runsUpTo = Number(sql(`SELECT count(*) FROM payroll.runs WHERE tenant_id='${tenant}' AND company_id='${company}' AND status IN ('LOCKED','PAID') AND (period_year * 100 + period_month) <= 202503`))
+  const runsUpTo = Number(sql(`SELECT count(*) FROM payroll.runs WHERE tenant_id='${tenant}' AND company_id='${company}' AND status <> 'CANCELLED' AND (period_year * 100 + period_month) <= 202503`))
   check(`${PAST}: the payroll chart ends at that month`, runsUpTo > 0 ? (await page.getByText(/Mar 2025$/).count()) > 0 : (await page.getByText('Up to Mar 2025').count()) > 0, `finalized months up to it: ${runsUpTo}`)
   check(`${PAST}: weekly trend ends on the day`, (await page.getByText(`7 days to ${PAST_LABEL} · IST`).count()) > 0)
   check(`${PAST}: activity is up to the day`, (await page.getByText(`Activity up to ${PAST_LABEL}`).count()) > 0)
@@ -268,19 +273,19 @@ try {
 
   // A past working day with punches, and a working day in the previous year: the tiles show the records.
   const norm = (t) => (t || '').replace(/\s+/g, '')
-  const tileText = async (label) => norm(await page.getByRole('button', { name: new RegExp('^\\s*' + label) }).first().textContent({ timeout: 20000 }).catch(() => ''))
+  const tileText = async (label) => { const t = await tileValue(label).catch(() => ({ v: '', n: '' })); return { v: t.v, n: norm(t.n) } }
   for (const day of [WORKDAY, YEAR_AGO]) {
     const w = dayWant[day]
     const active = (await get(owner, `/v1/admin/dashboard/stats?companyId=${company}&date=${day}`)).body?.activeEmployees
     await page.goto(`${base}/dashboard?date=${day}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(1500)
-    const t = { total: await tileText('Total Employees'), present: await tileText('Present'), onLeave: await tileText('On Leave'), late: await tileText('Late Arrivals') }
-    const ok = t.total.startsWith(norm(`Total Employees${w.total}${active} active`)) && t.present.startsWith(norm(`Present${w.present}Checked in`))
-      && t.onLeave.startsWith(norm(`On Leave${w.onLeave}Approved leave`)) && new RegExp(`^LateArrivals${w.late}(Noonelate|Needsattention)`).test(t.late)
-    check(`${day}: the Live Overview tiles show that day's records`, ok, `${t.total.slice(0, 40)} | ${t.present.slice(0, 30)} | ${t.onLeave.slice(0, 30)} | ${t.late.slice(0, 30)}`)
+    const t = { total: await tileText('Total employees'), present: await tileText('Present'), onLeave: await tileText('On leave'), late: await tileText('Late arrivals') }
+    const ok = t.total.v === String(w.total) && t.total.n.startsWith(norm(`${active} active`)) && t.present.v === String(w.present) && /(scheduled|Nobody)/.test(t.present.n)
+      && t.onLeave.v === String(w.onLeave) && t.onLeave.n.startsWith('Approvedleave') && t.late.v === String(w.late) && /^(Noonelate|After)/.test(t.late.n)
+    check(`${day}: the Live Overview tiles show that day's records`, ok, JSON.stringify(t).slice(0, 240))
     if (day === WORKDAY) {
-      check(`${day}: the tiles name the day`, (await page.getByText(`Attendance · ${WORKDAY_LABEL.slice(0, 6)}`, { exact: false }).count()) > 0 || (await page.getByText('Checked in on 22 Sep', { exact: false }).count()) > 0)
+      check(`${day}: the tiles name the day`, (await page.getByText(`Attendance on Tue, ${WORKDAY_LABEL.slice(0, 6)}`, { exact: false }).count()) > 0)
       await screens(page, 'dashboard-workday-1440')
     }
   }
