@@ -13,6 +13,7 @@ import { StatTile } from '@/design/dc/StatTile'
 import { SectionState } from '@/design/dc/SectionState'
 import { ApprovalCard } from '@/design/dc/ApprovalCard'
 import { dashIcon } from '@/design/dc/icons'
+import { ToastSlot, TOAST_MS } from '@/design/kit/Toast'
 
 export const FONT = 'Inter,-apple-system,sans-serif'
 export const HEAD_FONT = "'Plus Jakarta Sans',Inter,sans-serif"
@@ -207,18 +208,14 @@ export function Facts({ items, min = 150 }: { items: { k: string; v: ReactNode }
   )
 }
 
-/** The design's dark toast (bottom centre); `node` renders it. */
+/** The design's toast (bottom centre, the shared kit Toast); `node` renders it. Success goes after 2.6s, errors after 7s. */
 export function useDesignToast() {
-  const [t, set] = useState<null | { msg: string; err?: boolean; detail?: string }>(null)
-  const timer = useRef<ReturnType<typeof setTimeout>>()
-  useEffect(() => () => clearTimeout(timer.current), [])
-  const show = (msg: string, err?: boolean, detail?: string) => { clearTimeout(timer.current); set({ msg, err, detail }); timer.current = setTimeout(() => set(null), err ? 7000 : 3200) }
+  const [t, set] = useState<null | { msg: string; err?: boolean; detail?: string; n: number }>(null)
+  const seq = useRef(0)
+  const show = (msg: string, err?: boolean, detail?: string) => set({ msg, err, detail, n: ++seq.current })
   const node = t ? (
-    <div role={t.err ? 'alert' : 'status'} style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 1400, display: 'flex', alignItems: t.detail ? 'flex-start' : 'center', gap: 10, width: 'max-content', maxWidth: 'min(460px,calc(100vw - 32px))', padding: '12px 14px', borderRadius: 14, background: '#0f172a', color: '#fff', boxShadow: '0 18px 36px -14px rgba(15,23,42,.6)', boxSizing: 'border-box', fontFamily: FONT }}>
-      <span aria-hidden="true" style={{ display: 'inline-flex', color: t.err ? '#fca5a5' : '#34d399', marginTop: t.detail ? 1 : 0 }}>{dashIcon(t.err ? 'alertTriangle' : 'check', 18)}</span>
-      <span style={{ display: 'grid', gap: 3 }}><strong style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35 }}>{t.msg}</strong>{t.detail && <span style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.45 }}>{t.detail}</span>}</span>
-      <button type="button" aria-label="Dismiss" onClick={() => set(null)} style={{ border: 0, background: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'inline-flex', padding: 2, marginLeft: 4 }}>{dashIcon('x', 15)}</button>
-    </div>
+    <ToastSlot key={t.n} tone={t.err ? 'error' : 'success'} message={t.msg} detail={t.detail} duration={t.err ? 7000 : TOAST_MS.success}
+      onDone={() => set((cur) => (cur && cur.n === t.n ? null : cur))} />
   ) : null
   return { show, node }
 }
