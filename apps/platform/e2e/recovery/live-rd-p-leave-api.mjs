@@ -43,7 +43,7 @@ async function session(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (json && json.errorCode === 'FEATURE_NOT_READY') notReady.push(`${email} ${method} ${path}`)
     return { status: res.status, json }
