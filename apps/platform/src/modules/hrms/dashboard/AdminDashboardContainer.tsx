@@ -1,41 +1,49 @@
-// Real-data container for the redesigned Company Admin Dashboard
-// (design/dc/AdminDashboard). Every number comes from an existing endpoint;
-// each dashboard section gets its own loading / empty / error state.
+// The admin dashboard at /dashboard (prototype PgDashboard.dc.html), hand-built on the redesign kit.
+// Every number comes from an existing endpoint; each card has its own loading / empty / error state and shows
+// only with the permission its endpoint checks, so no request is refused.
 //
-// The date (?date= in the URL) drives every card: a past day asks each endpoint
-// for that day (`date=`, the history view: headcount from joining / exit dates
-// and status history, the day's attendance with the people employed then, the
-// requests pending then, the payroll months up to it…). Today's view sends the
-// same requests as before. Seats have no history: they say "As of today".
+// The date (?date= in the URL) drives every card: a past day asks each endpoint for that day (`date=`, the
+// history view: headcount from joining / exit dates and status history, the day's attendance with the people
+// employed then, the requests pending then, the payroll months up to it…). Today's view sends the same requests
+// as before. Seats have no history: they say "As of today".
+//
+// Release 1 is frontend only on today's backend. Design pieces that need a new endpoint are left out until it
+// exists (never faked): Customise / most-used quick actions (BW-112), the Total employees sparkline and "joined
+// this month" today (BW-113), the performers' average (BW-114), onboarding department and joining date (BW-115),
+// hiring "this quarter" and conversion (BW-116 / BW-66), project owner / due / health (BW-117), notice event
+// date (BW-118), approval Undo (BW-06) and Remind (BW-10).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
-import { HrDrawer } from '@/shared/components/hr'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { greetingName } from '@/shared/hooks/greetingName'
-import { AdminDashboard, type SectionKey, type SectionStatus, type ShowKey } from '@/design/dc/AdminDashboard'
-import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
-import { istToday, istHour, addDays, dt, fmtShort, fmtLong, MON } from '@/design/dc/dates'
+import { canOpen } from '@/shared/navigation/access'
+import { PAGE_REGISTRY, MENU_RULES } from '@/shared/navigation/pageRegistry'
+import { useAccessContext } from '@/shared/navigation/useAccess'
+import { useToast } from '@/design/kit/overlays'
+import { istToday, istHour, addDays, fmtShort } from '@/design/dc/dates'
 import { useCompanies } from '../api/useOrg'
-import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals, type TeamDashboardResponse, type DailyAttendanceCounts } from '../api/useAttendance'
+import { useTeamDashboard, useAttendanceTrend, type TeamDashboardResponse, type DailyAttendanceCounts } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
-import { useLeaveOverview } from '../api/useLeave'
 import { useHeadcountReport, fetchHeadcountWorkbook } from '../api/useReports'
 import { useActivityFeed, activityActor, type AuditPageResponse } from '../api/useActivity'
 import { useSeatsUsage } from '../api/useSeats'
 import { useHolidays } from '../api/useSettings'
-import { useMilestones, useRetirementsDue, type Milestone } from '../api/useMilestones'
 import { useUpcomingProbations, type UpcomingProbation } from '../api/useProbation'
 import { useRuns } from '../api/usePayrollRuns'
 import { useEmployeeDirectory } from '../api/useWorkforce'
-import { ProjectProductivity } from './ProjectProductivity'
 import { headcountFileName, headcountSheets } from './headcountWorkbook'
 import { saveAndRecord, xlsxBlob } from '@/shared/export/fileExport'
-import { endOfIstDay, monthToDate, parseDashboardDate, payrollWindow } from './dashboardDate'
+import { endOfIstDay, monthToDate, parseDashboardDate } from './dashboardDate'
+import { useInboxCounts } from './NeedsAction'
+import { AdminDashboard, type DashboardVm } from '@/design/dc/AdminDashboard'
+import {
+  lateNote, monthSpan, payrollHint, payrollMonths, pctOf, quickActions, relTime, scheduledOf, trendColumns, workingWindow,
+  type DashSection,
+} from './dashboardModel'
 
 interface Stats { activeEmployees?: number; openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string
   /** Past dates only (the history view): everyone on the roll that day, and the month's joiners / leavers up to it. */
@@ -45,33 +53,19 @@ interface Notice { id: string; title: string; body: string; expiresOn?: string; 
 interface Project { id: string; name: string; status: string; total: number; completed: number }
 
 const STAGE_LABEL: Record<string, string> = { APPLIED: 'Applied', SCREENING: 'Screening', INTERVIEW: 'Interview', OFFER: 'Offer', HIRED: 'Hired', REJECTED: 'Rejected' }
-
-type Q = { isLoading: boolean; isError: boolean; refetch: () => unknown; isFetched?: boolean }
-const status = (q: Q | null, allowed: boolean, empty: boolean): SectionStatus =>
-  !allowed || !q ? 'empty' : q.isLoading ? 'loading' : q.isError ? 'error' : empty ? 'empty' : 'live'
-
-
-/** "12 min ago" style relative time for the activity feed. */
-function relTime(iso: string | null): string {
-  if (!iso) return ''
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.round(s / 60)} min ago`
-  if (s < 86400) return `${Math.round(s / 3600)} hr ago`
-  return `${Math.round(s / 86400)} d ago`
-}
-const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }).toLowerCase() : '')
-const humanise = (t: string) => { const w = t.replace(/[._-]+/g, ' ').trim().toLowerCase(); return w }
+const humanise = (t: string) => t.replace(/[._-]+/g, ' ').trim().toLowerCase()
 /** "CREATE" → "created", so the feed reads "Asha created report schedule …". */
 const VERB: Record<string, string> = { create: 'created', update: 'updated', delete: 'deleted', approve: 'approved', reject: 'rejected', export: 'exported', submit: 'submitted', cancel: 'cancelled', login: 'signed in', logout: 'signed out' }
 const verb = (a: string) => VERB[humanise(a)] || humanise(a)
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 const NOTICES_PER_PAGE = 5
+const ZERO: DayBuckets = { total: 0, present: 0, regular: 0, late: 0, halfDay: 0, wfh: 0, onLeave: 0, notMarked: 0, absent: 0, earlyOut: 0, other: 0 }
 
 export function AdminDashboardContainer() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const confirm = useConfirmDialog()
-  const mobile = useIsMobile()
+  const toast = useToast()
   const today = istToday()
   // The date is kept in the URL (?date=yyyy-MM-dd): a refresh or Back keeps it.
   // Only past days are kept; today, a later day or a bad value is today's view.
@@ -91,7 +85,7 @@ export function AdminDashboardContainer() {
     // A later day (or not a date) can't be shown: say so once and drop it from the URL.
     if (parsed.future && !futureNoted.current) {
       futureNoted.current = true
-      toast.info('Showing today', { description: 'The dashboard can show today or an earlier date, not a date after today.' })
+      toast.info('Showing today', { detail: 'The dashboard can show today or an earlier date, not a date after today.' })
     }
     setDate(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,23 +99,25 @@ export function AdminDashboardContainer() {
   const [noticePage, setNoticePage] = useState(0)
 
   // ── permissions ────────────────────────────────────────────────────────────
+  const ctx = useAccessContext()
   const canReadEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
   const canReadTeam = usePermission(P.ATTENDANCE_TEAM_READ)
-  const canReadCompany = usePermission('org.company.read' as any)
-  const canWriteCompany = usePermission('org.company.write' as any)
+  const canReadCompany = usePermission(P.ORG_COMPANY_READ)
+  const canWriteCompany = usePermission(P.ORG_COMPANY_WRITE)
   const canReadHiring = usePermission(P.HRMS_HIRING_READ)
   const canReadPerformance = usePermission('hrms.performance.read' as any)
   const canReadOnboarding = usePermission('hrms.onboarding.instance.write' as any)
   const canReadProjects = usePermission('hrms.project.read' as any)
   const canAudit = usePermission(P.AUDIT_READ)
   const canSeeProbation = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
+  const canProbationConfig = usePermission('hrms.probation.config.read' as any)
   const canApproveCorrections = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
   const canApproveLeave = usePermission(P.HRMS_LEAVE_APPROVE_L1)
+  const canApproveWfh = usePermission(P.WFH_APPROVE)
   const canShiftAdmin = usePermission('attendance.workforce.admin' as any)
   const canRequestLeave = usePermission(P.LEAVE_REQUEST_SELF)
   const canExport = usePermission(P.HRMS_REPORT_HEADCOUNT)
   const canAddEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
-  const canManageOrg = usePermission(P.ORG_COMPANY_WRITE)
   const canReportAttrition = usePermission(P.HRMS_REPORT_ATTRITION)
   const canReportAttendance = usePermission(P.HRMS_REPORT_ATTENDANCE)
   const canReportLeave = usePermission(P.HRMS_REPORT_LEAVE)
@@ -130,12 +126,13 @@ export function AdminDashboardContainer() {
   const hasPayrollModule = useLocalAuthStore((s) => s.tenant?.activeModules?.includes('payroll') ?? false)
   const canRunsRead = usePermission(P.PAYROLL_RUNS_READ)
   const hasPayroll = hasPayrollModule && canRunsRead
-  const roles: string[] = useAuthStore((s) => s.user?.roles) ?? []
-  const canBilling = roles.some((r) => ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'].includes(r))
+  // Seats: the Billing & plan page's own rule (workspace.billing.manage), not a list of role names.
+  const reg = (id: string) => PAGE_REGISTRY.find((e) => e.id === id)?.access
+  const canBilling = canOpen(reg('s-billing'), ctx)
   // The greeting's name: the first name, or the full name when it is just an initial.
   const firstName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
 
-  // ── data ───────────────────────────────────────────────────────────────────
+  // ── data (query keys as before) ────────────────────────────────────────────
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id as string | undefined
   // Attendance: today's view keeps its hooks; a past day asks for the team as it was then
@@ -149,7 +146,8 @@ export function AdminDashboardContainer() {
   const directory = useEmployeeDirectory({ companyId, pageSize: 1 }, { enabled: canReadEmployees && !!companyId && !canReadTeam && !isPast })
   const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId, date], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}${dq}`), enabled: canReadCompany && !!companyId })
   const alerts = useQuery({ queryKey: ['dashboard', 'alerts', companyId, date], queryFn: () => apiJson<Alert[]>(`/v1/admin/dashboard/alerts${isPast ? `?date=${sel}` : ''}`), enabled: canReadCompany && !!companyId })
-  const seats = useSeatsUsage({ enabled: canBilling })
+  // Seats: read for the billing line, and for Add employee (disabled with the reason when every seat is used).
+  const seats = useSeatsUsage({ enabled: canBilling || canAddEmployee })
   const holidays = useHolidays(companyId ?? '', Number(sel.slice(0, 4)))
   const headcount = useHeadcountReport(canReadEmployees && canExport ? (companyId ?? null) : null, isPast ? sel : undefined)
   const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId, date], queryFn: () => apiJson<{ id: string; name: string; department?: string | null; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}${dq}`), enabled: canReadPerformance && !!companyId })
@@ -167,18 +165,17 @@ export function AdminDashboardContainer() {
   // Archiving the last notice on a page steps back to the page before.
   const noticePages = Math.max(1, Math.ceil((notices.data?.totalElements ?? 0) / NOTICES_PER_PAGE))
   useEffect(() => { if (notices.data && noticePage > 0 && noticePage >= noticePages) setNoticePage(noticePages - 1) }, [notices.data, noticePage, noticePages])
-  const milestones = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
-  // Retirements: the next 6 months for this company, at each company's retirement age (HR Configuration).
-  const sixMonthsOut = dt(today)
-  sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6)
-  const retirementDays = Math.round((sixMonthsOut.getTime() - dt(today).getTime()) / 86400000)
-  const retirementsDue = useRetirementsDue(retirementDays, { companyId, enabled: canReadEmployees && !!companyId })
   const probationsToday = useUpcomingProbations(30, canReadEmployees && !isPast)
   // A past day: people on probation then whose probation ended within 30 days of it.
   const probationsPast = useQuery({ queryKey: ['hrms', 'probation', 'upcoming', 30, 'on', sel], queryFn: () => apiJson<UpcomingProbation[]>(`/v1/probation/upcoming?days=30&date=${sel}`), enabled: canReadEmployees && isPast, staleTime: 60_000 })
   const probations = isPast ? probationsPast : probationsToday
-  const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
-  const leaveOverview = useLeaveOverview()
+
+  // ── Needs your action: the counts behind the tiles and the greeting ────────
+  const pastAlert = (type: string) => (isPast && alerts.data ? alerts.data.find((a) => a.type === type)?.count ?? 0 : undefined)
+  const inbox = useInboxCounts({
+    isPast, canAtt: canReadTeam, canFix: canApproveCorrections, canLeave: canApproveLeave, canWfh: canApproveWfh,
+    staff: team.data?.staffStatuses, pastCounts: { leave: pastAlert('LEAVE'), fix: pastAlert('CORRECTIONS') },
+  })
 
   // ── notices: save / archive through the API ────────────────────────────────
   const noticeMutation = useMutation({
@@ -188,8 +185,6 @@ export function AdminDashboardContainer() {
   })
 
   // "Export headcount": an Excel workbook (Summary + Employees) for the dashboard's company and date.
-  const companyName = companies[0]?.name as string | undefined
-  const exportName = headcountFileName(companyName, sel)
   const exportHeadcount = async () => {
     if (!companyId || exporting) return
     setExporting(true)
@@ -197,212 +192,187 @@ export function AdminDashboardContainer() {
       const wb = await fetchHeadcountWorkbook(companyId, sel)
       const file = headcountFileName(wb.companyName, wb.asOf)
       saveAndRecord(file, xlsxBlob(headcountSheets(wb)), { report: 'headcount', fmt: 'XLSX', companyId, filters: { asOf: wb.asOf, workbook: true } })
-      toast.success('Headcount exported', { description: wb.employeesIncluded ? file : `${file} · summary only, your role can’t read employee records` })
+      toast.success('Headcount exported', { detail: wb.employeesIncluded ? file : `${file} · summary only, your role can’t read employee records` })
     } catch (err) {
       const code = (err as Error & { status?: number }).status
-      toast.error('Could not generate the report', { description: code === 403 ? "Your role doesn't include the headcount report." : (err as Error)?.message || 'Please try again.' })
+      toast.error('Could not generate the report', { detail: code === 403 ? "Your role doesn't include the headcount report." : (err as Error)?.message || 'Please try again.' })
     } finally {
       setExporting(false)
     }
   }
 
-  // ── view data (shapes follow the design's sample data) ──────────────────────
-  const data = useMemo(() => {
-    // One bucket per person, the same numbers as Attendance & Time (see attendanceBuckets.ts).
-    const total = team.data ? team.data.staffStatuses.length : isPast ? stats.data?.headcount ?? 0 : directory.data?.totalElements ?? 0
-    const c = team.data
-      ? dayBuckets(team.data, today)
-      : { total, present: 0, regular: 0, late: 0, halfDay: 0, wfh: 0, onLeave: 0, notMarked: 0, absent: 0, earlyOut: 0, other: 0 }
+  // ── the view model ─────────────────────────────────────────────────────────
+  const vm: DashboardVm = useMemo(() => {
+    const staff = team.data?.staffStatuses ?? []
+    const total = team.data ? staff.length : isPast ? stats.data?.headcount ?? 0 : directory.data?.totalElements ?? 0
+    const c: DayBuckets = team.data ? dayBuckets(team.data, today) : { ...ZERO, total }
     const daily: Record<string, DayBuckets> = {}
     for (const r of trend.data ?? []) daily[r.date] = trendBuckets(r, today)
     if (team.data) daily[sel] = c
-
+    const win = workingWindow(daily, sel)
+    const series = (k: keyof DayBuckets) => (win.length >= 2 ? win.map((d) => Number(daily[d][k]) || 0) : null)
+    const dot = win.indexOf(sel) >= 0 ? win.indexOf(sel) : undefined
+    const sched = scheduledOf(c)
     const st = stats.data
-    const payrollMonths = new Map<string, number>()
-    const monthRun = new Map<string, string>()
-    for (const run of runs.data ?? []) {
-      if (run.status !== 'LOCKED' && run.status !== 'PAID') continue
-      const m = `${run.periodYear}-${String(run.periodMonth).padStart(2, '0')}`
-      payrollMonths.set(m, (payrollMonths.get(m) || 0) + Number(run.totalGross || 0))
-      if (!monthRun.has(m)) monthRun.set(m, run.id)
+    const hol = (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName }))
+    const runList = runs.data ?? []
+    const upTo = isPast ? sel.slice(0, 7) : undefined
+    const months6 = payrollMonths(runList, 6, upTo), months12 = payrollMonths(runList, 12, upTo)
+
+    // Quick actions: today's six tiles, each shown only when its target page opens for the viewer (§5.5).
+    const qa = quickActions([
+      { key: 'att', label: 'Attendance', path: '/hrms/attendance', allowed: canReadTeam && canOpen(reg('att-daily'), ctx) },
+      { key: 'shift', label: 'Change shifts', path: '/hrms/shifts?tab=roster', allowed: canShiftAdmin && canReadTeam && canOpen(reg('att-shifts'), ctx) },
+      { key: 'off', label: 'Add time-off', path: '/hrms/leave?tab=apply', allowed: canRequestLeave && canOpen(MENU_RULES['myleave:/hrms/leave'], ctx) },
+      { key: 'pay', label: 'Run payroll', path: '/hrms/payroll-dashboard', allowed: hasPayroll && canOpen(reg('pay-dashboard'), ctx) },
+      // A past date: the reports open on that date (Reports Center passes it on to the dated reports).
+      { key: 'rep', label: 'View reports', path: isPast ? `/hrms/reports?asOf=${sel}` : '/hrms/reports', allowed: canViewReports && canOpen(reg('reports'), ctx) },
+      { key: 'org', label: 'Org setup', path: '/hrms/organization', allowed: canOpen(reg('organization'), ctx) },
+    ])
+    const hint: Record<string, string> = {
+      att: sched ? `${c.present} of ${sched} in${isPast ? ` on ${fmtShort(sel).slice(0, -5)}` : ''}` : 'Daily tracking',
+      shift: 'Roster and shift changes',
+      off: 'Apply for leave',
+      pay: runs.data ? payrollHint(runList, today) : 'Payroll dashboard',
+      rep: isPast ? `Open on ${fmtShort(sel)}` : 'Headcount, attrition and more',
+      org: 'Departments, branches and designations',
     }
-    // A month's bar opens that month's run (the runs list has no month filter). Today: the last six finalized
-    // months, as before; a past date: the six up to that date's month.
-    const finalized = [...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).map(([month, gross]) => ({ month, gross }))
-    const payroll = (isPast ? payrollWindow(finalized, sel.slice(0, 7)) : finalized.slice(-6)).map(({ month, gross }) => ({
-      month, gross, label: MON[Number(month.slice(5, 7)) - 1], title: `${MON[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`,
-      path: monthRun.has(month) ? `/hrms/payroll/runs/${monthRun.get(month)}` : `/hrms/payroll/runs?month=${month}`,
-    }))
-    const pj = projects.data ?? []
-    const done = pj.reduce((n, x) => n + (x.completed || 0), 0), all = pj.reduce((n, x) => n + (x.total || 0), 0)
-    const milestone = (m: Milestone, kind: 'b' | 'a' | 'r') => {
-      const days = Math.round((dt(m.date).getTime() - dt(today).getTime()) / 86400000)
-      const when = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : kind === 'r' ? fmtShort(m.date) : `in ${days} days`
-      const date = kind === 'a' ? `${m.years ?? 1} ${(m.years ?? 1) === 1 ? 'year' : 'years'}` : kind === 'r' ? (days > 45 ? `in ${Math.round(days / 30)} months` : `in ${days} days`) : fmtShort(m.date).slice(0, -5)
-      return { id: m.employeeId, name: m.name, dept: m.department || '', when, date }
+    const kind: Record<string, DashboardVm['quick'][number]['kind']> = { att: 'clock', shift: 'swap', off: 'calendar', pay: 'coins', rep: 'chart', org: undefined }
+
+    const needN = inbox.total
+    const seatsData = seats.data ? { used: seats.data.current, total: seats.data.purchased } : null
+    const seatsFull = !!seatsData && seatsData.total > 0 && seatsData.used >= seatsData.total
+
+    const sections: Record<DashSection, boolean> = {
+      overview: true,
+      attendance: canReadTeam,
+      upcoming: true,
+      people: (canReadEmployees && canExport) || canReadPerformance || canReadOnboarding,
+      hiring: canReadHiring || canReadProjects,
+      payroll: hasPayroll || canAudit,
     }
+    const activityRows = (activity.data?.data ?? []).map((e) => {
+      const act = (e.action || '').toLowerCase()
+      const type = /approv/.test(act) ? 'approve' : /regulari|correct/.test(act) ? 'regularize' : /payroll|lock|process/.test(act) || (e.module || '').includes('payroll') ? 'payroll' : /onboard/.test(act) ? 'onboard' : 'update'
+      const record = e.resourceName?.trim() || ''
+      const summary = e.summary?.trim() || ''
+      const words = summary || `${verb(e.action || 'update')}${e.resourceType ? ' ' + humanise(e.resourceType) : ''}`
+      return {
+        id: e.id, type, actor: activityActor(e), action: words, record: summary && record && summary.includes(record) ? '' : record,
+        module: cap(humanise(e.module || '')), rel: isPast && e.occurredAt ? fmtShort(istToday(new Date(e.occurredAt))) : relTime(e.occurredAt), path: e.resourcePath || '/audit-logs',
+      }
+    })
+
     return {
-      today, todayLabel: fmtLong(today), firstName, companyId,
-      greetingWord: (() => { const h = istHour(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })(),
-      counts: c, daily,
-      summary: st ? {
-        active: st.activeEmployees, openRoles: st.openRoles, complianceDue: st.complianceDue, complianceDone: st.complianceCompleted,
-        payrollMonth: st.month, payrollGross: st.monthlyPayroll ?? null, hasPayrollFigure: 'monthlyPayroll' in st,
-        pipeline: hiring.data ? hiring.data.stages.reduce((n, x) => n + x.count, 0) : undefined,
-        // The history view: the month's joiners and leavers up to the day ("2 joined · 1 left, 1–14 Mar 2025").
-        monthMoves: isPast && st.joinedInMonth != null ? `${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${monthToDate(sel)}` : undefined,
-      } : {},
-      alerts: alerts.data ?? [],
-      seats: seats.data ? { used: seats.data.current, purchased: seats.data.purchased } : { used: 0, purchased: 0 },
-      holidays: (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName })),
-      // id opens the directory on that department; people without one open with departmentId=none.
-      departments: (headcount.data ?? []).map((r) => ({ id: r.department_id ?? null, name: r.department ?? 'No department', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
-      performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: x.department || '', reviews: x.reviews, rating: x.rating })),
-      onboarding: (onboarding.data ?? []).map((o) => ({ ...o, statusLabel: o.status === 'IN_PROGRESS' ? 'In progress' : o.status.charAt(0) + o.status.slice(1).toLowerCase().replace(/_/g, ' ') })),
-      hiring: hiring.data ? { openJobs: hiring.data.openJobs, stages: hiring.data.stages.map((x) => ({ ...x, label: STAGE_LABEL[x.stage] || x.stage })) } : { openJobs: 0, stages: [] },
-      projects: { active: pj.filter((x) => x.status === 'ACTIVE').length, completedTasks: done, openTasks: Math.max(0, all - done), completion: all ? Math.round((done / all) * 100) : 0 },
-      payroll,
-      activity: (activity.data?.data ?? []).map((e) => {
-        const act = (e.action || '').toLowerCase()
-        const type = /approv/.test(act) ? 'approve' : /regulari|correct/.test(act) ? 'regularize' : /payroll|lock|process/.test(act) || (e.module || '').includes('payroll') ? 'payroll' : /onboard/.test(act) ? 'onboard' : 'update'
-        // The record the event is about ("… for Rahul Verma"): resolved server-side, opening its own page when it has one.
-        const record = e.resourceName?.trim() || ''
-        const summary = e.summary?.trim() || ''
-        const words = summary || `${verb(e.action || 'update')}${e.resourceType ? ' ' + humanise(e.resourceType) : ''}`
-        return { id: e.id, type, actor: activityActor(e), action: words, record: summary && record && summary.includes(record) ? '' : record, path: e.resourcePath || '/audit-logs', rel: isPast && e.occurredAt ? fmtShort(istToday(new Date(e.occurredAt))) : relTime(e.occurredAt), time: clock(e.occurredAt) }
-      }),
-      notices: (notices.data?.content ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body, published: fmtShort(n.createdAt.slice(0, 10)), until: n.expiresOn ? fmtShort(n.expiresOn) : null, expiryIso: n.expiresOn || '' })),
-      noticeTotal: notices.data?.totalElements,
-      milestones: {
-        birthdays: (milestones.data?.birthdays ?? []).map((m) => milestone(m, 'b')),
-        anniversaries: (milestones.data?.anniversaries ?? []).map((m) => milestone(m, 'a')),
-        retirements: (retirementsDue.data
-          ? retirementsDue.data.map((r): Milestone => ({ employeeId: r.employeeId, name: r.name, initials: r.initials, department: r.department, date: r.retirementDate, years: r.retirementAge }))
-          : milestones.data?.retirements ?? []).map((m) => milestone(m, 'r')),
+      today, sel, isPast,
+      greeting: `${(() => { const h = istHour(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })()}, ${firstName || 'there'}`,
+      greetSub: canReadTeam && team.data
+        ? { inN: c.present, sched, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null }
+        : { inN: null, sched: null, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null },
+      emptyWorkspace: canReadEmployees && !isPast && total === 0 && !team.isLoading && !directory.isLoading && (team.data != null || directory.data != null),
+      sections,
+      daily, holidays: hol,
+      // ── stat cards ──
+      counts: c, staff,
+      liveLoading: canReadTeam ? team.isLoading : directory.isLoading || (isPast && stats.isLoading),
+      liveError: canReadTeam ? team.error : null,
+      stats: {
+        showTotal: canReadEmployees, showAtt: canReadTeam,
+        total,
+        totalNote: (() => {
+          // Company summary's active employees live in this note (§5.5); a past date adds the month's joiners and leavers.
+          const active = st?.activeEmployees
+          if (active == null) return 'Employee directory'
+          return isPast && st?.joinedInMonth != null ? `${active} active · ${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${monthToDate(sel)}` : `${active} active · employee directory`
+        })(),
+        presentNote: `${pctOf(c.present, sched)}% of ${sched} scheduled`,
+        leaveNote: `Approved leave · ${pctOf(c.onLeave, c.total)}%`,
+        lateNote: lateNote(staff, c.late),
+        spark: { present: series('present'), leave: series('onLeave'), late: series('late'), half: series('halfDay'), wfh: series('wfh'), none: isPast ? null : series('notMarked'), absent: series('absent') },
+        sparkDot: dot,
       },
-      probations: (probations.data ?? []).map((p) => ({ id: p.employeeId, code: p.employeeCode, name: p.employeeName, title: p.jobTitle || '', manager: p.managerName || '—', end: fmtShort(p.probationEndDate), days: p.daysRemaining })),
-      ops: (() => {
-        // A past day: what was pending then, from the dashboard's alerts for that day. Without them
-        // (no permission to read the alerts) the counts are today's and say so.
-        const then = (type: string) => (isPast && alerts.data ? alerts.data.find((a) => a.type === type)?.count : undefined)
-        const c = then('CORRECTIONS'), l = then('LEAVE')
-        return {
-          corrections: c ?? corrections.data?.totalElements ?? 0, leave: l ?? leaveOverview.data?.pendingApprovals ?? 0,
-          correctionsToday: isPast && c == null, leaveToday: isPast && l == null,
-        }
-      })(),
-      isPast,
+      // ── quick actions, seats ──
+      quick: qa.map((q) => ({ ...q, hint: hint[q.key], kind: kind[q.key] })),
+      seats: canBilling && seatsData && seatsData.total > 0 ? seatsData : null,
+      addEmployee: canAddEmployee ? { disabledReason: seatsFull ? `All ${seatsData!.total} seats are in use. Add seats to add employees.` : null } : null,
+      canExport, exporting, exportName: headcountFileName(companies[0]?.name as string | undefined, sel),
+      // ── needs your action / today's attendance ──
+      inbox, canAtt: canReadTeam, canFix: canApproveCorrections, canLeave: canApproveLeave, canWfh: canApproveWfh,
+      trendCols: trendColumns(daily, sel, new Set(hol.map((h) => h.date))),
+      trendLoading: trend.isLoading, trendError: trend.error,
+      // ── upcoming ──
+      showNotices: canReadCompany, notices: (notices.data?.content ?? []), noticeTotal: notices.data?.totalElements ?? 0,
+      noticesLoading: notices.isLoading, noticesError: notices.isError, noticePage, noticePages,
+      canManageNotices: canWriteCompany && !isPast,
+      compliance: st && st.complianceDue != null ? { due: Number(st.complianceDue || 0), done: Number(st.complianceCompleted || 0) } : null,
+      companyId, canReadEmployees,
+      showProbations: canSeeProbation && canReadEmployees, probations: probations.data ?? [], probationsLoading: probations.isLoading, probationsError: probations.error,
+      canDecideProbation: canAddEmployee, canProbationConfig,
+      // ── people ──
+      showDept: canReadEmployees && canExport, showPerformers: canReadPerformance, showOnboarding: canReadOnboarding,
+      departments: (headcount.data ?? []).map((r) => ({ id: r.department_id ?? null, name: r.department ?? 'No department', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
+      deptLoading: headcount.isLoading, deptError: headcount.error,
+      performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: x.department || '', reviews: x.reviews, rating: x.rating })),
+      performersLoading: performers.isLoading, performersError: performers.error,
+      onboarding: (onboarding.data ?? []).map((o) => ({ ...o, statusLabel: o.status === 'IN_PROGRESS' ? 'In progress' : o.status.charAt(0) + o.status.slice(1).toLowerCase().replace(/_/g, ' ') })),
+      onboardingLoading: onboarding.isLoading, onboardingError: onboarding.error,
+      // ── hiring & projects ──
+      showHiring: canReadHiring, showProjects: canReadProjects,
+      hiring: { openJobs: hiring.data?.openJobs ?? 0, stages: (hiring.data?.stages ?? []).map((x) => ({ ...x, label: STAGE_LABEL[x.stage] || x.stage })) },
+      hiringLoading: hiring.isLoading, hiringError: hiring.error,
+      projects: projects.data ?? [], projectsLoading: projects.isLoading, projectsError: projects.error,
+      // ── payroll & activity ──
+      showPayroll: hasPayroll, showActivity: canAudit,
+      months6, months12,
+      payRange: months6.length ? monthSpan(months6) : isPast ? `Up to ${fmtShort(sel).slice(-8)}` : '',
+      payHeadline: st && 'monthlyPayroll' in st ? { month: st.month, gross: st.monthlyPayroll ?? null } : undefined,
+      payLoading: runs.isLoading, payError: runs.error,
+      activity: activityRows, activityLoading: activity.isLoading, activityError: activity.error,
     }
-  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, retirementsDue.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName, isPast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team.data, team.isLoading, team.error, trend.data, trend.isLoading, trend.error, directory.data, directory.isLoading, stats.data, stats.isLoading, alerts.data, seats.data, holidays.data, headcount.data, headcount.isLoading, headcount.error,
+    performers.data, performers.isLoading, performers.error, onboarding.data, onboarding.isLoading, onboarding.error, hiring.data, hiring.isLoading, hiring.error, projects.data, projects.isLoading, projects.error,
+    runs.data, runs.isLoading, runs.error, activity.data, activity.isLoading, activity.error, notices.data, notices.isLoading, notices.isError, probations.data, probations.isLoading, probations.error,
+    inbox, sel, today, firstName, isPast, noticePage, noticePages, ctx, exporting, companies])
 
-  const d = data
-  const sec: Record<SectionKey, { state: SectionStatus; retry: () => void }> = {
-    live: { state: status(canReadTeam ? team : directory, canReadTeam || canReadEmployees, false), retry: () => { team.refetch(); trend.refetch() } },
-    summary: { state: status(stats, canReadCompany, false), retry: () => stats.refetch() },
-    alerts: { state: status(alerts, canReadCompany, !(alerts.data ?? []).some((a) => a.count > 0)), retry: () => alerts.refetch() },
-    trend: { state: status(trend, canReadTeam, !(trend.data ?? []).length), retry: () => trend.refetch() },
-    today: { state: status(team, canReadTeam, !d.counts.total), retry: () => team.refetch() },
-    dept: { state: status(headcount, canReadEmployees && canExport, !d.departments.length), retry: () => headcount.refetch() },
-    performers: { state: status(performers, canReadPerformance, !d.performers.length), retry: () => performers.refetch() },
-    onboarding: { state: status(onboarding, canReadOnboarding, !d.onboarding.length), retry: () => onboarding.refetch() },
-    hiring: { state: status(hiring, canReadHiring, !d.hiring.stages.some((x) => x.count > 0) && !d.hiring.openJobs), retry: () => hiring.refetch() },
-    projects: { state: status(projects, canReadProjects, !(projects.data ?? []).length), retry: () => projects.refetch() },
-    payroll: { state: status(runs, hasPayroll, !d.payroll.length), retry: () => runs.refetch() },
-    activity: { state: status(activity, canAudit, !d.activity.length), retry: () => activity.refetch() },
-    notices: { state: status(notices, true, !d.notices.length), retry: () => notices.refetch() },
-    milestones: { state: status(milestones, true, !(d.milestones.birthdays.length + d.milestones.anniversaries.length + d.milestones.retirements.length)), retry: () => milestones.refetch() },
-    probations: { state: status(probations, canSeeProbation && canReadEmployees, !d.probations.length), retry: () => probations.refetch() },
+  const refetch = {
+    live: () => { team.refetch(); trend.refetch(); directory.refetch() }, trend: () => trend.refetch(), notices: () => notices.refetch(), probations: () => probations.refetch(),
+    dept: () => headcount.refetch(), performers: () => performers.refetch(), onboarding: () => onboarding.refetch(), hiring: () => hiring.refetch(),
+    projects: () => projects.refetch(), payroll: () => runs.refetch(), activity: () => activity.refetch(),
   }
 
-  // Sections and cards the viewer has no permission for are hidden rather than shown
-  // empty (the design's rule). Each flag is the permission its endpoint checks.
-  const showDept = canReadEmployees && canExport
-  const show: Record<ShowKey, boolean> = {
-    live: canReadTeam || canReadEmployees, summary: canReadCompany, att: canReadTeam,
-    dept: showDept, performers: canReadPerformance, onboarding: canReadOnboarding, emp: showDept || canReadPerformance || canReadOnboarding, directory: canReadEmployees,
-    projects: canReadProjects, recruit: canReadHiring || canReadProjects,
-    activity: canAudit, payact: hasPayroll || canAudit,
-    notices: canReadCompany, probations: canSeeProbation && canReadEmployees,
-    opsAttendance: canReadTeam, opsCorrections: canApproveCorrections, opsLeave: canApproveLeave, ops: canReadTeam || canApproveCorrections || canApproveLeave,
-  }
-
-  const quickActions = [
-    canReadTeam && { label: 'Attendance', icon: 'clock', path: '/hrms/attendance' },
-    canShiftAdmin && canReadTeam && { label: 'Change shifts', icon: 'swap', path: '/hrms/shifts?tab=roster' },
-    canRequestLeave && { label: 'Add time-off', icon: 'calendarPlus', path: '/hrms/leave?tab=apply' },
-    hasPayroll && { label: 'Run payroll', icon: 'rupee', path: '/hrms/payroll-dashboard' },
-    // A past date: the reports open on that date (Reports Center passes it on to the dated reports).
-    canViewReports && { label: 'View reports', icon: 'fileText', path: isPast ? `/hrms/reports?asOf=${sel}` : '/hrms/reports' },
-    canManageOrg && { label: 'Org setup', icon: 'building', path: '/hrms/organization' },
-  ].filter(Boolean)
-
-  const onNavigate = (path: string) => {
-    if (path === '/projects') { setProjectsOpen(true); return }
-    navigate(path)
-  }
+  const onNavigate = (path: string) => navigate(path)
 
   return (
-    <DesignFrame>
-      <AdminDashboard
-        data={d}
-        sec={sec}
-        show={show}
-        date={date}
-        onDate={setDate}
-        mobile={mobile}
-        hasPayroll={hasPayroll}
-        canHiring={canReadHiring}
-        canBilling={canBilling && !!seats.data}
-        canReadEmployees={canReadEmployees}
-        canReadTeam={canReadTeam}
-        canExport={canExport}
-        canAddEmployee={canAddEmployee}
-        canManageNotices={canWriteCompany && !isPast}
-        exporting={exporting}
-        exportName={exportName}
-        quickActions={quickActions}
-        payRange={(() => {
-          // A past date with no finalized months up to it still says which months the chart covers.
-          if (!d.payroll.length) return isPast ? `Up to ${MON[Number(sel.slice(5, 7)) - 1]} ${sel.slice(0, 4)}` : ''
-          const first = d.payroll[0], last = d.payroll[d.payroll.length - 1]
-          return `${first.month.slice(0, 4) === last.month.slice(0, 4) ? first.label : first.title} – ${last.title}`
-        })()}
-        onNavigate={onNavigate}
-        onExportHeadcount={exportHeadcount}
-        noticePage={noticePage}
-        noticePages={noticePages}
-        onNoticePage={setNoticePage}
-        onSaveNotice={async (n: { id?: string | null; title: string; body: string; expiry: string | null }) => {
-          try {
-            await noticeMutation.mutateAsync(n)
-            toast.success(n.id ? 'Notice updated' : 'Notice published')
-            return true
-          } catch (e) {
-            toast.error('Could not save the notice', { description: (e as Error)?.message })
-            return false
-          }
-        }}
-        onArchiveNotice={async (id: string) => {
-          if (!(await confirm({ title: 'Archive notice?', body: 'This notice will no longer appear on the dashboard.', confirmLabel: 'Archive', tone: 'danger' }))) return
-          try {
-            await noticeMutation.mutateAsync({ id, archive: true })
-            toast.success('Notice archived')
-          } catch (e) {
-            toast.error('Could not archive the notice', { description: (e as Error)?.message })
-          }
-        }}
-      />
-      {projectsOpen && companyId && (
-        <HrDrawer title="Projects & Productivity" onClose={() => setProjectsOpen(false)} width="max-w-2xl">
-          {/* The card shows the chosen day; this list is where projects are managed, so it is always today's. */}
-          {isPast && (
-            <p role="note" className="mb-4 rounded-lg border border-border-default bg-bg-base px-3 py-2 text-xs text-text-secondary">
-              <strong className="text-text-primary">As of today.</strong> The dashboard card shows {fmtShort(sel)}; the projects and tasks here are today’s, and changes apply today.
-            </p>
-          )}
-          <ProjectProductivity companyId={companyId} />
-        </HrDrawer>
-      )}
-    </DesignFrame>
+    <AdminDashboard
+      vm={vm}
+      refetch={refetch}
+      onNavigate={onNavigate}
+      onDate={setDate}
+      onExport={exportHeadcount}
+      onNoticePage={setNoticePage}
+      onSaveNotice={async (n) => {
+        try {
+          await noticeMutation.mutateAsync(n)
+          toast.success(n.id ? 'Notice updated' : 'Notice published')
+          return true
+        } catch (e) {
+          toast.error('Could not save the notice', { detail: (e as Error)?.message })
+          return false
+        }
+      }}
+      onArchiveNotice={async (id) => {
+        if (!(await confirm({ title: 'Archive notice?', body: 'This notice will no longer appear on the dashboard.', confirmLabel: 'Archive', tone: 'danger' }))) return
+        try {
+          await noticeMutation.mutateAsync({ id, archive: true })
+          toast.success('Notice archived')
+        } catch (e) {
+          toast.error('Could not archive the notice', { detail: (e as Error)?.message })
+        }
+      }}
+      projectsOpen={projectsOpen}
+      onProjects={setProjectsOpen}
+    />
   )
 }
+
