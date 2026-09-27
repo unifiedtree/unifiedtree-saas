@@ -7,7 +7,6 @@
 // small chart — that the kit StatCard's string/number props can't take. It uses
 // the kit's own classes (display.css), so it looks exactly like the kit card.
 import type { MouseEvent, ReactNode } from 'react'
-import { CountUp } from '@/design/kit/StatCard'
 import { cx } from '@/design/kit/displayUtil'
 import { useHoverFx } from '@/design/theme/motion'
 import '@/design/kit/display.css'
@@ -68,7 +67,9 @@ export function LegacyStatCard({ label, value, icon, tone = 'brand', chart, note
       </div>
     )
   }
-  const figure = value == null || typeof value === 'string' || typeof value === 'number' ? <CountUp value={value as string | number | null | undefined} /> : value
+  // The figure shows at once and exactly as given (no count-up, no regrouping), as these tiles always
+  // did: pages and their tests read it as soon as the data arrives. The kit StatCard counts up.
+  const figure = value == null ? null : typeof value === 'string' || typeof value === 'number' ? String(value) : value
   const hasNote = note != null && note !== '' && note !== ' '
   const inner = (
     <>

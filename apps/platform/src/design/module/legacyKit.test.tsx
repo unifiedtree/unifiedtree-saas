@@ -65,7 +65,11 @@ describe('ModuleKit', () => {
     expect(s).toContain('uk-stat__circle--gold')
     expect(s).toContain('uk-stat__circle--brand')
     expect(s).toContain('<span class="uk-stat__label">Waiting</span>')
+    // The figure shows at once and exactly as given (tests read it as soon as data arrives).
+    expect(s).toContain('<span class="uk-stat__value">4</span>')
     expect(s).toContain('Not decided')
+    expect(html(<HrStatCard icon={<Inbox />} value={12345} label="Staff" />)).toContain('<span class="uk-stat__value">12345</span>')
+    expect(html(<StatCard title="Leads" value={1234} icon={Inbox} />)).toContain('<span class="uk-stat__value">1234</span>')
     expect(statTone('red')).toBe('red')
     expect(statTone('teal')).toBe('brand')
   })
@@ -97,7 +101,7 @@ describe('ModuleKit', () => {
   it('RowList / Row: a clickable row is one button, rows sit in one card', () => {
     const s = html(<RowList><Row title="Onboarding" meta="3 tasks left" onClick={noop} /><Row title="Plain" muted /></RowList>)
     expect(s).toContain('<div class="umk-rows"')
-    expect(s).toContain('<button type="button" class="umk-row">')
+    expect(s).toContain('<button type="button" class="umk-row ut-row-hover">')
     expect(s).toContain('<div class="umk-row" style="opacity:0.7">')
     expect(rawHexInStyles(s)).toEqual([])
   })

@@ -38,7 +38,9 @@ export const StatCard: React.FC<StatCardProps> = ({
   <KitStatCard
     variant="stat"
     label={title}
-    value={value}
+    // Shown at once and exactly as given, as before (no count-up, no regrouping).
+    value={String(value)}
+    countUp={false}
     icon={<Icon size={20} aria-hidden="true" />}
     tone={toneOf(iconColor, iconBg)}
     delta={change}

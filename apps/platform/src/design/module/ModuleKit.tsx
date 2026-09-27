@@ -150,7 +150,8 @@ export function RowList({ children }: { children: ReactNode }) {
 export function Row({ lead, title, meta, note, trail, onClick, muted }: { lead?: ReactNode; title: ReactNode; meta?: ReactNode; note?: ReactNode; trail?: ReactNode; onClick?: () => void; muted?: boolean }) {
   const Tag = onClick ? 'button' : 'div'
   return h(Tag as any, {
-    type: onClick ? 'button' : undefined, onClick, className: 'umk-row',
+    // `ut-row-hover` stays on clickable rows: existing live tests find them by it (ModuleKit.css draws the hover).
+    type: onClick ? 'button' : undefined, onClick, className: onClick ? 'umk-row ut-row-hover' : 'umk-row',
     style: muted ? { opacity: 0.7 } : undefined,
   },
   lead,
