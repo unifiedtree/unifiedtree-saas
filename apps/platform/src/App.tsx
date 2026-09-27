@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route, Navigate, useLocation, createRoutesFromChildren } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useSearchParams, createRoutesFromChildren } from 'react-router-dom'
 import { lazyPage, registerRoutes } from '@/shared/routing/lazyPage'
 import { P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { RouteGuard } from '@/routes/RouteGuard'
@@ -29,6 +29,8 @@ import { ComingSoon } from '@/shared/components/ComingSoon'
 import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
+import { useHome } from '@/design/shell/useHome'
+import { TEAM_APPROVE_CODES } from '@/shared/navigation/shellCodes'
 
 //   // route disabled — see /module-workspace redirect below
 
@@ -80,11 +82,21 @@ const Learning = lazyPage(() => import('@/modules/hrms/Learning').then(m => ({ d
 const LearningProgramDetail = lazyPage(() => import('@/modules/hrms/learning/ProgramDetail').then(m => ({ default: m.ProgramDetail })))
 const Compliance = lazyPage(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = lazyPage(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
-/** Policy admins get the Master "Policy Documents" page; everyone else keeps the page where they read and acknowledge policies. */
+/**
+ * Policy admins get the Master "Policy Documents" page; everyone else keeps the page where they read and
+ * acknowledge policies. Admins reach that reading view too, at ?view=documents (My documents › Policies).
+ */
 function PoliciesRoute() {
   const admin = useSdkStore(s => s.permissions.has('hrms.policy.write') && s.permissions.has('hrms.policy.read'))
-  return admin ? <MasterModule /> : <Policies />
+  const [params] = useSearchParams()
+  return admin && params.get('view') !== 'documents' ? <MasterModule /> : <Policies />
 }
+// Seams: each of these pages is being rebuilt by its own package; the route file renders today's page until then.
+const DirectoryRoute = lazyPage(() => import('@/modules/hrms/workforce/DirectoryRoute').then(m => ({ default: m.DirectoryRoute })))
+const AnalyticsRoute = lazyPage(() => import('@/modules/hrms/attendance/AnalyticsRoute').then(m => ({ default: m.AnalyticsRoute })))
+const ShiftsRoute = lazyPage(() => import('@/modules/hrms/attendance/ShiftsRoute').then(m => ({ default: m.ShiftsRoute })))
+const PliRoute = lazyPage(() => import('@/modules/hrms/payroll/PliRoute').then(m => ({ default: m.PliRoute })))
+const AdvancesRoute = lazyPage(() => import('@/modules/hrms/advance/AdvancesRoute').then(m => ({ default: m.AdvancesRoute })))
 const Integrations = lazyPage(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = lazyPage(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
 const MySalaryStructure = lazyPage(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
@@ -105,6 +117,18 @@ const MyAssets = lazyPage(() => import('@/modules/hrms/onboarding/MyAssets').the
 const MyInterviews = lazyPage(() => import('@/modules/hrms/hiring/Interviews').then(m => ({ default: m.MyInterviews })))
 const ModuleWorkspace = lazyPage(() => import('@/pages/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })))
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
+
+/**
+ * /dashboard is the admin dashboard for the people whose Home it is (a company-wide read, DECISIONS 12).
+ * Everyone else goes to their own Home — the self-service Home at /me, else the first page they can
+ * open, else /no-access — so the launcher tile and old links keep working. Their ?date= is dropped.
+ */
+function DashboardRoute({ children }: { children: React.ReactNode }) {
+  const home = useHome()
+  if (!home.ready) return null
+  if (home.kind === 'admin') return <>{children}</>
+  return <Navigate to={home.path} replace />
+}
 
 function RoleAwareLanding() {
   const roles = useSdkStore(s => s.user?.roles ?? [])
@@ -202,10 +226,10 @@ const ROUTE_TREE = (
       >
         {/* Role-aware root — redirects based on highest role */}
         <Route path="/"          element={<RoleAwareLanding />} />
-        {/* AUTH-ONLY (intentional): the dashboard is the universal post-login landing
-            every authenticated user must reach; it carries no privileged data of its own
-            (each widget fetches behind its own permission and 403s independently). */}
-        <Route path="/dashboard" element={<Dashboard />} />
+        {/* AUTH-ONLY (intentional): /dashboard is every person's way Home. The admin dashboard shows
+            for a company-wide read (each widget still fetches behind its own permission); everyone
+            else is sent to their own Home (DashboardRoute). */}
+        <Route path="/dashboard" element={<DashboardRoute><Dashboard /></DashboardRoute>} />
         {/* AUTH-ONLY (intentional): Analytics renders mock KPIs (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/analytics" element={<ComingSoonForAdmins module="analytics" />} />
@@ -303,10 +327,12 @@ const ROUTE_TREE = (
             hold it broadly and were landing on a manager-only screen from every
             employee-directory deep link. Guard on team-attendance + first-line
             leave approval, both of which are dept-manager authorities. */}
+        {/* Widened with the approve permissions (My team › Approvals, DECISIONS 15): a custom role that
+            can only approve, say, expense claims can open it. The menu keeps today's rule. */}
         <Route
           path="/team"
           element={
-            <RouteGuard anyOf={[P.ATTENDANCE_TEAM_READ, P.HRMS_LEAVE_APPROVE_L1]}>
+            <RouteGuard anyOf={[P.ATTENDANCE_TEAM_READ, P.HRMS_LEAVE_APPROVE_L1, ...TEAM_APPROVE_CODES]}>
               <ModuleGate moduleKey="hrms"><TeamDashboard /></ModuleGate>
             </RouteGuard>
           }
@@ -318,7 +344,7 @@ const ROUTE_TREE = (
           element={
             <RequirePermission code={P.HRMS_EMPLOYEE_READ}>
               <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
-                <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+                <ModuleGate moduleKey="hrms"><DirectoryRoute /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -403,7 +429,7 @@ const ROUTE_TREE = (
           path="/hrms/advances"
           element={
             <RouteGuard anyOf={['hrms.advance.request.self', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse', 'hrms.advance.request.others']}>
-              <ModuleGate moduleKey="hrms"><PayrollModule /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><AdvancesRoute /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -459,7 +485,7 @@ const ROUTE_TREE = (
           path="/hrms/att-analytics"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_ATTENDANCE, 'attendance.team.read']}>
-              <ModuleGate moduleKey="hrms"><AttendanceModule /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><AnalyticsRoute /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -596,7 +622,7 @@ const ROUTE_TREE = (
           path="/hrms/pli"
           element={
             <RouteGuard anyOf={['hrms.pli.read', 'hrms.pli.write', 'hrms.pli.read.self']}>
-              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PliRoute /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -620,7 +646,7 @@ const ROUTE_TREE = (
           path="/hrms/shifts"
           element={
             <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
-              <ModuleGate moduleKey="hrms"><AttendanceModule /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><ShiftsRoute /></ModuleGate>
             </RouteGuard>
           }
         />
