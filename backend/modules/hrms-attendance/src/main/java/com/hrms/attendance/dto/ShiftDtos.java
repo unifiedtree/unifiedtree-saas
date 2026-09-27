@@ -39,7 +39,29 @@ public final class ShiftDtos {
             LocalTime coreStartTime,
             LocalTime coreEndTime,
             /** V143.23: weekly offs for people on this shift, ISO 1 = Mon … 7 = Sun (null when not set). */
-            java.util.List<Integer> weeklyOffDays) {}
+            java.util.List<Integer> weeklyOffDays,
+            /**
+             * People on this shift today: still employed, in the shift's company, with an assignment to it in
+             * force today (BW-32). Set only by the shift list (GET /v1/shifts); null elsewhere.
+             */
+            Integer employeeCount) {
+
+        /** The shape before the head count. */
+        public ShiftPolicyResponse(UUID id, String name, ShiftType shiftType, LocalTime startTime, LocalTime endTime,
+                                   int gracePeriodMinutes, Double workingHoursPerDay, boolean overtimeApplicable,
+                                   BigDecimal overtimeMultiplier, String code, LocalTime coreStartTime,
+                                   LocalTime coreEndTime, java.util.List<Integer> weeklyOffDays) {
+            this(id, name, shiftType, startTime, endTime, gracePeriodMinutes, workingHoursPerDay, overtimeApplicable,
+                    overtimeMultiplier, code, coreStartTime, coreEndTime, weeklyOffDays, null);
+        }
+
+        /** This shift with its head count. */
+        public ShiftPolicyResponse withEmployeeCount(Integer count) {
+            return new ShiftPolicyResponse(id, name, shiftType, startTime, endTime, gracePeriodMinutes,
+                    workingHoursPerDay, overtimeApplicable, overtimeMultiplier, code, coreStartTime, coreEndTime,
+                    weeklyOffDays, count);
+        }
+    }
 
     /**
      * Create / update a shift definition.
@@ -157,11 +179,22 @@ public final class ShiftDtos {
      * characters. {@code effectiveDate} is optional only because app builds
      * from before the date field omit it; such a request starts on the day it
      * is approved.
+     *
+     * <p>{@code endDate} ("Until", BW-31) is optional: the last day on the new
+     * shift, after which the person goes back to the shift they were on. Null
+     * or left out means permanent, as before. It needs {@code effectiveDate}.
      */
     public record CreateShiftChangeRequest(
             UUID requestedShiftPolicyId,
             String reason,
-            LocalDate effectiveDate) {}
+            LocalDate effectiveDate,
+            LocalDate endDate) {
+
+        /** The shape before "Until": a permanent change. */
+        public CreateShiftChangeRequest(UUID requestedShiftPolicyId, String reason, LocalDate effectiveDate) {
+            this(requestedShiftPolicyId, reason, effectiveDate, null);
+        }
+    }
 
     /**
      * HR/manager decides a request. An approved request starts on the
@@ -181,6 +214,9 @@ public final class ShiftDtos {
      * requests); {@code appliedEffectiveDate} is when the new shift actually
      * starts (set on approval). {@code approverName} is who decided it (null
      * while pending, and for requests that expired on their own).
+     * {@code requestedEndDate} is the last day of a temporary change (BW-31;
+     * null = permanent). {@code status} is PENDING, APPROVED, REJECTED, or
+     * CANCELLED once the employee withdrew it (BW-34).
      */
     public record ShiftChangeRequestResponse(
             UUID id,
@@ -199,5 +235,19 @@ public final class ShiftDtos {
             Instant createdAt,
             LocalDate requestedEffectiveDate,
             LocalDate appliedEffectiveDate,
-            String approverName) {}
+            String approverName,
+            LocalDate requestedEndDate) {
+
+        /** The shape before "Until": a permanent change. */
+        public ShiftChangeRequestResponse(UUID id, UUID employeeId, String employeeName, String employeeCode,
+                                          UUID currentShiftPolicyId, String currentShiftName,
+                                          UUID requestedShiftPolicyId, String requestedShiftName, String reason,
+                                          String status, UUID approverId, String decisionNote, Instant decidedAt,
+                                          Instant createdAt, LocalDate requestedEffectiveDate,
+                                          LocalDate appliedEffectiveDate, String approverName) {
+            this(id, employeeId, employeeName, employeeCode, currentShiftPolicyId, currentShiftName,
+                    requestedShiftPolicyId, requestedShiftName, reason, status, approverId, decisionNote, decidedAt,
+                    createdAt, requestedEffectiveDate, appliedEffectiveDate, approverName, null);
+        }
+    }
 }

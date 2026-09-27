@@ -5,6 +5,7 @@ import com.hrms.attendance.dto.ShiftDtos.CreateShiftChangeRequest;
 import com.hrms.attendance.dto.ShiftDtos.ShiftChangeDecisionRequest;
 import com.hrms.attendance.dto.ShiftDtos.ShiftChangeRequestResponse;
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.core.exception.FeatureNotReady;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.core.tenant.TenantContext;
 import com.unifiedtree.notifications.events.ShiftChangeDecidedEvent;
@@ -40,6 +41,15 @@ import java.util.UUID;
  * {@code ShiftChangeRequestExpiryJob}, and on the spot whenever someone acts on
  * it) and the employee applies again. Both submit + decision fan out
  * notifications through the standard event listener.
+ *
+ * <p>"Until" (BW-31, V143.54): a request may carry {@code requested_end_date},
+ * the last day on the new shift. Approving it assigns the new shift from the
+ * start date, and the shift the person was on comes back the day after the end
+ * date. No end date means permanent, as before. The column is read only where
+ * it exists (a catalog check, which can't abort the caller's transaction), so
+ * every read and a permanent request work as before while the migration is not
+ * applied; asking for an end date then answers FEATURE_NOT_READY. The employee
+ * can withdraw a request while it waits (BW-34): it becomes CANCELLED.
  */
 @Service
 public class ShiftChangeRequestService {
@@ -91,8 +101,10 @@ public class ShiftChangeRequestService {
             rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant(),
             rs.getObject("requested_effective_date", LocalDate.class),
             rs.getObject("applied_effective_date", LocalDate.class),
-            rs.getString("approver_name"));
+            rs.getString("approver_name"),
+            rs.getObject("requested_end_date", LocalDate.class));
 
+    /** Today's SELECT; {@link #select()} adds the end date in front of FROM. */
     private static final String SELECT = """
             SELECT scr.id, scr.employee_id, scr.current_shift_policy_id,
                    COALESCE(NULLIF(concat_ws(' ', em.first_name, em.last_name), ''), emu.display_name, emu.email) AS employee_name,
@@ -103,7 +115,7 @@ public class ShiftChangeRequestService {
                    scr.decided_at, scr.created_at,
                    scr.requested_effective_date, scr.applied_effective_date,
                    COALESCE(NULLIF(concat_ws(' ', ap.first_name, ap.last_name), ''), apu.display_name, apu.email) AS approver_name
-              FROM attendance.shift_change_requests scr
+            %s  FROM attendance.shift_change_requests scr
               LEFT JOIN attendance.shift_policies cur ON cur.id = scr.current_shift_policy_id
               LEFT JOIN attendance.shift_policies req ON req.id = scr.requested_shift_policy_id
               LEFT JOIN hrms.employees em ON em.id = scr.employee_id AND em.tenant_id = scr.tenant_id
@@ -112,11 +124,40 @@ public class ShiftChangeRequestService {
               LEFT JOIN auth.user_credentials apu ON apu.id = scr.approver_id AND apu.tenant_id = scr.tenant_id
             """;
 
+    /** The row SELECT, with the end date where V143.54's column exists (else a NULL in its place). */
+    private String select() {
+        return SELECT.formatted(endDateColumnExists()
+                ? "     , scr.requested_end_date\n"
+                : "     , NULL::date AS requested_end_date\n");
+    }
+
+    /**
+     * True when {@code attendance.shift_change_requests.requested_end_date}
+     * (V143.54) exists. A catalog read: it never fails on a missing column, so
+     * it can't abort the caller's transaction the way a failed SELECT would.
+     * Asked every time rather than cached, so applying the migration by hand
+     * takes effect without a restart.
+     */
+    boolean endDateColumnExists() {
+        Boolean exists = jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM pg_attribute
+                                WHERE attrelid = to_regclass('attendance.shift_change_requests')
+                                  AND attname = 'requested_end_date' AND attnum > 0 AND NOT attisdropped)
+                """, Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
     @Transactional
     public ShiftChangeRequestResponse create(UUID employeeId, CreateShiftChangeRequest req) {
         UUID tenantId = TenantContext.getTenantId();
         if (employeeId == null || tenantId == null || req.requestedShiftPolicyId() == null) {
             throw new BusinessRuleException("employee, tenant and requested shift are required", "SHIFT_CHANGE_INVALID");
+        }
+        // "Until" needs V143.54's column. Without it the request is refused rather
+        // than saved as a permanent change the employee didn't ask for.
+        LocalDate endDate = req.endDate();
+        if (endDate != null && !endDateColumnExists()) {
+            throw new FeatureNotReady();
         }
         String reason = req.reason() == null ? "" : req.reason().trim();
         if (reason.length() < REASON_MIN) {
@@ -140,6 +181,9 @@ public class ShiftChangeRequestService {
                                 .formatted(fmt(scheduled)),
                         "SHIFT_CHANGE_DATE_CONFLICT");
             }
+        }
+        if (endDate != null) {
+            requireEndDateInWindow(startDate, endDate, today);
         }
         // Measure the request against the shift in force on the day it would
         // start: a request for next month is compared with next month's shift.
@@ -167,18 +211,30 @@ public class ShiftChangeRequestService {
 
         UUID id = UUID.randomUUID();
         try {
-            jdbc.update("""
-                    INSERT INTO attendance.shift_change_requests
-                        (id, tenant_id, employee_id, current_shift_policy_id, requested_shift_policy_id,
-                         reason, status, requested_effective_date)
-                    VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
-                    """, id, tenantId, employeeId, currentShiftId, req.requestedShiftPolicyId(),
-                    reason, startDate);
+            if (endDate == null) {
+                // A permanent change: exactly the row it always was.
+                jdbc.update("""
+                        INSERT INTO attendance.shift_change_requests
+                            (id, tenant_id, employee_id, current_shift_policy_id, requested_shift_policy_id,
+                             reason, status, requested_effective_date)
+                        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                        """, id, tenantId, employeeId, currentShiftId, req.requestedShiftPolicyId(),
+                        reason, startDate);
+            } else {
+                // Guarded: if the column vanished since the check, still never a permanent change.
+                FeatureNotReady.run(() -> jdbc.update("""
+                        INSERT INTO attendance.shift_change_requests
+                            (id, tenant_id, employee_id, current_shift_policy_id, requested_shift_policy_id,
+                             reason, status, requested_effective_date, requested_end_date)
+                        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+                        """, id, tenantId, employeeId, currentShiftId, req.requestedShiftPolicyId(),
+                        reason, startDate, endDate));
+            }
         } catch (DuplicateKeyException ex) {
             throw pendingExists();
         }
-        log.info("Shift-change request {} created: employee={} -> shift={} from {}",
-                id, employeeId, req.requestedShiftPolicyId(), startDate);
+        log.info("Shift-change request {} created: employee={} -> shift={} from {} until {}",
+                id, employeeId, req.requestedShiftPolicyId(), startDate, endDate);
 
         ShiftChangeRequestResponse saved = getById(id);
         try {
@@ -193,7 +249,7 @@ public class ShiftChangeRequestService {
     @Transactional(readOnly = true)
     public List<ShiftChangeRequestResponse> listMine(UUID employeeId) {
         UUID tenantId = TenantContext.getTenantId();
-        return jdbc.query(SELECT + " WHERE scr.tenant_id = ? AND scr.employee_id = ? ORDER BY scr.created_at DESC",
+        return jdbc.query(select() + " WHERE scr.tenant_id = ? AND scr.employee_id = ? ORDER BY scr.created_at DESC",
                 MAPPER, tenantId, employeeId);
     }
 
@@ -208,7 +264,7 @@ public class ShiftChangeRequestService {
     @Transactional(readOnly = true)
     public List<ShiftChangeRequestResponse> listPending() {
         UUID tenantId = TenantContext.getTenantId();
-        return jdbc.query(SELECT + """
+        return jdbc.query(select() + """
                  WHERE scr.tenant_id = ? AND scr.status = 'PENDING'
                    AND (scr.requested_effective_date IS NULL OR scr.requested_effective_date >= ?)
                  ORDER BY scr.created_at DESC
@@ -230,7 +286,7 @@ public class ShiftChangeRequestService {
     public List<ShiftChangeRequestResponse> listDecided(int days) {
         UUID tenantId = TenantContext.getTenantId();
         int window = Math.max(1, Math.min(days, MAX_DECIDED_DAYS));
-        return jdbc.query(SELECT + """
+        return jdbc.query(select() + """
                  WHERE scr.tenant_id = ? AND scr.status IN ('APPROVED', 'REJECTED')
                    AND scr.decided_at >= now() - make_interval(days => ?)
                  ORDER BY scr.decided_at DESC, scr.created_at DESC
@@ -280,6 +336,9 @@ public class ShiftChangeRequestService {
         // The employee's date; a request from an older app build has none and
         // starts on the day it is approved, as those requests always did.
         LocalDate startDate = null;
+        // A temporary change (BW-31): its last day, and the shift to go back to after it.
+        LocalDate endDate = existing.requestedEndDate();
+        UUID backTo = null;
         if (decision.approved()) {
             startDate = requested != null ? requested : today;
             LocalDate scheduled = shiftService.nextAssignmentStartAfter(existing.employeeId(), startDate);
@@ -288,6 +347,24 @@ public class ShiftChangeRequestService {
                         "This employee's shift is already scheduled to change on %s, after the requested start %s. Reject this request, or ask the employee to apply again for a date on or after %s."
                                 .formatted(fmt(scheduled), fmt(startDate), fmt(scheduled)),
                         "SHIFT_CHANGE_DATE_CONFLICT");
+            }
+            if (endDate != null) {
+                if (endDate.isBefore(startDate)) {
+                    throw new BusinessRuleException(
+                            "This request ends on %s, before it would start (%s). Reject it, and ask the employee to apply again."
+                                    .formatted(fmt(endDate), fmt(startDate)),
+                            "SHIFT_CHANGE_END_BEFORE_START");
+                }
+                // Nothing is scheduled after the start (checked above), so the shift
+                // in force on the start day is the one the person would be on after
+                // the end date too.
+                backTo = shiftService.shiftPolicyIdOn(existing.employeeId(), startDate);
+                if (backTo != null && !backTo.equals(existing.requestedShiftPolicyId()) && !shiftIsActive(tenantId, backTo)) {
+                    throw new BusinessRuleException(
+                            "This employee's current shift has been archived, so they can't go back to it on %s. Reject this request, or restore that shift first."
+                                    .formatted(fmt(endDate.plusDays(1))),
+                            "SHIFT_CHANGE_RESTORE_INACTIVE");
+                }
             }
         }
         String newStatus = decision.approved() ? "APPROVED" : "REJECTED";
@@ -308,12 +385,78 @@ public class ShiftChangeRequestService {
         if (decision.approved()) {
             shiftService.assignShift(existing.employeeId(),
                     new AssignShiftRequest(existing.requestedShiftPolicyId(), startDate, assignmentNote(existing.reason())));
+            if (endDate != null) {
+                applyEnd(existing, startDate, endDate, backTo);
+            }
         }
-        log.info("Shift-change request {} {} by {} (starts {})", requestId, newStatus, approverId, startDate);
+        log.info("Shift-change request {} {} by {} (starts {}, until {})", requestId, newStatus, approverId, startDate,
+                decision.approved() ? endDate : null);
 
         ShiftChangeRequestResponse result = getById(requestId);
         publishDecided(tenantId, existing, decision.approved(), decision.comment(), startDate);
         return result;
+    }
+
+    /**
+     * The end of an approved temporary change. With a shift to go back to, it is
+     * assigned from the day after the end date, which closes the new assignment
+     * on the end date (the same close-and-open every reassignment does). Someone
+     * who had no shift before the change has none again after it: the new
+     * assignment just ends on the end date. Runs in {@link #decide}'s
+     * transaction, so a failure here undoes the whole approval.
+     */
+    private void applyEnd(ShiftChangeRequestResponse request, LocalDate startDate, LocalDate endDate, UUID backTo) {
+        if (backTo == null) {
+            shiftService.endAssignment(request.employeeId(), request.requestedShiftPolicyId(), startDate, endDate);
+        } else if (!backTo.equals(request.requestedShiftPolicyId())) {
+            shiftService.assignShift(request.employeeId(),
+                    new AssignShiftRequest(backTo, endDate.plusDays(1), backNote(endDate)));
+        }
+        // backTo == the requested shift: the person is on it before and after, so nothing ends.
+    }
+
+    /** The note on the assignment that brings the previous shift back, shown in the shift history. */
+    static String backNote(LocalDate endDate) {
+        return "Back from a temporary shift change that ended on " + fmt(endDate);
+    }
+
+    private boolean shiftIsActive(UUID tenantId, UUID shiftPolicyId) {
+        List<Boolean> active = jdbc.queryForList(
+                "SELECT is_active FROM attendance.shift_policies WHERE id = ? AND tenant_id = ?",
+                Boolean.class, shiftPolicyId, tenantId);
+        return !active.isEmpty() && Boolean.TRUE.equals(active.get(0));
+    }
+
+    /**
+     * The employee withdraws their own request while it is still waiting
+     * (BW-34). It becomes CANCELLED, stays in their list, leaves the approvers'
+     * queue, and frees them to send another. Nothing else changes: no shift was
+     * assigned while it waited.
+     */
+    @Transactional
+    public ShiftChangeRequestResponse withdraw(UUID requestId, UUID employeeId) {
+        UUID tenantId = TenantContext.getTenantId();
+        ShiftChangeRequestResponse existing = getById(requestId);
+        if (existing == null) {
+            throw new ResourceNotFoundException("ShiftChangeRequest", requestId);
+        }
+        if (employeeId == null || !employeeId.equals(existing.employeeId())) {
+            throw new BusinessRuleException("You can withdraw only your own shift change request.", "SHIFT_CHANGE_NOT_YOURS");
+        }
+        if (!"PENDING".equals(existing.status())) {
+            throw new BusinessRuleException("Only a request that is still waiting can be withdrawn.", "SHIFT_CHANGE_NOT_PENDING");
+        }
+        // status = 'PENDING' in the WHERE: an approver deciding at the same moment wins or loses as a whole.
+        int updated = jdbc.update("""
+                UPDATE attendance.shift_change_requests
+                   SET status = 'CANCELLED', decided_at = now(), updated_at = now()
+                 WHERE id = ? AND tenant_id = ? AND employee_id = ? AND status = 'PENDING'
+                """, requestId, tenantId, employeeId);
+        if (updated == 0) {
+            throw new BusinessRuleException("This request has already been decided.", "SHIFT_CHANGE_NOT_PENDING");
+        }
+        log.info("Shift-change request {} withdrawn by employee {}", requestId, employeeId);
+        return getById(requestId);
     }
 
     /**
@@ -330,11 +473,11 @@ public class ShiftChangeRequestService {
     /** Expire this tenant's passed pending requests — all of them, or one employee's. */
     private int expirePassed(UUID tenantId, UUID employeeId) {
         List<ShiftChangeRequestResponse> stale = employeeId == null
-                ? jdbc.query(SELECT + """
+                ? jdbc.query(select() + """
                          WHERE scr.tenant_id = ? AND scr.status = 'PENDING' AND scr.requested_effective_date < ?
                          FOR UPDATE OF scr SKIP LOCKED
                         """, MAPPER, tenantId, today())
-                : jdbc.query(SELECT + """
+                : jdbc.query(select() + """
                          WHERE scr.tenant_id = ? AND scr.employee_id = ? AND scr.status = 'PENDING'
                            AND scr.requested_effective_date < ?
                          FOR UPDATE OF scr SKIP LOCKED
@@ -384,6 +527,24 @@ public class ShiftChangeRequestService {
         }
     }
 
+    /**
+     * "Until" needs a start date, comes on or after it, and stays within a year
+     * of today: like a far-future start, a typo'd end date would put an
+     * assignment far ahead that blocks every earlier reassignment.
+     */
+    private static void requireEndDateInWindow(LocalDate startDate, LocalDate endDate, LocalDate today) {
+        if (startDate == null) {
+            throw new BusinessRuleException("Choose the first day on the new shift as well as the last.",
+                    "SHIFT_CHANGE_END_NEEDS_START");
+        }
+        if (endDate.isBefore(startDate)) {
+            throw new BusinessRuleException("The last day can't be before the first day.", "SHIFT_CHANGE_END_BEFORE_START");
+        }
+        if (endDate.isAfter(today.plusYears(1))) {
+            throw new BusinessRuleException("Choose a last day within the next 12 months.", "SHIFT_CHANGE_END_TOO_FAR");
+        }
+    }
+
     private static BusinessRuleException pendingExists() {
         return new BusinessRuleException("You already have a pending shift change request.", "SHIFT_CHANGE_PENDING_EXISTS");
     }
@@ -399,7 +560,7 @@ public class ShiftChangeRequestService {
     private ShiftChangeRequestResponse getById(UUID id) {
         UUID tenantId = TenantContext.getTenantId();
         List<ShiftChangeRequestResponse> rows = jdbc.query(
-                SELECT + " WHERE scr.id = ? AND scr.tenant_id = ?", MAPPER, id, tenantId);
+                select() + " WHERE scr.id = ? AND scr.tenant_id = ?", MAPPER, id, tenantId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 }
