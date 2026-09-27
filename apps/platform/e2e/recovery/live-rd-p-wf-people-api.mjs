@@ -1,3 +1,4 @@
+/* global process, console, fetch, FormData, Blob */
 // P-WF-PEOPLE backend (redesign BW-90–98) against a live backend: API only.
 //
 //   employee stats and "my record" per role, checked against SQL · drafts (stripped,
@@ -47,7 +48,7 @@ async function call(who, method, path, body, { form } = {}) {
   else if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body) }
   const r = await fetch(api + path, { method, headers, body: payload })
   const text = await r.text()
-  let json = null
+  let json
   try { json = text ? JSON.parse(text) : null } catch { json = text }
   if (r.status === 503 && json?.errorCode === 'FEATURE_NOT_READY' && !renameStep) unexpected.push(`${method} ${path}`)
   if (r.status >= 500 && r.status !== 503) unexpected.push(`${r.status} ${method} ${path}`)

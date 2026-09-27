@@ -1,3 +1,4 @@
+/* global process, console, fetch */
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
