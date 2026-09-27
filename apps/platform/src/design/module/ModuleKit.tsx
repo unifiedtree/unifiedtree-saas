@@ -1,30 +1,36 @@
-// The module-page pattern, taken from the Claude Design screens already built
-// (Attendance, Payroll, Master): a page header, the design's view tabs
-// (SubTabs), stat tiles (StatTile), section headings with an icon tile, quiet
-// section states (SectionState), approval cards (ApprovalCard), list rows,
-// form panels and the dark toast. Modules without a design of their own
-// (Leave, Expenses, Hiring…) are assembled from these parts so every page
-// speaks the same visual language as the designed ones.
+// The module-page pattern in the redesign's look (design_handoff_hrms_redesign,
+// prototype PgGeneric / UtSection / UtStat): the kit page header, the design's
+// view pills (SubTabs), stat cards (StatTile), section headings, quiet section
+// states (SectionState), approval cards (ApprovalCard), list rows, form panels,
+// notes and the kit toast. Modules without a design of their own (Leave,
+// Expenses, Hiring…) are assembled from these parts so every page speaks the
+// same visual language. Colours are the design tokens only (light and dark).
 import { createElement as h, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { HrAvatar, HrButton, HrPageHeader, HrStatusPill } from '@/shared/components/hr'
+import { HrStatusPill } from '@/shared/components/hr'
 import { DesignFrame } from '@/design/dc/DesignFrame'
 import { SubTabs } from '@/design/dc/SubTabs'
 import { StatTile } from '@/design/dc/StatTile'
 import { SectionState } from '@/design/dc/SectionState'
 import { ApprovalCard } from '@/design/dc/ApprovalCard'
+import { ApprovalShell } from '@/design/dc/ApprovalCard.view'
 import { dashIcon } from '@/design/dc/icons'
 import { ToastSlot, TOAST_MS } from '@/design/kit/Toast'
+import { PageHeader } from '@/design/kit/PageHeader'
+import { SectionHeading } from '@/design/kit/Section'
+import { ErrorState } from '@/design/kit/EmptyState'
+import './ModuleKit.css'
 
 export const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
 export const HEAD_FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
-export const CARD: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 }
+/** The design's card surface (UtSection): white, 18px corners, hairline, card shadow. */
+export const CARD: CSSProperties = { background: 'var(--u-sf,#fff)', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 18, boxShadow: 'var(--u-shc,0 1px 2px rgba(14,27,22,.05))', minWidth: 0 }
 
-/** Page frame: header, then content on the design's 28px rhythm. */
-export function ModulePage({ crumb, title, subtitle, actions, children, gap = 28 }: { crumb: string; title: string; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; gap?: number }) {
+/** Page frame: the kit page header (context line, 28/34 title, summary, actions), then content on the design's 20px rhythm. */
+export function ModulePage({ crumb, title, subtitle, actions, children, gap = 20 }: { crumb: string; title: string; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; gap?: number }) {
   return (
     <DesignFrame>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap, minWidth: 0, fontFamily: FONT, color: '#0f172a' }}>
-        <div style={{ marginBottom: -32, minWidth: 0 }}><HrPageHeader crumb={crumb} title={title} subtitle={subtitle} actions={actions} /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap, minWidth: 0, fontFamily: FONT, color: 'var(--u-ink,#0E1B16)' }}>
+        <PageHeader eyebrow={crumb} title={title} sub={subtitle} actions={actions} />
         {children}
       </div>
     </DesignFrame>
@@ -32,7 +38,7 @@ export function ModulePage({ crumb, title, subtitle, actions, children, gap = 28
 }
 
 export interface ViewTab { key: string; label: string; count?: number | string | null; urgent?: boolean; icon?: string; tip?: string }
-/** The design's view tabs. The active one is kept in ?view= (or the given param) so links and Back work. */
+/** The design's view pills. The active one is kept in ?view= (or the given param) so links and Back work. */
 export function Views({ items, active, onChange, label = 'Views' }: { items: ViewTab[]; active: string; onChange: (k: string) => void; label?: string }) {
   return h(SubTabs as any, {
     label,
@@ -60,48 +66,37 @@ export function useView(allowed: string[], param = 'view'): [string, (k: string)
 }
 
 export interface Tile { icon: string; color: 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'teal'; label: string; value: ReactNode; sub?: ReactNode; onClick?: () => void; tip?: string }
+/** A row of the design's stat cards (UtStat): repeat(auto-fit, minmax(min(100%, min), 1fr)), 12px apart. */
 export function StatRow({ tiles, min = 200 }: { tiles: Tile[]; min?: number }) {
   return (
     <div role="group" style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit,minmax(min(100%,${min}px),1fr))`, gap: 12 }}>
-      {tiles.map((t) => h(StatTile as any, { key: t.label, tile: { ...t, icon: dashIcon(t.icon, 17), chart: null, onClick: t.onClick || (() => {}) } }))}
+      {tiles.map((t) => h(StatTile as any, { key: t.label, tile: { ...t, icon: dashIcon(t.icon, 20), chart: null, onClick: t.onClick || (() => {}) } }))}
     </div>
   )
 }
 
-/** A section heading: icon tile, title and a divider, then its content. */
+/** A section heading: the design's group heading (icon tile, 18px title), then its content. */
 export function Section({ icon, title, aside, children, id }: { icon: string; title: string; aside?: ReactNode; children?: ReactNode; id?: string }) {
   const hid = id || `sec-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
     <section aria-labelledby={hid} style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px 14px', paddingBottom: 14, borderBottom: '1px solid #e2e8f0' }}>
-        <span aria-hidden="true" style={{ flex: '0 0 auto', width: 36, height: 36, boxSizing: 'border-box', borderRadius: 11, background: '#ecfdf5', border: '1px solid #d1fae5', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon(icon, 18)}</span>
-        <h2 id={hid} style={{ margin: 0, flex: '1 1 220px', minWidth: 0, fontFamily: HEAD_FONT, fontSize: 21, fontWeight: 700, letterSpacing: '-.015em', lineHeight: 1.25 }}>{title}</h2>
-        {aside}
-      </div>
+      <SectionHeading icon={icon} title={title} actions={aside} id={hid} />
       {children}
     </section>
   )
 }
 
-/** A smaller heading inside a view ("Waiting for your OK", "Already decided"). */
+/** A smaller heading inside a view ("Waiting for your OK", "Already decided"): the design's 16px inline heading. */
 export function SubHeading({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-      <h3 style={{ margin: 0, flex: '1 1 auto', fontFamily: HEAD_FONT, fontSize: 16, fontWeight: 800 }}>{children}</h3>
-      {aside}
-    </div>
-  )
+  return <SectionHeading level={3} title={children} actions={aside} className="umk-subhead" />
 }
 
 /** Loading, error or empty, in the design's quiet style. */
 export function State({ kind, title, description, onRetry, icon, height }: { kind: 'loading' | 'error' | 'empty'; title?: string; description?: string; onRetry?: () => void; icon?: string; height?: number }) {
   // The design's SectionState error has fixed wording; ours says what failed and why (the server's message).
   if (kind === 'error') return (
-    <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 16px', textAlign: 'center', ...CARD, fontFamily: FONT }}>
-      <span aria-hidden="true" style={{ display: 'inline-flex', width: 36, height: 36, borderRadius: 999, background: '#fff1f2', color: '#be123c', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('circleX', 18)}</span>
-      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{title || 'Unable to load this section.'}</p>
-      {description && <p style={{ margin: 0, maxWidth: 460, fontSize: 13, lineHeight: 1.5, color: '#64748b' }}>{description}</p>}
-      {onRetry && h(HrButton as any, { variant: 'ghost', size: 'sm', onClick: onRetry }, 'Try again')}
+    <div style={{ ...CARD, fontFamily: FONT }}>
+      <ErrorState title={title || 'Unable to load this section.'} message={description || ''} onRetry={onRetry} />
     </div>
   )
   return h(SectionState as any, { kind, title, description, retry: onRetry, icon, height })
@@ -129,56 +124,53 @@ export function DecisionCard({ name, sub, status, facts, reason, raised, details
   name: string; sub?: string; status?: [string, string]; facts: { k: string; v: ReactNode }[]; reason?: ReactNode; raised?: string; details?: ReactNode; actions?: ReactNode
 }) {
   return (
-    <article style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 20px', alignItems: 'flex-start', padding: '16px 18px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, fontFamily: FONT, color: '#0f172a' }}>
-      <div style={{ flex: '1 1 260px', minWidth: 0, display: 'grid', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          {h(HrAvatar as any, { name, sub })}
-          {status && h(HrStatusPill as any, { tone: status[1] }, status[0])}
-        </div>
-        <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: '8px 14px', fontSize: 13 }}>
-          {facts.map((x) => (
-            <div key={x.k}>
-              <dt style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#64748b' }}>{x.k}</dt>
-              <dd style={{ margin: '3px 0 0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{x.v}</dd>
-            </div>
-          ))}
-        </dl>
-        {reason ? <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{reason}</p> : null}
-        {raised ? <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Raised {raised}</p> : null}
-        {details}
-      </div>
-      {actions ? <div style={{ flex: '0 0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 8, alignSelf: 'center' }}>{actions}</div> : null}
-    </article>
+    <ApprovalShell
+      name={name}
+      sub={sub}
+      basis="1 1 260px"
+      status={status ? h(HrStatusPill as any, { tone: status[1] }, status[0]) : null}
+      facts={facts}
+      body={
+        <>
+          {reason ? <p style={{ margin: 0, fontSize: 13.5, color: 'var(--u-ink2,#4A5A54)', lineHeight: 1.5 }}>{reason}</p> : null}
+          {raised ? <p style={{ margin: 0, fontSize: 12, color: 'var(--u-ink3,#6A7A73)' }}>Raised {raised}</p> : null}
+          {details}
+        </>
+      }
+      side={actions ? <div style={{ flex: '0 0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 8, alignSelf: 'center' }}>{actions}</div> : null}
+    />
   )
 }
 
 /** Rows in one white card (the design's "Already decided" list). */
 export function RowList({ children }: { children: ReactNode }) {
-  return <div style={{ ...CARD, overflow: 'hidden' }}>{children}</div>
+  return <div className="umk-rows" style={{ ...CARD, overflow: 'hidden' }}>{children}</div>
 }
+/** A list row: leading tile, title with a quiet line (and a note), trailing pills or buttons; a button when it opens something. */
 export function Row({ lead, title, meta, note, trail, onClick, muted }: { lead?: ReactNode; title: ReactNode; meta?: ReactNode; note?: ReactNode; trail?: ReactNode; onClick?: () => void; muted?: boolean }) {
   const Tag = onClick ? 'button' : 'div'
   return h(Tag as any, {
-    type: onClick ? 'button' : undefined, onClick, className: onClick ? 'ut-row-hover' : undefined,
-    style: { width: '100%', textAlign: 'left', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px', padding: '12px 16px', border: 0, borderBottom: '1px solid #f1f5f9', background: 'transparent', font: 'inherit', color: 'inherit', cursor: onClick ? 'pointer' : 'default', opacity: muted ? 0.7 : 1, boxSizing: 'border-box' },
+    // `ut-row-hover` stays on clickable rows: existing live tests find them by it (ModuleKit.css draws the hover).
+    type: onClick ? 'button' : undefined, onClick, className: onClick ? 'umk-row ut-row-hover' : 'umk-row',
+    style: muted ? { opacity: 0.7 } : undefined,
   },
   lead,
-  h('span', { style: { flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 2, fontSize: 13 } },
-    h('strong', { style: { fontSize: 13.5, fontVariantNumeric: 'tabular-nums' } }, title),
-    meta ? h('span', { style: { color: '#64748b' } }, meta) : null,
-    note ? h('span', { style: { color: '#475569', fontStyle: 'italic' } }, note) : null),
-  trail ? h('span', { style: { flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } }, trail) : null)
+  h('span', { className: 'umk-row__text' },
+    h('strong', { className: 'umk-row__title' }, title),
+    meta ? h('span', { className: 'umk-row__meta' }, meta) : null,
+    note ? h('span', { className: 'umk-row__note' }, note) : null),
+  trail ? h('span', { className: 'umk-row__trail' }, trail) : null)
 }
 
-/** A white form/content panel with an optional title row. */
+/** A white form/content panel with an optional title row (the design's panel card: 16px title, quiet sub-line). */
 export function Panel({ title, sub, aside, children, pad = 20, style }: { title?: ReactNode; sub?: ReactNode; aside?: ReactNode; children: ReactNode; pad?: number; style?: CSSProperties }) {
   return (
     <div style={{ ...CARD, padding: pad, display: 'grid', gap: 16, ...style }}>
       {(title || aside) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '6px 12px' }}>
-          <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 2 }}>
-            {title && <h3 style={{ margin: 0, fontFamily: HEAD_FONT, fontSize: 16, fontWeight: 700 }}>{title}</h3>}
-            {sub && <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: '#64748b' }}>{sub}</p>}
+          <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 3 }}>
+            {title && <h3 style={{ margin: 0, fontFamily: HEAD_FONT, fontSize: 16, lineHeight: '22px', fontWeight: 500, letterSpacing: '-.01em', color: 'var(--u-ink,#0E1B16)' }}>{title}</h3>}
+            {sub && <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: 'var(--u-ink3,#6A7A73)' }}>{sub}</p>}
           </div>
           {aside}
         </div>
@@ -188,20 +180,20 @@ export function Panel({ title, sub, aside, children, pad = 20, style }: { title?
   )
 }
 
-/** Notes inside panels: plain, amber (caution) or red (blocking). */
+/** Notes inside panels: plain, amber (caution), red (blocking) or green — the design's tinted note boxes. */
 export function Note({ tone, children }: { tone?: 'amber' | 'red' | 'green'; children: ReactNode }) {
-  const c = tone === 'red' ? ['#fef2f2', '#fecaca', '#b91c1c'] : tone === 'amber' ? ['#fffbeb', '#fde68a', '#92400e'] : tone === 'green' ? ['#ecfdf5', '#a7f3d0', '#065f46'] : ['#f8fafc', '#eef2f6', '#475569']
-  return <p role={tone === 'red' ? 'alert' : undefined} style={{ margin: 0, padding: '10px 12px', borderRadius: 10, background: c[0], border: `1px solid ${c[1]}`, fontSize: 12.5, lineHeight: 1.5, color: c[2] }}>{children}</p>
+  const t = tone === 'red' ? 'danger' : tone === 'amber' ? 'warning' : tone === 'green' ? 'success' : 'neutral'
+  return <p role={tone === 'red' ? 'alert' : undefined} className={`umk-note uk-tone--${t}`}>{children}</p>
 }
 
-/** Label/value tiles (the workspace's grey fact tiles). */
+/** Label/value tiles (grey inset tiles: a quiet label over the figure). */
 export function Facts({ items, min = 150 }: { items: { k: string; v: ReactNode }[]; min?: number }) {
   return (
-    <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: `repeat(auto-fill,minmax(min(100%,${min}px),1fr))`, gap: 10 }}>
+    <dl className="umk-facts" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(min(100%,${min}px),1fr))` }}>
       {items.map((f) => (
-        <div key={f.k} style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc', minWidth: 0 }}>
-          <dt style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#64748b' }}>{f.k}</dt>
-          <dd style={{ margin: '3px 0 0', fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{f.v}</dd>
+        <div key={f.k} className="umk-fact">
+          <dt className="uk-kv__k">{f.k}</dt>
+          <dd className="uk-kv__v">{f.v}</dd>
         </div>
       ))}
     </dl>

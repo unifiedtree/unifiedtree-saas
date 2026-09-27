@@ -5,6 +5,13 @@ import { createElement, type CSSProperties, type ComponentType } from 'react'
 type Node = [string, Record<string, any>]
 const P = (d: string): Node => ['path', { d }]
 const I: Record<string, Node[]> = {
+// Added for the kit's data and layout pieces (UploadDrop, AmountMask, the Documents action cards); paths as the design draws them.
+upload:[P('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'),P('M17 8l-5-5-5 5'),P('M12 3v12')],
+eye:[P('M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'),P('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z')],
+file:[P('M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'),P('M14 3v6h6')],
+mail:[P('M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z'),P('M22 6l-10 7L2 6')],
+laptop:[P('M4 5h16a1 1 0 0 1 1 1v10H3V6a1 1 0 0 1 1-1z'),P('M2 19h20')],
+shieldPlain:[P('M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z')],
 alertTriangle:[P('m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'),P('M12 9v4'),P('M12 17h.01')],
 calculator:[['rect',{width:16,height:20,x:4,y:2,rx:2}],['line',{x1:8,x2:16,y1:6,y2:6}],['line',{x1:16,x2:16,y1:14,y2:18}],P('M16 10h.01'),P('M12 10h.01'),P('M8 10h.01'),P('M12 14h.01'),P('M8 14h.01'),P('M12 18h.01'),P('M8 18h.01')],
 banknote:[['rect',{width:20,height:12,x:2,y:6,rx:2}],['circle',{cx:12,cy:12,r:2}],P('M6 12h.01M18 12h.01')],

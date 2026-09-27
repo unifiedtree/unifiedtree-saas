@@ -6,7 +6,7 @@ const tenant='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const foreign=randomUUID(), company=randomUUID(), employee=randomUUID(), document=randomUUID(), kpi=randomUUID()
 const marker=`Tenant Isolation QA ${foreign}`
 function sql(statement) {
-  return execFileSync('C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d','unifiedtree_recovery','-v','ON_ERROR_STOP=1','-q'],{input:statement,encoding:'utf8',stdio:['pipe','pipe','pipe']})
+  return execFileSync('C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe',['-h','127.0.0.1','-p','55432','-U','postgres','-d',process.env.RECOVERY_DB || 'unifiedtree_recovery','-v','ON_ERROR_STOP=1','-q'],{input:statement,encoding:'utf8',stdio:['pipe','pipe','pipe']})
 }
 const response=await fetch(api+'/v1/canonical-auth/login',{method:'POST',headers:{'Content-Type':'application/json','X-Tenant-ID':tenant},body:JSON.stringify({tenantId:tenant,email:'owner@unifiedtree.demo',password:process.env.RECOVERY_PASSWORD || 'Hrms@12345'})})
 assert.equal(response.status,200)
