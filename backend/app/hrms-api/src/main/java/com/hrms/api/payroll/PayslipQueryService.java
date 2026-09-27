@@ -1,0 +1,152 @@
+package com.hrms.api.payroll;
+
+import com.hrms.core.exception.HrmsException;
+import com.unifiedtree.audit.AuditService;
+import com.unifiedtree.security.tenant.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * "Ask payroll" (BW-59): an employee asks the payroll team about one of their
+ * own LOCKED or PAID payslips; someone holding payroll.runs.manage answers.
+ *
+ * <ul>
+ *   <li>Own payslips only: a run that isn't the caller's, or isn't final yet,
+ *       is "No payslip for this period" (404), the same answer as opening it.</li>
+ *   <li>A question is answered once. A second answer is refused (409), so two
+ *       people answering at the same time can't overwrite each other.</li>
+ *   <li>The payroll team is told a question is waiting, and the employee that
+ *       it was answered. Neither notification carries the text.</li>
+ *   <li>While V143.58 isn't applied, every call answers 503 FEATURE_NOT_READY.</li>
+ * </ul>
+ */
+@Service
+public class PayslipQueryService {
+
+    private static final Logger log = LoggerFactory.getLogger(PayslipQueryService.class);
+
+    /** Who is told about a new question, and who may answer it. */
+    static final String ANSWER_PERMISSION = "payroll.runs.manage";
+    static final int MAX_MESSAGE = 1000;
+    static final int MAX_ANSWER = 2000;
+    /** At most this many payroll people are told about one question. */
+    static final int MAX_RECIPIENTS = 25;
+    static final Set<String> STATUSES = Set.of("OPEN", "ANSWERED", "CLOSED");
+
+    private final JdbcTemplate jdbc;
+    private final PayslipQueryStore store;
+    private final PayslipQueryNotifier notifier;
+    private final AuditService audit;
+
+    public PayslipQueryService(JdbcTemplate jdbc, PayslipQueryStore store, PayslipQueryNotifier notifier,
+                               AuditService audit) {
+        this.jdbc = jdbc;
+        this.store = store;
+        this.notifier = notifier;
+        this.audit = audit;
+    }
+
+    /**
+     * One question. {@code answeredByName} is the answering person's name (no
+     * email); {@code companyName} tells companies apart for the payroll team.
+     */
+    public record PayslipQueryDto(UUID id, UUID runId, String period, int periodMonth, int periodYear,
+                                  UUID employeeId, String employeeName, String employeeCode,
+                                  UUID companyId, String companyName, String message, String status,
+                                  String answer, String answeredByName, String answeredAt, String createdAt) {}
+
+    // ── The employee's side ───────────────────────────────────────────────────
+
+    @Transactional
+    public PayslipQueryDto raise(UUID tenantId, UUID userId, UUID employeeId, UUID runId, String message) {
+        bindTenant(tenantId);
+        String text = clean(message, MAX_MESSAGE, "QUESTION_REQUIRED", "Write your question.",
+                "QUESTION_TOO_LONG", "Keep the question under " + MAX_MESSAGE + " characters.");
+        PayslipQueryStore.OwnPayslip slip = employeeId == null ? null
+                : store.ownPayslip(tenantId, employeeId, runId).orElse(null);
+        if (slip == null) {
+            throw new HrmsException("No payslip for this period", HttpStatus.NOT_FOUND, "PAYSLIP_NOT_FOUND");
+        }
+        UUID id = store.insert(tenantId, slip, employeeId, text, userId);
+        PayslipQueryStore.QueryRow row = store.find(tenantId, id)
+                .orElseThrow(() -> new IllegalStateException("Payslip question " + id + " not found after insert"));
+        List<UUID> team = store.employeesHolding(tenantId, ANSWER_PERMISSION, employeeId, MAX_RECIPIENTS);
+        notifier.raised(tenantId, team, row.employeeName(), row.period(), id, slip.runId());
+        return dto(row);
+    }
+
+    @Transactional
+    public List<PayslipQueryDto> mine(UUID tenantId, UUID employeeId, UUID runId) {
+        bindTenant(tenantId);
+        if (employeeId == null) return List.of();
+        return store.listForEmployee(tenantId, employeeId, runId, 200).stream().map(PayslipQueryService::dto).toList();
+    }
+
+    // ── The payroll team's side ───────────────────────────────────────────────
+
+    @Transactional
+    public List<PayslipQueryDto> list(UUID tenantId, String status, Integer limit) {
+        bindTenant(tenantId);
+        String s = status == null || status.isBlank() ? null : status.trim().toUpperCase(java.util.Locale.ROOT);
+        if (s != null && !STATUSES.contains(s)) {
+            throw new HrmsException("Status must be OPEN, ANSWERED or CLOSED", HttpStatus.BAD_REQUEST, "INVALID_STATUS");
+        }
+        int n = limit == null ? 200 : Math.max(1, Math.min(500, limit));
+        return store.list(tenantId, s, n).stream().map(PayslipQueryService::dto).toList();
+    }
+
+    @Transactional
+    public PayslipQueryDto answer(UUID tenantId, UUID userId, UUID answererEmployeeId, UUID id, String answer) {
+        bindTenant(tenantId);
+        String text = clean(answer, MAX_ANSWER, "ANSWER_REQUIRED", "Write an answer.",
+                "ANSWER_TOO_LONG", "Keep the answer under " + MAX_ANSWER + " characters.");
+        PayslipQueryStore.QueryRow row = store.find(tenantId, id)
+                .orElseThrow(() -> new HrmsException("Question not found", HttpStatus.NOT_FOUND, "QUERY_NOT_FOUND"));
+        if (!"OPEN".equals(row.status()) || !store.answer(tenantId, id, text, userId, answererEmployeeId)) {
+            throw new HrmsException("This question has already been answered", HttpStatus.CONFLICT,
+                    "QUERY_ALREADY_ANSWERED");
+        }
+        PayslipQueryStore.QueryRow answered = store.find(tenantId, id).orElse(row);
+        try {
+            // The audit trail records who answered whom, never the text (it may quote pay details).
+            audit.record("payroll", "PAYSLIP_QUERY_ANSWERED", "payslip_query", id,
+                    "Answered %s's question about their %s payslip".formatted(
+                            answered.employeeName() == null ? "an employee" : answered.employeeName(), answered.period()));
+        } catch (Exception e) {
+            log.warn("Audit for payslip question {} failed: {}", id, e.getMessage());
+        }
+        String by = store.accountName(tenantId, userId);
+        notifier.answered(tenantId, answered.employeeId(), by, answered.period(), id, answered.runId());
+        return dto(answered);
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /** Trimmed text, or a 400 when it is empty or too long. */
+    static String clean(String value, int max, String emptyCode, String emptyMessage, String longCode, String longMessage) {
+        String t = value == null ? "" : value.strip();
+        if (t.isEmpty()) throw new HrmsException(emptyMessage, HttpStatus.BAD_REQUEST, emptyCode);
+        if (t.length() > max) throw new HrmsException(longMessage, HttpStatus.BAD_REQUEST, longCode);
+        return t;
+    }
+
+    static PayslipQueryDto dto(PayslipQueryStore.QueryRow r) {
+        return new PayslipQueryDto(r.id(), r.runId(), r.period(), r.periodMonth(), r.periodYear(),
+                r.employeeId(), r.employeeName(), r.employeeCode(), r.companyId(), r.companyName(),
+                r.message(), r.status(), r.answer(), r.answeredByName(), r.answeredAt(), r.createdAt());
+    }
+
+    private void bindTenant(UUID tenantId) {
+        TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        jdbc.execute("SET LOCAL app.tenant_id = '" + tenantId + "'");
+    }
+}
