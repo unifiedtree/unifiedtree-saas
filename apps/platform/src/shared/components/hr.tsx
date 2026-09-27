@@ -4,26 +4,27 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { DateField } from './calendar'
 import { SidePanel } from '@/design/kit/SidePanel'
+import { StatusPill, type StatusTone } from '@/design/kit/StatusPill'
+import { PageHeader } from '@/design/kit/PageHeader'
+import { Avatar } from '@/design/kit/Avatar'
+import { LegacyStatCard, statTone } from '@/design/dc/StatTile.view'
 
 /**
  * Reusable building blocks shared by every HR list/detail screen so they all
- * share one premium, token-driven look. All are presentational — screens feed
- * them live data from our React Query hooks.
+ * share one look: the redesign's (design_handoff_hrms_redesign), drawn with the
+ * design tokens var(--u-*) so light and dark both work. The stat card, status
+ * pill, page header and avatar are the redesign kit's own pieces
+ * (src/design/kit); the rest are styled to match them. All are presentational —
+ * screens feed them live data from our React Query hooks.
  *
- * Brand colour comes from the design-system tokens (emerald). Status/semantic
- * colours (success/warning/error/info) stay distinct for at-a-glance scanning.
+ * Brand colour is the emerald token (--u-br / --u-brt). Status colours
+ * (success/warning/danger/info…) stay distinct for at-a-glance scanning.
  */
 
 // ── KPI stat card ──────────────────────────────────────────────────────────────
+// The design's stat card (prototype UtStat, kit StatCard "stat"): round tone
+// icon, label, figure (counts up), then the change and the note.
 type StatColor = 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'teal'
-const STAT_ICON: Record<StatColor, string> = {
-  green:  'bg-emerald-50 text-[#0F6E56] border border-emerald-200/60 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/40',
-  blue:   'bg-blue-50 text-blue-600 border border-blue-200/60 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-800/40',
-  orange: 'bg-amber-50 text-amber-600 border border-amber-200/60 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800/40',
-  red:    'bg-rose-50 text-rose-600 border border-rose-200/60 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800/40',
-  purple: 'bg-purple-50 text-purple-600 border border-purple-200/60 dark:bg-purple-950/60 dark:text-purple-400 dark:border-purple-800/40',
-  teal:   'bg-teal-50 text-teal-600 border border-teal-200/60 dark:bg-teal-950/60 dark:text-teal-400 dark:border-teal-800/40',
-}
 
 export function HrStatCard({
   icon, color = 'blue', value, label, trend, sub, loading, onClick,
@@ -47,73 +48,48 @@ export function HrStatCard({
    */
   onClick?: () => void
 }) {
-  const interactive = typeof onClick === 'function'
-  const Tag = (interactive ? 'button' : 'div') as 'button' | 'div'
   return (
-    <Tag
-      {...(interactive ? { type: 'button' as const, onClick } : {})}
-      className={clsx(
-        'ut-card ut-card-sm group relative overflow-hidden p-6 transition-all duration-300 bg-white ring-1 ring-gray-200 shadow-sm rounded-2xl',
-        interactive
-          ? 'ut-card-hover w-full cursor-pointer text-left hover:ring-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-500'
-          : 'cursor-default',
-      )}
-    >
-      <div className="absolute top-0 right-0 p-6 opacity-5 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-12 group-hover:opacity-10 pointer-events-none">
-        {React.cloneElement(icon as React.ReactElement, { size: 120 })}
-      </div>
-      <div className="relative z-10 flex items-start justify-between">
-        <div className={clsx('flex h-12 w-12 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 shadow-sm', STAT_ICON[color])}>
-          {icon}
-        </div>
-        {trend && (
-          <span className={clsx(
-            'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-bold tracking-tight shadow-sm',
-            trend.dir === 'up'
-              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-              : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
-          )}>
-            {trend.dir === 'up' ? '↑' : '↓'} {trend.value}
-          </span>
-        )}
-      </div>
-      <div className="relative z-10 mt-5">
-        <p className="text-[12px] font-bold uppercase tracking-wider text-gray-500">{label}</p>
-        <p className="mt-1 text-[32px] font-black leading-none tracking-tight text-gray-900 tabular-nums">
-          {loading ? <span className="inline-block h-8 w-24 animate-pulse rounded-lg bg-gray-100" /> : value}
-        </p>
-        {sub && <p className="mt-2 text-[13px] font-medium text-gray-400">{sub}</p>}
-      </div>
-    </Tag>
+    <LegacyStatCard
+      label={label}
+      value={value}
+      icon={icon}
+      tone={statTone(color)}
+      note={sub}
+      delta={trend?.value}
+      trend={trend?.dir}
+      mood={trend ? (trend.dir === 'up' ? 'good' : 'bad') : 'flat'}
+      onClick={onClick}
+      loading={loading}
+    />
   )
 }
 
 // ── Status pill ──────────────────────────────────────────────────────────────
+// The kit StatusPill (22px, 12px/500, soft fill + readable text in both themes).
+// The old tone names map onto the design's palette.
 export type PillTone = 'ok' | 'warn' | 'info' | 'late' | 'purple' | 'red' | 'pink' | 'teal' | 'gray' | 'green' | 'orange' | 'blue'
-const PILL: Record<PillTone, string> = {
-  ok:     'bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/40',
-  green:  'bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/40',
-  warn:   'bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/40',
-  orange: 'bg-orange-50 text-orange-700 border border-orange-200/80 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800/40',
-  info:   'bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/40',
-  blue:   'bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/40',
-  late:   'bg-orange-50 text-orange-700 border border-orange-200/80 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800/40',
-  purple: 'bg-purple-50 text-purple-700 border border-purple-200/80 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800/40',
-  red:    'bg-rose-50 text-rose-700 border border-rose-200/80 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/40',
-  pink:   'bg-pink-50 text-pink-700 border border-pink-200/80 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800/40',
-  teal:   'bg-teal-50 text-teal-700 border border-teal-200/80 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800/40',
-  gray:   'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+const PILL: Record<PillTone, StatusTone> = {
+  ok: 'success',
+  green: 'success',
+  warn: 'warning',
+  late: 'warning',
+  orange: 'leave',
+  info: 'info',
+  blue: 'info',
+  purple: 'holiday',
+  pink: 'holiday',
+  red: 'danger',
+  teal: 'mint',
+  gray: 'neutral',
 }
 
 export function HrStatusPill({ tone = 'gray', children }: { tone?: PillTone; children: React.ReactNode }) {
-  return (
-    <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-tight shadow-2xs', PILL[tone])}>
-      {children}
-    </span>
-  )
+  return <StatusPill tone={PILL[tone] ?? 'neutral'}>{children}</StatusPill>
 }
 
 // ── Page header (title + subtitle + actions) ─────────────────────────────────
+// The kit PageHeader: context line, 28/34 title, one-line summary, actions on
+// the right, no card behind it (the design's page header).
 export function HrPageHeader({
   title, subtitle, crumb, actions, tabs, filters, className
 }: {
@@ -126,26 +102,11 @@ export function HrPageHeader({
   className?: string
 }) {
   return (
-    <div className={clsx(
-      "relative mb-8 overflow-hidden rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-[var(--border-default)] dark:bg-[var(--bg-surface)] sm:p-8",
-      className
-    )}>
-      {/* Subtle brand background glows */}
-      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/5 opacity-70 blur-3xl" aria-hidden="true" />
-      <div className="pointer-events-none absolute -bottom-20 -left-20 h-48 w-48 rounded-full bg-emerald-500/5 opacity-70 blur-3xl" aria-hidden="true" />
-
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          {crumb && <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#0F6E56] dark:text-emerald-400">{crumb}</p>}
-          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-[var(--text-primary)] sm:text-3xl">{title}</h1>
-          {subtitle && <p className="mt-2 text-[14px] font-medium leading-relaxed text-[var(--text-secondary)] max-w-2xl">{subtitle}</p>}
-        </div>
-        {actions && <div className="mt-2 flex shrink-0 flex-wrap items-center gap-3 sm:ml-6 sm:mt-0">{actions}</div>}
-      </div>
-
+    <div className={clsx('mb-5 min-w-0', className)}>
+      <PageHeader eyebrow={crumb} title={title} sub={subtitle} actions={actions} />
       {(tabs || filters) && (
-        <div className="relative mt-6 flex flex-col gap-4 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-between">
-          {tabs && <div className="-mb-6 -mt-2 sm:-mb-8 sm:-mt-2">{tabs}</div>}
+        <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          {tabs && <div className="min-w-0">{tabs}</div>}
           {filters && <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">{filters}</div>}
         </div>
       )}
@@ -153,7 +114,26 @@ export function HrPageHeader({
   )
 }
 
-// ── Green primary / ghost buttons (brand style) ─────────────────────────────
+// ── Green primary / white secondary / red buttons (the kit Button's look) ────
+// Sizes: md = 38px (the design's default), sm = 32px (small inline buttons).
+// Tailwind classes on purpose: callers' own utilities (mt-2, w-full, flex-1)
+// keep working exactly as before.
+const BTN_BASE =
+  'btn-press inline-flex items-center justify-center whitespace-nowrap border font-medium leading-none transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-[.55]'
+const BTN_SIZE = {
+  md: 'h-[38px] gap-2 rounded-[10px] px-[14px] text-[13.5px]',
+  sm: 'h-8 gap-1.5 rounded-[9px] px-3 text-[12.5px]',
+}
+const BTN_VARIANT = {
+  primary:
+    'border-transparent bg-[var(--u-br,#0F6E56)] text-[var(--u-onbr,#fff)] hover:bg-[var(--u-brh,#0B5A46)] focus-visible:shadow-[0_0_0_2px_var(--u-sf,#fff),0_0_0_4px_var(--u-br,#0F6E56)]',
+  ghost:
+    'border-[var(--u-ln,#E3E9E6)] bg-[var(--u-sf,#fff)] text-[var(--u-ink,#0E1B16)] hover:border-[var(--u-br,#0F6E56)] focus-visible:border-[var(--u-br,#0F6E56)] focus-visible:shadow-[var(--u-focus,0_0_0_3px_#E8F3EE)]',
+  // The red fill stays the light-theme red in dark too (as the kit's danger), so white text keeps its contrast.
+  danger:
+    'border-transparent bg-[var(--u-danger-fill,#C4453A)] text-[var(--u-onbr,#fff)] hover:bg-[var(--u-danger-fill-h,#B23A2F)] focus-visible:shadow-[0_0_0_2px_var(--u-sf,#fff),0_0_0_4px_var(--u-br,#0F6E56)]',
+}
+
 export function HrButton({
   variant = 'primary', size = 'md', className, children, ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger'; size?: 'sm' | 'md' }) {
@@ -161,11 +141,11 @@ export function HrButton({
     <button
       {...rest}
       className={clsx(
-        'btn-press inline-flex items-center justify-center gap-1.5 rounded-md font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm',
-        variant === 'primary' && 'bg-[var(--interactive-primary)] text-white shadow-sm hover:bg-[var(--interactive-primary-hover)] hover:shadow-sm',
-        variant === 'ghost' && 'border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs hover:bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]',
-        variant === 'danger' && 'bg-[var(--interactive-danger)] text-white shadow-sm hover:bg-[var(--interactive-danger-hover)]',
+        BTN_BASE,
+        BTN_SIZE[size],
+        BTN_VARIANT[variant],
+        variant === 'primary' && size === 'md' && 'shadow-[0_12px_24px_-14px_rgba(15,110,86,.9),inset_0_1px_0_rgba(255,255,255,.16)]',
+        variant === 'ghost' && size === 'sm' && 'hover:text-[var(--u-brt,#0F6E56)]',
         className,
       )}
     >
@@ -175,6 +155,9 @@ export function HrButton({
 }
 
 // ── Table card: toolbar (search + actions) → scrollable table → footer ──
+// The design's table card: white card (18px corners, hairline, card shadow), a
+// toolbar with the 40px search field, the table scrolling sideways inside the
+// card, and a quiet footer strip. Keeps the platform's .ut-card class.
 export function TableCard({
   search, filters, onClearFilters, actions, footer, children,
 }: {
@@ -209,18 +192,21 @@ export function TableCard({
     : filters
   const hasToolbar = Boolean(search || filterNode || actions)
   return (
-    <div className="ut-card overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+    <div
+      className="ut-card overflow-hidden"
+      style={{ borderRadius: 18, borderColor: 'var(--u-ln,#E3E9E6)', background: 'var(--u-sf,#fff)', boxShadow: 'var(--u-shc,0 1px 2px rgba(14,27,22,.05))' }}
+    >
       {hasToolbar && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-gray-100 bg-white/50 px-6 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-[var(--u-ln2,#EDF1EF)] px-5 py-4">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             {search && (
               <div className="relative min-w-[240px] flex-1 sm:max-w-[320px]">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--u-ink3,#6A7A73)]" />
                 <input
                   value={search.value}
                   onChange={(e) => search.onChange(e.target.value)}
                   placeholder={search.placeholder ?? 'Search records…'}
-                  className="w-full rounded-[10px] border border-gray-200 bg-gray-50/50 py-2 pl-10 pr-4 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all shadow-sm"
+                  className="h-10 w-full rounded-[11px] border border-[var(--u-ln,#E3E9E6)] bg-[var(--u-sf,#fff)] pl-10 pr-3 text-[13.5px] text-[var(--u-ink,#0E1B16)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--u-ink3,#6A7A73)] hover:border-[var(--u-gy,#C9D2CE)] focus:border-[var(--u-br,#0F6E56)] focus:shadow-[var(--u-focus,0_0_0_3px_#E8F3EE)] focus-visible:outline-none"
                 />
               </div>
             )}
@@ -229,8 +215,8 @@ export function TableCard({
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-3">{actions}</div>}
         </div>
       )}
-      <div className="overflow-x-auto bg-white">{children}</div>
-      {footer && <div className="border-t border-gray-100 bg-gray-50/50 px-6 py-4">{footer}</div>}
+      <div className="overflow-x-auto">{children}</div>
+      {footer && <div className="border-t border-[var(--u-ln2,#EDF1EF)] bg-[var(--u-sf2,#F7F9F8)] px-5 py-3.5">{footer}</div>}
     </div>
   )
 }
@@ -283,6 +269,12 @@ export interface FilterDef {
   width?: number
 }
 
+// The fields' colours as inline styles, so they follow the theme tokens (the
+// shared .ut-input/.ut-select rules carry a light fill), and an active filter
+// really shows its brand tint.
+const FIELD_IDLE: React.CSSProperties = { backgroundColor: 'var(--u-sf,#fff)' }
+const FIELD_ACTIVE: React.CSSProperties = { backgroundColor: 'var(--u-brs,#E8F3EE)', borderColor: 'var(--u-brl,#BFDFD1)', color: 'var(--u-brt,#0F6E56)' }
+
 export function FilterBar({ filters, onClearAll }: {
   filters: FilterDef[]
   /**
@@ -307,8 +299,8 @@ export function FilterBar({ filters, onClearAll }: {
         // An active filter is tinted whatever its shape, so it is obvious at a
         // glance which constraints are narrowing the list — the commonest
         // "why can't I see my data" support question on list screens.
-        const activeTint = f.value !== ''
-          && 'border-[var(--accent-border)] bg-[var(--accent-bg)] font-semibold text-[var(--accent-fg-strong)]'
+        const on = f.value !== ''
+        const tint = on && 'font-medium'
         // `key` is deliberately NOT part of this object: React requires it to be
         // passed directly to JSX, and spreading it warns on every render.
         const shared = {
@@ -330,8 +322,8 @@ export function FilterBar({ filters, onClearAll }: {
               onChange={(e) => f.onChange(e.target.value)}
               format="short"
               clearable
-              style={{ width: f.width ?? 150 }}
-              className={clsx('ut-input ut-input-sm', activeTint)}
+              style={{ width: f.width ?? 150, ...(on ? FIELD_ACTIVE : FIELD_IDLE) }}
+              className={clsx('ut-input ut-input-sm', tint)}
             />
           )
         }
@@ -343,8 +335,8 @@ export function FilterBar({ filters, onClearAll }: {
               {...shared}
               type="text"
               placeholder={f.allLabel}
-              style={{ width: f.width ?? 170 }}
-              className={clsx('ut-input ut-input-sm', activeTint)}
+              style={{ width: f.width ?? 170, ...(on ? FIELD_ACTIVE : FIELD_IDLE) }}
+              className={clsx('ut-input ut-input-sm', tint)}
             />
           )
         }
@@ -353,7 +345,8 @@ export function FilterBar({ filters, onClearAll }: {
           <select
             key={f.key}
             {...shared}
-            className={clsx('ut-select ut-select-sm w-auto min-w-[140px] max-w-[200px]', activeTint)}
+            style={on ? FIELD_ACTIVE : FIELD_IDLE}
+            className={clsx('ut-select ut-select-sm w-auto min-w-[140px] max-w-[200px]', tint)}
           >
             <option value="">{f.allLabel}</option>
             {(f.options ?? []).map((o) => (
@@ -367,18 +360,19 @@ export function FilterBar({ filters, onClearAll }: {
         <button
           type="button"
           onClick={clearAll}
-          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2.5 text-[12.5px] font-medium text-[var(--u-ink2,#4A5A54)] transition-colors hover:bg-[var(--u-hv,#F0F4F2)] hover:text-[var(--u-ink,#0E1B16)] focus-visible:outline-none focus-visible:shadow-[var(--u-focus,0_0_0_3px_#E8F3EE)]"
         >
-          <X size={13} /> Clear {active.length === 1 ? 'filter' : `${active.length} filters`}
+          <X size={13} aria-hidden="true" /> Clear {active.length === 1 ? 'filter' : `${active.length} filters`}
         </button>
       )}
     </div>
   )
 }
 
-// ── Row avatar (colored initials + name/sub) ─────────────────────────────────
-const AV_COLORS = ['#0F6E56', '#0A5240', '#237D67', '#397467']
-export function HrAvatar({ name, sub, seed = 0 }: { name?: string | null; sub?: string; seed?: number }) {
+// ── Row avatar (initials + name/sub) ─────────────────────────────────────────
+// The kit Avatar (36px circle, brand soft 2 with brand initials), then the name
+// and a quiet second line.
+export function HrAvatar({ name, sub, seed: _seed = 0 }: { name?: string | null; sub?: string; seed?: number }) {
   // 2026-09-10: `name` was typed `string` and dereferenced directly with
   // name.split(' '). A report row whose employee_name came back NULL (Postgres
   // `x || NULL` is NULL — an employee with no last_name) therefore threw
@@ -390,24 +384,24 @@ export function HrAvatar({ name, sub, seed = 0 }: { name?: string | null; sub?: 
   // matter what the server sends. The type now admits null and the value is
   // coerced before use.
   const safeName = (name ?? '').trim()
+  // The same two letters as before (first letters of the first two words).
   const initials = safeName.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
-  const bg = AV_COLORS[Math.abs(seed) % AV_COLORS.length]
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-xs" style={{ background: bg }}>
-        {initials}
-      </div>
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar name={safeName || null} initials={initials} size={36} tone="soft" weight={600} />
       <div className="min-w-0">
         {/* Falls back to an em dash rather than rendering an empty row, so a
             missing name reads as absent data instead of a broken layout. */}
-        <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{safeName || '—'}</p>
-        {sub && <p className="truncate text-xs font-medium text-[var(--text-tertiary)]">{sub}</p>}
+        <p className="truncate text-[13.5px] font-medium text-[var(--u-ink,#0E1B16)]">{safeName || '—'}</p>
+        {sub && <p className="truncate text-[12px] text-[var(--u-ink3,#6A7A73)]">{sub}</p>}
       </div>
     </div>
   )
 }
 
 // ── Accessible tab bar (role=tablist + roving focus + arrow keys) ────────────
+// The design's pill tabs (kit PillTabs look: 40px outlined pills, the active one
+// solid brand green), keeping the tab roles, ids and keys this bar always had.
 export interface HrTab { key: string; label: React.ReactNode; badge?: React.ReactNode }
 export function HrTabs({ tabs, active, onChange, className }: {
   tabs: HrTab[]
@@ -416,7 +410,6 @@ export function HrTabs({ tabs, active, onChange, className }: {
   className?: string
 }) {
   const ref = React.useRef<HTMLDivElement>(null)
-  const pillId = React.useId()
   const focusTab = (i: number) => requestAnimationFrame(() =>
     ref.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[i]?.focus())
   // Scroll the selected tab into view whenever it changes.
@@ -443,51 +436,40 @@ export function HrTabs({ tabs, active, onChange, className }: {
     if (n >= 0) { e.preventDefault(); onChange(tabs[n].key); focusTab(n) }
   }
   return (
-    <div className={clsx('mb-6 overflow-x-auto scrollbar-hide', className)}>
+    <div className={clsx('mb-6 min-w-0', className)}>
       <div
         ref={ref}
         role="tablist"
         onKeyDown={onKeyDown}
-        className="inline-flex w-max items-center gap-1 rounded-[14px] bg-gray-100/80 p-1.5 shadow-inner"
+        className="uk-ptabs"
       >
         {tabs.map((t) => {
           const sel = t.key === active
           return (
             <button
               key={t.key}
+              type="button"
               role="tab"
               id={`tab-${t.key}`}
               aria-selected={sel}
               aria-controls={`panel-${t.key}`}
               tabIndex={sel ? 0 : -1}
+              data-active={sel ? 'true' : undefined}
               onClick={() => onChange(t.key)}
-              className={clsx(
-                'relative shrink-0 rounded-[10px] px-5 py-2 text-[13px] font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-                sel ? 'text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700',
-              )}
+              className={clsx('uk-ptab', sel ? 'is-on' : 'ufx-spot')}
             >
-              {sel && (
-                <motion.span
-                  layoutId={`hrtab-pill-${pillId}`}
+              {t.label}
+              {t.badge != null && (
+                <span
                   aria-hidden
-                  className="absolute inset-0 rounded-[10px] bg-white shadow-sm ring-1 ring-black/5"
-                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                />
+                  className={clsx(
+                    'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11.5px] font-medium leading-none tabular-nums',
+                    sel ? 'bg-white/20 text-[var(--u-onbr,#fff)]' : 'bg-[var(--u-hv,#F0F4F2)] text-[var(--u-ink2,#4A5A54)]',
+                  )}
+                >
+                  {t.badge}
+                </span>
               )}
-              <span className="relative z-10 inline-flex items-center gap-2">
-                {t.label}
-                {t.badge != null && (
-                  <span
-                    aria-hidden
-                    className={clsx(
-                      'rounded-full px-2 py-0.5 text-[10px] font-bold leading-none',
-                      sel ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200/50 text-gray-500',
-                    )}
-                  >
-                    {t.badge}
-                  </span>
-                )}
-              </span>
             </button>
           )
         })}
@@ -501,6 +483,8 @@ export function HrTabPanel({ tabKey, children }: { tabKey: string; children: Rea
 }
 
 // ── Custom select (listbox) ──────────────────────────────────────────────────
+// The trigger is the shared field; the list is the design's menu (12px corners,
+// hairline, popover shadow).
 export interface HrSelectOption { value: string; label: React.ReactNode }
 export function HrSelect({
   value, onChange, options, placeholder = 'Select…', size = 'md', disabled, className,
@@ -582,18 +566,20 @@ export function HrSelect({
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         onClick={() => (open ? close() : openList())}
+        style={{ backgroundColor: 'var(--u-sf,#fff)' }}
         className={clsx(
           'ut-input flex items-center justify-between gap-2 text-left font-medium',
           size === 'sm' && 'ut-input-sm',
-          open && '!border-[var(--border-focus)] !bg-white shadow-[0_0_0_4px_rgba(15,110,86,0.15)]',
+          open && '!border-[var(--u-br,#0F6E56)] !shadow-[var(--u-focus,0_0_0_3px_#E8F3EE)]',
         )}
       >
-        <span className={clsx('truncate', !selected && 'text-[var(--text-tertiary)]')}>
+        <span className={clsx('truncate', !selected && 'text-[var(--u-ink3,#6A7A73)]')}>
           {selected?.label ?? placeholder}
         </span>
         <ChevronDown
           size={15}
-          className={clsx('shrink-0 text-[var(--text-tertiary)] transition-transform duration-150', open && 'rotate-180')}
+          aria-hidden="true"
+          className={clsx('shrink-0 text-[var(--u-ink3,#6A7A73)] transition-transform duration-150', open && 'rotate-180')}
         />
       </button>
       <AnimatePresence>
@@ -605,8 +591,8 @@ export function HrSelect({
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute left-0 right-0 top-[calc(100%+6px)] z-dropdown max-h-60 origin-top overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] py-1.5 shadow-[0_16px_48px_-16px_rgba(15,110,86,0.25)]"
+            transition={{ duration: 0.13, ease: [0.2, 0.8, 0.2, 1] }}
+            className="absolute left-0 right-0 top-[calc(100%+6px)] z-dropdown max-h-60 origin-top overflow-y-auto rounded-[12px] border border-[var(--u-ln,#E3E9E6)] bg-[var(--u-sf,#fff)] p-1.5 shadow-[var(--u-shp,0_24px_60px_-20px_rgba(14,27,22,.35))]"
           >
             {options.map((o, i) => {
               const isSelected = o.value === value
@@ -619,13 +605,13 @@ export function HrSelect({
                   onClick={() => commit(i)}
                   onMouseEnter={() => setActive(i)}
                   className={clsx(
-                    'flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left text-sm font-medium transition-colors',
-                    i === active && 'bg-[var(--accent-bg)]',
-                    isSelected ? 'font-bold text-[var(--accent-fg)]' : 'text-[var(--text-primary)]',
+                    'flex w-full items-center justify-between gap-2 rounded-[9px] px-3 py-2 text-left text-[13.5px] transition-colors',
+                    i === active && 'bg-[var(--u-hv,#F0F4F2)]',
+                    isSelected ? 'font-medium text-[var(--u-brt,#0F6E56)]' : 'text-[var(--u-ink,#0E1B16)]',
                   )}
                 >
                   <span className="truncate">{o.label}</span>
-                  {isSelected && <Check size={15} className="shrink-0 text-[var(--accent-fg)]" />}
+                  {isSelected && <Check size={15} aria-hidden="true" className="shrink-0 text-[var(--u-brt,#0F6E56)]" />}
                 </button>
               )
             })}

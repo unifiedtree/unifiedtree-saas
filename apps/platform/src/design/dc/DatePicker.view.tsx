@@ -1,13 +1,14 @@
-// The DatePicker's view: the shared calendar field with the design's 42px trigger
-// (DatePicker.view.css). Everything else — popover, views, keyboard — is shared.
+// hand-owned (F2d). The DatePicker's view: the shared calendar field with the
+// design's 42px trigger (DatePicker.view.css, tokens only). Everything else —
+// popover, views, keyboard — is the shared calendar's.
 import { DateField } from '@/shared/components/calendar'
 import './DatePicker.view.css'
 
 export function DatePickerView({ v }: { v: any }) {
   return (
-    <div style={{ position: 'relative', width: '100%', minWidth: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: '#0f172a' }}>
+    <div style={{ position: 'relative', width: '100%', minWidth: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>
       <DateField
-        className="dc-date-picker"
+        className="dcdp"
         value={v.value || ''}
         min={v.min}
         max={v.max}
