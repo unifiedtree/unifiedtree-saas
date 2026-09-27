@@ -45,8 +45,11 @@ public class DepartmentService {
                 (org.springframework.jdbc.core.RowCallbackHandler) rs -> branches
                         .computeIfAbsent(rs.getObject(1, UUID.class), k -> new ArrayList<>()).add(rs.getObject(2, UUID.class)),
                 companyId);
+        Map<UUID, String> costCentres = costCentresOf(companyId);
+        Map<UUID, String> heads = headNamesOf(companyId);
         return repository.findAllByCompanyIdAndActiveTrueOrderByNameAsc(companyId)
-                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0), branches.getOrDefault(x.getId(), List.of()))).toList();
+                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0), branches.getOrDefault(x.getId(), List.of()),
+                        costCentres.get(x.getId()), x.getDepartmentHeadEmployeeId() == null ? null : heads.get(x.getDepartmentHeadEmployeeId()))).toList();
     }
 
     /**
@@ -73,6 +76,9 @@ public class DepartmentService {
      * keeps those references intact instead of orphaning them.
      */
     public DepartmentResponse create(CreateDepartmentRequest req) {
+        String costCentre = cleanCostCentre(req.costCentre());
+        // Checked before anything is saved, so a missing table refuses the whole create.
+        if (costCentre != null) requireCostCentreTable();
         Department existing = repository
                 .findByCompanyIdAndNameIgnoreCase(req.companyId(), req.name())
                 .orElse(null);
@@ -103,6 +109,7 @@ public class DepartmentService {
         Department saved = repository.saveAndFlush(d);
         // 2026-09-25: branchIds used to be accepted and silently dropped.
         if (req.branchIds() != null) replaceBranches(saved, req.branchIds());
+        if (costCentre != null) writeCostCentre(saved, costCentre);
         return toResponse(saved);
     }
 
@@ -216,6 +223,18 @@ public class DepartmentService {
      * and uniqueness-checked within the company, same as create.
      */
     public DepartmentResponse updateDetails(UUID id, String code, String description) {
+        return updateDetails(id, code, description, null);
+    }
+
+    /**
+     * {@link #updateDetails(UUID, String, String)} plus the cost centre
+     * (redesign BW-95): null leaves it, blank clears it. Answers
+     * FEATURE_NOT_READY, before changing anything, when a cost centre is sent
+     * and V143_52 isn't applied.
+     */
+    public DepartmentResponse updateDetails(UUID id, String code, String description, String costCentre) {
+        String cleanCostCentre = costCentre == null ? null : cleanCostCentre(costCentre);
+        if (costCentre != null) requireCostCentreTable();
         Department d = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));
         if (code != null) {
@@ -230,7 +249,9 @@ public class DepartmentService {
         if (description != null) {
             d.setDescription(description.isBlank() ? null : description.trim());
         }
-        return toResponse(repository.save(d));
+        Department saved = repository.save(d);
+        if (costCentre != null) writeCostCentre(saved, cleanCostCentre);
+        return toResponse(saved);
     }
 
     public DepartmentResponse setHead(UUID id, UUID employeeId) {
@@ -248,15 +269,102 @@ public class DepartmentService {
     }
 
     private DepartmentResponse toResponse(Department d) {
-        return toResponse(d, headcount.countFor("department_id", d.getId()), branchesOf(d.getId()));
+        return toResponse(d, headcount.countFor("department_id", d.getId()), branchesOf(d.getId()),
+                costCentreOf(d.getId()), headNameOf(d.getDepartmentHeadEmployeeId()));
     }
 
     /** {@code employees}: people working there now (see LiveHeadcount), not the never-updated cached column. */
-    private DepartmentResponse toResponse(Department d, int employees, List<UUID> branchIds) {
+    private DepartmentResponse toResponse(Department d, int employees, List<UUID> branchIds, String costCentre, String headName) {
         return new DepartmentResponse(
                 d.getId(), d.getCompanyId(), d.getName(), d.getCode(),
                 d.getParentDepartmentId(), d.getDepartmentHeadEmployeeId(),
                 d.getDescription(), d.getColorHex(), d.getIconKey(),
-                employees, d.isActive(), List.copyOf(branchIds));
+                employees, d.isActive(), List.copyOf(branchIds), costCentre, headName);
+    }
+
+    // -- Cost centre and head name (redesign BW-95) --------------------------
+    // The cost centre lives in hrms.department_cost_centres (V143_52, JDBC only;
+    // hrms.departments is JPA-mapped). Reads check to_regclass first and leave
+    // it null when the table isn't there, so department lists keep working
+    // before the migration is applied; writes answer FEATURE_NOT_READY.
+
+    /** Longest cost centre kept (the column is VARCHAR(50)). */
+    static final int COST_CENTRE_MAX = 50;
+
+    /** Trimmed; blank = none (null). Longer than {@value #COST_CENTRE_MAX} characters is refused. */
+    static String cleanCostCentre(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String t = raw.trim();
+        if (t.length() > COST_CENTRE_MAX) {
+            throw new BusinessRuleException("A cost centre can be at most " + COST_CENTRE_MAX + " characters", "COST_CENTRE_TOO_LONG");
+        }
+        return t;
+    }
+
+    boolean costCentreTableExists() {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT to_regclass('hrms.department_cost_centres') IS NOT NULL", Boolean.class));
+    }
+
+    private void requireCostCentreTable() {
+        if (!costCentreTableExists()) throw new com.hrms.core.exception.FeatureNotReady();
+    }
+
+    /** Sets ({@code costCentre} non-null) or clears (null) the department's cost centre. */
+    private void writeCostCentre(Department d, String costCentre) {
+        UUID tenant = d.getTenantId() != null ? d.getTenantId() : TenantContext.getTenantId();
+        com.hrms.core.exception.FeatureNotReady.run(() -> {
+            if (costCentre == null) {
+                jdbc.update("DELETE FROM hrms.department_cost_centres WHERE tenant_id = ? AND department_id = ?", tenant, d.getId());
+            } else {
+                jdbc.update("""
+                        INSERT INTO hrms.department_cost_centres (tenant_id, department_id, cost_centre)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT (tenant_id, department_id) DO UPDATE SET cost_centre = EXCLUDED.cost_centre, updated_at = now()
+                        """, tenant, d.getId(), costCentre);
+            }
+        });
+    }
+
+    private Map<UUID, String> costCentresOf(UUID companyId) {
+        Map<UUID, String> out = new HashMap<>();
+        if (!costCentreTableExists()) return out;
+        jdbc.query("""
+                SELECT c.department_id, c.cost_centre FROM hrms.department_cost_centres c
+                  JOIN hrms.departments d ON d.id = c.department_id
+                 WHERE d.company_id = ? AND c.tenant_id = d.tenant_id""",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getObject(1, UUID.class), rs.getString(2)),
+                companyId);
+        return out;
+    }
+
+    private String costCentreOf(UUID departmentId) {
+        if (departmentId == null || !costCentreTableExists()) return null;
+        List<String> rows = jdbc.queryForList(
+                "SELECT cost_centre FROM hrms.department_cost_centres WHERE department_id = ?", String.class, departmentId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** Head names for the company's departments, by the head's employee id. */
+    private Map<UUID, String> headNamesOf(UUID companyId) {
+        Map<UUID, String> out = new HashMap<>();
+        jdbc.query("""
+                SELECT e.id, e.first_name, e.last_name FROM hrms.employees e
+                  JOIN hrms.departments d ON d.department_head_employee_id = e.id
+                 WHERE d.company_id = ?""",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getObject(1, UUID.class), fullName(rs.getString(2), rs.getString(3))),
+                companyId);
+        return out;
+    }
+
+    private String headNameOf(UUID employeeId) {
+        if (employeeId == null) return null;
+        List<String> rows = jdbc.query("SELECT first_name, last_name FROM hrms.employees WHERE id = ?",
+                (rs, i) -> fullName(rs.getString(1), rs.getString(2)), employeeId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    static String fullName(String first, String last) {
+        String n = ((first == null ? "" : first.trim()) + " " + (last == null ? "" : last.trim())).trim();
+        return n.isEmpty() ? null : n;
     }
 }

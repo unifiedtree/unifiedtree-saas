@@ -1,20 +1,19 @@
 package com.hrms.app.bulk;
 
+import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.HrmsException;
 import com.hrms.core.tenant.TenantContext;
-import org.apache.poi.ooxml.POIXMLException;
-import org.springframework.http.HttpStatus;
-import com.hrms.employee.dto.CreateEmployeeRequest;
-import com.hrms.employee.enums.EmploymentType;
-import com.hrms.employee.enums.Gender;
 import com.hrms.employee.quota.SeatQuotaEnforcer;
-import com.hrms.employee.repository.EmployeeRepository;
-import com.hrms.employee.service.EmployeeService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
+import com.hrms.employee.workforce.service.WorkforceEmployeeService;
+import org.apache.poi.ooxml.POIXMLException;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,26 +23,48 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * Two-phase employee bulk import:
  *  Phase 1 (validate): Parse file, collect all errors, return without writing.
  *  Phase 2 (commit):   Re-parse and create employees only if Phase 1 had zero errors.
+ *
+ * <p>Redesign BW-93: every row is created through the Add-employee path
+ * ({@link WorkforceEmployeeService#create(com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest, boolean)}),
+ * under the same rules (company employee codes, weekly offs, the only branch,
+ * the department head as manager), with department and designation matched by
+ * name, branch by name or code and manager by code or email
+ * ({@link EmployeeImportMapper}). Imported people start ACTIVE, as they always
+ * have. Problems come back per row and column. Commit stays all-or-nothing:
+ * one transaction, and nothing is written unless every row passes.
  */
 @Service
 public class EmployeeBulkImportService {
 
     private static final Logger log = LoggerFactory.getLogger(EmployeeBulkImportService.class);
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    private final EmployeeService employeeService;
-    private final EmployeeRepository employeeRepository;
+    /** The template's columns. Required ones first; the check itself is in {@link EmployeeImportMapper}. */
+    public static final List<String> REQUIRED_COLUMNS = List.of(
+            "first_name", "last_name", "email", "employment_type", "date_of_joining");
+    public static final List<String> OPTIONAL_COLUMNS = List.of(
+            "employee_code", "phone", "department", "designation", "job_title", "branch", "reporting_manager",
+            "gender", "date_of_birth", "pan", "uan", "esi", "bank_name", "bank_account", "ifsc");
+
+    /** The columns, for the import page's chips (GET /v1/bulk-import/employees/columns). */
+    public record Columns(List<String> required, List<String> optional) {}
+
+    /** A commit: the result, and the people it created (for starting onboarding after the commit). */
+    public record Commit(BulkImportResult result, List<WorkforceEmployeeResponse> employees) {}
+
+    private final WorkforceEmployeeService workforce;
+    private final JdbcTemplate jdbc;
     /**
      * Canonical seat-quota enforcer, shared with EmployeeService and the
      * workforce-directory create path. Kept optional so unit tests / legacy
@@ -53,74 +74,129 @@ public class EmployeeBulkImportService {
     private final SeatQuotaEnforcer seatQuotaEnforcer;
 
     @Autowired
-    public EmployeeBulkImportService(EmployeeService employeeService,
-                                     EmployeeRepository employeeRepository,
+    public EmployeeBulkImportService(WorkforceEmployeeService workforce,
+                                     JdbcTemplate jdbc,
                                      org.springframework.beans.factory.ObjectProvider<SeatQuotaEnforcer> seatQuotaEnforcerProvider) {
-        this.employeeService = employeeService;
-        this.employeeRepository = employeeRepository;
+        this.workforce = workforce;
+        this.jdbc = jdbc;
         this.seatQuotaEnforcer = seatQuotaEnforcerProvider.getIfAvailable();
     }
 
+    public Columns columns() {
+        return new Columns(REQUIRED_COLUMNS, OPTIONAL_COLUMNS);
+    }
+
+    @Transactional(readOnly = true)
     public BulkImportResult validateOnly(MultipartFile file, UUID companyId) throws IOException {
         List<BulkImportRow> rows = parse(file);
-        validate(rows, companyId);
-        List<String> errors = rows.stream()
-                .filter(BulkImportRow::hasErrors)
-                .flatMap(r -> r.getErrors().stream())
-                .toList();
-        return BulkImportResult.validationFailed(rows.size(), errors);
+        EmployeeImportMapper.map(rows, companyId, lookups(companyId));
+        return checked(rows);
     }
 
     @Transactional
-    public BulkImportResult validateAndCommit(MultipartFile file, UUID companyId) throws IOException {
+    public Commit validateAndCommit(MultipartFile file, UUID companyId) throws IOException {
         List<BulkImportRow> rows = parse(file);
-        validate(rows, companyId);
-
-        List<String> errors = rows.stream()
-                .filter(BulkImportRow::hasErrors)
-                .flatMap(r -> r.getErrors().stream())
-                .toList();
-
-        if (!errors.isEmpty()) {
-            return BulkImportResult.validationFailed(rows.size(), errors);
+        List<EmployeeImportMapper.Mapped> mapped = EmployeeImportMapper.map(rows, companyId, lookups(companyId));
+        BulkImportResult check = checked(rows);
+        if (!check.errors().isEmpty()) {
+            return new Commit(check, List.of());
         }
 
         // Seat guard: reject the whole file if it would push the workspace over
         // its paid cap. Applied before ANY row is written — the alternative was
         // half-committing an upload and half-erroring mid-batch. This closes the
         // bypass verified live 2026-08-10 where a 500-row CSV walked past a
-        // 10-seat plan without a peep. Per-row assertCapacity(1) inside
-        // employeeService.createEmployee is a belt-and-braces second check,
+        // 10-seat plan without a peep. The per-row assertCapacity() inside
+        // WorkforceEmployeeService.create is a belt-and-braces second check,
         // but the aggregate pre-flight is what stops a bulk-mode blowout.
         if (seatQuotaEnforcer != null) {
             seatQuotaEnforcer.assertCapacity(rows.size());
         }
 
-        int created = 0;
-        for (BulkImportRow row : rows) {
-            CreateEmployeeRequest req = toRequest(row, companyId);
-            employeeService.createEmployee(req);
-            created++;
+        List<BulkImportResult.CreatedRow> created = new ArrayList<>();
+        List<WorkforceEmployeeResponse> employees = new ArrayList<>();
+        for (EmployeeImportMapper.Mapped m : mapped) {
+            WorkforceEmployeeResponse emp;
+            try {
+                emp = workforce.create(m.request(), true);
+            } catch (HrmsException e) {
+                // Everything above is checked first, so this is rare (someone added the
+                // same email meanwhile). The whole import is rolled back.
+                throw new BusinessRuleException("Row " + m.row() + ": " + e.getMessage(), "IMPORT_ROW_FAILED");
+            }
+            if (m.jobTitle() != null) {
+                // hrms.employees.job_title isn't mapped on the workforce entity; imports
+                // have always kept the file's job title (else the unmatched designation).
+                jdbc.update("UPDATE hrms.employees SET job_title = ? WHERE id = ? AND tenant_id = ?",
+                        m.jobTitle(), emp.id(), TenantContext.getTenantId());
+            }
+            employees.add(emp);
+            created.add(new BulkImportResult.CreatedRow(m.row(), emp.id(), emp.employeeCode(),
+                    (emp.firstName() + " " + (emp.lastName() == null ? "" : emp.lastName())).trim(), null, null));
         }
 
-        log.info("BulkImport: committed {} employees for company={}", created, companyId);
-        return BulkImportResult.committed(rows.size(), created);
+        log.info("BulkImport: committed {} employees for company={}", created.size(), companyId);
+        return new Commit(BulkImportResult.committed(rows.size(), warnings(rows), created), employees);
+    }
+
+    private static BulkImportResult checked(List<BulkImportRow> rows) {
+        List<String> errors = rows.stream().flatMap(r -> r.getErrors().stream()).toList();
+        List<BulkImportProblem> problems = rows.stream().flatMap(r -> r.getProblems().stream()).toList();
+        return BulkImportResult.checked(rows.size(), errors, problems, warnings(rows));
+    }
+
+    private static List<BulkImportProblem> warnings(List<BulkImportRow> rows) {
+        return rows.stream().flatMap(r -> r.getWarnings().stream()).toList();
+    }
+
+    // ── Lookups (JDBC; tenant-filtered, RLS as well) ─────────────────────────
+
+    EmployeeImportMapper.Lookups lookups(UUID companyId) {
+        UUID tenant = TenantContext.getTenantId();
+        Boolean company = jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM org.companies WHERE tenant_id = ? AND id = ?)", Boolean.class, tenant, companyId);
+        if (!Boolean.TRUE.equals(company)) {
+            throw new BusinessRuleException("That company isn't in this workspace", "IMPORT_COMPANY_UNKNOWN");
+        }
+        Map<UUID, String> active = new HashMap<>();
+        Set<String> inactive = new HashSet<>();
+        jdbc.query("SELECT id, name, is_active FROM hrms.departments WHERE tenant_id = ? AND company_id = ?",
+                rs -> {
+                    if (rs.getBoolean("is_active")) active.put(rs.getObject("id", UUID.class), rs.getString("name"));
+                    else inactive.add(EmployeeImportMapper.key(rs.getString("name")));
+                }, tenant, companyId);
+        Map<UUID, String> titles = new HashMap<>();
+        jdbc.query("SELECT id, title FROM hrms.designations WHERE tenant_id = ? AND company_id = ? AND is_active = TRUE",
+                rs -> { titles.put(rs.getObject("id", UUID.class), rs.getString("title")); }, tenant, companyId);
+        List<EmployeeImportMapper.Branch> branches = jdbc.query(
+                "SELECT id, name, code FROM org.branches WHERE tenant_id = ? AND company_id = ? AND is_active = TRUE",
+                (rs, i) -> new EmployeeImportMapper.Branch(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("code")),
+                tenant, companyId);
+        List<EmployeeImportMapper.Manager> managers = jdbc.query("""
+                SELECT id, employee_code, email FROM hrms.employees
+                 WHERE tenant_id = ? AND is_active = TRUE AND employment_status NOT IN ('EXITED', 'TERMINATED')
+                """, (rs, i) -> new EmployeeImportMapper.Manager(rs.getObject("id", UUID.class),
+                        rs.getString("employee_code"), rs.getString("email")), tenant);
+        // Emails: anywhere in the workspace, as imports always checked. Codes: in this company, as Add employee checks.
+        Set<String> emails = new HashSet<>(jdbc.queryForList(
+                "SELECT lower(email) FROM hrms.employees WHERE tenant_id = ? AND email IS NOT NULL", String.class, tenant));
+        Set<String> codes = new HashSet<>(jdbc.queryForList(
+                "SELECT lower(employee_code) FROM hrms.employees WHERE tenant_id = ? AND company_id = ?", String.class, tenant, companyId));
+        return new EmployeeImportMapper.Lookups(EmployeeImportMapper.index(active), inactive,
+                EmployeeImportMapper.index(titles), branches, managers, emails, codes);
     }
 
     // ── Template ─────────────────────────────────────────────────────────────
 
     public byte[] buildTemplate() throws IOException {
-        String[] required = {"first_name", "last_name", "email", "employment_type", "date_of_joining"};
-        String[] optional = {"phone", "department", "designation", "job_title", "gender", "date_of_birth"};
-
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet("Employees");
 
             // Header row
             Row header = sheet.createRow(0);
             int col = 0;
-            for (String h : required) header.createCell(col++).setCellValue(h);
-            for (String h : optional) header.createCell(col++).setCellValue(h);
+            for (String h : REQUIRED_COLUMNS) header.createCell(col++).setCellValue(h);
+            for (String h : OPTIONAL_COLUMNS) header.createCell(col++).setCellValue(h);
 
             // One example row
             Row example = sheet.createRow(1);
@@ -130,11 +206,21 @@ public class EmployeeBulkImportService {
             example.createCell(3).setCellValue("FULL_TIME");
             example.createCell(4).setCellValue("2025-01-15");
 
-            for (int i = 0; i < required.length + optional.length; i++) sheet.autoSizeColumn(i);
+            for (int i = 0; i < REQUIRED_COLUMNS.size() + OPTIONAL_COLUMNS.size(); i++) sheet.autoSizeColumn(i);
 
             wb.write(out);
             return out.toByteArray();
         }
+    }
+
+    /** The same template as CSV (UTF-8, header plus the example row). */
+    public byte[] buildCsvTemplate() {
+        List<String> header = new ArrayList<>(REQUIRED_COLUMNS);
+        header.addAll(OPTIONAL_COLUMNS);
+        List<String> example = new ArrayList<>(List.of("Jane", "Smith", "jane.smith@example.com", "FULL_TIME", "2025-01-15"));
+        while (example.size() < header.size()) example.add("");
+        String csv = String.join(",", header) + "\r\n" + String.join(",", example) + "\r\n";
+        return csv.getBytes(StandardCharsets.UTF_8);
     }
 
     // ── Parsing ───────────────────────────────────────────────────────────────
@@ -286,79 +372,32 @@ public class EmployeeBulkImportService {
         BulkImportRow row = new BulkImportRow(rowNum);
         for (int i = 0; i < headers.length; i++) {
             String val = i < cells.length ? cells[i].trim() : "";
-            switch (headers[i].toLowerCase().replace(" ", "_")) {
+            switch (headers[i].trim().toLowerCase().replace(" ", "_").replace("-", "_")) {
                 case "first_name"       -> row.setFirstName(val);
                 case "last_name"        -> row.setLastName(val);
-                case "email"            -> row.setEmail(val);
-                case "phone"            -> row.setPhone(val);
+                case "email", "work_email" -> row.setEmail(val);
+                case "phone", "mobile"  -> row.setPhone(val);
                 case "department"       -> row.setDepartmentName(val);
                 case "designation"      -> row.setDesignationName(val);
                 case "job_title"        -> row.setJobTitle(val);
                 case "employment_type"  -> row.setEmploymentType(val);
-                case "date_of_joining"  -> row.setDateOfJoining(val);
+                case "date_of_joining", "joining_date" -> row.setDateOfJoining(val);
                 case "gender"           -> row.setGender(val);
-                case "date_of_birth"    -> row.setDateOfBirth(val);
+                case "date_of_birth", "dob" -> row.setDateOfBirth(val);
+                // Redesign BW-93: the Add-employee columns.
+                case "employee_code", "code" -> row.setEmployeeCode(val);
+                case "branch"           -> row.setBranch(val);
+                case "reporting_manager", "manager", "manager_code", "manager_email" -> row.setReportingManager(val);
+                case "pan", "pan_number" -> row.setPan(val);
+                case "uan", "uan_number" -> row.setUan(val);
+                case "esi", "esi_number" -> row.setEsi(val);
+                case "bank_name"        -> row.setBankName(val);
+                case "bank_account", "bank_account_number", "account_number" -> row.setBankAccount(val);
+                case "ifsc", "bank_ifsc", "ifsc_code" -> row.setIfsc(val);
+                default -> { /* unknown columns are ignored, as before */ }
             }
         }
         return row;
-    }
-
-    // ── Validation ────────────────────────────────────────────────────────────
-
-    private void validate(List<BulkImportRow> rows, UUID companyId) {
-        for (BulkImportRow row : rows) {
-            if (row.getFirstName() == null || row.getFirstName().isBlank()) {
-                row.addError("first_name is required");
-            }
-            if (row.getLastName() == null || row.getLastName().isBlank()) {
-                row.addError("last_name is required");
-            }
-            if (row.getEmail() == null || !row.getEmail().contains("@")) {
-                row.addError("email is invalid or missing");
-            } else if (employeeRepository.findByEmail(row.getEmail()).isPresent()) {
-                row.addError("email already exists: " + row.getEmail());
-            }
-            if (row.getDateOfJoining() != null && !row.getDateOfJoining().isBlank()) {
-                try {
-                    LocalDate.parse(row.getDateOfJoining(), DATE_FMT);
-                } catch (DateTimeParseException e) {
-                    row.addError("date_of_joining must be yyyy-MM-dd, got: " + row.getDateOfJoining());
-                }
-            }
-            if (row.getEmploymentType() != null && !row.getEmploymentType().isBlank()) {
-                try {
-                    EmploymentType.valueOf(row.getEmploymentType().toUpperCase());
-                } catch (IllegalArgumentException e) {
-                    row.addError("employment_type invalid: " + row.getEmploymentType());
-                }
-            }
-        }
-    }
-
-    // ── Mapping to CreateEmployeeRequest ──────────────────────────────────────
-
-    private CreateEmployeeRequest toRequest(BulkImportRow row, UUID companyId) {
-        LocalDate doj = (row.getDateOfJoining() != null && !row.getDateOfJoining().isBlank())
-                ? LocalDate.parse(row.getDateOfJoining(), DATE_FMT) : LocalDate.now();
-        LocalDate dob = (row.getDateOfBirth() != null && !row.getDateOfBirth().isBlank())
-                ? LocalDate.parse(row.getDateOfBirth(), DATE_FMT) : null;
-        EmploymentType et = (row.getEmploymentType() != null && !row.getEmploymentType().isBlank())
-                ? EmploymentType.valueOf(row.getEmploymentType().toUpperCase()) : EmploymentType.FULL_TIME;
-        Gender gender = null;
-        if (row.getGender() != null && !row.getGender().isBlank()) {
-            try { gender = Gender.valueOf(row.getGender().toUpperCase()); } catch (IllegalArgumentException ignored) {}
-        }
-
-        return new CreateEmployeeRequest(
-                row.getFirstName(), row.getLastName(), null,
-                row.getEmail(), null, row.getPhone(),
-                dob, gender, companyId,
-                null, null, null,
-                row.getJobTitle() != null ? row.getJobTitle() : row.getDesignationName(),
-                et, doj, 30, null, null, null,
-                null, null, null, null,
-                null, null, null, null,
-                null);
     }
 
     private String cellValue(Cell cell) {

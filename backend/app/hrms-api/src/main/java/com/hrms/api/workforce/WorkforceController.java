@@ -84,6 +84,19 @@ public class WorkforceController {
     private final InvitationService         invitationService;
     @Autowired(required = false)
     private AuditService                    audit;
+    // Redesign (P-WF-PEOPLE): stats, my record, exit lists, onboarding on create.
+    // Field-injected like `audit`, so the existing constructor (and the tests
+    // that build this controller) stay as they are.
+    @Autowired(required = false)
+    private EmployeeStatsService            employeeStats;
+    @Autowired(required = false)
+    private EmployeeRecordQueries           recordQueries;
+    @Autowired(required = false)
+    private NewHireOnboarding               newHireOnboarding;
+    @Autowired(required = false)
+    private com.unifiedtree.rbac.security.PermissionChecker permissionChecker;
+    @Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public WorkforceController(CompanyService companies,
                                @Qualifier("workforceBranchService") BranchService branches,
@@ -253,8 +266,11 @@ public class WorkforceController {
     public DepartmentResponse updateDepartmentDetails(
             @PathVariable UUID id,
             @RequestParam(required = false) String code,
-            @RequestParam(required = false) String description) {
-        return departments.updateDetails(id, code, description);
+            @RequestParam(required = false) String description,
+            // Redesign BW-95: null = leave unchanged, blank = clear. 503
+            // FEATURE_NOT_READY (and nothing changed) until V143_52 is applied.
+            @RequestParam(required = false) String costCentre) {
+        return departments.updateDetails(id, code, description, costCentre);
     }
 
     @PatchMapping("/departments/{id}/head")
@@ -348,9 +364,11 @@ public class WorkforceController {
             @RequestParam(required = false) String milestone,
             @RequestParam(required = false) Integer milestoneWithin,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo,
+            // Redesign BW-96: only this person's direct reports.
+            @RequestParam(required = false) UUID reportingManagerId) {
         return employees.directory(new WorkforceFilter(companyId, departmentId, branchId, status, search, page, pageSize,
-                noDepartment, milestoneKind(milestone), milestoneWithin, milestoneRange(milestoneFrom, milestoneTo)));
+                noDepartment, milestoneKind(milestone), milestoneWithin, milestoneRange(milestoneFrom, milestoneTo), reportingManagerId));
     }
 
     private static com.hrms.employee.workforce.service.MilestoneWindow.Range milestoneRange(LocalDate from, LocalDate to) {
@@ -393,7 +411,8 @@ public class WorkforceController {
             @RequestParam(required = false) String milestone,
             @RequestParam(required = false) Integer milestoneWithin,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo,
+            @RequestParam(required = false) UUID reportingManagerId) {
         var milestoneKind = milestoneKind(milestone);
         var range = milestoneRange(milestoneFrom, milestoneTo);
         List<WorkforceEmployeeResponse> rows = new java.util.ArrayList<>();
@@ -401,7 +420,7 @@ public class WorkforceController {
         for (int page = 0; ; page++) {
             PageResponse<WorkforceEmployeeResponse> chunk = employees.directory(
                     new WorkforceFilter(companyId, departmentId, branchId, status, search, page, 500,
-                            noDepartment, milestoneKind, milestoneWithin, range));
+                            noDepartment, milestoneKind, milestoneWithin, range, reportingManagerId));
             total = chunk.totalElements();
             rows.addAll(chunk.content());
             if (chunk.last() || chunk.content().isEmpty() || rows.size() >= EXPORT_MAX_ROWS) break;
@@ -446,10 +465,91 @@ public class WorkforceController {
                 .filter(s -> s != null && !s.isBlank()).reduce((a, b) -> a + " " + b).orElse(e.employeeCode());
     }
 
-    @GetMapping("/employees/{id}")
+    // -- Redesign literal paths ---------------------------------------------
+    // Mapped as literals so they win over /employees/{id} (which answered 400
+    // for "stats", "me" and "exits", none of them being an id).
+
+    /**
+     * Redesign BW-90: the Workforce figures (counts by status, joiners and
+     * leavers, notices, probation reviews, exits, attrition, a 7-point trend,
+     * and when each suspension began). See {@link EmployeeStats} for every
+     * rule. Attrition only for holders of hrms.report.attrition (null
+     * otherwise). GET /employees/counts stays as it is.
+     */
+    @GetMapping("/employees/stats")
     @PreAuthorize("hasAuthority('hrms.employee.read')")
-    public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id) {
-        return employees.get(id);
+    public EmployeeStats.Response employeeStats(@RequestParam(required = false) UUID companyId) {
+        return employeeStats.stats(companyId, holdsOrChecks(WorkforceAccess.ATTRITION_READ));
+    }
+
+    /**
+     * Redesign BW-98: the signed-in person's own work record (probation,
+     * confirmation, notice, designation, department, manager). Always the
+     * caller's own (employee id from the token); 404 for a login without an
+     * employee record. No pay, bank or identity fields. GET /v1/employees/me
+     * stays as it is.
+     */
+    @GetMapping("/employees/me")
+    @PreAuthorize("isAuthenticated()")
+    public EmployeeRecordQueries.MyEmployeeRecord myEmployeeRecord(@AuthenticationPrincipal Jwt jwt) {
+        return recordQueries.myRecord(WorkforceAccess.employeeId(jwt));
+    }
+
+    /**
+     * Redesign BW-91: people on notice or gone, with the exit type, the reason,
+     * the department and the last working day. {@code status} = NOTICE_PERIOD,
+     * EXITED or TERMINATED (blank = all three). The reason is why this needs
+     * hrms.employee.write, like the rest of the exit flow.
+     */
+    @GetMapping("/employees/exits")
+    @PreAuthorize("hasAuthority('hrms.employee.write')")
+    public PageResponse<EmployeeRecordQueries.ExitRow> employeeExits(
+            @RequestParam(required = false) UUID companyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int pageSize) {
+        return recordQueries.exits(companyId, status, page, pageSize);
+    }
+
+    /**
+     * One employee. Holders of hrms.employee.read get the full record, as
+     * before. Redesign BW-97 (a privacy change): a person's direct manager who
+     * holds hrms.employee.team.manage but not hrms.employee.read gets the
+     * directory's list view of that one person, so pay, bank and identity
+     * fields are left out. Everyone else: 403, as before.
+     */
+    @GetMapping("/employees/{id}")
+    @PreAuthorize("hasAuthority('hrms.employee.read') or hasAuthority('hrms.employee.team.manage') or @perm.check('hrms.employee.team.manage')")
+    public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        boolean read = WorkforceAccess.holds(WorkforceAccess.EMPLOYEE_READ);
+        if (read) return employees.get(id);
+        // Past the guard without hrms.employee.read means hrms.employee.team.manage is held.
+        UUID caller = WorkforceAccess.employeeId(jwt);
+        WorkforceAccess.RecordView view = WorkforceAccess.recordView(false, true, caller, caller == null ? null : reportingManagerOf(id));
+        if (view != WorkforceAccess.RecordView.LIST) {
+            throw new org.springframework.security.access.AccessDeniedException("You can open only your own team's records");
+        }
+        return employees.getListView(id);
+    }
+
+    /** The person's reporting manager (null when none, or when the row isn't visible to this tenant). */
+    private UUID reportingManagerOf(UUID employeeId) {
+        if (jdbc == null) return null;
+        List<UUID> rows = jdbc.queryForList(
+                "SELECT reporting_manager_id FROM hrms.employees WHERE id = ? AND tenant_id = ?",
+                UUID.class, employeeId, TenantContext.getTenantId());
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** The permission from the token, else from the database (@perm, 60-second cache), as the report endpoints check it. */
+    private boolean holdsOrChecks(String permission) {
+        if (WorkforceAccess.holds(permission)) return true;
+        try {
+            return permissionChecker != null && permissionChecker.check(permission);
+        } catch (RuntimeException e) {
+            log.warn("Permission lookup for {} failed; treating it as not held: {}", permission, e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -488,9 +588,17 @@ public class WorkforceController {
     @PostMapping("/employees")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('hrms.employee.write')")
-    public WorkforceEmployeeResponse createEmployee(@Valid @RequestBody CreateWorkforceEmployeeRequest req,
-                                                    @AuthenticationPrincipal Jwt jwt) {
+    public Object createEmployee(@Valid @RequestBody CreateWorkforceEmployeeRequest req,
+                                 // Redesign BW-94: opt-in. Without it the response is exactly as before.
+                                 @RequestParam(defaultValue = "false") boolean startOnboarding,
+                                 @AuthenticationPrincipal Jwt jwt) {
         WorkforceEmployeeResponse emp = employees.create(req);
+        if (startOnboarding && newHireOnboarding != null) {
+            // The employee is saved and committed; the onboarding starts in its own
+            // transaction and can never undo the create.
+            NewHireOnboarding.Outcome outcome = newHireOnboarding.start(emp, newHireOnboarding.allowed());
+            return new CreatedEmployeeResponse(emp, outcome.onboarding(), outcome.status());
+        }
         // Invitation is DELIBERATELY not fired here — the SPA sends its own
         // POST /v1/employees/{id}/invite right after create so it can honour a
         // "send invitation email" checkbox in the form. Firing from both sides
@@ -506,6 +614,17 @@ public class WorkforceController {
         // the double-fire in the first place is cleaner and cheaper.
         return emp;
     }
+
+    /**
+     * The create response when onboarding was asked for: every field of the
+     * employee, as before, plus {@code onboarding {instanceId, templateName}}
+     * (null when none started) and {@code onboardingStatus} (STARTED,
+     * NO_CHECKLIST, NOT_ALLOWED or FAILED).
+     */
+    public record CreatedEmployeeResponse(
+            @com.fasterxml.jackson.annotation.JsonUnwrapped WorkforceEmployeeResponse employee,
+            NewHireOnboarding.Started onboarding,
+            NewHireOnboarding.Status onboardingStatus) {}
 
     @PutMapping("/employees/{id}")
     @PreAuthorize("hasAuthority('hrms.employee.write')")
