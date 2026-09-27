@@ -1,2 +1,18 @@
-.dc-approval-card-0:hover{border-color:#a7f3d0 !important}
-.dc-approval-card-1:focus{border-color:#0f6e56 !important;box-shadow:0 0 0 3px #a7f3d0 !important}
+/* hand-owned (F2d). ApprovalShell: the kit approval card surface (.uko-apprc) laid out in two columns. */
+.uko-apprc.dcap { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 20px; padding: 18px 20px; overflow: visible; transition: border-color .2s; }
+.uko-apprc.dcap:hover { border-color: var(--u-brl, #BFDFD1); }
+.dcap .uko-apprc-facts { padding: 10px 12px; gap: 8px 14px; }
+.dcap-link {
+  display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none;
+  font: inherit; font-weight: 500; color: var(--u-brt, #0F6E56); cursor: pointer; border-radius: 4px;
+}
+.dcap-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.dcap-link:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.dcap-note {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); font: inherit; font-size: 13px; line-height: 1.45;
+  resize: vertical; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.dcap-note::placeholder { color: var(--u-ink3, #6A7A73); }
+.dcap-note:hover { border-color: var(--u-gy, #C9D2CE); }
+.dcap-note:focus { border-color: var(--u-br, #0F6E56); box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
