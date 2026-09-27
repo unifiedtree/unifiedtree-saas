@@ -1,0 +1,127 @@
+/* Motion for the HRMS redesign (design: prototype/hrms-fx.js). motion.ts has the hooks.
+ *
+ *   .ufx-rise   [data-rise]        entrance: fade + 10px rise, 520ms, staggered 40ms by --i (max 14)
+ *   .ufx-pop    [data-pop]         popover in: 260ms from 6px above at 98% (.ufx-pop-up / [data-pop=up], .ufx-pop-left / [data-pop=left])
+ *   .ufx-grow-x [data-grow=x]      bars grow on scaleX (…-y on scaleY), 750ms, 120ms + 35ms × --i (max 16)
+ *   .ufx-draw   [data-draw]        stroke draw (needs pathLength="1" + stroke-dasharray="1"), 1100ms, 150ms + 60ms × --i
+ *   .ufx-ring   [data-arc]         ring draw: stroke-dasharray from "0 100" to its own value, 1000ms, 150ms + 90ms × --i
+ *   .ufx-float  [data-float]       idle float, 2.8s alternate
+ *   .ufx-tilt / .ufx-spot  [data-fx=tilt|spot]   hover: --fx 0→1 (lift, spotlight, icon scenes); tilt also gets --fxr (border light)
+ *   .ufx-light                     the light running round a tilt tile's border (conic gradient on --ang)
+ * The data-* forms are for markup converted from the prototype; kit components use the classes.
+ * Pointer position (--mx/--my) and tilt (--rx/--ry): useHoverFx() per element, or installMotion() for data-fx markup.
+ *
+ * Levels: <html data-ufx="full|subtle|off">. subtle = no tilt, no border light. off = nothing moves
+ * except the idle float (as in the design). prefers-reduced-motion = nothing moves at all.
+ */
+
+/* Inherits, so converted markup's border-light layer reads the angle installMotion() sets on its tile. */
+@property --ang {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+
+:root {
+  --ufx-ease: cubic-bezier(.2,.8,.2,1);
+  --ufx-spring: cubic-bezier(.34,1.56,.64,1);
+}
+
+/* ── Entrance ─────────────────────────────────────────────────────────────── */
+:is(.ufx-rise, [data-rise]) {
+  animation: ufx-rise 520ms var(--ufx-ease) backwards;
+  animation-delay: calc(min(var(--i, var(--ufx-nth, 0)), 14) * 40ms);
+}
+@keyframes ufx-rise {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+/* Siblings stagger by position when no --i is given. */
+:is(.ufx-rise, [data-rise]):nth-child(2) { --ufx-nth: 1; }
+:is(.ufx-rise, [data-rise]):nth-child(3) { --ufx-nth: 2; }
+:is(.ufx-rise, [data-rise]):nth-child(4) { --ufx-nth: 3; }
+:is(.ufx-rise, [data-rise]):nth-child(5) { --ufx-nth: 4; }
+:is(.ufx-rise, [data-rise]):nth-child(6) { --ufx-nth: 5; }
+:is(.ufx-rise, [data-rise]):nth-child(7) { --ufx-nth: 6; }
+:is(.ufx-rise, [data-rise]):nth-child(8) { --ufx-nth: 7; }
+:is(.ufx-rise, [data-rise]):nth-child(9) { --ufx-nth: 8; }
+:is(.ufx-rise, [data-rise]):nth-child(10) { --ufx-nth: 9; }
+:is(.ufx-rise, [data-rise]):nth-child(11) { --ufx-nth: 10; }
+:is(.ufx-rise, [data-rise]):nth-child(12) { --ufx-nth: 11; }
+:is(.ufx-rise, [data-rise]):nth-child(13) { --ufx-nth: 12; }
+:is(.ufx-rise, [data-rise]):nth-child(14) { --ufx-nth: 13; }
+:is(.ufx-rise, [data-rise]):nth-child(n+15) { --ufx-nth: 14; }
+
+:is(.ufx-pop, [data-pop]) { animation: ufx-pop 260ms var(--ufx-ease) backwards; }
+:is(.ufx-pop-up, [data-pop='up']) { animation: ufx-pop-up 260ms var(--ufx-ease) backwards; }
+:is(.ufx-pop-left, [data-pop='left']) { animation: ufx-pop-left 260ms var(--ufx-ease) backwards; }
+@keyframes ufx-pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+@keyframes ufx-pop-up { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+@keyframes ufx-pop-left { from { opacity: 0; transform: translateX(-18px); } }
+
+/* ── Data: bars, strokes, rings ───────────────────────────────────────────── */
+:is(.ufx-grow-x, .ufx-grow-y, [data-grow]) {
+  animation-duration: 750ms;
+  animation-timing-function: var(--ufx-ease);
+  animation-fill-mode: backwards;
+  animation-delay: calc(120ms + min(var(--i, 0), 16) * 35ms);
+}
+:is(.ufx-grow-x, [data-grow='x']) { animation-name: ufx-grow-x; transform-origin: left center; }
+:is(.ufx-grow-y, [data-grow='y']) { animation-name: ufx-grow-y; transform-origin: center bottom; }
+@keyframes ufx-grow-x { from { transform: scaleX(0); } }
+@keyframes ufx-grow-y { from { transform: scaleY(0); } }
+
+:is(.ufx-draw, [data-draw]) {
+  animation: ufx-draw 1100ms var(--ufx-ease) backwards;
+  animation-delay: calc(150ms + var(--i, 0) * 60ms);
+}
+@keyframes ufx-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+:is(.ufx-ring, [data-arc]) {
+  animation: ufx-ring 1000ms var(--ufx-ease) backwards;
+  animation-delay: calc(150ms + var(--i, 0) * 90ms);
+}
+@keyframes ufx-ring {
+  from { stroke-dasharray: 0 100; }
+}
+
+:is(.ufx-float, [data-float]) { animation: ufx-float 2800ms ease-in-out infinite alternate; }
+@keyframes ufx-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-7px); }
+}
+
+/* ── Hover: lift, spotlight, tilt, border light ───────────────────────────── */
+@media (hover: hover) {
+  :is(.ufx-tilt, .ufx-spot, [data-fx]):hover { --fx: 1; }
+  :root:not([data-ufx='subtle']) :is(.ufx-tilt, [data-fx='tilt']):hover { --fxr: 1; }
+}
+
+.ufx-light {
+  animation: ufx-spin 2250ms linear infinite;
+  animation-play-state: paused;
+}
+:is(.ufx-tilt, [data-fx='tilt']):hover .ufx-light { animation-play-state: running; }
+@keyframes ufx-spin { to { --ang: 360deg; } }
+
+/* ── Levels ───────────────────────────────────────────────────────────────── */
+:root[data-ufx='subtle'] :is(.ufx-tilt, [data-fx='tilt']) { --rx: 0deg !important; --ry: 0deg !important; --fxr: 0 !important; }
+
+:root[data-ufx='off'] :is(.ufx-tilt, .ufx-spot, [data-fx]) {
+  --fx: 0 !important; --fxr: 0 !important; --rx: 0deg !important; --ry: 0deg !important;
+}
+:root[data-ufx='off'] :is(.ufx-rise, .ufx-pop, .ufx-pop-up, .ufx-pop-left, .ufx-grow-x, .ufx-grow-y, .ufx-draw, .ufx-ring, .ufx-light,
+  [data-rise], [data-pop], [data-grow], [data-draw], [data-arc]) {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.ufx-tilt, .ufx-spot, [data-fx]) { --fx: 0 !important; --fxr: 0 !important; --rx: 0deg !important; --ry: 0deg !important; }
+  :is(.ufx-rise, .ufx-pop, .ufx-pop-up, .ufx-pop-left, .ufx-grow-x, .ufx-grow-y, .ufx-draw, .ufx-ring, .ufx-float, .ufx-light,
+    [data-rise], [data-pop], [data-grow], [data-draw], [data-arc], [data-float]) {
+    animation: none !important;
+  }
+}
