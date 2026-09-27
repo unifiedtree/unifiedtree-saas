@@ -334,7 +334,6 @@ public class LeaveInsightsService {
             if (department == null) return new ColleaguesOff(from, to, false, List.of());
             UUID company = (UUID) self.get(0).get("company_id");
 
-            record Away(UUID person, String firstName, LocalDate start, LocalDate end) {}
             List<Away> away = jdbc.query("""
                     SELECT lr.employee_id, TRIM(COALESCE(e.first_name, '')) AS first_name, lr.start_date, lr.end_date
                       FROM leave_mgmt.leave_requests lr
@@ -349,22 +348,31 @@ public class LeaveInsightsService {
                     tenant, Date.valueOf(to), Date.valueOf(from), department, me);
             if (away.isEmpty()) return new ColleaguesOff(from, to, true, List.of());
 
-            Set<Integer> offDays = weeklyOffs(company);
-            Set<LocalDate> holidays = holidays(company, from, to);
-            TreeMap<LocalDate, LinkedHashMap<UUID, String>> byDay = new TreeMap<>();
-            for (Away a : away) {
-                if (a.firstName() == null || a.firstName().isBlank()) continue;
-                LocalDate d = a.start().isBefore(from) ? from : a.start();
-                LocalDate last = a.end().isAfter(to) ? to : a.end();
-                for (; !d.isAfter(last); d = d.plusDays(1)) {
-                    if (offDays.contains(d.getDayOfWeek().getValue()) || holidays.contains(d)) continue;
-                    byDay.computeIfAbsent(d, k -> new LinkedHashMap<>()).putIfAbsent(a.person(), a.firstName());
-                }
-            }
-            List<DayOff> days = new ArrayList<>();
-            byDay.forEach((date, people) -> days.add(new DayOff(date, List.copyOf(people.values()))));
-            return new ColleaguesOff(from, to, true, days);
+            return new ColleaguesOff(from, to, true, byDay(away, from, to, weeklyOffs(company), holidays(company, from, to)));
         });
+    }
+
+    /** A colleague's approved leave: who (first name only) and when. */
+    record Away(UUID person, String firstName, LocalDate start, LocalDate end) {}
+
+    /**
+     * The first names off on each day of [{@code from}, {@code to}], skipping
+     * weekly offs and holidays; a person once per day; days with nobody left out.
+     */
+    static List<DayOff> byDay(List<Away> away, LocalDate from, LocalDate to, Set<Integer> offDays, Set<LocalDate> holidays) {
+        TreeMap<LocalDate, LinkedHashMap<UUID, String>> byDay = new TreeMap<>();
+        for (Away a : away) {
+            if (a.firstName() == null || a.firstName().isBlank()) continue;
+            LocalDate d = a.start().isBefore(from) ? from : a.start();
+            LocalDate last = a.end().isAfter(to) ? to : a.end();
+            for (; !d.isAfter(last); d = d.plusDays(1)) {
+                if (offDays.contains(d.getDayOfWeek().getValue()) || holidays.contains(d)) continue;
+                byDay.computeIfAbsent(d, k -> new LinkedHashMap<>()).putIfAbsent(a.person(), a.firstName().trim());
+            }
+        }
+        List<DayOff> days = new ArrayList<>();
+        byDay.forEach((date, people) -> days.add(new DayOff(date, List.copyOf(people.values()))));
+        return days;
     }
 
     // ── everyone's balances and usage (BW-44) ────────────────────────────────
