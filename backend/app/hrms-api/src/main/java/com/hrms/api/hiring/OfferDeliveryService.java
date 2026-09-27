@@ -86,8 +86,14 @@ public class OfferDeliveryService {
 
     private record Prepared(HiringOfferResponse alreadySubmitted, UUID attemptId, EmailMessage message) {}
 
+    /**
+     * @param recipient the address typed for this send; when left out, the
+     *                  offer's candidate email is used (the one stored on the
+     *                  offer, else the linked candidate's recorded email, V143.59)
+     */
     public HiringOfferResponse send(UUID id, String recipient, String actor) {
-        String email = recipient.trim();
+        String typed = recipient == null ? "" : recipient.trim();
+        String email = typed.isEmpty() ? tx.execute(status -> offerCandidateEmail(id)) : typed;
         Prepared prepared = tx.execute(status -> prepare(id, email, actor));
         if (prepared.alreadySubmitted() != null) return prepared.alreadySubmitted();
 
@@ -111,6 +117,15 @@ public class OfferDeliveryService {
             markSubmitted(id, email);
             return hiring.getOffer(id);
         });
+    }
+
+    /** The email "Send offer email" uses when none is typed; refused when the offer has none. */
+    private String offerCandidateEmail(UUID id) {
+        String email = hiring.getOffer(id).candidateEmail();
+        if (email == null || email.isBlank())
+            throw new BusinessRuleException("This offer has no candidate email yet. Add it to the offer, or type the address.",
+                    "OFFER_EMAIL_REQUIRED");
+        return email.trim();
     }
 
     /** Backwards-compatible entry for callers without an actor. */

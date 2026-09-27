@@ -208,6 +208,32 @@ public class EmployeeShiftService {
         return toEmployeeResponse(employeeId, saved, policy);
     }
 
+    /**
+     * Ends the employee's open assignment to {@code shiftPolicyId} that starts
+     * on {@code from}, on {@code lastDay}: the end of a temporary shift change
+     * for someone who had no shift before it (BW-31), so they have none after
+     * it either. Returns false, changing nothing, when there is no such open
+     * assignment.
+     */
+    @Transactional
+    public boolean endAssignment(UUID employeeId, UUID shiftPolicyId, LocalDate from, LocalDate lastDay) {
+        if (employeeId == null || shiftPolicyId == null || from == null || lastDay == null) {
+            throw new BusinessRuleException("employeeId, shift and dates are required", "SHIFT_ASSIGN_INVALID");
+        }
+        if (lastDay.isBefore(from)) {
+            throw new BusinessRuleException("An assignment can't end before it starts", "SHIFT_DATE_INVALID");
+        }
+        for (EmployeeShiftAssignment a : assignmentRepo.findByEmployeeIdAndEffectiveToIsNull(employeeId)) {
+            if (shiftPolicyId.equals(a.getShiftPolicyId()) && from.equals(a.getEffectiveFrom())) {
+                a.setEffectiveTo(lastDay);
+                assignmentRepo.save(a);
+                log.info("Assignment of employee {} to shift {} from {} now ends on {}", employeeId, shiftPolicyId, from, lastDay);
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Transactional(readOnly = true)
     public EmployeeShiftResponse getCurrentShift(UUID employeeId) {
         LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));

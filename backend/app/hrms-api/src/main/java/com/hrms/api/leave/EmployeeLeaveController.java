@@ -48,6 +48,9 @@ public class EmployeeLeaveController {
     private final LeaveService leaveService;
     private final EmployeeRepository employeeRepository;
     private final EmployeeRecordAccess access;
+    /** Row details for the redesign (BW-38): approver and decider names, type code, balance. Optional in hand-built tests. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private LeaveRequestDetails details;
 
     public EmployeeLeaveController(LeaveService leaveService, EmployeeRepository employeeRepository,
                                    EmployeeRecordAccess access) {
@@ -87,7 +90,10 @@ public class EmployeeLeaveController {
         }
         PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100),
                 Sort.by(Sort.Order.desc("startDate"), Sort.Order.desc("createdAt")));
-        return leaveService.getMyLeaves(employeeId, pageable);
+        PageResponse<LeaveRequestResponse> found = leaveService.getMyLeaves(employeeId, pageable);
+        if (details == null) return found;
+        return new PageResponse<>(details.apply(found.content(), false), found.page(), found.size(),
+                found.totalElements(), found.totalPages(), found.last());
     }
 
     /**

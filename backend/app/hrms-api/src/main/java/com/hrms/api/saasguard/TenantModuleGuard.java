@@ -54,6 +54,24 @@ public class TenantModuleGuard implements HandlerInterceptor {
             Map.entry("/v1/notiftemplate","hrms"),
             Map.entry("/v1/integration", "hrms"),
             Map.entry("/v1/probation",   "hrms"),
+            // HRMS redesign (27 Sep 2026): every new path prefix of the redesign's
+            // backend (AUDIT §3) belongs to HRMS. Unlisted prefixes skip this
+            // check, so each one is named here.
+            //   /v1/team       My team: summary, time off, Approvals inbox, probation,
+            //                  messages (and the existing /v1/team/schedule, whose web
+            //                  page already needed HRMS)
+            //   /v1/approvals  the caller's recent decisions (approval Undo)
+            //   /v1/ess        self-service reads and the timesheet (/v1/ess/timesheets)
+            //   /v1/timesheets timesheet week approvals
+            //   /v1/me/dashboard, /v1/me/approvers  quick-action preferences, who a
+            //                  request goes to (other /v1/me paths stay open: they are
+            //                  the person's own account settings)
+            Map.entry("/v1/team",        "hrms"),
+            Map.entry("/v1/approvals",   "hrms"),
+            Map.entry("/v1/ess",         "hrms"),
+            Map.entry("/v1/timesheets",  "hrms"),
+            Map.entry("/v1/me/dashboard", "hrms"),
+            Map.entry("/v1/me/approvers", "hrms"),
             // Attendance module
             Map.entry("/v1/attendance",  "attendance"),
             Map.entry("/v1/wfh",         "attendance"),
@@ -103,7 +121,8 @@ public class TenantModuleGuard implements HandlerInterceptor {
         return p == null ? "" : p;
     }
 
-    private String moduleForPath(String path) {
+    /** The module a path needs, or null when it needs none. Package-private for TenantModuleGuardTest. */
+    static String moduleForPath(String path) {
         for (Map.Entry<String, String> e : MODULE_PATHS.entrySet()) {
             if (path.equals(e.getKey()) || path.startsWith(e.getKey() + "/")) return e.getValue();
         }

@@ -104,6 +104,17 @@ public class SettingsController {
         return holidays.create(req);
     }
 
+    /** Edits a holiday's date, name, type and description (HRMS redesign, BW-46). */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrms.api.leave.HolidayEditService holidayEdits;
+
+    @PutMapping("/holidays/{id}")
+    @PreAuthorize("hasAuthority('settings.holidays.write')")
+    public HolidayResponse updateHoliday(@PathVariable UUID id,
+                                         @Valid @RequestBody com.hrms.api.leave.HolidayEditService.UpdateHolidayRequest req) {
+        return holidayEdits.update(id, req);
+    }
+
     @DeleteMapping("/holidays/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('settings.holidays.write')")

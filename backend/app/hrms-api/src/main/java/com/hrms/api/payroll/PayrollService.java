@@ -500,7 +500,56 @@ public class PayrollService {
         jdbc.execute("SET LOCAL app.tenant_id = '" + tenantId + "'");
     }
 
+    /**
+     * Current structures of several people at once (the redesign's paged
+     * structure list, BW-56), with the same full-month figures as
+     * {@link #getCurrentStructure}; the catalogue and settings are read once.
+     * People without a current structure are missing from the map.
+     */
+    @Transactional
+    public Map<UUID, StructureDto> getCurrentStructures(UUID tenantId, Collection<UUID> employeeIds) {
+        bindTenant(tenantId);
+        if (employeeIds == null || employeeIds.isEmpty()) return Map.of();
+        List<UUID> ids = new ArrayList<>(new LinkedHashSet<>(employeeIds));
+        String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(tenantId);
+        args.addAll(ids);
+        PreviewContext ctx = new PreviewContext();
+        Map<UUID, StructureDto> out = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbc.queryForList(
+                "SELECT * FROM payroll.employee_salary_structures WHERE tenant_id = ? AND is_current IS TRUE"
+                        + " AND employee_id IN (" + marks + ")", args.toArray())) {
+            StructureDto dto = toStructure(row, ctx);
+            out.put(dto.employeeId(), dto);
+        }
+        return out;
+    }
+
+    /** The catalogue and settings a structure preview needs, read once per request. */
+    private final class PreviewContext {
+        private Map<String, PayrollCalc.ComponentInfo> catalog;
+        private SettingsDto settings;
+
+        Map<String, PayrollCalc.ComponentInfo> catalog() {
+            if (catalog == null) catalog = loadCatalog();
+            return catalog;
+        }
+
+        SettingsDto settings(UUID tid) {
+            if (settings == null) {
+                ensureSettingsRow(tid);
+                settings = getSettingsInline(tid);
+            }
+            return settings;
+        }
+    }
+
     private StructureDto toStructure(Map<String, Object> r) {
+        return toStructure(r, new PreviewContext());
+    }
+
+    private StructureDto toStructure(Map<String, Object> r, PreviewContext ctx) {
         UUID id = (UUID) r.get("id");
         List<StructureLineDto> lines = jdbc.query("""
             SELECT esc.component_id, esc.monthly_amount, c.code, c.name, c.category
@@ -526,7 +575,7 @@ public class PayrollService {
         PayrollCalc.ResolvedPay pay = PayrollCalc.resolvePay(
                 lines.stream().map(l -> new PayrollCalc.StructureLine(l.componentCode(), l.componentName(),
                         l.category(), false, 100, l.monthlyAmount())).toList(),
-                loadCatalog(), ctcMonthly,
+                ctx.catalog(), ctcMonthly,
                 new PayrollEngine.ComponentDef("BASIC", "Basic", "EARNING", false, 10));
         boolean derivedFromCtc = pay.derivedFromCtc();
         List<PayrollEngine.EarningLine> engineEarnings = new ArrayList<>(pay.earnings());
@@ -568,8 +617,7 @@ public class PayrollService {
                 // catch below would turn straight back into ₹0. Create the
                 // defaults row first (idempotent), same as the settings screen.
                 UUID tid = TenantContext.getTenantId();
-                ensureSettingsRow(tid);
-                SettingsDto s = getSettingsInline(tid);
+                SettingsDto s = ctx.settings(tid);
                 boolean ptEnabled = Boolean.TRUE.equals(s.ptEnabled());
                 String ptState = (String) r.get("pt_state") != null
                         ? (String) r.get("pt_state") : s.ptStateCode();

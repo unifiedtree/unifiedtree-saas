@@ -57,7 +57,9 @@ public class PayrollDashboardService {
             BigDecimal tdsLiability,       // sum of TDS payslip_lines for currentPeriod
             String     currentPeriodLabel, // "AUG 2026"
             int        currentPeriodMonth,
-            int        currentPeriodYear) {}
+            int        currentPeriodYear,
+            // Redesign BW-54 (additive): the net pay of those same pending runs, summed.
+            BigDecimal pendingDisbursalAmount) {}
 
     public record TrendPointDto(
             int        periodMonth,
@@ -158,8 +160,19 @@ public class PayrollDashboardService {
                 PENDING_DISBURSAL_STATUSES.toArray());
         pending = pending == null ? 0 : pending;
 
+        // BW-54: the same runs as the count above, as an amount (their net pay).
+        BigDecimal pendingAmount = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(r.total_net), 0) FROM payroll.runs r "
+              + "WHERE r.tenant_id = ? AND r.status IN (" + inPlaceholders + ") "
+              + "  AND NOT EXISTS ("
+              + "        SELECT 1 FROM payroll.disbursement_batches b"
+              + "         WHERE b.run_id = r.id"
+              + "           AND b.status IN ('POSTED','PAID'))",
+                BigDecimal.class,
+                pendingArgs(tenantId));
+
         return new KpisDto(totalCost, avg, pending, tds,
-                periodLabel(pm, py), pm, py);
+                periodLabel(pm, py), pm, py, pendingAmount == null ? BigDecimal.ZERO : pendingAmount);
     }
 
     /**
@@ -220,6 +233,14 @@ public class PayrollDashboardService {
     }
 
     // ── helpers (mirror PayrollRunService verbatim so behaviour matches) ─────
+
+    /** The tenant, then one bind per pending status (see the note on IN lists above). */
+    private static Object[] pendingArgs(UUID tenantId) {
+        Object[] args = new Object[PENDING_DISBURSAL_STATUSES.size() + 1];
+        args[0] = tenantId;
+        for (int i = 0; i < PENDING_DISBURSAL_STATUSES.size(); i++) args[i + 1] = PENDING_DISBURSAL_STATUSES.get(i);
+        return args;
+    }
 
     private static String periodLabel(int month, int year) {
         return YearMonth.of(year, month)

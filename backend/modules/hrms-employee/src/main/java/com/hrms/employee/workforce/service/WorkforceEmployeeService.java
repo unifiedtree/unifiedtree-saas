@@ -94,6 +94,7 @@ public class WorkforceEmployeeService {
             if (milestoneIds != null)     ps.add(milestoneIds.isEmpty() ? cb.disjunction() : root.get("id").in(milestoneIds));
             if (f.branchId()     != null) ps.add(cb.equal(root.get("branchId"), f.branchId()));
             if (f.status()       != null) ps.add(cb.equal(root.get("employmentStatus"), f.status()));
+            if (f.reportingManagerId() != null) ps.add(cb.equal(root.get("reportingManagerId"), f.reportingManagerId()));
             if (f.search() != null && !f.search().isBlank()) {
                 String needle = "%" + f.search().trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT) + "%";
                 var firstName = cb.trim(cb.coalesce(root.<String>get("firstName"), ""));
@@ -101,7 +102,7 @@ public class WorkforceEmployeeService {
                 var lastName = cb.trim(cb.coalesce(root.<String>get("lastName"), ""));
                 var firstAndLast = cb.concat(cb.concat(firstName, " "), lastName);
                 var fullName = cb.concat(cb.concat(cb.concat(firstName, " "), middleName), cb.concat(" ", lastName));
-                ps.add(cb.or(
+                Predicate whole = cb.or(
                         cb.like(cb.lower(root.get("employeeCode")), needle),
                         cb.like(cb.lower(root.get("firstName")),    needle),
                         cb.like(cb.lower(root.get("middleName")),   needle),
@@ -109,10 +110,57 @@ public class WorkforceEmployeeService {
                         cb.like(cb.lower(root.get("email")),        needle),
                         cb.like(cb.lower(firstAndLast), needle),
                         cb.like(cb.lower(fullName), needle)
-                ));
+                );
+                // Redesign BW-96: word by word as well. A row also matches when
+                // EVERY word of the query is in one of the code, a name, the
+                // email, or the name of the person's department, designation or
+                // branch ("sales priya" finds Priya in Sales), as the global
+                // search does. The whole-query match above is unchanged, so
+                // everything that matched before still matches.
+                List<String> words = directoryWords(f.search());
+                if (words.isEmpty()) {
+                    ps.add(whole);
+                } else {
+                    List<Predicate> each = new ArrayList<>();
+                    for (String word : words) each.add(wordMatches(root, query, cb, "%" + escapeLike(word) + "%"));
+                    ps.add(cb.or(whole, cb.and(each.toArray(new Predicate[0]))));
+                }
             }
             return cb.and(ps.toArray(new Predicate[0]));
         };
+    }
+
+    /**
+     * The words of a directory search, lower-cased, first
+     * {@value #SEARCH_MAX_TOKENS} distinct ones; no words (so only the
+     * whole-query match applies) for a blank query.
+     */
+    public static List<String> directoryWords(String raw) {
+        return searchTokens(normalizeSearchQuery(raw));
+    }
+
+    /** One word in the code, a name, the email, or the department / designation / branch name. */
+    private static Predicate wordMatches(jakarta.persistence.criteria.Root<WorkforceEmployee> root,
+                                         jakarta.persistence.criteria.CriteriaQuery<?> query,
+                                         jakarta.persistence.criteria.CriteriaBuilder cb, String pattern) {
+        var dept = query.subquery(UUID.class);
+        var d = dept.from(com.hrms.employee.workforce.entity.Department.class);
+        dept.select(d.get("id")).where(cb.like(cb.lower(d.get("name")), pattern, '\\'));
+        var desig = query.subquery(UUID.class);
+        var g = desig.from(com.hrms.employee.workforce.entity.Designation.class);
+        desig.select(g.get("id")).where(cb.like(cb.lower(g.get("title")), pattern, '\\'));
+        var branch = query.subquery(UUID.class);
+        var b = branch.from(com.hrms.employee.workforce.entity.Branch.class);
+        branch.select(b.get("id")).where(cb.like(cb.lower(b.get("name")), pattern, '\\'));
+        return cb.or(
+                cb.like(cb.lower(root.get("employeeCode")), pattern, '\\'),
+                cb.like(cb.lower(root.get("firstName")),    pattern, '\\'),
+                cb.like(cb.lower(root.get("middleName")),   pattern, '\\'),
+                cb.like(cb.lower(root.get("lastName")),     pattern, '\\'),
+                cb.like(cb.lower(root.get("email")),        pattern, '\\'),
+                root.get("departmentId").in(dept),
+                root.get("designationId").in(desig),
+                root.get("branchId").in(branch));
     }
 
     // -- Entity search (GET /v1/search) -------------------------------------
@@ -292,6 +340,19 @@ public class WorkforceEmployeeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found")));
     }
 
+    /**
+     * Redesign BW-97: one person as the directory lists them, for a direct
+     * manager without hrms.employee.read. It is the list projection, so pay
+     * (CTC, monthly salary, frequency), bank (account, IFSC, branch), UAN, ESI
+     * and the exit reason are left out; PAN, Aadhaar and passport are never in
+     * either projection.
+     */
+    @Transactional(readOnly = true)
+    public WorkforceEmployeeResponse getListView(UUID id) {
+        return toListResponse(repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found")));
+    }
+
     // -- Counts -------------------------------------------------------------
     /**
      * Single grouped-count query for the Workforce Directory stat cards.
@@ -352,6 +413,16 @@ public class WorkforceEmployeeService {
 
     // -- Create -------------------------------------------------------------
     public WorkforceEmployeeResponse create(CreateWorkforceEmployeeRequest req) {
+        return create(req, false);
+    }
+
+    /**
+     * Redesign BW-93: the employee import creates each row through this same
+     * path (code, branch, weekly offs, manager and designation rules). With
+     * {@code imported} the person starts ACTIVE, without a probation end date,
+     * as imported people always have; everything else is the Add-employee rule.
+     */
+    public WorkforceEmployeeResponse create(CreateWorkforceEmployeeRequest req, boolean imported) {
         // Enforce the workspace's paid seat cap BEFORE we touch the DB.
         // This is the SPA-invoked path (POST /v1/hrms/employees). The
         // previous round guarded this via a Spring AOP aspect that
@@ -430,7 +501,11 @@ public class WorkforceEmployeeService {
         // Default probation (HR Configuration → Probation → Default probation):
         // the end date is the joining date plus the company's months. 0 months
         // means new hires start confirmed, without probation.
-        applyDefaultProbation(e, companyProbationMonths(req.companyId()));
+        if (imported) {
+            e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.ACTIVE);
+        } else {
+            applyDefaultProbation(e, companyProbationMonths(req.companyId()));
+        }
         e.setCtcAnnual(req.ctcAnnual());
 
         e.setPanNumber(req.panNumber());

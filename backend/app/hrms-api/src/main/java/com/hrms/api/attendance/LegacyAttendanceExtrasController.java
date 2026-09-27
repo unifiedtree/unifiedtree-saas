@@ -67,6 +67,9 @@ public class LegacyAttendanceExtrasController {
     private final EmployeeRepository employeeRepository;
     @org.springframework.beans.factory.annotation.Autowired
     private com.hrms.leave.repository.WfhRequestRepository wfhRequestRepository;
+    /** "Anywhere (no geofence)" per person (V143.53). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PunchRulesService punchRules;
     private final WorkforceDepartmentRepository departmentRepository;
 
     public LegacyAttendanceExtrasController(AttendanceService attendanceService,
@@ -96,6 +99,12 @@ public class LegacyAttendanceExtrasController {
         if (wfhRequestRepository.hasApprovedOn(employeeId, today)) {
             return ResponseEntity.ok(new GeoValidateResponse(true, null, null, 0.0,
                     "Approved WFH today — you can punch from anywhere."));
+        }
+        // "Anywhere (no geofence)" for this person (V143.53, BW-28): /checkin
+        // skips the zone for them, so the pre-flight must not stop the camera.
+        if (punchRules != null && punchRules.allowAnywhere(employeeId)) {
+            return ResponseEntity.ok(new GeoValidateResponse(true, null, null, 0.0,
+                    "You can punch from anywhere."));
         }
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
         return ResponseEntity.ok(geoValidationService.validate(

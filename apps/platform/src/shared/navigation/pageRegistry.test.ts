@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { accessState, type AccessContext } from './access'
-import { PAGE_REGISTRY, MENU_RULES, menuRule, visibleEntries, firstOpenIn } from './pageRegistry'
+import { ALL_PAGE_ENTRIES, PAGE_REGISTRY, MENU_RULES, READY_PAGES, isReadyPage, menuRule, visibleEntries, firstOpenIn } from './pageRegistry'
 
 // Built-in role grants as seeded (local recovery DB, 25 Sep), trimmed to the codes the rules read.
 const EMPLOYEE = ['attendance.checkin.self', 'hrms.advance.request.self', 'hrms.department.read', 'hrms.designation.read', 'hrms.document.read.self', 'hrms.document.write.self',
@@ -20,6 +20,8 @@ function ctx(perms: string[], o: Partial<AccessContext> = {}): AccessContext {
 }
 const open = (c: AccessContext, path: string, group?: string) => accessState(menuRule(path, group), c) === 'open'
 const ids = (c: AccessContext) => new Set(visibleEntries(c).map((e) => e.id))
+/** Including the pages and tabs not live yet (their package isn't in READY_PAGES). */
+const idsAll = (c: AccessContext) => new Set(visibleEntries(c, ALL_PAGE_ENTRIES).map((e) => e.id))
 
 describe('page registry', () => {
   it('has unique ids and "/" paths, and real routes', () => {
@@ -43,7 +45,7 @@ describe('page registry', () => {
       exit: 'tab', 'workforce-analytics': 'tab',
       onboarding: 'view', documents: 'view', performance: 'view', learning: 'view', compliance: 'view', roles: 'view', team: 'view',
     }
-    for (const e of PAGE_REGISTRY.filter((x) => x.parent)) {
+    for (const e of ALL_PAGE_ENTRIES.filter((x) => x.parent)) {
       expect(param[e.parent!], e.id).toBeTruthy()
       expect(e.path.split('?')[1]?.startsWith(param[e.parent!] + '='), e.id).toBe(true)
     }
@@ -197,6 +199,7 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
   })
 
   it('the new tabs are registered with their own rules', () => {
+    const ids = idsAll
     const hr = ids(ctx([...HR_MANAGER, 'hrms.leave.employee.read']))
     expect(hr.has('att-daily:timesheet')).toBe(true)
     expect(hr.has('att-analytics:punctuality')).toBe(true)
@@ -213,5 +216,22 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
     const mgr = ids(ctx(DEPT_MANAGER))
     expect(mgr.has('team:schedule') && mgr.has('team:approvals')).toBe(true)
     expect(ids(ctx(EMPLOYEE)).has('team:approvals')).toBe(false)
+  })
+
+  it('a page or tab of a package not shipped yet stays out of the app (READY_PAGES)', () => {
+    const pending = ALL_PAGE_ENTRIES.filter((e) => e.pkg && !READY_PAGES.has(e.pkg)).map((e) => e.id)
+    for (const id of pending) expect(PAGE_REGISTRY.some((e) => e.id === id), id).toBe(false)
+    // Release 1 ships none of the page packages: every new tab is out, today's pages are all in.
+    expect(READY_PAGES.size).toBe(0)
+    expect(pending.sort()).toEqual(['att-analytics:punctuality', 'att-daily:timesheet', 'exit:exited', 'exit:notice', 'exit:terminated', 'leave:all-balances',
+      'team:approvals', 'team:schedule', 'workforce-analytics:attrition', 'workforce-analytics:diversity', 'workforce-analytics:headcount'])
+    expect(PAGE_REGISTRY.length + pending.length).toBe(ALL_PAGE_ENTRIES.length)
+    const hr = ids(ctx([...HR_MANAGER, 'hrms.leave.employee.read']))
+    expect(hr.has('leave:all-balances') || hr.has('att-analytics:punctuality') || hr.has('exit:notice')).toBe(false)
+    expect(ids(ctx(DEPT_MANAGER)).has('team:approvals')).toBe(false)
+    // Listing a package brings its pages in.
+    expect(isReadyPage({ pkg: 'P-TEAM' }, new Set(['P-TEAM']))).toBe(true)
+    expect(isReadyPage({ pkg: 'P-TEAM' })).toBe(false)
+    expect(isReadyPage({})).toBe(true)
   })
 })

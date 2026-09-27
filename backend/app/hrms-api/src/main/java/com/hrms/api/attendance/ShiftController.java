@@ -47,6 +47,9 @@ public class ShiftController {
     private final ShiftChangeRequestService changeRequestService;
     private final TeamEmployeeScope teamScope;
     private final ShiftHistoryService historyService;
+    /** People per shift on the list (BW-32); a field so the constructor stays as it was. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ShiftHeadcount headcount;
 
     public ShiftController(EmployeeShiftService shiftService,
                            ShiftChangeRequestService changeRequestService,
@@ -80,11 +83,29 @@ public class ShiftController {
         return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());
     }
 
-    @Operation(summary = "List a company's shift definitions (seeds defaults if none exist)")
+    @Operation(summary = "List a company's shift definitions (seeds defaults for a company that never had any), each with the number of people on it today")
     @GetMapping
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public ResponseEntity<List<ShiftPolicyResponse>> list(@RequestParam("companyId") UUID companyId) {
-        return ResponseEntity.ok(shiftService.listShifts(companyId));
+        return ResponseEntity.ok(withHeadcount(companyId, shiftService.listShifts(companyId)));
+    }
+
+    /**
+     * Adds {@code employeeCount} (BW-32): people on each shift today, 0 for a
+     * shift nobody is on. The count is an extra: if it can't be read the list
+     * is returned as it always was, without counts.
+     */
+    List<ShiftPolicyResponse> withHeadcount(UUID companyId, List<ShiftPolicyResponse> shifts) {
+        if (headcount == null || shifts.isEmpty()) return shifts;
+        java.util.Map<UUID, Integer> counts;
+        try {
+            counts = headcount.byShift(companyId);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ShiftController.class)
+                    .warn("People per shift not added for company {}: {}", companyId, e.getMessage());
+            return shifts;
+        }
+        return shifts.stream().map(s -> s.withEmployeeCount(counts.getOrDefault(s.id(), 0))).toList();
     }
 
     @Operation(summary = "Create a shift definition")
@@ -170,6 +191,14 @@ public class ShiftController {
     public ResponseEntity<ShiftChangeRequestResponse> requestChange(@AuthenticationPrincipal Jwt jwt,
                                                                     @RequestBody CreateShiftChangeRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(changeRequestService.create(employeeId(jwt), req));
+    }
+
+    @Operation(summary = "Withdraw my shift-change request while it is still waiting (it becomes CANCELLED)")
+    @PostMapping("/change-requests/{requestId}/cancel")
+    @PreAuthorize("hasAuthority('attendance.checkin.self')")
+    public ResponseEntity<ShiftChangeRequestResponse> withdrawChange(@AuthenticationPrincipal Jwt jwt,
+                                                                     @PathVariable UUID requestId) {
+        return ResponseEntity.ok(changeRequestService.withdraw(requestId, employeeId(jwt)));
     }
 
     @Operation(summary = "My shift-change requests")

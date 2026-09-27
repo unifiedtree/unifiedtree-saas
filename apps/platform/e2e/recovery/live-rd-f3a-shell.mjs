@@ -39,10 +39,16 @@ function watch(page, who) {
   })
 }
 
-async function signIn(email, width = 1440) {
+async function signIn(email, width = 1440, { quiet = false } = {}) {
   const context = await browser.newContext({ viewport: { width, height: 900 } })
   const page = await context.newPage()
-  watch(page, email.split('@')[0] + (width < 700 ? ' (phone)' : ''))
+  const who = email.split('@')[0] + (width < 700 ? ' (phone)' : '')
+  if (!quiet) watch(page, who)
+  else {
+    // Page errors still count; API answers are only noted.
+    page.on('pageerror', (e) => pageErrors.push(`${who}: ${String(e.message || e).slice(0, 200)}`))
+    page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400 && !EXPECTED.some((re) => re.test(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`))) note(`${who} (custom role): ${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`) })
+  }
   await page.goto(base + '/login')
   await page.locator('input[type=email]').fill(email)
   await page.locator('input[type=password]').fill(password)
@@ -318,24 +324,29 @@ if (!roleChanges) {
     revoked = rev.status < 300
     check('setup: reader holds only the temporary role', granted.status < 300 && revoked, `${granted.status} / ${rev.status}`)
 
-    // No permission at all: /dashboard ends on /no-access.
+    // A role with no permissions. Today's backend gives everyone with an employee record the Employee
+    // role's self-service floor whatever roles they hold (EmployeeBaselinePermissions), so the reader
+    // keeps Home and My work, and nothing else. (/no-access, for someone with no page at all, and a
+    // custom role whose only page is Policies are covered by useHome.test.ts: an employee can't reach them.)
     {
       const { context, page } = await signIn('reader@unifiedtree.demo')
       await page.goto(base + '/dashboard'); await settle(page)
-      check('none: /dashboard goes to /no-access', new URL(page.url()).pathname === '/no-access', at(page))
-      check('none: /no-access explains and offers Sign out', await page.getByRole('heading', { name: 'No access yet' }).isVisible().catch(() => false) && await page.getByRole('button', { name: 'Sign out' }).isVisible().catch(() => false))
-      if (shots) await page.screenshot({ path: `${shots}/rd-f3a-live-none-no-access-1440.png` })
+      check('empty role: /dashboard goes to Home (/me): the employee floor stays', new URL(page.url()).pathname === '/me', at(page))
+      const r = await railState(page)
+      check('empty role: the rail shows Home and My work only', !!r && r.groups.every((g) => ['Home', 'My work'].includes(g.label)), JSON.stringify(r?.groups))
       await context.close()
     }
-    // A custom role that can only read policies: Home is the first page it can open.
-    const put = await call(`/v1/rbac/roles/${role.id}/permissions?acknowledgeRisk=true`, 'PUT', ['hrms.policy.read'], token)
-    check('setup: the temporary role reads policies only', put.status < 300, `${put.status} ${JSON.stringify(put.json).slice(0, 160)}`)
+    // A custom role adding one company-wide read (the headcount report): Home becomes the dashboard.
+    const put = await call(`/v1/rbac/roles/${role.id}/permissions?acknowledgeRisk=true`, 'PUT', ['hrms.report.headcount'], token)
+    check('setup: the temporary role reads the headcount report only', put.status < 300, `${put.status} ${JSON.stringify(put.json).slice(0, 160)}`)
     {
-      const { context, page } = await signIn('reader@unifiedtree.demo')
+      // The dashboard's own widgets belong to the dashboard package: their answers for this narrow role are noted, not judged here.
+      const { context, page } = await signIn('reader@unifiedtree.demo', 1440, { quiet: true })
       await page.goto(base + '/dashboard'); await settle(page)
-      check('custom role: /dashboard goes to the first page it can open (Policies)', new URL(page.url()).pathname === '/hrms/policies', at(page))
+      check('custom role: with a company-wide read /dashboard stays the Home', new URL(page.url()).pathname === '/dashboard', at(page))
       const r = await railState(page)
-      check('custom role: the rail shows only what the role opens (My documents › Policies)', !!r && r.groups.flatMap((g) => g.items).every((i) => ['Home', 'My documents'].includes(i)), JSON.stringify(r?.groups))
+      const items = r ? r.groups.flatMap((g) => g.items) : []
+      check('custom role: the rail has Dashboard and Reports, no self-service Home, and My work', items.includes('Dashboard') && items.includes('Reports') && !items.includes('Home') && items.includes('My leave'), JSON.stringify(r?.groups))
       await context.close()
     }
   } catch (e) {

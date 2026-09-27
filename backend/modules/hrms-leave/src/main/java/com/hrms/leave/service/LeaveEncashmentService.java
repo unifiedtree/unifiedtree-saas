@@ -5,6 +5,8 @@ import com.hrms.core.exception.HrmsException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentCreateRequest;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentOption;
+import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentSummary;
+import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentSummaryType;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentResponse;
 import com.hrms.leave.dto.LeaveAccrualDtos.PayableEncashment;
 import com.unifiedtree.notifications.events.LeaveEncashmentDecidedEvent;
@@ -102,6 +104,60 @@ public class LeaveEncashmentService {
             return new EncashmentOption(rs.getObject("id", UUID.class), rs.getString("name"), year, available, max,
                     requested, canRequest(available, max, requested), rate);
         }, employeeId, year, employeeId, year, e.companyId());
+    }
+
+    /**
+     * "Can encash now" across the company (HRMS redesign, BW-45): for everyone
+     * whose balances are kept (working, on probation, serving notice or on long
+     * leave), what they could ask to encash this year per encashable leave type
+     * of their company, by {@link #canRequest}, summed. Balances are read as they
+     * are (the nightly job credits them); nothing is written. {@code companyId}
+     * null means every company. Without the encashment table (V143.23) it answers
+     * FEATURE_NOT_READY.
+     */
+    @Transactional(readOnly = true)
+    public EncashmentSummary summary(UUID companyId) {
+        int year = LeaveAccrualService.todayIst().getYear();
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        StringBuilder sql = new StringBuilder("""
+                SELECT e.id AS employee_id, lt.id AS type_id, lt.name AS type_name, lt.max_encash_days,
+                       COALESCE(b.total_entitlement + b.carry_forward - b.used - b.pending, 0) AS available,
+                       COALESCE((SELECT SUM(r.days) FROM leave_mgmt.leave_encashment_requests r
+                                  WHERE r.employee_id = e.id AND r.leave_type_id = lt.id AND r.year = ?
+                                    AND r.status IN ('PENDING','APPROVED','PAID')), 0) AS requested
+                  FROM hrms.employees e
+                  JOIN leave_mgmt.leave_types lt
+                    ON lt.company_id = e.company_id AND lt.is_active = TRUE AND lt.is_encashable = TRUE
+                  LEFT JOIN leave_mgmt.leave_balances b
+                         ON b.leave_type_id = lt.id AND b.employee_id = e.id AND b.year = ?
+                 WHERE e.tenant_id = ? AND %s""".formatted(LeaveAccrualService.LIVE));
+        List<Object> args = new ArrayList<>(List.of(year, year, tenantId));
+        if (companyId != null) { sql.append(" AND e.company_id = ?"); args.add(companyId); }
+        java.util.Map<UUID, String> typeNames = new java.util.LinkedHashMap<>();
+        java.util.Map<UUID, Double> typeDays = new java.util.HashMap<>();
+        java.util.Map<UUID, java.util.Set<UUID>> typePeople = new java.util.HashMap<>();
+        java.util.Set<UUID> people = new java.util.HashSet<>();
+        double[] total = {0};
+        com.hrms.core.exception.FeatureNotReady.run(() -> jdbc.query(sql.toString(), rs -> {
+            int maxRaw = rs.getInt("max_encash_days");
+            Integer max = rs.wasNull() ? null : maxRaw;
+            double available = LeaveAccrualMath.round2(Math.max(0, rs.getDouble("available")));
+            double can = canRequest(available, max, LeaveAccrualMath.round2(rs.getDouble("requested")));
+            UUID type = rs.getObject("type_id", UUID.class);
+            typeNames.putIfAbsent(type, rs.getString("type_name"));
+            if (can <= 0) return;
+            UUID employee = rs.getObject("employee_id", UUID.class);
+            typeDays.merge(type, can, Double::sum);
+            typePeople.computeIfAbsent(type, k -> new java.util.HashSet<>()).add(employee);
+            people.add(employee);
+            total[0] += can;
+        }, args.toArray()));
+        List<EncashmentSummaryType> types = new ArrayList<>();
+        typeNames.forEach((id, name) -> types.add(new EncashmentSummaryType(id, name,
+                LeaveAccrualMath.round2(typeDays.getOrDefault(id, 0.0)),
+                typePeople.getOrDefault(id, java.util.Set.of()).size())));
+        types.sort(java.util.Comparator.comparing(t -> t.leaveTypeName() == null ? "" : t.leaveTypeName()));
+        return new EncashmentSummary(year, companyId, LeaveAccrualMath.round2(total[0]), people.size(), types);
     }
 
     /** The most that can be asked for: the balance, and what's left of the yearly limit, in half days. */
