@@ -222,10 +222,11 @@ try {
   check('department: reader can\'t change it (403)', (await call(reader, 'PATCH', `/v1/hrms/departments/${dep.body.id}/details?costCentre=X`)).status === 403)
 
   // ── Import through the Add path (BW-93, BW-94) ─────────────────────────────
+  const mgrEmail = sql(`SELECT email FROM hrms.employees WHERE id='${ids.mgr}'`).toUpperCase()   // matched ignoring case
   const header = 'first_name,last_name,email,employment_type,date_of_joining,department,designation,reporting_manager,branch,pan,bank_account,ifsc\n'
   const rows = header
     + `Import QA,One ${tag},wfp-imp1-${tag}@example.invalid,FULL_TIME,2026-09-01,local qa operations,QA Specialist,EMP004,QAOFF,ABCDE1234F,123456789012,HDFC0001234\n`
-    + `Import QA,Two ${tag},wfp-imp2-${tag}@example.invalid,INTERN,2031-02-01,Local QA Operations,Chief Tea Officer,dept@unifiedtree.demo,Local QA Office,,,\n`
+    + `Import QA,Two ${tag},wfp-imp2-${tag}@example.invalid,INTERN,2031-02-01,Local QA Operations,Chief Tea Officer,${mgrEmail},Local QA Office,,,\n`
   const bad = header + `Import QA,Bad ${tag},wfp-imp3-${tag}@example.invalid,FULL_TIME,2026-09-01,Nowhere Dept,,,,,,\n`
   const badCheck = await call(owner, 'POST', `/v1/bulk-import/employees/validate?companyId=${company}`, undefined, { form: csvForm(bad) })
   check('import: an unknown department is a problem on its row and column', badCheck.status === 200 && badCheck.body.errors.length === 1
@@ -248,6 +249,7 @@ try {
   const branchId = sql(`SELECT id FROM org.branches WHERE company_id='${company}' AND code='QAOFF'`)
   check('import: designation, branch (code or name) and manager (code or email) mapped', one?.designationId === specialist && one?.branchId === branchId
     && two?.branchId === branchId && one?.reportingManagerId === ids.mgr && two?.reportingManagerId === ids.mgr, { one, two })
+  if (!one?.id || !two?.id) throw new Error('the import created nobody to check')
   check('import: the unmatched designation is the job title, and no designation was created',
     sql(`SELECT job_title FROM hrms.employees WHERE id='${two?.id}'`) === 'Chief Tea Officer'
     && sql(`SELECT count(*) FROM hrms.designations WHERE title='Chief Tea Officer'`) === '0' && two?.designationId === null)
