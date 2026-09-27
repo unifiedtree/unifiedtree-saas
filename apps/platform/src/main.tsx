@@ -2,6 +2,7 @@ import '@unifiedtree/design-system/tokens.css'
 import './design/theme/tokens.css'
 import './globals.css'
 import './design/theme/base.css'
+import './design/theme/dark-bridge.css'
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
