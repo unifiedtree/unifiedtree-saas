@@ -86,7 +86,17 @@ public class AttendanceReviewService {
             String id, UUID employeeId, String employeeName, String employeeCode, String departmentName,
             LocalDate date, List<String> flags, String status, String note, Instant checkIn, Instant checkOut,
             Integer lateMinutes, Integer workedMinutes, Integer earlyByMinutes, Integer distanceMeters,
-            String shiftName, Instant expectedStart, boolean lossOfPay) {}
+            String shiftName, Instant expectedStart, boolean lossOfPay,
+            // ── V143.53 redesign (BW-14). Additive; null when unknown.
+            /** The employee's branch. */
+            String branchName,
+            /** Where the check-in was made: the zone the app matched, else the place it reported. */
+            String zoneName,
+            /** How the check-in was made (FACE_RECOGNITION, GPS, WEB, MANAGER_OVERRIDE …). */
+            String checkInMethod) {}
+
+    /** How and where one day's check-in was made (from the record). */
+    record PunchPlace(String method, String zone) {}
 
     /** One manual change, for the history. */
     public record StatusChange(UUID id, UUID employeeId, LocalDate date, String action, String fromStatus,
@@ -134,6 +144,8 @@ public class AttendanceReviewService {
         Map<UUID, Employee> byId = team.stream().collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
         Map<UUID, String> depts = departmentNames(team);
         Map<UUID, Map<LocalDate, EffectiveDay>> all = days.effectiveStatuses(byId.keySet(), range[0], range[1]);
+        Map<UUID, String> branches = branchNames(team);
+        Map<String, PunchPlace> places = punchPlaces(byId.keySet(), range[0], range[1]);
         List<ExceptionItem> out = new ArrayList<>();
         for (Map.Entry<UUID, Map<LocalDate, EffectiveDay>> e : all.entrySet()) {
             Employee emp = byId.get(e.getKey());
@@ -141,11 +153,14 @@ public class AttendanceReviewService {
                 if (d == null || d.manual()) continue;
                 List<String> flags = flags(d, today);
                 if (flags.isEmpty()) continue;
+                PunchPlace place = d.hasPunch() ? places.get(e.getKey() + ":" + d.date()) : null;
                 out.add(new ExceptionItem(e.getKey() + ":" + d.date(), e.getKey(), name(emp), emp.getEmployeeCode(),
                         emp.getDepartmentId() != null ? depts.get(emp.getDepartmentId()) : null, d.date(), flags,
                         d.status(), d.note(), d.hasPunch() ? d.checkIn() : null, d.hasPunch() ? d.checkOut() : null,
                         d.lateMinutes(), d.workedMinutes(), d.earlyByMinutes(), d.distanceMeters(), d.shiftName(),
-                        d.expectedStart(), d.lossOfPay()));
+                        d.expectedStart(), d.lossOfPay(),
+                        emp.getBranchId() != null ? branches.get(emp.getBranchId()) : null,
+                        place != null ? place.zone() : null, place != null ? place.method() : null));
             }
         }
         out.sort(Comparator.comparing(ExceptionItem::date).reversed().thenComparing(i -> Objects.toString(i.employeeName(), "")));
@@ -487,6 +502,42 @@ public class AttendanceReviewService {
         Map<UUID, String> names = new HashMap<>();
         if (!ids.isEmpty()) departments.findAllById(ids).forEach(d -> names.put(d.getId(), d.getName()));
         return names;
+    }
+
+    /** The team's branch names (BW-14): one query. */
+    private Map<UUID, String> branchNames(List<Employee> list) {
+        List<UUID> ids = list.stream().map(Employee::getBranchId).filter(Objects::nonNull).distinct().toList();
+        Map<UUID, String> names = new HashMap<>();
+        if (ids.isEmpty()) return names;
+        List<Object> args = new ArrayList<>();
+        args.add(TenantContext.getTenantId());
+        args.addAll(ids);
+        jdbc.query("SELECT id, name FROM org.branches WHERE tenant_id = ? AND id IN (" + String.join(",", Collections.nCopies(ids.size(), "?")) + ")",
+                (RowCallbackHandler) rs -> names.put((UUID) rs.getObject("id"), rs.getString("name")), args.toArray());
+        return names;
+    }
+
+    /**
+     * How and where each day's check-in was made (BW-14), keyed "employeeId:date":
+     * the method, and the zone the app matched else the place it reported. One query.
+     */
+    private Map<String, PunchPlace> punchPlaces(java.util.Collection<UUID> employeeIds, LocalDate from, LocalDate to) {
+        Map<String, PunchPlace> out = new HashMap<>();
+        if (employeeIds.isEmpty()) return out;
+        List<Object> args = new ArrayList<>();
+        args.add(TenantContext.getTenantId());
+        args.addAll(employeeIds);
+        args.add(from);
+        args.add(to);
+        jdbc.query("SELECT employee_id, attendance_date, check_in_method, "
+                        + "COALESCE(NULLIF(btrim(check_in_zone_name), ''), NULLIF(btrim(check_in_location_name), '')) AS zone "
+                        + "FROM attendance.records WHERE tenant_id = ? AND employee_id IN ("
+                        + String.join(",", Collections.nCopies(employeeIds.size(), "?"))
+                        + ") AND attendance_date BETWEEN ? AND ? AND check_in_at IS NOT NULL",
+                (RowCallbackHandler) rs -> out.putIfAbsent(rs.getObject("employee_id") + ":" + rs.getDate("attendance_date").toLocalDate(),
+                        new PunchPlace(rs.getString("check_in_method"), rs.getString("zone"))),
+                args.toArray());
+        return out;
     }
 
     static String name(Employee e) {

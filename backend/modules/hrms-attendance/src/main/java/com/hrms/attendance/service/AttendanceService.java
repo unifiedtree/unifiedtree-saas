@@ -381,6 +381,9 @@ public class AttendanceService {
         logEvent(saved, AttendanceEventType.CHECK_OUT, latitude, longitude,
                 locationName, zoneName, employeeId, null,
                 backdated ? checkOutAt : null);
+        // A break still on at check-out ends with it (V143.53). Event log only:
+        // worked hours above are check-in to check-out, as always.
+        closeOpenBreak(saved, checkOutAt, employeeId);
         log.info("Check-out recorded: employee={}, workingHours={}", employeeId, saved.getWorkingHours());
         return toDto(saved);
     }
@@ -409,6 +412,178 @@ public class AttendanceService {
         return attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(employeeId, LocalDate.now(IST))
                 .map(this::toDto);
+    }
+
+    // ── The person's own day on the web (V143.53 redesign) ───────────────────
+    // "Your day": breaks (BW-26) and undo check-out (BW-25). Breaks are event-log
+    // rows only; they never change the record, so worked hours, overtime and pay
+    // stay check-in to check-out. The web switch is checked by the caller.
+
+    /** The record for {@code date}, if any (the entity; callers map it with {@link #toAttendanceDto}). */
+    @Transactional(readOnly = true)
+    public Optional<AttendanceRecord> recordOn(UUID employeeId, LocalDate date) {
+        return attendanceRecordRepository.findByEmployeeIdAndAttendanceDate(employeeId, date);
+    }
+
+    /**
+     * The day the person is working right now: today's record with a check-in
+     * and no check-out, else yesterday's still open (a night shift, within the
+     * same 20 hours {@link #checkOut} allows).
+     */
+    @Transactional(readOnly = true)
+    public Optional<AttendanceRecord> openRecord(UUID employeeId, Instant now) {
+        LocalDate today = now.atZone(IST).toLocalDate();
+        AttendanceRecord todays = attendanceRecordRepository.findByEmployeeIdAndAttendanceDate(employeeId, today).orElse(null);
+        if (todays != null && todays.getCheckInAt() != null) {
+            return todays.getCheckOutAt() == null ? Optional.of(todays) : Optional.empty();
+        }
+        return attendanceRecordRepository.findByEmployeeIdAndAttendanceDate(employeeId, today.minusDays(1))
+                .filter(r -> r.getCheckInAt() != null && r.getCheckOutAt() == null
+                        && Duration.between(r.getCheckInAt(), now).toHours() <= 20);
+    }
+
+    /** The breaks on a record's day, the open one counted up to {@code now}. */
+    @Transactional(readOnly = true)
+    public SelfPunchRules.BreakState breakState(AttendanceRecord record, Instant now) {
+        if (record == null || record.getId() == null) return SelfPunchRules.BreakState.NONE;
+        return SelfPunchRules.breaks(eventsOf(record), now);
+    }
+
+    /**
+     * Starts a break. Only while checked in and not checked out, one break at a
+     * time. Nothing on the record changes.
+     */
+    @Transactional
+    public SelfPunchRules.BreakState startBreak(UUID employeeId, Instant now) {
+        lockRecentDays(employeeId, now);
+        AttendanceRecord record = openRecord(employeeId, now).orElseThrow(() -> new BusinessRuleException(
+                "You're not checked in right now, so there's no day to pause.", SelfPunchRules.NOT_CHECKED_IN));
+        SelfPunchRules.BreakState state = breakState(record, now);
+        if (state.onBreak()) {
+            throw new BusinessRuleException("You're already on a break. End it before starting another.", "BREAK_ALREADY_STARTED");
+        }
+        logEvent(record, AttendanceEventType.BREAK_START, null, null, null, null, employeeId, null, now);
+        return breakState(record, now);
+    }
+
+    /** Ends the open break. Nothing on the record changes. */
+    @Transactional
+    public SelfPunchRules.BreakState endBreak(UUID employeeId, Instant now) {
+        lockRecentDays(employeeId, now);
+        AttendanceRecord record = openRecord(employeeId, now).orElseThrow(() -> new BusinessRuleException(
+                "You're not checked in right now, so there's no break to end.", SelfPunchRules.NOT_CHECKED_IN));
+        if (!breakState(record, now).onBreak()) {
+            throw new BusinessRuleException("You're not on a break.", "NO_OPEN_BREAK");
+        }
+        logEvent(record, AttendanceEventType.BREAK_END, null, null, null, null, employeeId, null, now);
+        return breakState(record, now);
+    }
+
+    /**
+     * Takes back the person's own check-out (V143.53, BW-25): same day, within
+     * {@link SelfPunchRules#UNDO_WINDOW}, and only a check-out they made
+     * themselves. Clears the check-out time, its method and place, worked hours
+     * and overtime, exactly as they were before checking out, and logs it as
+     * MANUAL_OVERRIDE. The web switch is checked by the caller.
+     */
+    @Transactional
+    public AttendanceDto undoOwnCheckOut(UUID employeeId, Instant now) {
+        LocalDate today = now.atZone(IST).toLocalDate();
+        lockDay(employeeId, today);
+        AttendanceRecord record = attendanceRecordRepository.findByEmployeeIdAndAttendanceDate(employeeId, today).orElse(null);
+        String refusal = SelfPunchRules.undoRefusal(record, today, now,
+                record != null && punchedOutByOther(record), record != null && overtimeDecided(record));
+        if (refusal != null) throw new BusinessRuleException(SelfPunchRules.undoMessage(refusal), refusal);
+
+        Instant was = record.getCheckOutAt();
+        record.setCheckOutAt(null);
+        record.setCheckOutMethod(null);
+        record.setCheckOutLatitude(null);
+        record.setCheckOutLongitude(null);
+        record.setCheckOutZoneName(null);
+        record.setWorkingHours(null);
+        record.setOvertimeMinutes(null);
+        // A check-out that named a place replaced the check-in's; put the check-in's back.
+        eventsOf(record).stream()
+                .filter(e -> e.getEventType() == AttendanceEventType.CHECK_IN)
+                .reduce((a, b) -> b)
+                .ifPresent(e -> record.setLocationName(e.getLocationName()));
+        AttendanceRecord saved = attendanceRecordRepository.save(record);
+        logEvent(saved, AttendanceEventType.MANUAL_OVERRIDE, null, null, saved.getLocationName(), null, employeeId,
+                "Check-out at " + formatIstHourMinute(was) + " undone by the employee, within "
+                        + SelfPunchRules.UNDO_WINDOW.toMinutes() + " minutes.", now);
+        log.info("Check-out undone: employee={}, record={}, was={}", employeeId, saved.getId(), was);
+        return toDto(saved);
+    }
+
+    /** Whether the person may still take back the check-out on {@code record} (the same rules as {@link #undoOwnCheckOut}). */
+    @Transactional(readOnly = true)
+    public boolean checkOutUndoable(AttendanceRecord record, Instant now) {
+        if (record == null || record.getCheckOutAt() == null) return false;
+        return SelfPunchRules.undoRefusal(record, now.atZone(IST).toLocalDate(), now,
+                punchedOutByOther(record), overtimeDecided(record)) == null;
+    }
+
+    /** The API shape of a record. */
+    public AttendanceDto toAttendanceDto(AttendanceRecord record) {
+        return record == null ? null : toDto(record);
+    }
+
+    /** Ends a break still on at check-out, at the check-out time. */
+    private void closeOpenBreak(AttendanceRecord record, Instant checkOutAt, UUID actorEmployeeId) {
+        SelfPunchRules.BreakState state = breakState(record, checkOutAt);
+        if (!state.onBreak()) return;
+        logEvent(record, AttendanceEventType.BREAK_END, null, null, null, null, actorEmployeeId,
+                "Break ended at check-out.", checkOutAt);
+    }
+
+    /** The day's event-log rows of this record, oldest first. */
+    private List<AttendanceEventLog> eventsOf(AttendanceRecord record) {
+        if (record.getId() == null || record.getAttendanceDate() == null) return List.of();
+        return attendanceEventLogRepository
+                .findByEmployeeIdInAndEventDateOrderByEventAtAsc(List.of(record.getEmployeeId()), record.getAttendanceDate())
+                .stream()
+                .filter(e -> record.getId().equals(e.getAttendanceRecordId()))
+                .toList();
+    }
+
+    /** Serialises a person's own punches on a day (row lock on the day's record, when there is one). */
+    private void lockDay(UUID employeeId, LocalDate date) {
+        if (jdbcTemplate == null) return;
+        jdbcTemplate.query("SELECT id FROM attendance.records WHERE employee_id = ? AND attendance_date = ? FOR UPDATE",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> { }, employeeId, date);
+    }
+
+    /** {@link #lockDay} for today and yesterday (a night shift's break is on yesterday's record). */
+    private void lockRecentDays(UUID employeeId, Instant now) {
+        if (jdbcTemplate == null) return;
+        LocalDate today = now.atZone(IST).toLocalDate();
+        jdbcTemplate.query("SELECT id FROM attendance.records WHERE employee_id = ? AND attendance_date IN (?, ?) FOR UPDATE",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> { }, employeeId, today, today.minusDays(1));
+    }
+
+    /** A manager or HR punched this person out on their phone (assisted punch, V143.40). False when that table isn't there. */
+    private boolean punchedOutByOther(AttendanceRecord record) {
+        if (jdbcTemplate == null || record.getId() == null || !tableExists("attendance.assisted_punches")) return false;
+        Boolean found = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM attendance.assisted_punches WHERE tenant_id = ? AND attendance_record_id = ? AND punch_type = 'CHECK_OUT')",
+                Boolean.class, record.getTenantId(), record.getId());
+        return Boolean.TRUE.equals(found);
+    }
+
+    /** Someone already approved or rejected this day's overtime. False when that table isn't there. */
+    private boolean overtimeDecided(AttendanceRecord record) {
+        if (jdbcTemplate == null || record.getId() == null || !tableExists("attendance.overtime_decisions")) return false;
+        Boolean found = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM attendance.overtime_decisions WHERE tenant_id = ? AND record_id = ?)",
+                Boolean.class, record.getTenantId(), record.getId());
+        return Boolean.TRUE.equals(found);
+    }
+
+    /** to_regclass: never fails, so it is safe inside a transaction. */
+    private boolean tableExists(String qualifiedName) {
+        Boolean exists = jdbcTemplate.queryForObject("SELECT to_regclass(?) IS NOT NULL", Boolean.class, qualifiedName);
+        return Boolean.TRUE.equals(exists);
     }
 
     // ── Monthly stats ────────────────────────────────────────────────────────
@@ -598,7 +773,7 @@ public class AttendanceService {
         Map<LocalDate, AttendanceRecord> byDate = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getAttendanceDate, r -> r));
 
-        int presentDays = 0, absentDays = 0, onTimeDays = 0, lateDays = 0, holidayDays = 0;
+        int presentDays = 0, absentDays = 0, onTimeDays = 0, lateDays = 0, holidayDays = 0, leaveDayCount = 0;
 
         // Don't count days before the employee joined as Absent. A new hire on
         // the 13th has no records for the 1st-12th, but those weren't absences.
@@ -628,6 +803,7 @@ public class AttendanceService {
                 holidayDays++;
             } else if (leaveDays.contains(cursor)) {
                 // on approved leave — neither present nor absent
+                leaveDayCount++;
             } else if (!cursor.equals(today)) {
                 // Today isn't an absence until it's over: no punch yet just means not marked.
                 absentDays++;
@@ -638,7 +814,7 @@ public class AttendanceService {
         int workingDays = presentDays + absentDays;
         int score = workingDays > 0 ? Math.round((float) presentDays / workingDays * 100) : 100;
 
-        return new MonthlyStatsResponse(presentDays, absentDays, holidayDays, onTimeDays, lateDays, score);
+        return new MonthlyStatsResponse(presentDays, absentDays, holidayDays, onTimeDays, lateDays, score, leaveDayCount);
     }
 
     // ── Month history (calendar) ─────────────────────────────────────────────
@@ -681,11 +857,13 @@ public class AttendanceService {
                 if (rec != null && rec.getCheckInAt() != null) {
                     LocalTime checkInLocal = rec.getCheckInAt().atZone(IST).toLocalTime();
                     String status = checkInLocal.isAfter(lateThreshold) ? "LATE" : "PRESENT";
-                    result.add(new DayRecordResponse(
+                    Integer late = rec.getLateByMinutes() != null && rec.getLateByMinutes() > 0 ? rec.getLateByMinutes() : null;
+                    result.add(withDetails(new DayRecordResponse(
                             cursor.toString(), status,
                             rec.getCheckInAt().toString(),
                             rec.getCheckOutAt() != null ? rec.getCheckOutAt().toString() : null,
-                            rec.getWorkingHours()));
+                            rec.getWorkingHours()), rec,
+                            rec.getAttendanceType() != null ? rec.getAttendanceType().name() : null, late));
                 } else if (!beforeJoining && holidays.contains(cursor)) {
                     result.add(new DayRecordResponse(cursor.toString(), "HOLIDAY", null, null, null));
                 } else if (!beforeJoining && leaveDays.contains(cursor)) {
@@ -830,7 +1008,7 @@ public class AttendanceService {
         LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
         Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> days =
                 effectiveDays.effectiveStatuses(List.of(employeeId), start, end).getOrDefault(employeeId, Map.of());
-        int present = 0, absent = 0, onTime = 0, late = 0, holidays = 0;
+        int present = 0, absent = 0, onTime = 0, late = 0, holidays = 0, leave = 0;
         for (com.hrms.attendance.policy.EffectiveDay d : days.values()) {
             if (d == null) continue;
             switch (d.status()) {
@@ -842,12 +1020,14 @@ public class AttendanceService {
                 }
                 case com.hrms.attendance.policy.EffectiveDay.ABSENT -> absent++;
                 case com.hrms.attendance.policy.EffectiveDay.HOLIDAY -> holidays++;
-                default -> { /* leave, weekly off, not marked, upcoming, not tracked */ }
+                // Days on approved leave (V143.53, BW-15): a count only; they stay out of the score.
+                case com.hrms.attendance.policy.EffectiveDay.ON_LEAVE -> leave++;
+                default -> { /* weekly off, not marked, upcoming, not tracked */ }
             }
         }
         int workingDays = present + absent;
         int score = workingDays > 0 ? Math.round((float) present / workingDays * 100) : 100;
-        return new MonthlyStatsResponse(present, absent, holidays, onTime, late, score);
+        return new MonthlyStatsResponse(present, absent, holidays, onTime, late, score, leave);
     }
 
     private List<DayRecordResponse> monthHistoryFromPolicy(UUID employeeId, int year, int month) {
@@ -856,6 +1036,11 @@ public class AttendanceService {
         Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> days =
                 effectiveDays.effectiveStatuses(List.of(employeeId), start, end).getOrDefault(employeeId, Map.of());
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
+        // The day's record, for the details beside the status (BW-15): how and
+        // where the person punched, and whether the day was fixed. One query.
+        Map<LocalDate, AttendanceRecord> records = new HashMap<>();
+        attendanceRecordRepository.findByEmployeeIdAndAttendanceDateBetween(employeeId, start, end).forEach(r ->
+                records.merge(r.getAttendanceDate(), r, (a, b) -> a.getCheckInAt() != null ? a : b));
         List<DayRecordResponse> result = new ArrayList<>();
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             com.hrms.attendance.policy.EffectiveDay d = days.get(day);
@@ -874,13 +1059,33 @@ public class AttendanceService {
                 continue;
             }
             boolean punched = d.hasPunch();
-            result.add(new DayRecordResponse(day.toString(), st,
+            result.add(withDetails(new DayRecordResponse(day.toString(), st,
                     punched ? d.checkIn().toString() : null,
                     punched && d.checkOut() != null ? d.checkOut().toString() : null,
                     punched && d.workedMinutes() != null ? Math.round(d.workedMinutes() / 60.0 * 100.0) / 100.0 : null,
-                    d.note(), d.manual()));
+                    d.note(), d.manual()), records.get(day), d.attendanceType(), d.lateMinutes()));
         }
         return result;
+    }
+
+    /**
+     * The day details of the month calendar (V143.53 redesign, BW-15), added to
+     * a day's row: the type and minutes late (from the day's status), and from
+     * its record how and where the person punched and whether the day was
+     * fixed. A day without a record gets only what the status knows.
+     */
+    static DayRecordResponse withDetails(DayRecordResponse day, AttendanceRecord rec, String attendanceType, Integer lateMinutes) {
+        String type = attendanceType != null ? attendanceType
+                : rec != null && rec.getAttendanceType() != null ? rec.getAttendanceType().name() : null;
+        boolean hasRecord = rec != null && rec.getCheckInAt() != null;
+        return new DayRecordResponse(day.date(), day.status(), day.checkInTime(), day.checkOutTime(), day.workHours(),
+                day.note(), day.manual(),
+                hasRecord ? type : null,
+                lateMinutes,
+                hasRecord && rec.getCheckInMethod() != null ? rec.getCheckInMethod().name() : null,
+                hasRecord && rec.getCheckOutAt() != null && rec.getCheckOutMethod() != null ? rec.getCheckOutMethod().name() : null,
+                hasRecord ? rec.getLocationName() : null,
+                rec != null ? (rec.isRegularized() || rec.isManualEntry()) : null);
     }
 
     private WeeklySummaryResponse weeklySummaryFromPolicy(UUID employeeId, LocalDate weekStart) {
@@ -1537,6 +1742,9 @@ public class AttendanceService {
             case "MANAGER_OVERRIDE" -> CheckInMethod.MANAGER_OVERRIDE;
             case "BIOMETRIC", "BIOMETRIC_DEVICE" -> CheckInMethod.BIOMETRIC_DEVICE;
             case "MANUAL" -> CheckInMethod.MANUAL;
+            // Web check-in (V143.53). The controller lets it through only while the
+            // company's "Allow web check-in" is on and the records accept WEB.
+            case "WEB" -> CheckInMethod.WEB;
             default -> CheckInMethod.MANUAL;
         };
     }
@@ -1845,7 +2053,13 @@ public class AttendanceService {
         record.setRegularizationReason(correction.getReason());
         record.setManagedByEmployeeId(approverEmployeeId);
         record.setManagerNote(note);
-        record.setAttendanceType(AttendanceType.OFFICE);
+        // Bug E28 (redesign BW-30): approving a fix used to write OFFICE on every
+        // day, so a work-from-home day became an office day. The day keeps its
+        // own type; a day with no record yet takes the punch's rule (an approved
+        // work-from-home day is WFH, anything else OFFICE, as checkInJson does).
+        record.setAttendanceType(correctedAttendanceType(record.getAttendanceType(),
+                record.getAttendanceType() == null
+                        && isApprovedWfhDay(correction.getEmployeeId(), correction.getMissingForDate())));
         record.setAttendanceStatus(parseAttendanceStatus(null, record.getCheckInAt(), correctedThreshold));
         recomputeWorkingHours(record);
 
@@ -1853,6 +2067,15 @@ public class AttendanceService {
         correction.setAttendanceRecordId(saved.getId());
         logEvent(saved, AttendanceEventType.CORRECTION_APPROVED, null, null,
                 saved.getLocationName(), null, approverEmployeeId, note);
+    }
+
+    /**
+     * The attendance type a fixed day keeps (bug E28): its own type when it has
+     * one, else WFH on an approved work-from-home day, else OFFICE.
+     */
+    static AttendanceType correctedAttendanceType(AttendanceType existing, boolean approvedWfhDay) {
+        if (existing != null) return existing;
+        return approvedWfhDay ? AttendanceType.WFH : AttendanceType.OFFICE;
     }
 
     private CorrectionRequestResponse toCorrectionResponse(AttendanceCorrectionRequest correction) {

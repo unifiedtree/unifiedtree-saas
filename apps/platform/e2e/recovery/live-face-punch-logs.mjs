@@ -18,8 +18,10 @@ const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const headers = { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, 'X-Tenant-Subdomain': 'demo' }
+// The database behind the backend under test (the live slot's is ut_w3_dev), as live-w3-punch does.
+const db = process.env.RECOVERY_DB || 'unifiedtree_recovery'
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',
-  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q]).toString().trim()
+  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atc', q]).toString().trim()
 
 const checks = []
 const check = (name, ok, detail) => { checks.push({ name, ok: Boolean(ok), detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`) }
