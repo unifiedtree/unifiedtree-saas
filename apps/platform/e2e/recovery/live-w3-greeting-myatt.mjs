@@ -19,7 +19,7 @@ import { mkdirSync } from 'node:fs'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
-const db = process.env.RECOVERY_DB || 'unifiedtree_recovery'
+const db = process.env.RECOVERY_DB || 'ut_w3_dev'  // safe default: never write the long-lived recovery DB by accident
 const psql = process.env.PSQL || 'C:/Program Files/PostgreSQL/18/bin/psql.exe'
 const shots = process.env.SHOTS || 'C:/REACT/ut-wt/_results/shots'
 const OWNER_EMP = '11111111-1111-1111-1111-111111111111' // owner@ and admin@ ("Admin User")
