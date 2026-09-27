@@ -262,3 +262,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ud-tile, .ud-date, .ud-col { transition: none; }
 }
+
+/* Projects drawer fields */
+.ud-grow { flex: 1 1 220px; min-width: 0; }
+.ud-narrow { width: 180px; max-width: 100%; }

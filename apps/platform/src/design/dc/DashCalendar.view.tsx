@@ -10,35 +10,35 @@ import './DashCalendar.view.css'
 export function DashCalendarView({ v }: { v: any }) {
   return (
     <>
-      <div ref={v.rootRef} role="dialog" aria-modal="true" aria-label="Choose dashboard date" tabIndex={-1} onKeyDown={v.onKey} style={{display: "flex", flexWrap: "wrap", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 24px 48px -16px rgba(15,23,42,.32)", overflow: "hidden", outline: "none", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div ref={v.rootRef} role="dialog" aria-modal="true" aria-label="Choose dashboard date" tabIndex={-1} onKeyDown={v.onKey} style={{display: "flex", flexWrap: "wrap", background: "var(--u-sf,#fff)", border: "1px solid var(--u-ln,#E3E9E6)", borderRadius: "16px", boxShadow: "var(--u-shp,0 24px 60px -20px rgba(14,27,22,.35))", overflow: "hidden", outline: "none", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "var(--u-ink,#0E1B16)"}}>
         <div style={{flex: "1 1 300px", minWidth: "0", padding: "16px 16px 14px", display: "grid", gap: "12px", alignContent: "start"}}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
             <div>
-              <p style={{margin: "0", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#0f6e56"}}>
+              <p style={{margin: "0", fontSize: "11px", fontWeight: "600", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--u-brt,#0F6E56)"}}>
                 {"Dashboard date · IST"}
               </p>
-              <h3 aria-label={v.monthLabel} style={{margin: "2px 0 0 0", display: "flex", alignItems: "center", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "17px", fontWeight: "700", letterSpacing: "-.01em"}}>
+              <h3 aria-label={v.monthLabel} style={{margin: "2px 0 0 0", display: "flex", alignItems: "center", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "17px", fontWeight: "600", letterSpacing: "-.01em"}}>
                 <CalChip label={v.monthChip} active={v.isMonths} onClick={v.showMonths} ariaLabel={v.isMonths ? 'Back to days' : 'Choose month'} />
                 <CalChip label={v.yearChip} active={v.isYears} onClick={v.showYears} ariaLabel={v.isYears ? 'Close year list' : 'Choose year'} />
               </h3>
             </div>
             <div style={{display: "flex", gap: "6px"}}>
-              <button type="button" aria-label={v.prevAria} onClick={v.prevMonth} disabled={v.prevOff} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", borderRadius: "9px", background: "#fff", color: v.prevOff ? "#cbd5e1" : "#334155", cursor: v.prevOff ? "not-allowed" : "pointer"}} className="dc-dash-calendar-0">
+              <button type="button" aria-label={v.prevAria} onClick={v.prevMonth} disabled={v.prevOff} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--u-ln,#E3E9E6)", borderRadius: "9px", background: "var(--u-sf,#fff)", color: v.prevOff ? "var(--u-gy,#C9D2CE)" : "var(--u-ink2,#4A5A54)", cursor: v.prevOff ? "not-allowed" : "pointer"}} className="dc-dash-calendar-0">
                 {txt(v.icPrev)}
               </button>
-              <button type="button" aria-label={v.nextAria} onClick={v.nextMonth} disabled={v.nextOff} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", borderRadius: "9px", background: "#fff", color: v.nextOff ? "#cbd5e1" : "#334155", cursor: v.nextOff ? "not-allowed" : "pointer"}} className="dc-dash-calendar-0">
+              <button type="button" aria-label={v.nextAria} onClick={v.nextMonth} disabled={v.nextOff} style={{width: "34px", height: "34px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--u-ln,#E3E9E6)", borderRadius: "9px", background: "var(--u-sf,#fff)", color: v.nextOff ? "var(--u-gy,#C9D2CE)" : "var(--u-ink2,#4A5A54)", cursor: v.nextOff ? "not-allowed" : "pointer"}} className="dc-dash-calendar-0">
                 {txt(v.icNext)}
               </button>
             </div>
           </div>
           <div style={{display: "flex", gap: "6px", flexWrap: "wrap"}}>
-            <button type="button" onClick={v.pickToday} style={{height: "28px", padding: "0 10px", borderRadius: "999px", border: "1px solid #a7f3d0", background: "#ecfdf5", color: "#0a5240", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="dc-dash-calendar-1">
+            <button type="button" onClick={v.pickToday} style={{height: "28px", padding: "0 10px", borderRadius: "999px", border: "1px solid var(--u-brl,#BFDFD1)", background: "var(--u-brs,#E8F3EE)", color: "var(--u-brt,#0F6E56)", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="dc-dash-calendar-1">
               {"Today"}
             </button>
-            <button type="button" onClick={v.pickYesterday} style={{height: "28px", padding: "0 10px", borderRadius: "999px", border: "1px solid #e2e8f0", background: "#fff", color: "#334155", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="dc-dash-calendar-2">
+            <button type="button" onClick={v.pickYesterday} style={{height: "28px", padding: "0 10px", borderRadius: "999px", border: "1px solid var(--u-ln,#E3E9E6)", background: "var(--u-sf,#fff)", color: "var(--u-ink2,#4A5A54)", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="dc-dash-calendar-2">
               {"Yesterday"}
             </button>
-            <button type="button" onClick={v.pickLastWorking} style={{height: "28px", padding: "0 10px", borderRadius: "999px", border: "1px solid #e2e8f0", background: "#fff", color: "#334155", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="dc-dash-calendar-2">
+            <button type="button" onClick={v.pickLastWorking} style={{height: "28px", padding: "0 10px", borderRadius: "999px", border: "1px solid var(--u-ln,#E3E9E6)", background: "var(--u-sf,#fff)", color: "var(--u-ink2,#4A5A54)", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="dc-dash-calendar-2">
               {"Last working day"}
             </button>
           </div>
@@ -58,26 +58,26 @@ export function DashCalendarView({ v }: { v: any }) {
           ) : null}
           {v.isDays ? (
             <>
-          <div style={{display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: "4px", fontSize: "11px", fontWeight: "700", letterSpacing: ".04em", textTransform: "uppercase", textAlign: "center"}}>
-            <span style={{color: "#64748b"}}>
+          <div style={{display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: "4px", fontSize: "11px", fontWeight: "600", letterSpacing: ".04em", textTransform: "uppercase", textAlign: "center"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Mon"}
             </span>
-            <span style={{color: "#64748b"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Tue"}
             </span>
-            <span style={{color: "#64748b"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Wed"}
             </span>
-            <span style={{color: "#64748b"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Thu"}
             </span>
-            <span style={{color: "#64748b"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Fri"}
             </span>
-            <span style={{color: "#64748b"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Sat"}
             </span>
-            <span style={{color: "#94a3b8"}}>
+            <span style={{color: "var(--u-ink3,#6A7A73)"}}>
               {"Sun"}
             </span>
           </div>
@@ -86,7 +86,7 @@ export function DashCalendarView({ v }: { v: any }) {
               <Fragment key={$index}>
                 {c?.isSel ? (
                   <>
-                    <button type="button" role="gridcell" aria-selected="true" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "#0f6e56", color: "#fff", font: "inherit", fontSize: "13px", fontWeight: "700", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer", boxShadow: "0 6px 14px -6px rgba(15,110,86,.6)"}}>
+                    <button type="button" role="gridcell" aria-selected="true" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "var(--u-br,#0F6E56)", color: "#fff", font: "inherit", fontSize: "13px", fontWeight: "600", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer", boxShadow: "0 6px 14px -6px rgba(15,110,86,.6)"}}>
                       <span>
                         {txt(c?.day)}
                       </span>
@@ -98,7 +98,7 @@ export function DashCalendarView({ v }: { v: any }) {
                 ) : null}
                 {c?.isToday ? (
                   <>
-                    <button type="button" role="gridcell" aria-current="date" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "#fff", color: "#0f6e56", font: "inherit", fontSize: "13px", fontWeight: "800", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer", boxShadow: "inset 0 0 0 1.5px #0f6e56"}} className="dc-dash-calendar-3">
+                    <button type="button" role="gridcell" aria-current="date" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "var(--u-sf,#fff)", color: "var(--u-brt,#0F6E56)", font: "inherit", fontSize: "13px", fontWeight: "600", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer", boxShadow: "inset 0 0 0 1.5px var(--u-br,#0F6E56)"}} className="dc-dash-calendar-3">
                       <span>
                         {txt(c?.day)}
                       </span>
@@ -110,7 +110,7 @@ export function DashCalendarView({ v }: { v: any }) {
                 ) : null}
                 {c?.isDay ? (
                   <>
-                    <button type="button" role="gridcell" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "transparent", color: "#0f172a", font: "inherit", fontSize: "13px", fontWeight: "500", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer"}} className="dc-dash-calendar-0">
+                    <button type="button" role="gridcell" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "transparent", color: "var(--u-ink,#0E1B16)", font: "inherit", fontSize: "13px", fontWeight: "500", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer"}} className="dc-dash-calendar-0">
                       <span>
                         {txt(c?.day)}
                       </span>
@@ -122,31 +122,31 @@ export function DashCalendarView({ v }: { v: any }) {
                 ) : null}
                 {c?.isOff ? (
                   <>
-                    <button type="button" role="gridcell" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "#f8fafc", color: "#94a3b8", font: "inherit", fontSize: "13px", fontWeight: "500", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer"}} className="dc-dash-calendar-4">
+                    <button type="button" role="gridcell" aria-label={c?.label} title={c?.label} onClick={c?.onClick} style={{height: "42px", border: "0", borderRadius: "10px", background: "var(--u-sf2,#F7F9F8)", color: "var(--u-ink3,#6A7A73)", font: "inherit", fontSize: "13px", fontWeight: "500", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "pointer"}} className="dc-dash-calendar-4">
                       <span>
                         {txt(c?.day)}
                       </span>
                       <svg width="14" height="4" aria-hidden="true">
-                        <circle cx="7" cy="2" r="2" fill="#f59e0b" fillOpacity={c?.holidayOpacity} />
+                        <circle cx="7" cy="2" r="2" fill="#C8912E" fillOpacity={c?.holidayOpacity} />
                       </svg>
                     </button>
                   </>
                 ) : null}
                 {c?.isFuture ? (
                   <>
-                    <button type="button" role="gridcell" aria-disabled="true" aria-label={c?.label} title={c?.label} style={{height: "42px", border: "0", borderRadius: "10px", background: "transparent", color: "#cbd5e1", font: "inherit", fontSize: "13px", fontWeight: "500", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "not-allowed"}}>
+                    <button type="button" role="gridcell" aria-disabled="true" aria-label={c?.label} title={c?.label} style={{height: "42px", border: "0", borderRadius: "10px", background: "transparent", color: "var(--u-gy,#C9D2CE)", font: "inherit", fontSize: "13px", fontWeight: "500", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", cursor: "not-allowed"}}>
                       <span>
                         {txt(c?.day)}
                       </span>
                       <svg width="14" height="4" aria-hidden="true">
-                        <circle cx="7" cy="2" r="2" fill="#f59e0b" fillOpacity={c?.holidayOpacity} />
+                        <circle cx="7" cy="2" r="2" fill="#C8912E" fillOpacity={c?.holidayOpacity} />
                       </svg>
                     </button>
                   </>
                 ) : null}
                 {c?.isOut ? (
                   <>
-                    <span aria-hidden="true" style={{height: "42px", display: "flex", alignItems: "center", justifyContent: "center", color: "#e2e8f0", fontSize: "13px", fontVariantNumeric: "tabular-nums"}}>
+                    <span aria-hidden="true" style={{height: "42px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--u-ln,#E3E9E6)", fontSize: "13px", fontVariantNumeric: "tabular-nums"}}>
                       {txt(c?.day)}
                     </span>
                   </>
@@ -156,17 +156,17 @@ export function DashCalendarView({ v }: { v: any }) {
           </div>
             </>
           ) : null}
-          <div style={{display: "flex", flexWrap: "wrap", gap: "6px 14px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", fontSize: "11px", color: "#64748b"}}>
+          <div style={{display: "flex", flexWrap: "wrap", gap: "6px 14px", paddingTop: "10px", borderTop: "1px solid var(--u-hv,#F0F4F2)", fontSize: "11px", color: "var(--u-ink3,#6A7A73)"}}>
             <span style={{display: "inline-flex", alignItems: "center", gap: "5px"}}>
-              <i style={{width: "12px", height: "12px", borderRadius: "4px", boxShadow: "inset 0 0 0 1.5px #0f6e56", display: "inline-block"}} />
+              <i style={{width: "12px", height: "12px", borderRadius: "4px", boxShadow: "inset 0 0 0 1.5px var(--u-br,#0F6E56)", display: "inline-block"}} />
               {"Today"}
             </span>
             <span style={{display: "inline-flex", alignItems: "center", gap: "5px"}}>
-              <i style={{width: "12px", height: "12px", borderRadius: "4px", background: "#0f6e56", display: "inline-block"}} />
+              <i style={{width: "12px", height: "12px", borderRadius: "4px", background: "var(--u-br,#0F6E56)", display: "inline-block"}} />
               {"Selected"}
             </span>
             <span style={{display: "inline-flex", alignItems: "center", gap: "5px"}}>
-              <i style={{width: "6px", height: "6px", borderRadius: "999px", background: "#f59e0b", display: "inline-block"}} />
+              <i style={{width: "6px", height: "6px", borderRadius: "999px", background: "var(--u-gd,#C8912E)", display: "inline-block"}} />
               {"Holiday"}
             </span>
             <span style={{display: "inline-flex", alignItems: "center", gap: "5px"}}>
@@ -179,12 +179,12 @@ export function DashCalendarView({ v }: { v: any }) {
             </span>
           </div>
         </div>
-        <div style={{flex: "1 1 230px", minWidth: "0", background: "#f8fafc", padding: "18px 16px 16px", display: "flex", flexDirection: "column", gap: "12px", boxShadow: "inset 1px 0 0 #e2e8f0"}}>
+        <div style={{flex: "1 1 230px", minWidth: "0", background: "var(--u-sf2,#F7F9F8)", padding: "18px 16px 16px", display: "flex", flexDirection: "column", gap: "12px", boxShadow: "inset 1px 0 0 var(--u-ln,#E3E9E6)"}}>
           <div>
-            <p style={{margin: "0 0 4px", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
+            <p style={{margin: "0 0 4px", fontSize: "11px", fontWeight: "600", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--u-ink3,#6A7A73)"}}>
               {"Selected day"}
             </p>
-            <h4 style={{margin: "0 0 8px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700", lineHeight: "1.3"}}>
+            <h4 style={{margin: "0 0 8px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "600", lineHeight: "1.3"}}>
               {txt(v.panel?.title)}
             </h4>
             <HrStatusPill tone={v.panel?.tone}>
@@ -195,32 +195,32 @@ export function DashCalendarView({ v }: { v: any }) {
             <>
               <div style={{display: "grid", gap: "6px"}}>
                 <div style={{display: "flex", alignItems: "baseline", gap: "8px"}}>
-                  <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "28px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
+                  <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "28px", fontWeight: "600", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
                     {txt(v.panel?.rate)}
                   </span>
-                  <span style={{fontSize: "12px", color: "#64748b"}}>
+                  <span style={{fontSize: "12px", color: "var(--u-ink3,#6A7A73)"}}>
                     {"attendance"}
                   </span>
                 </div>
                 <svg viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "6px", borderRadius: "3px", overflow: "hidden"}}>
-                  <rect width="100" height="6" fill="#e2e8f0" />
+                  <rect width="100" height="6" fill="var(--u-ln,#E3E9E6)" />
                   <rect width={v.panel?.ratePct} height="6" fill={v.panel?.rateColor} />
                 </svg>
-                <p style={{margin: "0", fontSize: "12px", color: "#64748b", fontVariantNumeric: "tabular-nums"}}>
+                <p style={{margin: "0", fontSize: "12px", color: "var(--u-ink3,#6A7A73)", fontVariantNumeric: "tabular-nums"}}>
                   {txt(v.panel?.scheduled)}
                 </p>
               </div>
               <div style={{display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "8px"}}>
                 {arr(v.panel?.stats).map((s: any, $index: number) => (
                   <Fragment key={$index}>
-                    <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "8px 10px"}}>
-                      <p style={{margin: "0", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#64748b"}}>
+                    <div style={{background: "var(--u-sf,#fff)", border: "1px solid var(--u-ln,#E3E9E6)", borderRadius: "10px", padding: "8px 10px"}}>
+                      <p style={{margin: "0", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--u-ink3,#6A7A73)"}}>
                         <svg width="8" height="8" aria-hidden="true">
                           <circle cx="4" cy="4" r="4" fill={s?.color} />
                         </svg>
                         {txt(s?.label)}
                       </p>
-                      <p style={{margin: "2px 0 0", fontSize: "17px", fontWeight: "700", fontVariantNumeric: "tabular-nums"}}>
+                      <p style={{margin: "2px 0 0", fontSize: "17px", fontWeight: "600", fontVariantNumeric: "tabular-nums"}}>
                         {txt(s?.value)}
                       </p>
                     </div>
@@ -231,7 +231,7 @@ export function DashCalendarView({ v }: { v: any }) {
           ) : null}
           {v.panel?.noData ? (
             <>
-              <p style={{margin: "0", fontSize: "13px", lineHeight: "1.5", color: "#64748b", textWrap: "pretty"}}>
+              <p style={{margin: "0", fontSize: "13px", lineHeight: "1.5", color: "var(--u-ink3,#6A7A73)", textWrap: "pretty"}}>
                 {txt(v.panel?.note)}
               </p>
             </>
@@ -244,7 +244,7 @@ export function DashCalendarView({ v }: { v: any }) {
               <HrButton variant="ghost" size="sm" onClick={v.close}>
                 {"Cancel"}
               </HrButton>
-              <button type="button" onClick={v.openTracking} style={{background: "none", border: "0", padding: "0", color: "#0f6e56", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}}>
+              <button type="button" onClick={v.openTracking} style={{background: "none", border: "0", padding: "0", color: "var(--u-brt,#0F6E56)", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer"}}>
                 {"Daily Tracking for this day →"}
               </button>
             </div>
