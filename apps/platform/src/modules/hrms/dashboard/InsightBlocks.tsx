@@ -198,13 +198,13 @@ export function ActivityCard({ rows, title, onAll, onOpen, ...c }: Common & {
       empty={!rows.length ? { title: 'No records for this period.', icon: 'activity' } : undefined}>
       <div className="ud-act" role="list" aria-label="Recent activity">
         {rows.map((a) => (
-          <button key={a.id} type="button" role="listitem" className="ud-act__item" onClick={() => onOpen(a.path)}>
+          <div key={a.id} role="listitem" style={{ display: 'flex' }}><button type="button" className="ud-act__item" onClick={() => onOpen(a.path)}>
             <span className="ud-act__rail"><span className="ud-act__ic" aria-hidden="true">{dashIcon(ACT_ICON[a.type] || 'pencil', 15)}</span><span className="ud-act__line" /></span>
             <span className="ud-act__txt">
               <span className="ud-act__title" style={{ display: 'block' }}>{a.actor} {a.action}{a.record ? ` · ${a.record}` : ''}</span>
               <span className="ud-act__meta" style={{ display: 'block' }}>{a.module ? `${a.module} · ` : ''}{a.rel}</span>
             </span>
-          </button>
+          </button></div>
         ))}
       </div>
     </Section>

@@ -47,10 +47,12 @@ export function NoticesStrip({ notices, total, page, pages, isPast, sel, today, 
       ) : notices.length ? (
         <div className="ud-notices__list" role="list" aria-label="Notices">
           {notices.map((n) => (
-            <button key={n.id} type="button" role="listitem" className="ud-nchip" onClick={() => setOpenId(n.id)} aria-label={`${n.title}. ${meta(n)}. Open the notice`}>
-              <span className="ud-nchip__t">{n.title}</span>
-              <span className="ud-nchip__m">{meta(n)}</span>
-            </button>
+            <div key={n.id} role="listitem" style={{ display: 'flex', flexShrink: 0 }}>
+              <button type="button" className="ud-nchip" onClick={() => setOpenId(n.id)} aria-label={`${n.title}. ${meta(n)}. Open the notice`}>
+                <span className="ud-nchip__t">{n.title}</span>
+                <span className="ud-nchip__m">{meta(n)}</span>
+              </button>
+            </div>
           ))}
         </div>
       ) : (
