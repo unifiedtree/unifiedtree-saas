@@ -4,13 +4,17 @@ import com.unifiedtree.notifications.enums.AppNotificationType;
 import com.unifiedtree.notifications.template.NotificationEventCatalog.EventDef;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NotificationEventCatalogTest {
@@ -98,6 +102,88 @@ class NotificationEventCatalogTest {
         EventDef doc = NotificationEventCatalog.byKey("document.rejected").orElseThrow();
         assertEquals("Your PAN card was rejected. Please re-upload.",
                 TemplateRenderer.render(doc.defaultBody(), Map.of("documentType", "PAN card", "reasonText", "")));
+    }
+
+    /** The events the HRMS redesign adds (AUDIT §5.16, and addendum D): type → { key, group, audience }. */
+    private static final Map<AppNotificationType, String[]> REDESIGN_EVENTS = new LinkedHashMap<>();
+    static {
+        REDESIGN_EVENTS.put(AppNotificationType.DECISION_UNDONE, new String[]{"approvals.decision_undone", "Approvals", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.CHECKIN_REMINDER, new String[]{"attendance.checkin_reminder", "Attendance", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.PERFORMANCE_REVIEW_REMINDER, new String[]{"performance.review_reminder", "Performance", "Reviewers"});
+        REDESIGN_EVENTS.put(AppNotificationType.TEAM_MESSAGE, new String[]{"team.message", "Team", "Team members"});
+        REDESIGN_EVENTS.put(AppNotificationType.ASSET_ISSUE_REPORTED, new String[]{"assets.issue_reported", "Assets", "HR"});
+        REDESIGN_EVENTS.put(AppNotificationType.PAYSLIP_QUERY_RAISED, new String[]{"payroll.payslip_query_raised", "Payroll", "Payroll team"});
+        REDESIGN_EVENTS.put(AppNotificationType.PAYSLIP_QUERY_ANSWERED, new String[]{"payroll.payslip_query_answered", "Payroll", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.LEAVE_APPLIED_ON_BEHALF, new String[]{"leave.applied_on_behalf", "Leave", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.EXPENSE_CLAIM_RAISED_FOR_YOU, new String[]{"expense.raised_for_you", "Expenses and advances", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.TIMESHEET_SUBMITTED, new String[]{"attendance.timesheet_submitted", "Attendance", "Approver"});
+        REDESIGN_EVENTS.put(AppNotificationType.TIMESHEET_DECIDED, new String[]{"attendance.timesheet_decided", "Attendance", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.LETTER_SIGNATURE_REQUESTED, new String[]{"letters.signature_requested", "Letters", "Employee"});
+        REDESIGN_EVENTS.put(AppNotificationType.PROBATION_TEAM_DECISION, new String[]{"people.probation_team_decision", "People", "Employee and HR"});
+    }
+
+    /**
+     * Each redesign event has its own entry (not the "general" fallback) with the
+     * key the senders use, in the right group, for the right people. None is
+     * always-sent, so everyone can switch them off in their notification choices.
+     */
+    @Test
+    void redesignEventsHaveTheirOwnEntriesInTheRightGroup() {
+        assertEquals(13, REDESIGN_EVENTS.size());
+        for (Map.Entry<AppNotificationType, String[]> e : REDESIGN_EVENTS.entrySet()) {
+            AppNotificationType type = e.getKey();
+            String key = e.getValue()[0];
+            assertTrue(NotificationEventCatalog.covers(type), type + " has no entry of its own");
+            EventDef d = NotificationEventCatalog.forType(type);
+            assertEquals(key, d.key(), type + " key");
+            assertEquals(e.getValue()[1], d.group(), type + " group");
+            assertEquals(e.getValue()[2], d.audience(), type + " audience");
+            assertSame(d, NotificationEventCatalog.byKey(key).orElseThrow(), key + " by key");
+            assertSame(d, NotificationEventCatalog.byKey(type.name()).orElseThrow(), type + " by its enum name");
+            assertFalse(d.essential(), key + " must follow the person's choices");
+            assertFalse(d.external(), key + " goes to people in the workspace");
+            assertTrue(d.has(DeliveryChannel.IN_APP) && d.has(DeliveryChannel.PUSH), key + " is in the app and on the phone");
+            assertTrue(d.templatable(DeliveryChannel.IN_APP), key + " can have a company template");
+            assertFalse(d.emailByDefault(), key + " emails only people who switch it on");
+        }
+    }
+
+    /** A reminder a person sends by hand and a team message never go by email (DECISIONS 15). */
+    @Test
+    void checkInRemindersAndTeamMessagesAreAppAndPhoneOnly() {
+        for (AppNotificationType type : EnumSet.of(AppNotificationType.CHECKIN_REMINDER, AppNotificationType.TEAM_MESSAGE)) {
+            EventDef d = NotificationEventCatalog.forType(type);
+            assertEquals(EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH), d.channels(), type + " channels");
+        }
+    }
+
+    /** With every placeholder filled, the built-in wording of the new events reads as a whole sentence. */
+    @Test
+    void redesignWordingRendersWithNothingLeftOver() {
+        EventDef undo = NotificationEventCatalog.byKey("approvals.decision_undone").orElseThrow();
+        assertEquals("Priya Rao took back their decision on your leave request for 5 Jul 2026 to 7 Jul 2026. It is waiting for a decision again.",
+                TemplateRenderer.render(undo.defaultBody(), Map.of("decidedBy", "Priya Rao",
+                        "requestText", "leave request for 5 Jul 2026 to 7 Jul 2026")));
+        EventDef remind = NotificationEventCatalog.byKey("attendance.checkin_reminder").orElseThrow();
+        assertEquals("Priya Rao is reminding you to check in for 28 Sep 2026. If you're away that day, apply for leave.",
+                TemplateRenderer.render(remind.defaultBody(), Map.of("sentBy", "Priya Rao", "date", "28 Sep 2026")));
+        EventDef decided = NotificationEventCatalog.byKey("attendance.timesheet_decided").orElseThrow();
+        assertEquals("Timesheet rejected", TemplateRenderer.render(decided.defaultTitle(), Map.of("decision", "rejected")));
+        EventDef probation = NotificationEventCatalog.byKey("people.probation_team_decision").orElseThrow();
+        assertEquals("Probation extended", TemplateRenderer.render(probation.defaultTitle(), Map.of("decision", "extended")));
+        assertEquals("Priya Rao extended your probation to 5 Nov 2026.",
+                TemplateRenderer.render(probation.defaultBody(), Map.of("message", "Priya Rao extended your probation to 5 Nov 2026.")));
+
+        for (AppNotificationType type : REDESIGN_EVENTS.keySet()) {
+            EventDef d = NotificationEventCatalog.forType(type);
+            Map<String, String> values = new HashMap<>();
+            for (NotificationEventCatalog.Placeholder p : d.placeholders()) values.put(p.name(), "x");
+            for (String text : new String[]{d.defaultTitle(), d.defaultBody(), d.defaultEmailSubject(), d.defaultEmailBody()}) {
+                String rendered = TemplateRenderer.render(text, values);
+                assertNotBlank(rendered, d.key() + " wording");
+                assertFalse(rendered.contains("{{") || rendered.contains("}}"), d.key() + " leaves a placeholder: " + rendered);
+            }
+        }
     }
 
     private static void assertNotBlank(String s, String what) {

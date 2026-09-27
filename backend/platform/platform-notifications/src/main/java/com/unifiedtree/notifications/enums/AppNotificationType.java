@@ -91,5 +91,36 @@ public enum AppNotificationType {
      * the daily retirement alert job to people holding hrms.retirement.alerts.
      */
     RETIREMENT_DUE,
+
+    // HRMS redesign (27 Sep 2026). Each one is sent only when a person does
+    // something; no scheduled job sends them. The senders are built by the
+    // redesign's page packages; the catalog entries are in NotificationEventCatalog.
+    /** The person who approved or rejected a request took the decision back (approval Undo, within 10 minutes). */
+    DECISION_UNDONE,
+    /** A manager or HR reminded someone who hasn't checked in yet that day. */
+    CHECKIN_REMINDER,
+    /** HR pressed Remind on a review that is still to be written. */
+    PERFORMANCE_REVIEW_REMINDER,
+    /** A manager posted a message to their team. */
+    TEAM_MESSAGE,
+    /** An employee reported that an asset issued to them is lost, damaged or not working. */
+    ASSET_ISSUE_REPORTED,
+    /** An employee asked the payroll team a question about one of their payslips. */
+    PAYSLIP_QUERY_RAISED,
+    /** The payroll team answered an employee's payslip question. */
+    PAYSLIP_QUERY_ANSWERED,
+    /** HR or an admin applied for leave in the employee's name (it still needs approval). */
+    LEAVE_APPLIED_ON_BEHALF,
+    /** HR or finance raised an expense claim in the employee's name (it still needs approval). */
+    EXPENSE_CLAIM_RAISED_FOR_YOU,
+    /** Someone submitted a week of their timesheet; sent to the approver. */
+    TIMESHEET_SUBMITTED,
+    /** The employee's submitted timesheet week was approved or rejected. */
+    TIMESHEET_DECIDED,
+    /** HR sent a letter that asks for the employee's signature. */
+    LETTER_SIGNATURE_REQUESTED,
+    /** A manager confirmed or extended a team member's probation from Team today; sent to the employee and to HR. */
+    PROBATION_TEAM_DECISION,
+
     GENERAL
 }
