@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell } from 'lucide-react'
@@ -99,7 +99,16 @@ function openInApp(navigate: (to: string) => void, path: string) {
   if (samePage) window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
 }
 
-const isPhone = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches
+const PHONE = '(max-width: 767px)'
+const isPhone = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(PHONE).matches
+const onPhoneChange = (cb: () => void) => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {}
+  const m = window.matchMedia(PHONE)
+  m.addEventListener('change', cb)
+  return () => m.removeEventListener('change', cb)
+}
+/** Phone width, kept up to date (the side Pages panel doesn't show there: the Pages button opens it over the page). */
+const usePhone = () => useSyncExternalStore(onPhoneChange, isPhone, () => false)
 
 /** The plan catalog's "launching soon" module keys (the business apps' Soon badges); plan admins only. */
 function useSoonApps(enabled: boolean): ReadonlySet<string> {
@@ -125,6 +134,7 @@ export function PlatformShell() {
   const [pinned, setPinned] = useState(readPinned)
   // The Pages panel: open for one module (a rail click on a module with several pages opens it).
   const [panel, setPanel] = useState<{ open: boolean; module: string | null }>({ open: false, module: null })
+  const phone = usePhone()
   const [mobilePages, setMobilePages] = useState(false)
   // The rail item the person came through (a rail click, or a page in its Pages panel) and the page
   // that click opened; see railLit.ts.
@@ -195,7 +205,8 @@ export function PlatformShell() {
     : litModule ? { key: litModule.key, label: litModule.name, icon: litModule.icon, pages: litModule.pages } : null
   const currentPage = settingsScope ? settingsActive(sPages, pathname) : litModule ? activePage(litModule.pages, pathname) : undefined
   const multiPage = !!current && current.pages.length > 1
-  const panelShown = multiPage && panel.open && panel.module === current!.key
+  // Not on a phone: there the side panel has no room, and the top bar keeps its Pages button.
+  const panelShown = !phone && multiPage && panel.open && panel.module === current!.key
   const push = pinned && !panelShown
 
   // The click counts only on the page it opened. Any other move to another page (a link on the page,
