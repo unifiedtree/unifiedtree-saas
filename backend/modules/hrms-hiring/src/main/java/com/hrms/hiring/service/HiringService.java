@@ -39,11 +39,25 @@ public class HiringService {
     private final JobRequisitionRepository requisitionRepository;
     private final CandidateRepository candidateRepository;
     private final HiringOfferRepository offerRepository;
+    private final CandidateStageLog stageLog;
+    private final OfferEmailBook offerEmails;
 
     public HiringService(JobRequisitionRepository requisitionRepository, CandidateRepository candidateRepository, HiringOfferRepository offerRepository) {
+        this(requisitionRepository, candidateRepository, offerRepository, CandidateStageLog.NONE, OfferEmailBook.NONE);
+    }
+
+    /**
+     * @param stageLog    the candidate's stage history (V143.59), written in the transaction of each move
+     * @param offerEmails the candidate email stored on an offer (V143.59)
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public HiringService(JobRequisitionRepository requisitionRepository, CandidateRepository candidateRepository,
+                         HiringOfferRepository offerRepository, CandidateStageLog stageLog, OfferEmailBook offerEmails) {
         this.requisitionRepository = requisitionRepository;
         this.candidateRepository = candidateRepository;
         this.offerRepository = offerRepository;
+        this.stageLog = stageLog == null ? CandidateStageLog.NONE : stageLog;
+        this.offerEmails = offerEmails == null ? OfferEmailBook.NONE : offerEmails;
     }
 
 
@@ -52,7 +66,7 @@ public class HiringService {
         Page<HiringOffer> page = companyId != null
                 ? offerRepository.findByCompanyIdOrderByCreatedAtDesc(companyId, pageable)
                 : offerRepository.findAllByOrderByCreatedAtDesc(pageable);
-        return new PageResponse<>(page.getContent().stream().map(this::toOffer).toList(),
+        return new PageResponse<>(toOffers(page.getContent()),
                 page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast());
     }
 
@@ -61,6 +75,7 @@ public class HiringService {
         if (request.status() != null && request.status() != OfferStatus.DRAFT)
             throw new BusinessRuleException("Create a draft before issuing an offer", "OFFER_TRANSITION_INVALID");
         validateOfferLinks(companyId, request);
+        String candidateEmail = candidateEmailFor(request);
         UUID tenantId = TenantContext.getTenantId();
         HiringOffer offer = new HiringOffer();
         offer.setTenantId(tenantId);
@@ -69,10 +84,15 @@ public class HiringService {
         if (offer.getStatus() == OfferStatus.SENT && offer.getSentAt() == null) offer.setSentAt(java.time.Instant.now());
         if (request.candidateId() != null) {
             candidateRepository.findById(request.candidateId()).ifPresent(c -> {
-                if (c.getStage() == CandidateStage.INTERVIEW) c.setStage(CandidateStage.OFFER);
+                if (c.getStage() == CandidateStage.INTERVIEW) {
+                    c.setStage(CandidateStage.OFFER);
+                    stageLog.record(c.getId(), CandidateStage.INTERVIEW, CandidateStage.OFFER, CandidateStageLog.Kind.OFFER_CREATED);
+                }
             });
         }
-        return toOffer(offerRepository.save(offer));
+        HiringOffer saved = offerRepository.save(offer);
+        if (candidateEmail != null && !candidateEmail.isEmpty()) storeOfferEmail(saved.getId(), candidateEmail);
+        return toOffer(saved);
     }
 
     @Transactional
@@ -91,7 +111,12 @@ public class HiringService {
         if (status == OfferStatus.SENT && offer.getSentAt() == null) offer.setSentAt(java.time.Instant.now());
         if ((status == OfferStatus.ACCEPTED || status == OfferStatus.DECLINED) && offer.getRespondedAt() == null) offer.setRespondedAt(java.time.Instant.now());
         if (status == OfferStatus.ACCEPTED && offer.getCandidateId() != null) {
-            candidateRepository.findById(offer.getCandidateId()).ifPresent(c -> c.setStage(CandidateStage.HIRED));
+            candidateRepository.findById(offer.getCandidateId()).ifPresent(c -> {
+                CandidateStage before = c.getStage();
+                c.setStage(CandidateStage.HIRED);
+                if (before != CandidateStage.HIRED)
+                    stageLog.record(c.getId(), before, CandidateStage.HIRED, CandidateStageLog.Kind.OFFER_ACCEPTED);
+            });
         }
         return toOffer(offerRepository.save(offer));
     }
@@ -112,8 +137,38 @@ public class HiringService {
         if (request.companyId() != null && !offer.getCompanyId().equals(request.companyId()))
             throw new BusinessRuleException("An offer cannot move to another company", "OFFER_COMPANY_MISMATCH");
         validateOfferLinks(offer.getCompanyId(), request);
+        String candidateEmail = candidateEmailFor(request);
         applyOffer(offer, request);
-        return toOffer(offerRepository.save(offer));
+        HiringOffer saved = offerRepository.save(offer);
+        // Left out = unchanged (older clients never send it); empty = removed.
+        if (candidateEmail != null) storeOfferEmail(saved.getId(), candidateEmail.isEmpty() ? null : candidateEmail);
+        return toOffer(saved);
+    }
+
+    /**
+     * The request's candidate email, trimmed: null when left out, "" when sent
+     * empty. An offer linked to a candidate may only carry that candidate's
+     * recorded email, the same rule the send applies.
+     */
+    private String candidateEmailFor(HiringOfferRequest request) {
+        if (request.candidateEmail() == null) return null;
+        String email = request.candidateEmail().trim();
+        if (email.isEmpty() || request.candidateId() == null) return email;
+        Candidate candidate = candidateRepository.findById(request.candidateId())
+                .orElseThrow(() -> new ResourceNotFoundException("Candidate", request.candidateId()));
+        if (candidate.getEmail() == null || !email.equalsIgnoreCase(candidate.getEmail().trim()))
+            throw new BusinessRuleException("Use the linked candidate's recorded email address", "OFFER_EMAIL_MISMATCH");
+        return email;
+    }
+
+    /**
+     * Stores the email. While V143.59 is not applied it is not kept: the offer
+     * then shows the linked candidate's email (or none), and "Send offer
+     * email" asks for the address as it did before.
+     */
+    private void storeOfferEmail(UUID offerId, String email) {
+        if (!offerEmails.save(offerId, email))
+            log.warn("Offer {}: candidate email not stored, the offer email table is not there yet (V143.59)", offerId);
     }
 
     private void validateOfferLinks(UUID companyId, HiringOfferRequest request) {
@@ -260,6 +315,7 @@ public class HiringService {
         candidate.setNotes(request.notes());
         candidate.setStage(CandidateStage.APPLIED);
         candidate = candidateRepository.save(candidate);
+        stageLog.record(candidate.getId(), null, CandidateStage.APPLIED, CandidateStageLog.Kind.ADDED);
 
         log.info("Candidate {} added to requisition {}", candidate.getId(), requisitionId);
         return toCandidate(candidate);
@@ -295,6 +351,7 @@ public class HiringService {
         assertTransitionAllowed(from, to);
         candidate.setStage(to);
         candidate = candidateRepository.save(candidate);
+        if (from != to) stageLog.record(candidateId, from, to, CandidateStageLog.Kind.STAGE_CHANGE);
         log.info("Candidate {} advanced {} -> {}", candidateId, from, to);
         return toCandidate(candidate);
     }
@@ -341,6 +398,7 @@ public class HiringService {
         c.setConvertedEmployeeId(employeeId);
         c.setConvertedAt(java.time.Instant.now());
         c = candidateRepository.save(c);
+        stageLog.record(candidateId, c.getStage(), c.getStage(), CandidateStageLog.Kind.CONVERTED);
         log.info("Candidate {} converted to employee {}", candidateId, employeeId);
         return toCandidate(c);
     }
@@ -425,9 +483,33 @@ public class HiringService {
     }
 
     private HiringOfferResponse toOffer(HiringOffer o) {
-        return new HiringOfferResponse(o.getId(), o.getCompanyId(), o.getRequisitionId(), o.getCandidateId(),
-                o.getCandidateName(), o.getRoleTitle(), o.getOfferedCtc(), o.getJoiningDate(),
-                o.getStatus(), o.getSentAt(), o.getRespondedAt(), o.getNotes(), o.getCreatedAt(), o.getOfferTerms(), o.getEmailSubmittedAt(), o.getEmailRecipient());
+        return toOffers(List.of(o)).get(0);
+    }
+
+    /**
+     * Offers with their candidate email: the one stored on the offer, else the
+     * linked candidate's recorded email (one lookup of each per page).
+     */
+    private List<HiringOfferResponse> toOffers(List<HiringOffer> offers) {
+        if (offers.isEmpty()) return List.of();
+        java.util.Map<UUID, String> stored = offerEmails.find(
+                offers.stream().map(HiringOffer::getId).filter(java.util.Objects::nonNull).toList());
+        List<UUID> candidateIds = offers.stream().map(HiringOffer::getCandidateId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        java.util.Map<UUID, String> candidateEmails = new java.util.HashMap<>();
+        if (!candidateIds.isEmpty()) {
+            for (Candidate c : candidateRepository.findAllById(candidateIds)) {
+                if (c.getEmail() != null && !c.getEmail().isBlank()) candidateEmails.put(c.getId(), c.getEmail().trim());
+            }
+        }
+        return offers.stream().map(o -> {
+            String email = o.getId() == null ? null : stored.get(o.getId());
+            if (email == null && o.getCandidateId() != null) email = candidateEmails.get(o.getCandidateId());
+            return new HiringOfferResponse(o.getId(), o.getCompanyId(), o.getRequisitionId(), o.getCandidateId(),
+                    o.getCandidateName(), o.getRoleTitle(), o.getOfferedCtc(), o.getJoiningDate(),
+                    o.getStatus(), o.getSentAt(), o.getRespondedAt(), o.getNotes(), o.getCreatedAt(), o.getOfferTerms(),
+                    o.getEmailSubmittedAt(), o.getEmailRecipient(), email);
+        }).toList();
     }
 
     private CandidateResponse toCandidate(Candidate c) {
