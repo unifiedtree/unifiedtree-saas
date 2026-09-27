@@ -119,4 +119,33 @@ describe('MonthCalendar rendering', () => {
     expect(s).toContain('uk-cal__legend--detail')
     expect(count(s, 'uk-legend__item')).toBe(2)
   })
+  it('tags: day boxes list short tags (grey by default), then "+n more"; the tags are spoken with the day', () => {
+    const tagged: CalendarDay[] = [
+      { date: '2026-10-02', tags: [{ label: 'Gandhi Jayanti', tone: 'warning' }], tip: 'Holiday' },
+      { date: '2026-10-07', tags: [{ label: 'Priya · EL', tone: 'brand' }, { label: 'Arjun · SL' }] },
+      { date: '2026-10-12', tags: [{ label: 'PF due' }, { label: 'ESI due' }, { label: 'TDS due' }, { label: 'PT due' }] },
+    ]
+    const s = renderToStaticMarkup(<MonthCalendar month="2026-10" variant="tags" today="2026-10-07" days={tagged} label="October 2026" />)
+    expect(s).toContain('uk-cal uk-cal--v-tags')
+    expect(s).toContain('>Mon</span>')
+    expect(s).toMatch(/data-date="2026-10-02"[^>]*title="Holiday" class="uk-cal__day uk-cal__day--tags"/)
+    expect(s).toContain('<span class="uk-cal__tag uk-tone--warning" aria-hidden="true">Gandhi Jayanti</span>')
+    expect(s).toContain('<span class="uk-cal__tag uk-tone--muted" aria-hidden="true">Arjun · SL</span>')
+    expect(s).toMatch(/data-date="2026-10-07"[^>]*class="uk-cal__day uk-cal__day--tags is-today"/)
+    expect(s).toContain('aria-label="Wednesday, 7 October 2026, today, Priya · EL; Arjun · SL"')
+    const day12 = /data-date="2026-10-12"[^]*?<\/div>/.exec(s)![0]
+    expect(count(day12, 'class="uk-cal__tag')).toBe(2)
+    expect(day12).toContain('>PF due</span>')
+    expect(day12).toContain('>+3 more</span>')
+    expect(day12).toContain('aria-label="Monday, 12 October 2026, PF due; ESI due; TDS due; PT due"')
+  })
+  it('tags: maxTags sets how many fit before "+n more"', () => {
+    const many: CalendarDay[] = [{ date: '2026-10-12', tags: [{ label: 'A' }, { label: 'B' }, { label: 'C' }] }]
+    const three = renderToStaticMarkup(<MonthCalendar month="2026-10" variant="tags" today={null} days={many} maxTags={3} />)
+    expect(three).not.toContain('more</span>')
+    expect(count(three, 'class="uk-cal__tag')).toBe(3)
+    const one = renderToStaticMarkup(<MonthCalendar month="2026-10" variant="tags" today={null} days={many} maxTags={1} />)
+    expect(count(one, 'class="uk-cal__tag')).toBe(1)
+    expect(one).toContain('>+3 more</span>')
+  })
 })

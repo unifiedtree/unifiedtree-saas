@@ -11,6 +11,7 @@
 //   variant "compact"  34px tinted day chips, one-letter weekdays, legend below (Home)
 //   variant "detail"   76px day cards with a status dot and a short line (Time → This month)
 //   variant "planner"  52px days with a range, hatched holidays and team-off dots (Leave → Apply)
+//   variant "tags"     68px day boxes listing small tags (UtSection calendar: who is off, filings due)
 //
 // Keyboard: the grid is one tab stop; arrows move by day / week, Home / End go
 // to the start / end of the week, Page Up / Down change month when the page
@@ -18,6 +19,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import * as D from '@/shared/components/calendar/dateMath'
 import { cx } from './displayUtil'
+import type { StatusTone } from './StatusPill'
 import './display.css'
 
 /**
@@ -38,9 +40,17 @@ export interface CalendarDay {
   marker?: boolean
   /** Can't be picked (planner: past days, weekly offs). */
   disabled?: boolean
+  /** Tags variant: short labels in the day box ("Priya · EL"). */
+  tags?: readonly CalendarTag[]
 }
 
-export type CalendarVariant = 'compact' | 'detail' | 'planner'
+export interface CalendarTag {
+  label: string
+  /** brand (done), warning (due), info, muted (the default), or any status tone. */
+  tone?: StatusTone
+}
+
+export type CalendarVariant = 'compact' | 'detail' | 'planner' | 'tags'
 
 export interface CalendarLegendItem {
   /** A day state, or today / range / marker (the planner's own marks). */
@@ -68,6 +78,8 @@ export interface MonthCalendarProps {
   legend?: readonly CalendarLegendItem[]
   /** Accessible name of the grid, e.g. "September 2026 attendance". Default: the month. */
   label?: string
+  /** Tags variant: tags shown per day before "+n more" (default 2). */
+  maxTags?: number
   className?: string
 }
 
@@ -118,7 +130,7 @@ export function calendarKeyTarget(key: string, date: string, month: string): str
 const inMonth = (date: string | null | undefined, ym: string) => !!date && date.slice(0, 7) === ym
 
 export function MonthCalendar({
-  month, days = [], variant = 'compact', today, selected, range, onSelect, onMonthChange, legend, label, className,
+  month, days = [], variant = 'compact', today, selected, range, onSelect, onMonthChange, legend, label, maxTags = 2, className,
 }: MonthCalendarProps) {
   const ym = D.normMonth(month)
   const weeks = useMemo(() => monthWeeks(ym), [ym])
@@ -174,6 +186,7 @@ export function MonthCalendar({
     if (info?.label) parts.push(info.label)
     if (info?.tip) parts.push(info.tip)
     if (variant === 'planner' && info?.marker) parts.push(legend?.find((l) => l.tone === 'marker')?.label ?? 'marked')
+    if (variant === 'tags' && info?.tags?.length) parts.push(info.tags.map((g) => g.label).join('; '))
     return parts.join(', ')
   }
 
@@ -211,6 +224,20 @@ export function MonthCalendar({
             {isToday ? <span className="uk-cal__todaytag">Today</span> : dot ? <span className="uk-cal__dot" /> : null}
           </span>
           {info?.label && <span className={cx('uk-cal__label', isToday && 'is-today')} aria-hidden="true">{info.label}</span>}
+        </div>
+      )
+    }
+    if (variant === 'tags') {
+      const tags = info?.tags ?? []
+      const over = tags.length > maxTags
+      const shown = over ? tags.slice(0, Math.max(0, maxTags - 1)) : tags
+      return (
+        <div key={d} {...common} className={cx('uk-cal__day', 'uk-cal__day--tags', isToday && 'is-today', isSel && 'is-selected', pick)}>
+          <span className="uk-cal__n" aria-hidden="true">{n}</span>
+          {shown.map((g, gi) => (
+            <span key={gi} className={cx('uk-cal__tag', `uk-tone--${g.tone ?? 'muted'}`)} aria-hidden="true">{g.label}</span>
+          ))}
+          {over && <span className="uk-cal__tag uk-tone--muted" aria-hidden="true">+{tags.length - shown.length} more</span>}
         </div>
       )
     }
