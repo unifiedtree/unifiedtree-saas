@@ -80,7 +80,7 @@ public class OvertimeController {
   return Map.of("content",content,"totalElements",count);
  }
  /** The person's company's rules: {@code orr.counts_after_minutes} is null for a company without them. */
- static final String RULES_JOIN=" LEFT JOIN attendance.overtime_rules orr ON orr.tenant_id=r.tenant_id AND orr.company_id=e.company_id";
+ static final String RULES_JOIN=" LEFT JOIN attendance.overtime_rules orr ON orr.tenant_id=r.tenant_id AND orr.company_id=e.company_id\n";
  /** Only the minutes past "counts after" are overtime; a day with none left is not listed. */
  static final String COUNTED_WHERE=" AND r.overtime_minutes>COALESCE(orr.counts_after_minutes,0)";
  /**
