@@ -282,7 +282,7 @@ export function MilestonesCard({ today: todayProp, companyId, canReadEmployees, 
   return (
     <div data-milestones-card style={{ minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', padding: '20px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: 700, fontSize: 15, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <h2 style={{ margin: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: 700, fontSize: 15, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ display: 'inline-flex', width: 28, height: 28, borderRadius: 8, background: '#ecfdf5', color: '#0f6e56', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('cake', 16)}</span>
           Upcoming milestones
         </h2>

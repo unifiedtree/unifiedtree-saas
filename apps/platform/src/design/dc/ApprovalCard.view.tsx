@@ -8,7 +8,7 @@ import './ApprovalCard.view.css'
 export function ApprovalCardView({ v }: { v: any }) {
   return (
     <>
-      <article style={{display: "flex", flexWrap: "wrap", gap: "14px 20px", alignItems: "flex-start", padding: "16px 18px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "14px", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}} className="dc-approval-card-0">
+      <article style={{display: "flex", flexWrap: "wrap", gap: "14px 20px", alignItems: "flex-start", padding: "16px 18px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "14px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}} className="dc-approval-card-0">
         <div style={{flex: "1 1 220px", minWidth: "0", display: "grid", gap: "10px"}}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap"}}>
             <HrAvatar name={v.r?.name} sub={v.r?.sub} />

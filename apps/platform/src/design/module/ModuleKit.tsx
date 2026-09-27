@@ -14,8 +14,8 @@ import { SectionState } from '@/design/dc/SectionState'
 import { ApprovalCard } from '@/design/dc/ApprovalCard'
 import { dashIcon } from '@/design/dc/icons'
 
-export const FONT = 'Inter,-apple-system,sans-serif'
-export const HEAD_FONT = "'Plus Jakarta Sans',Inter,sans-serif"
+export const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
+export const HEAD_FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
 export const CARD: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 }
 
 /** Page frame: header, then content on the design's 28px rhythm. */

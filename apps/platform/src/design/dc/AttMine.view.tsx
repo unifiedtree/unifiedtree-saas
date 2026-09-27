@@ -8,7 +8,7 @@ import { StatTile } from './StatTile'
 export function AttMineView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         <section style={{flex: "1 1 300px", minWidth: "0", display: "grid", gap: "10px"}}>
           <p style={{margin: "0", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
             {txt(v.monthLabel)}{" summary"}
@@ -23,7 +23,7 @@ export function AttMineView({ v }: { v: any }) {
         </section>
         <section style={{flex: "1.6 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 20px", display: "grid", gap: "12px"}}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
-            <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "700"}}>
+            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
               {"Daily log"}
             </h3>
             <span style={{fontSize: "12px", color: "#475569", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px"}}>
@@ -68,7 +68,7 @@ export function AttMineView({ v }: { v: any }) {
                         {txt(c?.title)}
                       </title>
                       <rect x="1" y="1" width="38" height="38" rx="8" fill={c?.bg} stroke={c?.stroke} strokeWidth="2" />
-                      <text x="20" y="25" textAnchor="middle" fill={c?.fg} fontSize="13" fontWeight="700" fontFamily="Inter,sans-serif">
+                      <text x="20" y="25" textAnchor="middle" fill={c?.fg} fontSize="13" fontWeight="700" fontFamily="inherit">
                         {txt(c?.day)}
                       </text>
                     </svg>

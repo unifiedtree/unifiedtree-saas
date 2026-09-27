@@ -62,7 +62,7 @@ export function StatusChangeDrawer({ target, onClose, onSubmit }: {
   )
   return (
     <HrDrawer title={face ? 'Not them?' : 'Change status'} onClose={onClose} footer={footer} width="max-w-md">
-      <div style={{ display: 'grid', gap: 14, fontFamily: 'Inter,-apple-system,sans-serif', color: '#0f172a' }}>
+      <div style={{ display: 'grid', gap: 14, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: '#0f172a' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <HrAvatar name={target.name} sub={target.sub} />
           {target.status && <HrStatusPill tone={TONE[target.status] || 'gray'}>{statusLabel(target.status)}</HrStatusPill>}

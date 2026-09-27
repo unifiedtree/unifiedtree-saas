@@ -10,7 +10,7 @@ import { SubTabs } from './SubTabs'
 export function AttFacePunchView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "14px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "grid", gap: "14px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px 16px"}}>
           <SubTabs items={v.views} label="Face punch views" />
           <p style={{margin: "0", fontSize: "13px", color: "#475569", fontVariantNumeric: "tabular-nums"}}>

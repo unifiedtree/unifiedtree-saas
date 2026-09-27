@@ -13,7 +13,7 @@ import './ShiftSchedules.view.css'
 export function ShiftSchedulesView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "16px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "grid", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         {v.isError ? (
           <>
             <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", padding: "8px"}}>
@@ -73,7 +73,7 @@ export function ShiftSchedulesView({ v }: { v: any }) {
                         </span>
                       </span>
                       <div style={{flex: "1", minWidth: "0"}}>
-                        <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "17px", fontWeight: "800", letterSpacing: "-.01em"}}>
+                        <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "17px", fontWeight: "800", letterSpacing: "-.01em"}}>
                           {txt(s?.name)}
                         </h3>
                         <button type="button" onClick={s?.onPeople} data-tip={s?.peopleTip} style={{marginTop: "2px", padding: "0", border: "0", background: "none", font: "inherit", fontSize: "13px", fontWeight: "600", color: "#0f6e56", cursor: "pointer"}} className="dc-shift-schedules-1">
@@ -84,7 +84,7 @@ export function ShiftSchedulesView({ v }: { v: any }) {
                         {txt(s?.pillLabel)}
                       </HrStatusPill>
                     </div>
-                    <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontVariantNumeric: "tabular-nums"}}>
+                    <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontVariantNumeric: "tabular-nums"}}>
                       <span style={{fontSize: "22px", fontWeight: "800", letterSpacing: "-.02em"}}>
                         {txt(s?.startLabel)}
                       </span>
@@ -96,7 +96,7 @@ export function ShiftSchedulesView({ v }: { v: any }) {
                       </span>
                       {s?.overnight ? (
                         <>
-                          <span style={{fontFamily: "Inter,sans-serif", fontSize: "12px", fontWeight: "700", color: "#4338ca", padding: "2px 8px", borderRadius: "999px", background: "#eef2ff"}}>
+                          <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "12px", fontWeight: "700", color: "#4338ca", padding: "2px 8px", borderRadius: "999px", background: "#eef2ff"}}>
                             {"next day"}
                           </span>
                         </>
@@ -173,7 +173,7 @@ export function ShiftSchedulesView({ v }: { v: any }) {
                 <span style={{width: "48px", height: "48px", borderRadius: "999px", background: "#fff", border: "1px solid #e2e8f0", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#0f6e56"}}>
                   {txt(v.icPlusBig)}
                 </span>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "15px", fontWeight: "800", color: "#0f172a"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "15px", fontWeight: "800", color: "#0f172a"}}>
                   {"Add a shift"}
                 </span>
                 <span style={{fontSize: "13px", color: "#64748b", maxWidth: "220px"}}>
@@ -187,7 +187,7 @@ export function ShiftSchedulesView({ v }: { v: any }) {
       {v.drawerOpen ? (
         <>
           <HrDrawer title={v.drawerTitle} onClose={v.closeDrawer} footer={v.drawerFooter} width="max-w-md">
-            <div style={{display: "grid", gap: "16px", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+            <div style={{display: "grid", gap: "16px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
               <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
                 {"Shift name *"}
                 <input value={v.f?.name} onChange={v.setName} placeholder="e.g. Early morning" maxLength={40} style={{font: "inherit", fontWeight: "400", padding: "9px 12px", border: "1px solid #cbd5e1", borderRadius: "8px", outline: "none"}} className="dc-shift-schedules-3" />

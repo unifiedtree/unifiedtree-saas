@@ -17,7 +17,7 @@ export function StatTileView({ v }: { v: any }) {
                 {txt(v.t?.label)}
               </span>
               <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "28px"}}>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
                   {txt(v.t?.value)}
                 </span>
                 {txt(v.t?.chart)}
@@ -40,7 +40,7 @@ export function StatTileView({ v }: { v: any }) {
                 {txt(v.t?.label)}
               </span>
               <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "28px"}}>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
                   {txt(v.t?.value)}
                 </span>
                 {txt(v.t?.chart)}
@@ -63,7 +63,7 @@ export function StatTileView({ v }: { v: any }) {
                 {txt(v.t?.label)}
               </span>
               <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "28px"}}>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
                   {txt(v.t?.value)}
                 </span>
                 {txt(v.t?.chart)}
@@ -86,7 +86,7 @@ export function StatTileView({ v }: { v: any }) {
                 {txt(v.t?.label)}
               </span>
               <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "28px"}}>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
                   {txt(v.t?.value)}
                 </span>
                 {txt(v.t?.chart)}
@@ -109,7 +109,7 @@ export function StatTileView({ v }: { v: any }) {
                 {txt(v.t?.label)}
               </span>
               <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "28px"}}>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
                   {txt(v.t?.value)}
                 </span>
                 {txt(v.t?.chart)}
@@ -132,7 +132,7 @@ export function StatTileView({ v }: { v: any }) {
                 {txt(v.t?.label)}
               </span>
               <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "28px"}}>
-                <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
                   {txt(v.t?.value)}
                 </span>
                 {txt(v.t?.chart)}

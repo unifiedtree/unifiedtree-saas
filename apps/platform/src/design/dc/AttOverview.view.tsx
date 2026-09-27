@@ -13,7 +13,7 @@ import './AttOverview.view.css'
 export function AttOverviewView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "28px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "grid", gap: "28px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         {v.isError ? (
           <>
             <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", padding: "8px"}}>
@@ -53,7 +53,7 @@ export function AttOverviewView({ v }: { v: any }) {
           <>
             <section aria-labelledby="ov-today" style={{display: "grid", gap: "14px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px"}}>
-                <h2 id="ov-today" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "18px", fontWeight: "800", letterSpacing: "-.01em"}}>
+                <h2 id="ov-today" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "18px", fontWeight: "800", letterSpacing: "-.01em"}}>
                   {txt(v.dayTitle)}
                 </h2>
                 <span style={{padding: "3px 10px", borderRadius: "999px", background: "#fff", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: "600", color: "#475569"}}>
@@ -70,7 +70,7 @@ export function AttOverviewView({ v }: { v: any }) {
               <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "stretch"}}>
                 <article style={{flex: "1.25 1 400px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
                   <div>
-                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "800"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
                       {txt(v.mixTitle)}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b", textWrap: "pretty"}}>
@@ -92,7 +92,7 @@ export function AttOverviewView({ v }: { v: any }) {
                         ))}
                       </svg>
                       <span style={{position: "absolute", inset: "0", display: "grid", placeContent: "center", justifyItems: "center", textAlign: "center", pointerEvents: "none"}}>
-                        <strong style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "30px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
+                        <strong style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
                           {txt(v.total)}
                         </strong>
                         <span style={{marginTop: "5px", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
@@ -148,7 +148,7 @@ export function AttOverviewView({ v }: { v: any }) {
                 </article>
                 <article style={{flex: "1 1 320px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
                   <div>
-                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "800"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
                       {"How people checked in"}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
@@ -186,7 +186,7 @@ export function AttOverviewView({ v }: { v: any }) {
             </section>
             <section aria-labelledby="ov-month" style={{display: "grid", gap: "14px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px"}}>
-                <h2 id="ov-month" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "18px", fontWeight: "800", letterSpacing: "-.01em"}}>
+                <h2 id="ov-month" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "18px", fontWeight: "800", letterSpacing: "-.01em"}}>
                   {txt(v.monthTitle)}
                 </h2>
                 <span style={{padding: "3px 10px", borderRadius: "999px", background: "#fff", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: "600", color: "#475569"}}>
@@ -197,7 +197,7 @@ export function AttOverviewView({ v }: { v: any }) {
                 <article style={{flex: "1.7 1 460px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
                   <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: "10px 16px"}}>
                     <div>
-                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "800"}}>
+                      <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
                         {"Attendance trend"}
                       </h3>
                       <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
@@ -217,7 +217,7 @@ export function AttOverviewView({ v }: { v: any }) {
                       ))}
                     </ul>
                   </div>
-                  <svg viewBox={v.tr?.vb} role="img" aria-label={v.tr?.aria} style={{display: "block", width: "100%", height: "auto", fontFamily: "Inter,sans-serif"}}>
+                  <svg viewBox={v.tr?.vb} role="img" aria-label={v.tr?.aria} style={{display: "block", width: "100%", height: "auto", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"}}>
                     {arr(v.tr?.grid).map((g: any, $index: number) => (
                       <Fragment key={$index}>
                         <line x1={g?.x1} x2={g?.x2} y1={g?.y} y2={g?.y} stroke="#e5ebe9" strokeDasharray={g?.dash} />
@@ -246,7 +246,7 @@ export function AttOverviewView({ v }: { v: any }) {
                 </article>
                 <article style={{flex: "1 1 300px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
                   <div>
-                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "800"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
                       {"Late most often"}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
@@ -274,7 +274,7 @@ export function AttOverviewView({ v }: { v: any }) {
               <article style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", overflow: "hidden"}}>
                 <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px 16px", padding: "18px 22px 14px"}}>
                   <div>
-                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "800"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
                       {"Everyone’s month"}
                     </h3>
                     <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>

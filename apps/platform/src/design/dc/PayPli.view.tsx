@@ -12,7 +12,7 @@ import './PayPli.view.css'
 export function PayPliView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
         <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
           <span aria-hidden="true" style={{position: "absolute", right: "-60px", top: "-150px", width: "380px", height: "320px", borderRadius: "999px", background: "rgba(16,185,129,.10)", filter: "blur(60px)", pointerEvents: "none"}} />
           <div style={{position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px 24px", padding: "clamp(18px,2.4vw,26px) clamp(18px,2.6vw,30px)"}}>
@@ -20,7 +20,7 @@ export function PayPliView({ v }: { v: any }) {
               <p style={{margin: "0", fontSize: "12.5px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#0f6e56"}}>
                 {"Payroll / Incentives"}
               </p>
-              <h1 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "clamp(22px,2.4vw,28px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
+              <h1 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "clamp(22px,2.4vw,28px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
                 {"Production-Linked Incentive (PLI)"}
               </h1>
               <p style={{margin: "0", fontSize: "14px", lineHeight: "1.5", color: "#475569", textWrap: "pretty"}}>
@@ -132,7 +132,7 @@ export function PayPliView({ v }: { v: any }) {
       {v.editOpen ? (
         <>
           <HrDrawer title={v.eTitle} onClose={v.closeEdit} footer={v.eFooter} width="max-w-md">
-            <div style={{display: "grid", gap: "14px", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+            <div style={{display: "grid", gap: "14px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
               <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
                 {"Production target (units) *"}
                 <input type="number" min="1" value={v.fTarget} onChange={v.setTarget} style={{font: "inherit", fontWeight: "500", height: "42px", padding: "0 12px", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: "10px", outline: "none"}} className="dc-pay-pli-1" />
@@ -149,7 +149,7 @@ export function PayPliView({ v }: { v: any }) {
                 <span style={{fontSize: "12.5px", color: "#047857"}}>
                   {txt(v.ePreviewNote)}
                 </span>
-                <strong style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "22px", fontWeight: "800", color: "#0f6e56", fontVariantNumeric: "tabular-nums"}}>
+                <strong style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "22px", fontWeight: "800", color: "#0f6e56", fontVariantNumeric: "tabular-nums"}}>
                   {txt(v.ePool)}
                 </strong>
               </div>
@@ -158,7 +158,7 @@ export function PayPliView({ v }: { v: any }) {
         </>
       ) : null}
       <Modal open={v.targetsOpen} onOpenChange={v.setTargetsOpen} title="Set monthly targets" description={v.targetsDesc} size="sm">
-        <div style={{display: "grid", gap: "12px", marginTop: "4px", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+        <div style={{display: "grid", gap: "12px", marginTop: "4px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
           {arr(v.targetRows).map((t: any, $index: number) => (
             <Fragment key={$index}>
               <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
