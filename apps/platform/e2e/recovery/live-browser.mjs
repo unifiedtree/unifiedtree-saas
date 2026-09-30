@@ -31,8 +31,8 @@ try {
       await expect(page.getByRole('status', { name: 'Loading apps' })).toHaveCount(0)
     }
     if (route === '/dashboard') {
-      // The designed admin dashboard: its first tile is Total Employees.
-      await expect(page.getByText('Total Employees', { exact: true }).first()).toBeVisible({ timeout: 30000 })
+      // The designed admin dashboard: its first card is Total employees.
+      await expect(page.getByText('Total employees', { exact: true }).first()).toBeVisible({ timeout: 30000 })
       await expect(page.locator('body')).not.toContainText('Unavailable')
       await page.mouse.move(0, 0)
     }
