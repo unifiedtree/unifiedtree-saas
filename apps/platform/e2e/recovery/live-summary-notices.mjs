@@ -1,4 +1,5 @@
-﻿import assert from 'node:assert/strict'
+﻿/* global process, console, fetch */
+import assert from 'node:assert/strict'
 const base=process.env.RECOVERY_API_URL||'http://127.0.0.1:8080/api',tenantId='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',companyId='cccccccc-cccc-cccc-cccc-cccccccccccc'
 const headers={'Content-Type':'application/json','X-Tenant-ID':tenantId}
 async function call(path,body,method=body?'POST':'GET'){const r=await fetch(base+path,{method,headers,body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}

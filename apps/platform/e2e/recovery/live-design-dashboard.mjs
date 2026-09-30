@@ -1,3 +1,4 @@
+/* global process, console */
 // Live check of the redesigned Company Admin Dashboard against the local API.
 // Creates one company notice and archives it again (cleans up after itself).
 //

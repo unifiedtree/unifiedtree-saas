@@ -1,3 +1,4 @@
+/* global process, console, fetch, document, getComputedStyle */
 // Live check (wave 3): the Company Admin Dashboard follows the selected date end
 // to end. A past day (here in the previous year) asks every card for that day,
 // the numbers match that day's reality in the database, seats say "As of today",

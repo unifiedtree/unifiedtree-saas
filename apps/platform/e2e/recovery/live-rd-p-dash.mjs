@@ -1,3 +1,4 @@
+/* global process, console, URL, fetch, document, localStorage */
 // Live check for the redesigned admin dashboard (P-DASH, Release 1: frontend only on today's backend).
 //   - owner, hrm and fin open /dashboard: the section pills sit in the top bar, every card shows real data
 //     (compared with the API), nothing is refused, no page errors, light and dark, and no sideways scroll at 390
@@ -51,7 +52,6 @@ async function session(email, { width = 1440, theme = 'light' } = {}) {
 }
 const settle = async (page) => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(1500) }
 const norm = (t) => (t || '').replace(/\s+/g, ' ').trim()
-const cardText = async (page, label) => norm(await page.getByRole('button', { name: new RegExp('^\\s*' + label, 'i') }).first().textContent({ timeout: 20000 }).catch(() => ''))
 
 let ownerApi = null
 try {

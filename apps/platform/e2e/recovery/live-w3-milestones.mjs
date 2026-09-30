@@ -1,3 +1,4 @@
+/* global process, console, URL, URLSearchParams, fetch, document */
 // Live check for w3 "Upcoming milestones: date ranges" (26 Sep 2026), against a
 // local backend + web app (the shared live slot):
 //  1. API: each list (birthdays, work anniversaries, retirements) follows its

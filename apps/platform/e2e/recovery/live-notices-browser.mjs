@@ -1,3 +1,4 @@
+/* global process, console */
 import { chromium, expect } from '@playwright/test'
 // Company notices on the admin dashboard, in the browser: create, reload, edit and archive (the redesign puts
 // Edit / Archive in the notice panel that a notice chip opens). Cleans up after itself.
