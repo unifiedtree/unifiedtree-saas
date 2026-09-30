@@ -218,7 +218,7 @@ try {
   // ── 7. Project task due date (dashboard → Manage projects) ──
   await screen('Project task due date', async () => {
     await page.goto(base + '/dashboard')
-    await page.getByRole('button', { name: 'Manage projects →' }).click()
+    await page.getByRole('button', { name: /Manage projects/ }).click()
     const drawer = page.getByRole('dialog', { name: 'Projects & Productivity' })
     await drawer.waitFor({ timeout: 10000 })
     const select = drawer.getByRole('combobox', { name: 'Project', exact: true })

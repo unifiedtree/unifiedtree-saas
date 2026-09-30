@@ -24,7 +24,7 @@ const ACCOUNTS = [
   ['fin', 'fin@unifiedtree.demo'], ['mgr', 'mgr@unifiedtree.demo'], ['reader', 'reader@unifiedtree.demo'],
 ]
 // A card or button on the person's Home (the admin dashboard, or Home for everyone else) that opens Leave.
-const HOME_LEAVE = /Open leave approvals|Add Time-Off|Open leave|Apply for leave/
+const HOME_LEAVE = /Open leave approvals|Add Time-Off|Add time-off|Open approvals|Open leave|Apply for leave/
 
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
