@@ -46,7 +46,7 @@
 .ud-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 14px; }
 .ud-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .ud-pair > * { min-width: 0; }
-@media (max-width: 520px) { .ud-stats, .ud-pair { gap: 10px; } }
+@media (max-width: 520px) { .ud-stats, .ud-pair { gap: 10px; } .ud-pair { grid-template-columns: minmax(0, 1fr); } }  /* phones: one card per row so every label shows */
 
 /* Seats strip */
 .ud-seats {
