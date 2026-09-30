@@ -15,7 +15,7 @@ const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const shots = process.env.SHOTS_DIR || ''
 const READER = '22222222-2222-2222-2222-222222222222'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const balances0 = sql(`select coalesce(string_agg(leave_type_id||':'||used||':'||pending, ',' order by leave_type_id),'') from leave_mgmt.leave_balances where employee_id='${READER}' and year=extract(year from current_date)`)
@@ -60,7 +60,8 @@ try {
   // ── employee applies ──
   const r = await session('reader@unifiedtree.demo')
   await r.page.goto(base + '/me'); await settle(r.page)
-  check('employee: Self-service tabs include Leave', (await r.page.getByRole('link', { name: 'Leave', exact: true }).count()) > 0)
+  // The redesign's rail names self-service Leave "My leave" (visible label "Leave"); the old tab row was "Leave".
+  check('employee: Self-service tabs include Leave', (await r.page.getByRole('link', { name: /^(My leave|Leave)$/ }).count()) > 0)
   await r.page.goto(base + '/hrms/leave'); await settle(r.page)
   const views = await r.page.getByRole('navigation', { name: 'Leave views' }).innerText().catch(async () => r.page.locator('[aria-label="Leave views"]').innerText())
   check('employee: views are My leave, Apply, Balances, Calendar, Leave types, Holidays', ['My leave', 'Apply', 'Balances', 'Calendar', 'Leave types', 'Holidays'].every((v) => views.includes(v)) && !views.includes('Approvals'), views.replace(/\s+/g, ' '))

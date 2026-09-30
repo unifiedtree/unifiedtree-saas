@@ -1,0 +1,267 @@
+/* ============================================================================
+ * UnifiedTree HRMS redesign — design tokens (light + dark)
+ * ----------------------------------------------------------------------------
+ * Values come from the design handoff (design_handoff_hrms_redesign/README.md,
+ * prototype/hrms-core.js → DARK) and, where the design gives no dark value,
+ * from the foundation audit (redesign/audit/foundation.md §2.2), checked for
+ * contrast. Light is on :root, dark on [data-theme="dark"], which
+ * ThemeProvider (./ThemeProvider.tsx) and the no-flash script in
+ * apps/platform/index.html set on <html>.
+ *
+ * Write components with the design's own fallback form so they render right
+ * even without this file:  color: var(--u-ink3, #6A7A73)
+ * Never hardcode a hex in a component except as that fallback.
+ *
+ * TOKEN NAMES (light / dark)
+ *
+ *  Surfaces and lines
+ *   --u-bg      page background ............................ #F3F6F4 / #0A110E
+ *   --u-sf      surface (cards, panels, menus) ............. #FFFFFF / #101915
+ *   --u-sf2     surface 2 (inset tiles, table heads) ....... #F7F9F8 / #0D1512
+ *   --u-hv      hover fill, neutral chips .................. #F0F4F2 / #16211C
+ *   --u-ln      line (borders) ............................. #E3E9E6 / #1F2C27
+ *   --u-ln2     hairline (inner dividers) .................. #EDF1EF / #18231F
+ *   --u-ov      overlay ................................... rgba(14,27,22,.36) / rgba(0,0,0,.55)
+ *   --u-backdrop  side-panel / dialog backdrop (pair it with
+ *                 backdrop-filter: blur(4px) saturate(.85) on a SIBLING of the panel)
+ *                 linear-gradient(270deg,rgba(14,27,22,.38),rgba(14,27,22,.2)) / (270deg,rgba(0,0,0,.62),rgba(0,0,0,.45))
+ *
+ *  Ink (text)
+ *   --u-ink     primary text ............................... #0E1B16 / #E6EEEA
+ *   --u-ink2    secondary text ............................. #4A5A54 / #A7B6B0
+ *   --u-ink3    meta text .................................. #60706A / #80918A
+ *               (design sample #6A7A73 nudged to pass 4.5:1 on every light surface;
+ *                components keep the fallback form var(--u-ink3,#6A7A73))
+ *   --u-ink4    disabled text and icons (never body text) .. #A5B2AD / #5E6E68
+ *
+ *  Brand (emerald)
+ *   --u-br      brand FILL: rail, primary buttons, active pill — #0F6E56 in both themes
+ *   --u-brh     brand fill hover ........................... #0B5A46 in both themes
+ *   --u-brt     brand TEXT and icons (never a raw #0F6E56 for text: 2.9:1 in dark) #0F6E56 / #5CC4A3
+ *   --u-brs     brand soft fill ............................ #E8F3EE / #10271F
+ *   --u-brs2    brand soft 2 (stronger fill, avatars) ...... #D2EADF / #16362B
+ *   --u-brl     brand line (hover borders) ................. #BFDFD1 / #22503F
+ *   --u-g2      mint (charts) .............................. #5FB39C / #3F9C84
+ *   --u-g3      pale mint (charts) ......................... #A9D6C6 / #2B5C4E
+ *   --u-gy      grey (charts, strong lines) ................ #C9D2CE / #3A4843
+ *   --u-rail    rail background (same in both) ............. linear-gradient(180deg,#0F6E56 0%,#0C5F4A 58%,#0A5240 100%)
+ *
+ *  Gold and red, as the design names them
+ *   --u-gd / --u-gdt / --u-gds   gold solid / text / soft ... #C8912E #8A5A10 #FAF1E1 / #D9A441 #E6B865 #2A2113
+ *   --u-rd / --u-rdt / --u-rds   red solid / text / soft .... #C4453A #B42318 #FCEDEB / #E0645A #F18B80 #2C1715
+ *
+ *  Status palette (README "Design tokens"). solid = dots, bars, icons, borders
+ *  (same in both themes); text = words on the soft fill or on a surface;
+ *  soft = pill / callout fill. Dark softs are color-mix(in oklab, solid 16%,
+ *  var(--u-sf)) worked out to plain hex, so old browsers get them too.
+ *   --u-success / -text / -soft ... #12805F #0B5A46 #E3F2EA / #12805F #5CC4A3 #142820
+ *   --u-success-2  bright dot/bar ("on time") ........... #1F9D6E in both themes
+ *   --u-warning / -text / -soft ... #C8912E #8A5A12 #FBF1DE / #D9A441 #E6B865 #2A2113   (gold)
+ *   --u-danger  / -text / -soft ... #D9352B #B4302A #FDECEA / #D9352B #F18B80 #2C1715
+ *   --u-info    / -text / -soft ... #2585C7 #1D6A9E #E6F1FA / #2585C7 #7CB9E8 #15292E   (blue)
+ *   --u-leave   / -text / -soft ... #E0661B #A94E17 #FDEEE4 / #E0661B #F29A5E #2F261A   (orange;
+ *                                   light text nudged from #B4541A for 4.5:1)
+ *   --u-holiday / -text / -soft ... #8B4FE0 #6B3DB8 #F1EAFB / #8B4FE0 #B794F0 #212331   (purple)
+ *   --u-amber   / -text / -soft ... #C27A0E #9A6208 #FDF3E3 / #C27A0E #E3AE52 #2A281A
+ *
+ *  Stat-card accents (the design sets one as --k on each card; same in both
+ *  themes — the cards mix them with var(--u-sf), so their fills adapt)
+ *   --u-k-people #3B6FD9   --u-k-present #12805F   --u-k-leave #E0661B     --u-k-late #D9352B
+ *   --u-k-halfday #8B4FE0  --u-k-wfh #2585C7       --u-k-notmarked #C27A0E --u-k-absent #D13A6E
+ *
+ *  Toast (the design's dark toast would vanish on the dark page, so it inverts)
+ *   --u-toast-bg / --u-toast-ink / --u-toast-icon ... #0E1B16 #FFFFFF #8FD9BE / #E6EEEA #0E1B16 #0F6E56
+ *   --u-toast-sh ... 0 18px 40px -14px rgba(14,27,22,.55) / 0 18px 40px -14px rgba(0,0,0,.7)
+ *
+ *  Focus ring (with a brand border): --u-focus ... 0 0 0 3px #E8F3EE / 0 0 0 3px rgba(92,196,163,.35)
+ *
+ *  Small pieces the shared kit uses
+ *   --u-onbr       text and icons on a brand fill (same in both) ... #FFFFFF
+ *   --u-online     "online" dot on avatars (same in both) .......... #22B573
+ *   --u-fx-glow    light running round a tile border on hover ...... #8FD9BE
+ *   --u-fx-lamp    lit window in the animated office icon .......... #E8B04B
+ *   --u-home-text  work-from-home day label in the month calendar .. #2B7861 / #6FCBAE
+ *                  (design sample #2F8A70 nudged to pass 4.5:1, like --u-ink3)
+ *
+ *  Shadows
+ *   --u-shc   card ............ 0 1px 2px rgba(14,27,22,.05) / 0 1px 2px rgba(0,0,0,.5)
+ *   --u-shh   raised on hover . 0 20px 40px -22px rgba(15,110,86,.5) / 0 22px 44px -22px rgba(0,0,0,.85), 0 0 0 1px rgba(92,196,163,.22)
+ *   --u-shp   popover ......... 0 24px 60px -20px rgba(14,27,22,.35) / 0 24px 60px -20px rgba(0,0,0,.8)
+ *
+ *  Type and layout
+ *   --u-font   'Plus Jakarta Sans', system-ui, sans-serif — weights 400/500/600 only
+ *   --u-mono   ui-monospace, SFMono-Regular, Menlo, Consolas, monospace (codes, IDs)
+ *   --u-railx  248px (rail width, pinned or expanded)
+ *
+ *  Internal: RGB channels of --u-ln / --u-ln2 for Tailwind opacity utilities
+ *  (`border-border/60`); components use --u-ln / --u-ln2.
+ *   --u-ln-rgb  227 233 230 / 31 44 39      --u-ln2-rgb  237 241 239 / 24 35 31
+ *
+ * Contrast (checked with a script): every text token is >= 4.5:1 on --u-sf,
+ * --u-sf2, --u-hv and --u-bg in both themes, and on its own soft fill.
+ *
+ * The app's older tokens (--bg-*, --text-*, --border-*, --accent-*,
+ * --status-*…) in packages/design-system/src/tokens.css point at these, so
+ * screens not rebuilt yet follow the same palette in both themes.
+ * ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  --u-bg: #F3F6F4;
+  --u-sf: #FFFFFF;
+  --u-sf2: #F7F9F8;
+  --u-hv: #F0F4F2;
+  --u-ln: #E3E9E6;
+  --u-ln2: #EDF1EF;
+  --u-ov: rgba(14, 27, 22, .36);
+  --u-backdrop: linear-gradient(270deg, rgba(14, 27, 22, .38), rgba(14, 27, 22, .2));
+
+  --u-ink: #0E1B16;
+  --u-ink2: #4A5A54;
+  --u-ink3: #60706A;
+  --u-ink4: #A5B2AD;
+
+  --u-br: #0F6E56;
+  --u-brh: #0B5A46;
+  --u-brt: #0F6E56;
+  --u-brs: #E8F3EE;
+  --u-brs2: #D2EADF;
+  --u-brl: #BFDFD1;
+  --u-g2: #5FB39C;
+  --u-g3: #A9D6C6;
+  --u-gy: #C9D2CE;
+  --u-rail: linear-gradient(180deg, #0F6E56 0%, #0C5F4A 58%, #0A5240 100%);
+
+  --u-gd: #C8912E;
+  --u-gdt: #8A5A10;
+  --u-gds: #FAF1E1;
+  --u-rd: #C4453A;
+  --u-rdt: #B42318;
+  --u-rds: #FCEDEB;
+
+  --u-success: #12805F;
+  --u-ok: var(--u-success); /* alias used by the kit (ProgressBar, ApprovalRow); follows the theme */
+  --u-success-text: #0B5A46;
+  --u-success-soft: #E3F2EA;
+  --u-success-2: #1F9D6E;
+  --u-warning: #C8912E;
+  --u-warning-text: #8A5A12;
+  --u-warning-soft: #FBF1DE;
+  --u-danger: #D9352B;
+  --u-danger-text: #B4302A;
+  --u-danger-soft: #FDECEA;
+  --u-info: #2585C7;
+  --u-info-text: #1D6A9E;
+  --u-info-soft: #E6F1FA;
+  --u-leave: #E0661B;
+  --u-leave-text: #A94E17;
+  --u-leave-soft: #FDEEE4;
+  --u-holiday: #8B4FE0;
+  --u-holiday-text: #6B3DB8;
+  --u-holiday-soft: #F1EAFB;
+  --u-amber: #C27A0E;
+  --u-amber-text: #9A6208;
+  --u-amber-soft: #FDF3E3;
+
+  --u-k-people: #3B6FD9;
+  --u-k-present: #12805F;
+  --u-k-leave: #E0661B;
+  --u-k-late: #D9352B;
+  --u-k-halfday: #8B4FE0;
+  --u-k-wfh: #2585C7;
+  --u-k-notmarked: #C27A0E;
+  --u-k-absent: #D13A6E;
+
+  --u-toast-bg: #0E1B16;
+  --u-toast-ink: #FFFFFF;
+  --u-toast-icon: #8FD9BE;
+  --u-toast-sh: 0 18px 40px -14px rgba(14, 27, 22, .55);
+
+  --u-focus: 0 0 0 3px #E8F3EE;
+
+  --u-onbr: #FFFFFF;
+  --u-online: #22B573;
+  --u-fx-glow: #8FD9BE;
+  --u-fx-lamp: #E8B04B;
+  --u-home-text: #2B7861;
+
+  --u-shc: 0 1px 2px rgba(14, 27, 22, .05);
+  --u-shh: 0 20px 40px -22px rgba(15, 110, 86, .5);
+  --u-shp: 0 24px 60px -20px rgba(14, 27, 22, .35);
+
+  --u-font: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --u-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --u-railx: 248px;
+
+  --u-ln-rgb: 227 233 230;
+  --u-ln2-rgb: 237 241 239;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --u-bg: #0A110E;
+  --u-sf: #101915;
+  --u-sf2: #0D1512;
+  --u-hv: #16211C;
+  --u-ln: #1F2C27;
+  --u-ln2: #18231F;
+  --u-ov: rgba(0, 0, 0, .55);
+  --u-backdrop: linear-gradient(270deg, rgba(0, 0, 0, .62), rgba(0, 0, 0, .45));
+
+  --u-ink: #E6EEEA;
+  --u-ink2: #A7B6B0;
+  --u-ink3: #80918A;
+  --u-ink4: #5E6E68;
+
+  /* --u-br, --u-brh and --u-rail stay the same in both themes */
+  --u-brt: #5CC4A3;
+  --u-brs: #10271F;
+  --u-brs2: #16362B;
+  --u-brl: #22503F;
+  --u-g2: #3F9C84;
+  --u-g3: #2B5C4E;
+  --u-gy: #3A4843;
+
+  --u-gd: #D9A441;
+  --u-gdt: #E6B865;
+  --u-gds: #2A2113;
+  --u-rd: #E0645A;
+  --u-rdt: #F18B80;
+  --u-rds: #2C1715;
+
+  /* status solids and stat accents stay the same in both themes */
+  --u-success-text: #5CC4A3;
+  --u-success-soft: #142820;
+  --u-warning: #D9A441;
+  --u-warning-text: #E6B865;
+  --u-warning-soft: #2A2113;
+  --u-danger-text: #F18B80;
+  --u-danger-soft: #2C1715;
+  --u-info-text: #7CB9E8;
+  --u-info-soft: #15292E;
+  --u-leave-text: #F29A5E;
+  --u-leave-soft: #2F261A;
+  --u-holiday-text: #B794F0;
+  --u-holiday-soft: #212331;
+  --u-amber-text: #E3AE52;
+  --u-amber-soft: #2A281A;
+
+  --u-toast-bg: #E6EEEA;
+  --u-toast-ink: #0E1B16;
+  --u-toast-icon: #0F6E56;
+  --u-toast-sh: 0 18px 40px -14px rgba(0, 0, 0, .7);
+
+  --u-focus: 0 0 0 3px rgba(92, 196, 163, .35);
+
+  /* --u-onbr, --u-online, --u-fx-glow and --u-fx-lamp stay the same */
+  --u-home-text: #6FCBAE;
+
+  --u-shc: 0 1px 2px rgba(0, 0, 0, .5);
+  --u-shh: 0 22px 44px -22px rgba(0, 0, 0, .85), 0 0 0 1px rgba(92, 196, 163, .22);
+  --u-shp: 0 24px 60px -20px rgba(0, 0, 0, .8);
+
+  --u-ln-rgb: 31 44 39;
+  --u-ln2-rgb: 24 35 31;
+}

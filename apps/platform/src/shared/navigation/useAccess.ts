@@ -26,8 +26,11 @@ export function useAccessContext(): AccessContext {
   const permissions = useSdkStore((s) => s.permissions)
   const roles = useSdkStore((s) => s.user?.roles)
   const modules = useLocalAuthStore((s) => s.tenant?.activeModules)
+  // The local store copies the session's modules one render after sign-in (AuthProvider); until it
+  // has, read them from the session itself, so nothing module-gated is hidden (or redirected) meanwhile.
+  const sessionModules = useSdkStore((s) => s.modules)
   const roleKey = (roles ?? []).join('|')
-  const moduleKey = (modules ?? []).join('|')
+  const moduleKey = (modules ?? sessionModules.filter((m) => m.enabled).map((m) => m.key)).join('|')
   return useMemo<AccessContext>(() => {
     const wildcard = permissions.has('*')
     const r = roleKey ? roleKey.split('|') : []

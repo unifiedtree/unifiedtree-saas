@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { litRailKey, railViaOn, railViaTo, readRailVia, saveRailVia, type ActiveRailItem } from './railLit'
+import { litRail, litRailKey, railViaOn, railViaTo, readRailVia, saveRailVia, SELF_SERVICE_RAIL, type ActiveRailItem } from './railLit'
 
 // The rule before this change: the first active item with more than one page, else the first active item.
 const before = (active: ActiveRailItem[]) => (active.find(i => i.tabs > 1) ?? active[0])?.key
@@ -127,5 +127,39 @@ describe('remembering the rail item for this browser tab', () => {
     expect(() => saveRailVia(railViaTo('leave', '/hrms/leave'))).not.toThrow()
     expect(() => saveRailVia(null)).not.toThrow()
     expect(readRailVia()).toBeNull()
+  })
+})
+
+describe('the redesign rail: My work and More', () => {
+  // A department manager's rail owns these pages twice: the admin item and the My work item.
+  const LEAVE: ActiveRailItem[] = [{ key: 'myleave', tabs: 1 }, { key: 'leave', tabs: 1 }]
+  const ATT: ActiveRailItem[] = [{ key: 'mytime', tabs: 3 }, { key: 'attendance', tabs: 3 }]
+  const none = new Set<string>()
+
+  it('the item you came through stays lit; with nothing to go on, the admin item', () => {
+    expect(litRailKey(LEAVE, 'myleave')).toBe('myleave')
+    expect(litRailKey(LEAVE, 'leave')).toBe('leave')
+    expect(litRailKey(LEAVE, null)).toBe('leave')
+    expect(litRailKey(ATT, 'mytime')).toBe('mytime')
+    expect(litRailKey(ATT, null)).toBe('attendance')
+    // An employee has only My work: it lights, clicked or not.
+    expect(litRailKey([{ key: 'mypay', tabs: 5 }], null)).toBe('mypay')
+    for (const k of ['mytime', 'myleave', 'mypay', 'mydocs', 'mygrowth']) expect(SELF_SERVICE_RAIL.has(k), k).toBe(true)
+  })
+
+  it('settings, My profile and All apps light More, never a rail item', () => {
+    expect(litRail([], null, { morePage: true, overflow: none })).toEqual({ key: undefined, module: undefined, more: true })
+    // Even a remembered click can't light a rail item there.
+    expect(litRail([{ key: 'hrsettings', tabs: 3 }], 'hrsettings', { morePage: true, overflow: none }).more).toBe(true)
+  })
+
+  it('a module that moved into More lights More (its pages still show in the Pages panel)', () => {
+    const r = litRail([{ key: 'reports', tabs: 2 }], null, { morePage: false, overflow: new Set(['reports']) })
+    expect(r).toEqual({ key: undefined, module: 'reports', more: true })
+    expect(litRail([{ key: 'reports', tabs: 2 }], null, { morePage: false, overflow: none })).toEqual({ key: 'reports', module: 'reports', more: false })
+  })
+
+  it('a page no module owns lights nothing', () => {
+    expect(litRail([], null, { morePage: false, overflow: none })).toEqual({ key: undefined, module: undefined, more: false })
   })
 })

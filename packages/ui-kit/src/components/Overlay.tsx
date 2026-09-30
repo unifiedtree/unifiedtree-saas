@@ -4,6 +4,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '../cn';
 
+// The HRMS redesign's pop-up look (design README "Popups"), in the design's tokens with their
+// light defaults: dialogs 12px radius with the popover shadow, side panels square with a 1px
+// left border, and one backdrop — a soft gradient with a light blur. The blur sits on the
+// backdrop, a SIBLING of the content, never on the content itself: backdrop-filter makes an
+// element the containing block for fixed descendants (that broke 14 drawers on 23 Aug).
+const BACKDROP: React.CSSProperties = {
+  background: 'linear-gradient(270deg, rgba(14,27,22,.38), rgba(14,27,22,.2))',
+  backdropFilter: 'blur(4px) saturate(.85)',
+  WebkitBackdropFilter: 'blur(4px) saturate(.85)',
+};
+const SURFACE: React.CSSProperties = {
+  background: 'var(--u-sf, #fff)',
+  color: 'var(--u-ink, #0E1B16)',
+  borderColor: 'var(--u-ln, #E3E9E6)',
+  fontFamily: "var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif)",
+};
+const EASE: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
+const CLOSE_BTN =
+  'flex shrink-0 items-center justify-center rounded-full bg-[var(--u-hv,#F0F4F2)] text-[var(--u-ink2,#4A5A54)] transition-colors ' +
+  'hover:bg-[var(--u-ln,#E3E9E6)] hover:text-[var(--u-ink,#0E1B16)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--u-br,#0F6E56)]';
+
 // ─── Modal ───────────────────────────────────────────────────────────────────
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -53,7 +74,8 @@ export function Modal({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className="fixed inset-0 z-[var(--z-modal-backdrop)] bg-black/40 backdrop-blur-sm"
+                className="fixed inset-0 z-[var(--z-modal-backdrop)]"
+                style={BACKDROP}
               />
             </Dialog.Overlay>
             <Dialog.Content
@@ -86,31 +108,32 @@ export function Modal({
                 putting its footer out of reach.
               */}
               <motion.div
-                initial={{ opacity: 0, scale: 0.96, x: '-50%', y: 'calc(-50% + 8px)' }}
+                initial={{ opacity: 0, scale: 0.98, x: '-50%', y: 'calc(-50% - 6px)' }}
                 animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
-                exit={{ opacity: 0, scale: 0.96, x: '-50%', y: 'calc(-50% + 8px)' }}
-                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                exit={{ opacity: 0, scale: 0.98, x: '-50%', y: 'calc(-50% - 6px)' }}
+                transition={{ duration: 0.26, ease: EASE }}
+                style={{ ...SURFACE, boxShadow: 'var(--u-shp, 0 24px 60px -20px rgba(14,27,22,.35))' }}
                 className={cn(
                   'fixed left-1/2 top-1/2 z-[var(--z-modal)] w-full',
                   'max-h-[calc(100vh-2rem)] overflow-y-auto',
-                  'rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-xl',
+                  'rounded-[12px] border p-6',
                   modalSizes[size],
                   className,
                 )}
               >
                 {/* Title + Description always render (sr-only when absent) so
                     Radix never warns about a missing accessible name/description. */}
-                <div className={cn(title || description ? 'mb-4' : '')}>
-                  <Dialog.Title className={cn('text-base font-semibold text-[var(--text-primary)]', !title && 'sr-only')}>
+                <div className={cn(title || description ? 'mb-4 pr-10' : '')}>
+                  <Dialog.Title className={cn('text-[18px] font-medium leading-6 tracking-[-0.01em]', !title && 'sr-only')}>
                     {title ?? 'Dialog'}
                   </Dialog.Title>
-                  <Dialog.Description className={cn('mt-1 text-sm text-[var(--text-tertiary)]', !description && 'sr-only')}>
+                  <Dialog.Description className={cn('mt-1 text-[13.5px] leading-[1.5] text-[var(--u-ink2,#4A5A54)]', !description && 'sr-only')}>
                     {description ?? title ?? 'Dialog content'}
                   </Dialog.Description>
                 </div>
                 {children}
-                <Dialog.Close className="absolute right-4 top-4 rounded-md p-1 text-[var(--text-tertiary)] hover:bg-[var(--interactive-ghost-hover)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]">
-                  <X size={16} aria-hidden="true" />
+                <Dialog.Close className={cn('absolute right-4 top-4 h-[34px] w-[34px]', CLOSE_BTN)}>
+                  <X size={17} aria-hidden="true" />
                   <span className="sr-only">Close</span>
                 </Dialog.Close>
               </motion.div>
@@ -143,33 +166,35 @@ export function Drawer({ open, onOpenChange, title, children, className }: Drawe
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="fixed inset-0 z-[var(--z-modal-backdrop)] bg-black/30"
+                className="fixed inset-0 z-[var(--z-modal-backdrop)]"
+                style={BACKDROP}
                 onClick={() => onOpenChange(false)}
               />
             </Dialog.Overlay>
             <Dialog.Content asChild>
               <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                initial={{ x: 24, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 24, opacity: 0 }}
+                transition={{ duration: 0.26, ease: EASE }}
+                style={{ ...SURFACE, boxShadow: '-30px 0 70px -30px rgba(14,27,22,.45)' }}
                 className={cn(
                   'fixed right-0 top-0 z-[var(--z-modal)] flex h-full w-full max-w-md flex-col',
-                  'border-l border-[var(--border-default)] bg-[var(--bg-surface)] shadow-xl',
+                  'rounded-none border-l',
                   className,
                 )}
               >
-                <div className="flex items-center justify-between border-b border-[var(--border-default)] px-6 py-4">
-                  <Dialog.Title className={cn('text-base font-semibold text-[var(--text-primary)]', !title && 'sr-only')}>
+                <div className="flex shrink-0 items-start justify-between gap-3 px-6 pb-4 pt-[22px] shadow-[inset_0_-1px_0_var(--u-ln2,#EDF1EF)]">
+                  <Dialog.Title className={cn('m-0 text-[20px] font-medium leading-[26px] tracking-[-0.01em]', !title && 'sr-only')}>
                     {title ?? 'Panel'}
                   </Dialog.Title>
                   <Dialog.Description className="sr-only">{title ?? 'Panel content'}</Dialog.Description>
-                  <Dialog.Close className="rounded-md p-1 text-[var(--text-tertiary)] hover:bg-[var(--interactive-ghost-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]">
-                    <X size={16} />
+                  <Dialog.Close className={cn('h-[38px] w-[38px]', CLOSE_BTN)}>
+                    <X size={18} />
                     <span className="sr-only">Close</span>
                   </Dialog.Close>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6">{children}</div>
+                <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
               </motion.div>
             </Dialog.Content>
           </Dialog.Portal>

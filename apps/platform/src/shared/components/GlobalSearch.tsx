@@ -68,7 +68,7 @@ interface Row {
 interface Group { key: GroupKey; title: string; rows: Row[]; aside?: React.ReactNode; status?: React.ReactNode }
 
 // Design tokens (the kit's own values: ModuleKit / the design's chrome).
-const FONT = 'Inter,-apple-system,sans-serif'
+const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
 const INK = '#0f172a', MUTED = '#64748b', FAINT = '#94a3b8', LINE = '#e2e8f0', SOFT = '#f8fafc', GREEN_BG = '#ecfdf5', GREEN = '#0f6e56', GREEN_INK = '#0a5240'
 const KBD: React.CSSProperties = { fontFamily: FONT, fontSize: 11, fontWeight: 600, color: '#475569', background: '#f1f5f9', border: `1px solid ${LINE}`, borderRadius: 6, padding: '1px 6px', whiteSpace: 'nowrap', lineHeight: '16px' }
 const GROUP_TITLE: Record<GroupKey, string> = { recent: 'Recent', suggested: 'Suggested for you', goto: 'Go to', page: 'Pages', action: 'Actions', employee: 'People' }

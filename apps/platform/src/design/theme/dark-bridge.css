@@ -1,0 +1,726 @@
+/* ============================================================================
+ * Dark-theme bridge for screens not rebuilt on the redesign kit yet.
+ * ----------------------------------------------------------------------------
+ * Nothing in this file applies in the light theme: every rule sits under
+ * [data-theme='dark'].
+ *
+ * Older code hardcodes light colours the tokens cannot reach (inline style
+ * objects, Tailwind's fixed palette, generated view CSS). These rules map the
+ * common ones onto the dark tokens, so those screens stay readable in dark
+ * (no dark-on-dark or light-on-light text) until each one is rebuilt on
+ * var(--u-*). Rebuilt screens never match a rule here. Delete a section when
+ * nothing uses its colours or classes any more.
+ * Loaded once, after globals.css and base.css (main.tsx).
+ * ========================================================================== */
+
+/* ── Shared controls in globals.css with a hardcoded light fill ──────────── */
+[data-theme='dark'] .ut-input,
+[data-theme='dark'] .ut-select,
+[data-theme='dark'] .ut-input:focus,
+[data-theme='dark'] .ut-select:focus {
+  background-color: var(--u-sf, #101915);
+}
+[data-theme='dark'] .ut-skel {
+  background-image: linear-gradient(90deg, var(--u-hv, #16211C) 0%, var(--u-ln, #1F2C27) 45%, var(--u-hv, #16211C) 90%);
+}
+[data-theme='dark'] .ut-card-hover:hover {
+  box-shadow: var(--u-shh);
+}
+[data-theme='dark'] .ut-toc-idle:hover { background: var(--u-hv, #16211C) !important; color: var(--u-ink, #E6EEEA) !important; }
+[data-theme='dark'] .ut-bar-col:hover { background: var(--u-brs, #10271F); }
+[data-theme='dark'] .ut-dl-btn:hover { border-color: var(--u-brt, #5CC4A3) !important; color: var(--u-brt, #5CC4A3) !important; background: var(--u-brs, #10271F) !important; }
+[data-theme='dark'] .ut-link-btn:hover { color: var(--u-brt, #5CC4A3) !important; }
+[data-theme='dark'] .ut-row-hover:hover { background: var(--u-hv, #16211C); }
+[data-theme='dark'] .ut-report-card:hover { border-color: var(--u-brl, #22503F) !important; box-shadow: var(--u-shh) !important; }
+[data-theme='dark'] .ut-report-card:hover .ut-report-go { color: var(--u-brt, #5CC4A3) !important; }
+
+/* ── Tailwind's fixed light palette (white, grey and slate) ─────────────────
+   used as surfaces, lines and dark text. Deep shades (slate-700…950) are
+   already dark and are left alone. Written with :where() so a component's
+   own dark: variant (hr.tsx pills…) still wins. */
+:where([data-theme='dark']) .bg-white,
+:where([data-theme='dark']) .hover\:bg-white:hover,
+:where([data-theme='dark']) .focus\:bg-white:focus {
+  background-color: var(--u-sf, #101915);
+}
+/* see-through white panels keep their see-through, on the dark surface */
+:where([data-theme='dark']) .bg-white\/40 { background-color: rgba(16, 25, 21, .4); }
+:where([data-theme='dark']) .bg-white\/50 { background-color: rgba(16, 25, 21, .5); }
+:where([data-theme='dark']) .bg-white\/60 { background-color: rgba(16, 25, 21, .6); }
+:where([data-theme='dark']) .bg-white\/70 { background-color: rgba(16, 25, 21, .7); }
+:where([data-theme='dark']) .bg-white\/75 { background-color: rgba(16, 25, 21, .75); }
+:where([data-theme='dark']) .bg-white\/80 { background-color: rgba(16, 25, 21, .8); }
+:where([data-theme='dark']) .bg-white\/85 { background-color: rgba(16, 25, 21, .85); }
+:where([data-theme='dark']) .bg-white\/90 { background-color: rgba(16, 25, 21, .9); }
+:where([data-theme='dark']) .bg-white\/95 { background-color: rgba(16, 25, 21, .95); }
+:where([data-theme='dark']) .bg-gray-50,
+:where([data-theme='dark']) .bg-slate-50,
+:where([data-theme='dark']) .bg-gray-50\/50,
+:where([data-theme='dark']) .bg-gray-50\/80 {
+  background-color: var(--u-sf2, #0D1512);
+}
+:where([data-theme='dark']) .bg-gray-100,
+:where([data-theme='dark']) .bg-slate-100,
+:where([data-theme='dark']) .bg-gray-100\/80,
+:where([data-theme='dark']) .hover\:bg-gray-50:hover,
+:where([data-theme='dark']) .hover\:bg-slate-50:hover,
+:where([data-theme='dark']) .hover\:bg-gray-50\/50:hover,
+:where([data-theme='dark']) .hover\:bg-gray-50\/80:hover,
+:where([data-theme='dark']) .hover\:bg-gray-100:hover,
+:where([data-theme='dark']) .hover\:bg-slate-100:hover {
+  background-color: var(--u-hv, #16211C);
+}
+:where([data-theme='dark']) .bg-gray-200,
+:where([data-theme='dark']) .bg-slate-200,
+:where([data-theme='dark']) .bg-gray-200\/50 {
+  background-color: var(--u-ln, #1F2C27);
+}
+:where([data-theme='dark']) .bg-gray-300,
+:where([data-theme='dark']) .bg-slate-300 {
+  background-color: var(--u-gy, #3A4843);
+}
+:where([data-theme='dark']) .text-gray-900,
+:where([data-theme='dark']) .text-slate-900,
+:where([data-theme='dark']) .text-gray-800,
+:where([data-theme='dark']) .text-slate-800,
+:where([data-theme='dark']) .hover\:text-gray-900:hover {
+  color: var(--u-ink, #E6EEEA);
+}
+:where([data-theme='dark']) .text-gray-700,
+:where([data-theme='dark']) .text-slate-700,
+:where([data-theme='dark']) .text-gray-600,
+:where([data-theme='dark']) .text-slate-600,
+:where([data-theme='dark']) .hover\:text-gray-700:hover,
+:where([data-theme='dark']) .hover\:text-slate-700:hover {
+  color: var(--u-ink2, #A7B6B0);
+}
+:where([data-theme='dark']) .text-gray-500,
+:where([data-theme='dark']) .text-slate-500,
+:where([data-theme='dark']) .text-gray-400,
+:where([data-theme='dark']) .text-slate-400 {
+  color: var(--u-ink3, #80918A);
+}
+:where([data-theme='dark']) .placeholder\:text-gray-400::placeholder,
+:where([data-theme='dark']) .placeholder\:text-slate-500::placeholder,
+:where([data-theme='dark']) .placeholder-slate-500::placeholder {
+  color: var(--u-ink4, #5E6E68);
+}
+:where([data-theme='dark']) .border-gray-100,
+:where([data-theme='dark']) .border-slate-100 {
+  border-color: var(--u-ln2, #18231F);
+}
+:where([data-theme='dark']) .border-gray-200,
+:where([data-theme='dark']) .border-slate-200,
+:where([data-theme='dark']) .border-gray-200\/60 {
+  border-color: var(--u-ln, #1F2C27);
+}
+:where([data-theme='dark']) .border-gray-300,
+:where([data-theme='dark']) .border-slate-300 {
+  border-color: var(--u-gy, #3A4843);
+}
+:where([data-theme='dark']) .ring-gray-200 {
+  --tw-ring-color: var(--u-ln, #1F2C27);
+}
+
+/* ── Tailwind's light status tints (pills, alerts): the dark status tokens ─ */
+:where([data-theme='dark']) .bg-red-50,
+:where([data-theme='dark']) .bg-red-100,
+:where([data-theme='dark']) .bg-rose-50,
+:where([data-theme='dark']) .bg-rose-50\/70,
+:where([data-theme='dark']) .bg-rose-100,
+:where([data-theme='dark']) .bg-pink-50,
+:where([data-theme='dark']) .hover\:bg-red-50:hover,
+:where([data-theme='dark']) .hover\:bg-red-100:hover,
+:where([data-theme='dark']) .hover\:bg-rose-100:hover { background-color: var(--u-danger-soft, #2C1715); }
+:where([data-theme='dark']) .bg-amber-50,
+:where([data-theme='dark']) .bg-amber-50\/70,
+:where([data-theme='dark']) .bg-amber-100,
+:where([data-theme='dark']) .hover\:bg-amber-50:hover { background-color: var(--u-warning-soft, #2A2113); }
+:where([data-theme='dark']) .bg-emerald-50,
+:where([data-theme='dark']) .bg-emerald-50\/70,
+:where([data-theme='dark']) .bg-teal-50,
+:where([data-theme='dark']) .hover\:bg-emerald-50:hover { background-color: var(--u-brs, #10271F); }
+:where([data-theme='dark']) .bg-emerald-100,
+:where([data-theme='dark']) .bg-green-100,
+:where([data-theme='dark']) .hover\:bg-emerald-100:hover { background-color: var(--u-brs2, #16362B); }
+:where([data-theme='dark']) .bg-blue-50,
+:where([data-theme='dark']) .bg-sky-50,
+:where([data-theme='dark']) .bg-sky-100 { background-color: var(--u-info-soft, #15292E); }
+:where([data-theme='dark']) .bg-orange-50 { background-color: var(--u-leave-soft, #2F261A); }
+:where([data-theme='dark']) .bg-purple-50,
+:where([data-theme='dark']) .bg-violet-100 { background-color: var(--u-holiday-soft, #212331); }
+:where([data-theme='dark']) .text-red-600,
+:where([data-theme='dark']) .text-red-700,
+:where([data-theme='dark']) .text-red-800,
+:where([data-theme='dark']) .text-red-900,
+:where([data-theme='dark']) .text-rose-600,
+:where([data-theme='dark']) .text-rose-700,
+:where([data-theme='dark']) .text-pink-700,
+:where([data-theme='dark']) .hover\:text-red-600:hover,
+:where([data-theme='dark']) .hover\:text-red-700:hover { color: var(--u-danger-text, #F18B80); }
+:where([data-theme='dark']) .text-amber-600,
+:where([data-theme='dark']) .text-amber-700,
+:where([data-theme='dark']) .text-amber-800,
+:where([data-theme='dark']) .text-amber-900,
+:where([data-theme='dark']) .hover\:text-amber-700:hover,
+:where([data-theme='dark']) .hover\:text-amber-900:hover { color: var(--u-warning-text, #E6B865); }
+:where([data-theme='dark']) .text-emerald-600,
+:where([data-theme='dark']) .text-emerald-700,
+:where([data-theme='dark']) .text-green-700,
+:where([data-theme='dark']) .text-teal-600,
+:where([data-theme='dark']) .text-teal-700,
+:where([data-theme='dark']) .hover\:text-emerald-600:hover { color: var(--u-brt, #5CC4A3); }
+:where([data-theme='dark']) .text-blue-600,
+:where([data-theme='dark']) .text-blue-700,
+:where([data-theme='dark']) .text-sky-700 { color: var(--u-info-text, #7CB9E8); }
+:where([data-theme='dark']) .text-orange-600,
+:where([data-theme='dark']) .text-orange-700,
+:where([data-theme='dark']) .text-orange-800 { color: var(--u-leave-text, #F29A5E); }
+:where([data-theme='dark']) .text-purple-600,
+:where([data-theme='dark']) .text-purple-700,
+:where([data-theme='dark']) .text-violet-700 { color: var(--u-holiday-text, #B794F0); }
+:where([data-theme='dark']) .border-red-200,
+:where([data-theme='dark']) .border-red-300,
+:where([data-theme='dark']) .border-rose-200 { border-color: var(--status-error-border, #51291F); }
+:where([data-theme='dark']) .border-amber-200,
+:where([data-theme='dark']) .border-amber-300 { border-color: var(--status-warning-border, #4D4427); }
+:where([data-theme='dark']) .border-emerald-200 { border-color: var(--u-brl, #22503F); }
+
+/* ── Master pages (design/master/master.css, generated): white surfaces ─── */
+[data-theme='dark'] .utm .stabs,
+[data-theme='dark'] .utm .hero,
+[data-theme='dark'] .utm .btn:not(.pri):not(.danger):not(.warn):not(.ghost),
+[data-theme='dark'] .utm .stat,
+[data-theme='dark'] .utm .card,
+[data-theme='dark'] .utm .tsearch,
+[data-theme='dark'] .utm .pager button,
+[data-theme='dark'] .utm .seg button.on,
+[data-theme='dark'] .utm .ddb:not(.set),
+[data-theme='dark'] .utm .pop,
+[data-theme='dark'] .utm .drawer,
+[data-theme='dark'] .utm .modal,
+[data-theme='dark'] .utm .input,
+[data-theme='dark'] .utm .icons button,
+[data-theme='dark'] .utm .cb:not(:checked):not(.mixed),
+[data-theme='dark'] .utm .ccard,
+[data-theme='dark'] .utm .add-card:hover .tile,
+[data-theme='dark'] .utm .cat,
+[data-theme='dark'] .utm .ov,
+[data-theme='dark'] .utm .igrid > div,
+[data-theme='dark'] .utm .rc:not(.on) {
+  background-color: var(--u-sf, #101915);
+}
+[data-theme='dark'] .utm .btn:not(.pri):not(.danger):not(.warn):not(.ghost):hover { background-color: var(--u-hv, #16211C); }
+[data-theme='dark'] .utm .t th,
+[data-theme='dark'] .utm .dr-f,
+[data-theme='dark'] .utm .ccard.off { background-color: var(--u-sf2, #0D1512); }
+[data-theme='dark'] .utm .t tbody tr:hover td,
+[data-theme='dark'] .utm .ov-l:hover { background-color: var(--u-hv, #16211C); }
+[data-theme='dark'] .utm .t tbody tr.sel td { background-color: var(--u-brs, #10271F); }
+[data-theme='dark'] .utm .seg .n { background-color: var(--u-ln, #1F2C27); color: var(--u-ink2, #A7B6B0); }
+[data-theme='dark'] .utm .tl .g,
+[data-theme='dark'] .utm .lvl span { background-color: var(--u-ln, #1F2C27); }
+[data-theme='dark'] .utm .sw:not(.on) { background-color: var(--u-gy, #3A4843); }
+[data-theme='dark'] .utm .cb:not(:checked):not(.mixed) { border-color: var(--u-gy, #3A4843); }
+[data-theme='dark'] .utm .code { color: var(--u-ink2, #A7B6B0); }
+[data-theme='dark'] .utm .ddb.set { border-color: var(--u-brl, #22503F); }
+[data-theme='dark'] .utm .btn.warn,
+[data-theme='dark'] .utm .warn-link { background-color: var(--u-warning-soft, #2A2113); border-color: var(--status-warning-border, #4D4427); color: var(--u-warning-text, #E6B865); }
+[data-theme='dark'] .utm .btn.warn:hover,
+[data-theme='dark'] .utm .warn-link:hover { background-color: var(--u-gds, #2A2113); }
+[data-theme='dark'] .utm .opt.danger,
+[data-theme='dark'] .utm .opt.danger svg,
+[data-theme='dark'] .utm .field label em,
+[data-theme='dark'] .utm .hint.e { color: var(--u-danger-text, #F18B80); }
+[data-theme='dark'] .utm .opt.danger:hover { background-color: var(--u-danger-soft, #2C1715); }
+[data-theme='dark'] .utm .field.err .input,
+[data-theme='dark'] .utm .field.err .ddb { background-color: var(--u-danger-soft, #2C1715); }
+[data-theme='dark'] .utm ::selection { background: var(--u-brs2, #16362B); }
+
+/* ── Generated design views (design/dc/*.view.css, MilestonesCard.css,
+   shell.css): hover states with a light fill ─────────────────────────────── */
+[data-theme='dark'] .dc-admin-dashboard-4:hover,
+[data-theme='dark'] .dc-att-overview-0:hover,
+[data-theme='dark'] .dc-branch-drawer-0:hover,
+[data-theme='dark'] .dc-companies-page-1:hover,
+[data-theme='dark'] .dc-dash-calendar-0:hover,
+[data-theme='dark'] .dc-employee-workspace-3:hover,
+[data-theme='dark'] .dc-pay-dashboard-1:hover,
+[data-theme='dark'] .dc-pay-runs-1:hover,
+[data-theme='dark'] .dc-shift-schedules-4:hover,
+[data-theme='dark'] .dc-workforce-analytics-3:hover,
+[data-theme='dark'] .ms-opt:hover {
+  background: var(--u-hv, #16211C) !important;
+}
+[data-theme='dark'] .dc-admin-dashboard-5:hover,
+[data-theme='dark'] .dc-admin-dashboard-6:hover,
+[data-theme='dark'] .ms-row:hover {
+  background: var(--u-sf, #101915) !important;
+}
+[data-theme='dark'] .dc-admin-dashboard-0:hover,
+[data-theme='dark'] .dc-att-daily-logs-0:hover,
+[data-theme='dark'] .dc-dash-calendar-3:hover,
+[data-theme='dark'] .dc-employee-workspace-1:hover,
+[data-theme='dark'] .dc-employee-workspace-2:hover,
+[data-theme='dark'] .dc-payroll-run-page-0:hover,
+[data-theme='dark'] .dc-shift-schedules-2:hover,
+[data-theme='dark'] .dc-workforce-analytics-1:hover {
+  background: var(--u-brs, #10271F) !important;
+}
+[data-theme='dark'] .dc-pay-runs-0:hover,
+[data-theme='dark'] .dc-pay-salary-0:hover,
+[data-theme='dark'] .ms-opt[aria-checked='true']:hover {
+  background: var(--u-brs2, #16362B) !important;
+}
+[data-theme='dark'] .dc-admin-dashboard-1:hover { background: var(--u-danger-soft, #2C1715) !important; }
+[data-theme='dark'] .dc-admin-dashboard-2:hover,
+[data-theme='dark'] .dc-shift-schedules-0:hover { background: var(--u-warning-soft, #2A2113) !important; }
+[data-theme='dark'] .dc-att-overview-1:hover { background: var(--u-leave-soft, #2F261A) !important; }
+[data-theme='dark'] .dc-attendance-page-1:hover { background: var(--u-hv, #16211C) !important; color: var(--u-ink, #E6EEEA) !important; }
+[data-theme='dark'] .dc-dash-calendar-4:hover { background: var(--u-hv, #16211C) !important; color: var(--u-ink2, #A7B6B0) !important; }
+[data-theme='dark'] .dc-pay-settings-0:hover,
+[data-theme='dark'] .dc-sub-tabs-0:hover { background: var(--u-hv, #16211C) !important; color: var(--u-ink, #E6EEEA) !important; border-color: var(--u-gy, #3A4843) !important; }
+[data-theme='dark'] .dc-time-picker-2:hover,
+[data-theme='dark'] .dc-time-picker-3:hover,
+[data-theme='dark'] .dc-time-picker-4:hover,
+[data-theme='dark'] .dc-workforce-analytics-0:hover { background: var(--u-brs, #10271F) !important; color: var(--u-brt, #5CC4A3) !important; }
+[data-theme='dark'] .dc-attendance-page-0:hover,
+[data-theme='dark'] .dc-payroll-module-0:hover,
+[data-theme='dark'] .ds-subnav-idle:hover { color: var(--u-ink, #E6EEEA) !important; box-shadow: inset 0 -3px 0 var(--u-gy, #3A4843) !important; }
+[data-theme='dark'] .dc-admin-dashboard-3:hover,
+[data-theme='dark'] .dc-employee-workspace-0:hover,
+[data-theme='dark'] .dc-payroll-overview-0:hover,
+[data-theme='dark'] .dc-workforce-analytics-2:hover { color: var(--u-brt, #5CC4A3) !important; }
+[data-theme='dark'] .dc-date-picker { border-color: var(--u-gy, #3A4843); }
+
+/* ── Tailwind arbitrary colours (text-[#047857] …) ─────────────────────── */
+:where([data-theme='dark']) .text-\[\#047857\],
+:where([data-theme='dark']) .text-\[\#059669\],
+:where([data-theme='dark']) .text-\[\#0A5240\],
+:where([data-theme='dark']) .text-\[\#0F6E56\],
+:where([data-theme='dark']) .text-\[\#15803D\],
+:where([data-theme='dark']) .text-\[\#04503A\],
+:where([data-theme='dark']) .text-\[\#2e7d32\],
+:where([data-theme='dark']) .text-\[\#1b5e20\] { color: var(--u-brt, #5CC4A3); }
+:where([data-theme='dark']) .hover\:text-\[\#064E3B\]:hover,
+:where([data-theme='dark']) .hover\:text-\[\#047857\]:hover,
+:where([data-theme='dark']) .hover\:text-\[\#059669\]:hover,
+:where([data-theme='dark']) .hover\:text-\[\#053B2E\]:hover,
+:where([data-theme='dark']) .group:hover .group-hover\:text-\[\#059669\] { color: var(--accent-fg-strong, #8FD9BE); }
+:where([data-theme='dark']) .text-\[\#0F172A\] { color: var(--u-ink, #E6EEEA); }
+:where([data-theme='dark']) .hover\:text-\[\#64748B\]:hover { color: var(--u-ink2, #A7B6B0); }
+:where([data-theme='dark']) .text-\[\#64748B\],
+:where([data-theme='dark']) .text-\[\#94a3b8\] { color: var(--u-ink3, #80918A); }
+:where([data-theme='dark']) .text-\[\#B91C1C\],
+:where([data-theme='dark']) .text-\[\#b91c1c\],
+:where([data-theme='dark']) .text-\[\#DC2626\],
+:where([data-theme='dark']) .hover\:text-\[\#B91C1C\]:hover,
+:where([data-theme='dark']) .hover\:text-\[\#EF4444\]:hover { color: var(--u-danger-text, #F18B80); }
+:where([data-theme='dark']) .text-\[\#2563EB\],
+:where([data-theme='dark']) .text-\[\#1E40AF\],
+:where([data-theme='dark']) .text-\[\#1D4ED8\] { color: var(--u-info-text, #7CB9E8); }
+:where([data-theme='dark']) .text-\[\#EA580C\] { color: var(--u-leave-text, #F29A5E); }
+:where([data-theme='dark']) .text-\[\#B45309\],
+:where([data-theme='dark']) .text-\[\#92400e\] { color: var(--u-warning-text, #E6B865); }
+:where([data-theme='dark']) .text-\[\#6D28D9\] { color: var(--u-holiday-text, #B794F0); }
+:where([data-theme='dark']) .bg-\[\#ECFDF5\],
+:where([data-theme='dark']) .hover\:bg-\[\#ECFDF5\]:hover,
+:where([data-theme='dark']) .bg-\[\#E6F4F1\],
+:where([data-theme='dark']) .hover\:bg-\[\#E6F4F1\]:hover,
+:where([data-theme='dark']) .bg-\[\#E8F5E9\],
+:where([data-theme='dark']) .hover\:bg-\[\#F2FBF4\]:hover { background-color: var(--u-brs, #10271F); }
+:where([data-theme='dark']) .bg-\[\#DCFCE7\],
+:where([data-theme='dark']) .bg-\[\#A7F3D0\],
+:where([data-theme='dark']) .hover\:bg-\[\#D1FAE5\]:hover { background-color: var(--u-brs2, #16362B); }
+:where([data-theme='dark']) .bg-\[\#FEE2E2\],
+:where([data-theme='dark']) .hover\:bg-\[\#FEE2E2\]:hover,
+:where([data-theme='dark']) .bg-\[\#FEF2F2\],
+:where([data-theme='dark']) .hover\:bg-\[\#FECACA\]:hover { background-color: var(--u-danger-soft, #2C1715); }
+:where([data-theme='dark']) .bg-\[\#EFF6FF\] { background-color: var(--u-info-soft, #15292E); }
+:where([data-theme='dark']) .bg-\[\#f8fafc\],
+:where([data-theme='dark']) .bg-\[\#F8FAFC\] { background-color: var(--u-sf2, #0D1512); }
+:where([data-theme='dark']) .bg-\[\#FFF7ED\] { background-color: var(--u-leave-soft, #2F261A); }
+:where([data-theme='dark']) .bg-\[\#FEF3C7\],
+:where([data-theme='dark']) .hover\:bg-\[\#FFE9C7\]:hover { background-color: var(--u-warning-soft, #2A2113); }
+:where([data-theme='dark']) .bg-\[\#F3E8FF\] { background-color: var(--u-holiday-soft, #212331); }
+:where([data-theme='dark']) .border-\[\#6EE7B7\],
+:where([data-theme='dark']) .hover\:border-\[\#6EE7B7\]:hover,
+:where([data-theme='dark']) .border-\[\#C8E6C9\],
+:where([data-theme='dark']) .hover\:border-\[\#C8E6C9\]:hover,
+:where([data-theme='dark']) .border-\[\#BBF7D0\] { border-color: var(--u-brl, #22503F); }
+:where([data-theme='dark']) .border-\[\#FECACA\],
+:where([data-theme='dark']) .border-\[\#FCA5A5\] { border-color: var(--status-error-border, #51291F); }
+:where([data-theme='dark']) .border-\[\#BFDBFE\] { border-color: var(--status-info-border, #1A3B4C); }
+:where([data-theme='dark']) .border-\[\#e2e8f0\] { border-color: var(--u-ln, #1F2C27); }
+
+/* ── SVG colours given as attributes (chart tracks, grid lines, axis labels) ─ */
+[data-theme='dark'] svg [fill="#f1f5f9"],
+[data-theme='dark'] svg [fill="#e2e8f0"],
+[data-theme='dark'] svg [fill="#f8fafc"] { fill: var(--u-hv, #16211C); }
+[data-theme='dark'] svg [fill="#ecfdf5"] { fill: var(--u-brs, #10271F); }
+[data-theme='dark'] svg [fill="#fffbeb"],
+[data-theme='dark'] svg [fill="#fef3c7"] { fill: var(--u-warning-soft, #2A2113); }
+[data-theme='dark'] svg [fill="#fff7ed"],
+[data-theme='dark'] svg [fill="#ffedd5"],
+[data-theme='dark'] svg [fill="#fff1e6"] { fill: var(--u-leave-soft, #2F261A); }
+[data-theme='dark'] svg [stroke="#f1f5f9"],
+[data-theme='dark'] svg [stroke="#F1F5F9"],
+[data-theme='dark'] svg [stroke="#e2e8f0"],
+[data-theme='dark'] svg [stroke="#f3f4f6"],
+[data-theme='dark'] svg [stroke="#eef0f3"],
+[data-theme='dark'] svg [stroke="#EEF0F3"],
+[data-theme='dark'] svg [stroke="#e5ebe9"] { stroke: var(--u-ln, #1F2C27); }
+[data-theme='dark'] svg [fill="#0f172a"] { fill: var(--u-ink, #E6EEEA); }
+[data-theme='dark'] svg [fill="#64748b"],
+[data-theme='dark'] svg [fill="#6B7280"],
+[data-theme='dark'] svg [fill="#6b7280"] { fill: var(--u-ink3, #80918A); }
+
+/* ── Inline style objects (the design views, module and settings kits…) ────
+   The browser writes inline colours as rgb(), so each rule matches the
+   serialised value. "color:" rules match only the text colour (never
+   background-color or border-color). */
+/* white cards and panels */
+[data-theme='dark'] [style*="background: rgb(255, 255, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(255, 255, 255)"] {
+  background-color: var(--u-sf) !important;
+}
+/* off-white wells */
+[data-theme='dark'] [style*="background: rgb(248, 250, 252)"],
+[data-theme='dark'] [style*="background-color: rgb(248, 250, 252)"],
+[data-theme='dark'] [style*="background: rgb(251, 252, 253)"],
+[data-theme='dark'] [style*="background-color: rgb(251, 252, 253)"],
+[data-theme='dark'] [style*="background: rgb(251, 253, 252)"],
+[data-theme='dark'] [style*="background-color: rgb(251, 253, 252)"],
+[data-theme='dark'] [style*="background: rgb(252, 253, 253)"],
+[data-theme='dark'] [style*="background-color: rgb(252, 253, 253)"] {
+  background-color: var(--u-sf2) !important;
+}
+/* grey chips and fills */
+[data-theme='dark'] [style*="background: rgb(241, 245, 249)"],
+[data-theme='dark'] [style*="background-color: rgb(241, 245, 249)"],
+[data-theme='dark'] [style*="background: rgb(238, 242, 246)"],
+[data-theme='dark'] [style*="background-color: rgb(238, 242, 246)"],
+[data-theme='dark'] [style*="background: rgb(238, 242, 245)"],
+[data-theme='dark'] [style*="background-color: rgb(238, 242, 245)"],
+[data-theme='dark'] [style*="background: rgb(238, 242, 241)"],
+[data-theme='dark'] [style*="background-color: rgb(238, 242, 241)"] {
+  background-color: var(--u-hv) !important;
+}
+/* grey tracks */
+[data-theme='dark'] [style*="background: rgb(226, 232, 240)"],
+[data-theme='dark'] [style*="background-color: rgb(226, 232, 240)"],
+[data-theme='dark'] [style*="background: rgb(228, 233, 242)"],
+[data-theme='dark'] [style*="background-color: rgb(228, 233, 242)"] {
+  background-color: var(--u-ln) !important;
+}
+/* switch tracks and dots when off */
+[data-theme='dark'] [style*="background: rgb(203, 213, 225)"],
+[data-theme='dark'] [style*="background-color: rgb(203, 213, 225)"] {
+  background-color: var(--u-gy) !important;
+}
+/* emerald tints */
+[data-theme='dark'] [style*="background: rgb(236, 253, 245)"],
+[data-theme='dark'] [style*="background-color: rgb(236, 253, 245)"],
+[data-theme='dark'] [style*="background: rgb(240, 253, 244)"],
+[data-theme='dark'] [style*="background-color: rgb(240, 253, 244)"],
+[data-theme='dark'] [style*="background: rgb(240, 253, 248)"],
+[data-theme='dark'] [style*="background-color: rgb(240, 253, 248)"],
+[data-theme='dark'] [style*="background: rgb(240, 253, 250)"],
+[data-theme='dark'] [style*="background-color: rgb(240, 253, 250)"] {
+  background-color: var(--u-brs) !important;
+}
+/* stronger emerald tints */
+[data-theme='dark'] [style*="background: rgb(209, 250, 229)"],
+[data-theme='dark'] [style*="background-color: rgb(209, 250, 229)"],
+[data-theme='dark'] [style*="background: rgb(220, 252, 231)"],
+[data-theme='dark'] [style*="background-color: rgb(220, 252, 231)"] {
+  background-color: var(--u-brs2) !important;
+}
+/* amber tints */
+[data-theme='dark'] [style*="background: rgb(255, 251, 235)"],
+[data-theme='dark'] [style*="background-color: rgb(255, 251, 235)"],
+[data-theme='dark'] [style*="background: rgb(254, 243, 199)"],
+[data-theme='dark'] [style*="background-color: rgb(254, 243, 199)"] {
+  background-color: var(--u-warning-soft) !important;
+}
+/* red tints */
+[data-theme='dark'] [style*="background: rgb(255, 241, 242)"],
+[data-theme='dark'] [style*="background-color: rgb(255, 241, 242)"],
+[data-theme='dark'] [style*="background: rgb(254, 242, 242)"],
+[data-theme='dark'] [style*="background-color: rgb(254, 242, 242)"],
+[data-theme='dark'] [style*="background: rgb(254, 226, 226)"],
+[data-theme='dark'] [style*="background-color: rgb(254, 226, 226)"],
+[data-theme='dark'] [style*="background: rgb(255, 228, 230)"],
+[data-theme='dark'] [style*="background-color: rgb(255, 228, 230)"] {
+  background-color: var(--u-danger-soft) !important;
+}
+/* orange tints */
+[data-theme='dark'] [style*="background: rgb(255, 247, 237)"],
+[data-theme='dark'] [style*="background-color: rgb(255, 247, 237)"],
+[data-theme='dark'] [style*="background: rgb(255, 237, 213)"],
+[data-theme='dark'] [style*="background-color: rgb(255, 237, 213)"] {
+  background-color: var(--u-leave-soft) !important;
+}
+/* blue, indigo and cyan tints */
+[data-theme='dark'] [style*="background: rgb(239, 246, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(239, 246, 255)"],
+[data-theme='dark'] [style*="background: rgb(238, 242, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(238, 242, 255)"],
+[data-theme='dark'] [style*="background: rgb(236, 254, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(236, 254, 255)"] {
+  background-color: var(--u-info-soft) !important;
+}
+/* purple tints */
+[data-theme='dark'] [style*="background: rgb(250, 245, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(250, 245, 255)"],
+[data-theme='dark'] [style*="background: rgb(245, 243, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(245, 243, 255)"],
+[data-theme='dark'] [style*="background: rgb(253, 244, 255)"],
+[data-theme='dark'] [style*="background-color: rgb(253, 244, 255)"] {
+  background-color: var(--u-holiday-soft) !important;
+}
+/* pink tints */
+[data-theme='dark'] [style*="background: rgb(253, 242, 248)"],
+[data-theme='dark'] [style*="background-color: rgb(253, 242, 248)"] {
+  background-color: var(--u-danger-soft) !important;
+}
+/* ink */
+[data-theme='dark'] [style^="color: rgb(15, 23, 42)"],
+[data-theme='dark'] [style*=" color: rgb(15, 23, 42)"],
+[data-theme='dark'] [style^="color: rgb(30, 41, 59)"],
+[data-theme='dark'] [style*=" color: rgb(30, 41, 59)"],
+[data-theme='dark'] [style^="color: rgb(17, 24, 39)"],
+[data-theme='dark'] [style*=" color: rgb(17, 24, 39)"] {
+  color: var(--u-ink) !important;
+}
+/* secondary ink */
+[data-theme='dark'] [style^="color: rgb(51, 65, 85)"],
+[data-theme='dark'] [style*=" color: rgb(51, 65, 85)"],
+[data-theme='dark'] [style^="color: rgb(71, 85, 105)"],
+[data-theme='dark'] [style*=" color: rgb(71, 85, 105)"] {
+  color: var(--u-ink2) !important;
+}
+/* meta ink */
+[data-theme='dark'] [style^="color: rgb(100, 116, 139)"],
+[data-theme='dark'] [style*=" color: rgb(100, 116, 139)"],
+[data-theme='dark'] [style^="color: rgb(148, 163, 184)"],
+[data-theme='dark'] [style*=" color: rgb(148, 163, 184)"] {
+  color: var(--u-ink3) !important;
+}
+/* brand text (never a raw brand hex on dark) */
+[data-theme='dark'] [style^="color: rgb(15, 110, 86)"],
+[data-theme='dark'] [style*=" color: rgb(15, 110, 86)"],
+[data-theme='dark'] [style^="color: rgb(10, 82, 64)"],
+[data-theme='dark'] [style*=" color: rgb(10, 82, 64)"],
+[data-theme='dark'] [style^="color: rgb(4, 120, 87)"],
+[data-theme='dark'] [style*=" color: rgb(4, 120, 87)"],
+[data-theme='dark'] [style^="color: rgb(6, 95, 70)"],
+[data-theme='dark'] [style*=" color: rgb(6, 95, 70)"],
+[data-theme='dark'] [style^="color: rgb(5, 150, 105)"],
+[data-theme='dark'] [style*=" color: rgb(5, 150, 105)"] {
+  color: var(--u-brt) !important;
+}
+/* amber text */
+[data-theme='dark'] [style^="color: rgb(146, 64, 14)"],
+[data-theme='dark'] [style*=" color: rgb(146, 64, 14)"],
+[data-theme='dark'] [style^="color: rgb(180, 83, 9)"],
+[data-theme='dark'] [style*=" color: rgb(180, 83, 9)"],
+[data-theme='dark'] [style^="color: rgb(120, 53, 15)"],
+[data-theme='dark'] [style*=" color: rgb(120, 53, 15)"] {
+  color: var(--u-warning-text) !important;
+}
+/* red text */
+[data-theme='dark'] [style^="color: rgb(190, 18, 60)"],
+[data-theme='dark'] [style*=" color: rgb(190, 18, 60)"],
+[data-theme='dark'] [style^="color: rgb(185, 28, 28)"],
+[data-theme='dark'] [style*=" color: rgb(185, 28, 28)"],
+[data-theme='dark'] [style^="color: rgb(159, 18, 57)"],
+[data-theme='dark'] [style*=" color: rgb(159, 18, 57)"],
+[data-theme='dark'] [style^="color: rgb(225, 29, 72)"],
+[data-theme='dark'] [style*=" color: rgb(225, 29, 72)"],
+[data-theme='dark'] [style^="color: rgb(136, 19, 55)"],
+[data-theme='dark'] [style*=" color: rgb(136, 19, 55)"] {
+  color: var(--u-danger-text) !important;
+}
+/* orange text */
+[data-theme='dark'] [style^="color: rgb(154, 52, 18)"],
+[data-theme='dark'] [style*=" color: rgb(154, 52, 18)"],
+[data-theme='dark'] [style^="color: rgb(194, 65, 12)"],
+[data-theme='dark'] [style*=" color: rgb(194, 65, 12)"] {
+  color: var(--u-leave-text) !important;
+}
+/* blue, indigo and cyan text */
+[data-theme='dark'] [style^="color: rgb(37, 99, 235)"],
+[data-theme='dark'] [style*=" color: rgb(37, 99, 235)"],
+[data-theme='dark'] [style^="color: rgb(29, 78, 216)"],
+[data-theme='dark'] [style*=" color: rgb(29, 78, 216)"],
+[data-theme='dark'] [style^="color: rgb(67, 56, 202)"],
+[data-theme='dark'] [style*=" color: rgb(67, 56, 202)"],
+[data-theme='dark'] [style^="color: rgb(14, 116, 144)"],
+[data-theme='dark'] [style*=" color: rgb(14, 116, 144)"] {
+  color: var(--u-info-text) !important;
+}
+/* purple text */
+[data-theme='dark'] [style^="color: rgb(147, 51, 234)"],
+[data-theme='dark'] [style*=" color: rgb(147, 51, 234)"],
+[data-theme='dark'] [style^="color: rgb(124, 58, 237)"],
+[data-theme='dark'] [style*=" color: rgb(124, 58, 237)"],
+[data-theme='dark'] [style^="color: rgb(109, 40, 217)"],
+[data-theme='dark'] [style*=" color: rgb(109, 40, 217)"] {
+  color: var(--u-holiday-text) !important;
+}
+/* teal text */
+[data-theme='dark'] [style^="color: rgb(15, 118, 110)"],
+[data-theme='dark'] [style*=" color: rgb(15, 118, 110)"],
+[data-theme='dark'] [style^="color: rgb(13, 148, 136)"],
+[data-theme='dark'] [style*=" color: rgb(13, 148, 136)"] {
+  color: var(--u-brt) !important;
+}
+/* pink text */
+[data-theme='dark'] [style^="color: rgb(190, 24, 93)"],
+[data-theme='dark'] [style*=" color: rgb(190, 24, 93)"] {
+  color: var(--u-danger-text) !important;
+}
+/* lines */
+[data-theme='dark'] [style*="solid rgb(226, 232, 240)"],
+[data-theme='dark'] [style*="dashed rgb(226, 232, 240)"],
+[data-theme='dark'] [style*="border-color: rgb(226, 232, 240)"],
+[data-theme='dark'] [style*="currentcolor rgb(226, 232, 240)"],
+[data-theme='dark'] [style*="solid rgb(229, 231, 235)"],
+[data-theme='dark'] [style*="dashed rgb(229, 231, 235)"],
+[data-theme='dark'] [style*="border-color: rgb(229, 231, 235)"],
+[data-theme='dark'] [style*="currentcolor rgb(229, 231, 235)"] {
+  border-color: var(--u-ln) !important;
+}
+/* strong lines */
+[data-theme='dark'] [style*="solid rgb(203, 213, 225)"],
+[data-theme='dark'] [style*="dashed rgb(203, 213, 225)"],
+[data-theme='dark'] [style*="border-color: rgb(203, 213, 225)"],
+[data-theme='dark'] [style*="currentcolor rgb(203, 213, 225)"] {
+  border-color: var(--u-gy) !important;
+}
+/* hairlines */
+[data-theme='dark'] [style*="solid rgb(241, 245, 249)"],
+[data-theme='dark'] [style*="dashed rgb(241, 245, 249)"],
+[data-theme='dark'] [style*="border-color: rgb(241, 245, 249)"],
+[data-theme='dark'] [style*="currentcolor rgb(241, 245, 249)"],
+[data-theme='dark'] [style*="solid rgb(238, 242, 246)"],
+[data-theme='dark'] [style*="dashed rgb(238, 242, 246)"],
+[data-theme='dark'] [style*="border-color: rgb(238, 242, 246)"],
+[data-theme='dark'] [style*="currentcolor rgb(238, 242, 246)"],
+[data-theme='dark'] [style*="solid rgb(238, 242, 241)"],
+[data-theme='dark'] [style*="dashed rgb(238, 242, 241)"],
+[data-theme='dark'] [style*="border-color: rgb(238, 242, 241)"],
+[data-theme='dark'] [style*="currentcolor rgb(238, 242, 241)"],
+[data-theme='dark'] [style*="solid rgb(248, 250, 252)"],
+[data-theme='dark'] [style*="dashed rgb(248, 250, 252)"],
+[data-theme='dark'] [style*="border-color: rgb(248, 250, 252)"],
+[data-theme='dark'] [style*="currentcolor rgb(248, 250, 252)"] {
+  border-color: var(--u-ln2) !important;
+}
+/* emerald lines */
+[data-theme='dark'] [style*="solid rgb(167, 243, 208)"],
+[data-theme='dark'] [style*="dashed rgb(167, 243, 208)"],
+[data-theme='dark'] [style*="border-color: rgb(167, 243, 208)"],
+[data-theme='dark'] [style*="currentcolor rgb(167, 243, 208)"],
+[data-theme='dark'] [style*="solid rgb(209, 250, 229)"],
+[data-theme='dark'] [style*="dashed rgb(209, 250, 229)"],
+[data-theme='dark'] [style*="border-color: rgb(209, 250, 229)"],
+[data-theme='dark'] [style*="currentcolor rgb(209, 250, 229)"],
+[data-theme='dark'] [style*="solid rgb(110, 231, 183)"],
+[data-theme='dark'] [style*="dashed rgb(110, 231, 183)"],
+[data-theme='dark'] [style*="border-color: rgb(110, 231, 183)"],
+[data-theme='dark'] [style*="currentcolor rgb(110, 231, 183)"],
+[data-theme='dark'] [style*="solid rgb(153, 246, 228)"],
+[data-theme='dark'] [style*="dashed rgb(153, 246, 228)"],
+[data-theme='dark'] [style*="border-color: rgb(153, 246, 228)"],
+[data-theme='dark'] [style*="currentcolor rgb(153, 246, 228)"] {
+  border-color: var(--u-brl) !important;
+}
+/* amber lines */
+[data-theme='dark'] [style*="solid rgb(253, 230, 138)"],
+[data-theme='dark'] [style*="dashed rgb(253, 230, 138)"],
+[data-theme='dark'] [style*="border-color: rgb(253, 230, 138)"],
+[data-theme='dark'] [style*="currentcolor rgb(253, 230, 138)"],
+[data-theme='dark'] [style*="solid rgb(252, 211, 77)"],
+[data-theme='dark'] [style*="dashed rgb(252, 211, 77)"],
+[data-theme='dark'] [style*="border-color: rgb(252, 211, 77)"],
+[data-theme='dark'] [style*="currentcolor rgb(252, 211, 77)"],
+[data-theme='dark'] [style*="solid rgb(254, 215, 170)"],
+[data-theme='dark'] [style*="dashed rgb(254, 215, 170)"],
+[data-theme='dark'] [style*="border-color: rgb(254, 215, 170)"],
+[data-theme='dark'] [style*="currentcolor rgb(254, 215, 170)"] {
+  border-color: var(--status-warning-border) !important;
+}
+/* red lines */
+[data-theme='dark'] [style*="solid rgb(254, 205, 211)"],
+[data-theme='dark'] [style*="dashed rgb(254, 205, 211)"],
+[data-theme='dark'] [style*="border-color: rgb(254, 205, 211)"],
+[data-theme='dark'] [style*="currentcolor rgb(254, 205, 211)"],
+[data-theme='dark'] [style*="solid rgb(254, 202, 202)"],
+[data-theme='dark'] [style*="dashed rgb(254, 202, 202)"],
+[data-theme='dark'] [style*="border-color: rgb(254, 202, 202)"],
+[data-theme='dark'] [style*="currentcolor rgb(254, 202, 202)"] {
+  border-color: var(--status-error-border) !important;
+}
+/* blue, indigo and cyan lines */
+[data-theme='dark'] [style*="solid rgb(191, 219, 254)"],
+[data-theme='dark'] [style*="dashed rgb(191, 219, 254)"],
+[data-theme='dark'] [style*="border-color: rgb(191, 219, 254)"],
+[data-theme='dark'] [style*="currentcolor rgb(191, 219, 254)"],
+[data-theme='dark'] [style*="solid rgb(219, 234, 254)"],
+[data-theme='dark'] [style*="dashed rgb(219, 234, 254)"],
+[data-theme='dark'] [style*="border-color: rgb(219, 234, 254)"],
+[data-theme='dark'] [style*="currentcolor rgb(219, 234, 254)"],
+[data-theme='dark'] [style*="solid rgb(199, 210, 254)"],
+[data-theme='dark'] [style*="dashed rgb(199, 210, 254)"],
+[data-theme='dark'] [style*="border-color: rgb(199, 210, 254)"],
+[data-theme='dark'] [style*="currentcolor rgb(199, 210, 254)"],
+[data-theme='dark'] [style*="solid rgb(165, 243, 252)"],
+[data-theme='dark'] [style*="dashed rgb(165, 243, 252)"],
+[data-theme='dark'] [style*="border-color: rgb(165, 243, 252)"],
+[data-theme='dark'] [style*="currentcolor rgb(165, 243, 252)"] {
+  border-color: var(--status-info-border) !important;
+}
+/* purple lines */
+[data-theme='dark'] [style*="solid rgb(233, 213, 255)"],
+[data-theme='dark'] [style*="dashed rgb(233, 213, 255)"],
+[data-theme='dark'] [style*="border-color: rgb(233, 213, 255)"],
+[data-theme='dark'] [style*="currentcolor rgb(233, 213, 255)"],
+[data-theme='dark'] [style*="solid rgb(221, 214, 254)"],
+[data-theme='dark'] [style*="dashed rgb(221, 214, 254)"],
+[data-theme='dark'] [style*="border-color: rgb(221, 214, 254)"],
+[data-theme='dark'] [style*="currentcolor rgb(221, 214, 254)"],
+[data-theme='dark'] [style*="solid rgb(216, 180, 254)"],
+[data-theme='dark'] [style*="dashed rgb(216, 180, 254)"],
+[data-theme='dark'] [style*="border-color: rgb(216, 180, 254)"],
+[data-theme='dark'] [style*="currentcolor rgb(216, 180, 254)"] {
+  border-color: #362E53 !important;
+}
+/* pink lines */
+[data-theme='dark'] [style*="solid rgb(251, 207, 232)"],
+[data-theme='dark'] [style*="dashed rgb(251, 207, 232)"],
+[data-theme='dark'] [style*="border-color: rgb(251, 207, 232)"],
+[data-theme='dark'] [style*="currentcolor rgb(251, 207, 232)"] {
+  border-color: var(--status-error-border) !important;
+}
+/* full-bleed section bars */
+[data-theme='dark'] [style*="box-shadow: rgb(255, 255, 255) 0px 0px 0px 100vmax"] {
+  box-shadow: 0 0 0 100vmax var(--u-sf) !important;
+}
+/* full-bleed section bar lines */
+[data-theme='dark'] [style*="box-shadow: rgb(226, 232, 240) 0px 0px 0px 100vmax"] {
+  box-shadow: 0 0 0 100vmax var(--u-ln) !important;
+}
+
+/* ── Master pages' tone variables (MasterDesign.tsx sets --tb soft, --tf text,
+   --tl line and --ts solid inline on pills, avatars, tiles and stats): derive
+   the dark soft, line and text from the tone's own solid. Browsers without
+   color-mix() keep the light tones, which stay readable. */
+@supports (color: color-mix(in oklab, red 50%, blue)) {
+  [data-theme='dark'] [style*='--tb:'] {
+    --tb: color-mix(in oklab, var(--ts) 16%, var(--u-sf)) !important;
+    --tl: color-mix(in oklab, var(--ts) 34%, var(--u-sf)) !important;
+    --tf: color-mix(in oklab, var(--ts) 55%, #fff) !important;
+  }
+}

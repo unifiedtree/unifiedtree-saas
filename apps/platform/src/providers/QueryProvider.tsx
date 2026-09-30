@@ -1,5 +1,6 @@
 import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { isFeatureNotReady } from '@/core/api/featureNotReady'
 
 /**
  * Which failures are worth another attempt.
@@ -14,8 +15,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
  *
  * `failureCount` is the number of attempts that have already failed, so
  * `< 2` allows exactly one retry.
+ *
+ * A 503 FEATURE_NOT_READY is an answer too: the feature's migration isn't
+ * applied yet, and asking again cannot switch it on (core/api/featureNotReady).
  */
 export function isRetryable(failureCount: number, error: unknown): boolean {
+  if (isFeatureNotReady(error)) return false
   const e = error as { status?: number; response?: { status?: number } } | null
   const status = e?.status ?? e?.response?.status
   if (typeof status === 'number') {

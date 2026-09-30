@@ -1,5 +1,15 @@
+// Loading placeholders in the redesign's look: soft token-tinted shapes with the
+// design's slow shimmer (the kit Skeleton's gradient; still when motion is
+// reduced), a stat-card outline (prototype PgGeneric) and a list row.
 import React from 'react'
 import { clsx } from 'clsx'
+// For the `uk-shimmer` keyframes.
+import '@/design/kit/display.css'
+
+// The kit Skeleton's shimmer (display.css `uk-shimmer`), as utilities so a
+// caller's own classes (sizes, radius, display) keep winning as before.
+const SHIMMER =
+  'bg-[linear-gradient(90deg,var(--u-hv,#F0F4F2)_0%,var(--u-sf2,#F7F9F8)_45%,var(--u-hv,#F0F4F2)_90%)] bg-[length:200%_100%] animate-[uk-shimmer_1.3s_ease-in-out_infinite]'
 
 export function SkeletonBlock({
   className,
@@ -9,7 +19,8 @@ export function SkeletonBlock({
     <div
       aria-hidden
       className={clsx(
-        'animate-pulse rounded bg-gray-100',
+        'rounded',
+        SHIMMER,
         className,
       )}
       {...rest}
@@ -29,18 +40,15 @@ export function SkeletonCard({
       role="status"
       aria-label={ariaLabel}
       className={clsx(
-        'ut-card ut-card-sm p-6 bg-white ring-1 ring-gray-200 rounded-2xl shadow-sm',
+        'ut-card ut-card-sm flex min-h-[132px] flex-col justify-between p-[18px]',
         className,
       )}
+      style={{ borderRadius: 16, borderColor: 'var(--u-ln,#E3E9E6)', background: 'var(--u-sf,#fff)', boxShadow: 'var(--u-shc,0 1px 2px rgba(14,27,22,.05))' }}
     >
-      <div className="flex items-start justify-between">
-        <SkeletonBlock className="h-12 w-12 rounded-xl" />
-        <SkeletonBlock className="h-6 w-16 rounded-full" />
-      </div>
-      <div className="mt-5">
-        <SkeletonBlock className="h-3 w-20 mb-3" />
-        <SkeletonBlock className="h-8 w-32" />
-        <SkeletonBlock className="mt-3 h-3 w-40" />
+      <SkeletonBlock className="h-[42px] w-[42px] !rounded-full" />
+      <div className="flex flex-col gap-2">
+        <SkeletonBlock className="h-2.5 w-[52%]" />
+        <SkeletonBlock className="h-[18px] w-[34%] !rounded-md" />
       </div>
     </div>
   )
@@ -56,7 +64,7 @@ export function SkeletonCardGrid({
   return (
     <div
       className={clsx(
-        'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4',
+        'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4',
         className,
       )}
     >
@@ -75,10 +83,10 @@ export function SkeletonRow({ className }: { className?: string }) {
     >
       <SkeletonBlock className="h-8 w-8 rounded-full" />
       <div className="min-w-0 flex-1 space-y-2">
-        <SkeletonBlock className="h-3 w-40 max-w-full" />
-        <SkeletonBlock className="h-2.5 w-24 max-w-full" />
+        <SkeletonBlock className="h-2.5 w-40 max-w-full" />
+        <SkeletonBlock className="h-2 w-24 max-w-full" />
       </div>
-      <SkeletonBlock className="h-5 w-16 rounded-full" />
+      <SkeletonBlock className="h-[22px] w-16 rounded-full" />
     </div>
   )
 }

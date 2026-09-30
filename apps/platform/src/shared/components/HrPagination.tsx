@@ -52,6 +52,10 @@ export interface HrPaginationProps {
 
 const DEFAULT_PAGE_SIZES = [10, 25, 50, 100]
 
+/** The pager arrows in the redesign's look: 32px square, hairline, brand on hover and focus. */
+const PAGER_BTN =
+  'inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-[var(--u-ln,#E3E9E6)] bg-[var(--u-sf,#fff)] text-[var(--u-ink2,#4A5A54)] transition-colors hover:border-[var(--u-brl,#BFDFD1)] hover:text-[var(--u-brt,#0F6E56)] focus-visible:outline-none focus-visible:border-[var(--u-br,#0F6E56)] focus-visible:shadow-[var(--u-focus,0_0_0_3px_#E8F3EE)] disabled:pointer-events-none disabled:opacity-40'
+
 export function HrPagination({
   page, pageSize, totalElements, totalPages, onPageChange,
   onPageSizeChange, pageSizeOptions = DEFAULT_PAGE_SIZES,
@@ -68,12 +72,12 @@ export function HrPagination({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-4">
-        <p className="text-xs text-text-secondary">
-          Showing <span className="font-semibold text-text-primary">{first}–{last}</span> of{' '}
-          <span className="font-semibold text-text-primary">{totalElements}</span>
+        <p className="text-[12.5px] text-[var(--u-ink3,#6A7A73)]">
+          Showing <span className="font-medium tabular-nums text-[var(--u-ink,#0E1B16)]">{first}–{last}</span> of{' '}
+          <span className="font-medium tabular-nums text-[var(--u-ink,#0E1B16)]">{totalElements}</span>
         </p>
         {onPageSizeChange && (
-          <label className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <label className="flex items-center gap-1.5 text-[12.5px] text-[var(--u-ink3,#6A7A73)]">
             Rows
             <select
               value={pageSize}
@@ -86,6 +90,7 @@ export function HrPagination({
                 onPageSizeChange(Number(e.target.value))
                 onPageChange(0)
               }}
+              style={{ backgroundColor: 'var(--u-sf,#fff)' }}
               className="ut-select ut-select-sm w-auto min-w-[72px]"
             >
               {pageSizeOptions.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -104,19 +109,19 @@ export function HrPagination({
             onClick={() => onPageChange(page - 1)}
             disabled={page === 0}
             aria-label="Previous page"
-            className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
+            className={PAGER_BTN}
           >
-            <ChevronLeft size={15} />
+            <ChevronLeft size={15} aria-hidden="true" />
           </button>
-          <span className="px-1 text-xs font-semibold text-text-primary">{page + 1} / {totalPages}</span>
+          <span className="px-1 text-[12.5px] font-medium tabular-nums text-[var(--u-ink,#0E1B16)]">{page + 1} / {totalPages}</span>
           <button
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages - 1}
             aria-label="Next page"
-            className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
+            className={PAGER_BTN}
           >
-            <ChevronRight size={15} />
+            <ChevronRight size={15} aria-hidden="true" />
           </button>
         </div>
       )}

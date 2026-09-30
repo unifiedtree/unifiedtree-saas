@@ -1,3 +1,4 @@
+/* global process, console */
 // Live check of the redesigned Company Admin Dashboard against the local API.
 // Creates one company notice and archives it again (cleans up after itself).
 //
@@ -27,12 +28,13 @@ try {
   await page.waitForLoadState('networkidle')
   const heading = page.locator('h1', { hasText: /^Good (morning|afternoon|evening), / })
   check('greeting header renders', await heading.count() > 0, (await heading.first().textContent().catch(() => '')) || '')
-  check('Live Overview tiles render', await page.getByRole('button', { name: /Total Employees/ }).count() > 0)
-  await page.getByRole('button', { name: /Active employees/ }).first().waitFor({ timeout: 15000 }).catch(() => {})
-  check('Company summary renders', await page.getByRole('button', { name: /Active employees/ }).count() > 0)
+  check('Live Overview tiles render', await page.getByRole('button', { name: /Total employees/i }).count() > 0)
+  // Company summary's active employees now sit in the Total employees note (AUDIT §5.5).
+  await page.getByRole('button', { name: /Total employees/i }).first().locator('.uk-stat__note', { hasText: / active/ }).waitFor({ timeout: 15000 }).catch(() => {})
+  check('Company summary renders', await page.getByRole('button', { name: /Total employees/i }).first().locator('.uk-stat__note', { hasText: / active/ }).count() > 0)
 
   // Date calendar: pick yesterday, apply, banner appears, back to today.
-  await page.getByRole('button', { name: /September|October|November|December|January|February|March|April|May|June|July|August/ }).first().click()
+  await page.getByRole('button', { name: /change the dashboard date/ }).first().click()
   const cal = page.getByRole('dialog', { name: 'Choose dashboard date' })
   await cal.waitFor({ timeout: 5000 })
   check('date calendar opens', await cal.isVisible())
@@ -53,28 +55,29 @@ try {
   await page.getByText(title).first().waitFor({ timeout: 10000 })
   check('notice publishes and appears in the list', await page.getByText(title).count() > 0)
   // Archive every notice this check ever created (including leftovers from earlier runs).
-  const rowFor = (text) => page.locator('article').filter({ hasText: text })
+  // A notice chip opens its panel; Archive is there, behind the confirmation.
   for (let guard = 0; guard < 10 && (await page.getByText(/^Design check notice \d+$/).count()) > 0; guard++) {
     const t = (await page.getByText(/^Design check notice \d+$/).first().textContent()) || ''
-    await rowFor(t).getByRole('button', { name: 'Archive' }).click()
-    await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Archive' }).click()
+    await page.getByRole('button', { name: new RegExp('^' + t + '\\.') }).click()
+    await page.getByRole('dialog', { name: t }).getByRole('button', { name: 'Archive notice' }).click()
+    await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Archive', exact: true }).click()
     await page.getByText(t, { exact: true }).first().waitFor({ state: 'detached', timeout: 10000 }).catch(() => {})
   }
   check('notice archives and leaves the list', (await page.getByText(title).count()) === 0)
 
   // Projects panel keeps task management reachable.
   await page.getByRole('button', { name: /Manage projects/ }).click()
-  const drawer = page.getByText('Projects & Productivity').last()
-  check('Manage projects opens the projects panel', await drawer.isVisible())
+  const drawer = page.getByRole('dialog', { name: 'Projects & Productivity' })
+  check('Manage projects opens the projects panel', await drawer.waitFor({ timeout: 8000 }).then(() => true, () => false))
   await page.keyboard.press('Escape')
   await page.locator('button[aria-label="Close"], button[aria-label="Close drawer"]').first().click().catch(() => {})
 
   // Tile drill-down.
   await page.goto(base + '/dashboard')
   await page.waitForLoadState('networkidle')
-  await page.getByRole('button', { name: /Late Arrivals/ }).click()
+  await page.getByRole('button', { name: /Late arrivals/i }).click()
   await page.waitForURL(/\/hrms\/attendance\?tab=team&status=LATE&date=/, { timeout: 10000 }).catch(() => {})
-  check('Late Arrivals tile opens the late list', /status=LATE/.test(page.url()), page.url().replace(base, ''))
+  check('Late arrivals tile opens the late list', /status=LATE/.test(page.url()), page.url().replace(base, ''))
 
   check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
   check('no failed API calls', failed.length === 0, failed.slice(0, 4).join(' | '))

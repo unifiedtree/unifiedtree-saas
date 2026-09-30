@@ -53,7 +53,7 @@ function RailPreview({ src, letter, name, size = 30 }: { src: string | null; let
     <div style={{ width: 88, height: 64, borderRadius: 12, background: RAIL_GREEN, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, flex: '0 0 auto' }}>
       {src
         ? <img src={src} alt="" style={{ height: size, maxWidth: 76, objectFit: 'contain', display: 'block' }} />
-        : <span style={{ fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: 800, fontSize: 23, letterSpacing: '-.05em', lineHeight: '.9', color: '#fff', display: 'inline-flex', alignItems: 'flex-end', gap: 2 }}>
+        : <span style={{ fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: 800, fontSize: 23, letterSpacing: '-.05em', lineHeight: '.9', color: '#fff', display: 'inline-flex', alignItems: 'flex-end', gap: 2 }}>
             {letter}<i style={{ width: 8, height: 8, borderRadius: 999, background: '#6ee7b7', display: 'inline-block', marginBottom: 3 }} />
           </span>}
       <span style={{ maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.85)' }}>{name}</span>
@@ -67,7 +67,7 @@ function WhitePreview({ src, letter, height = 40 }: { src: string | null; letter
     <div style={{ minWidth: 88, height: 64, padding: '0 12px', borderRadius: 12, background: '#fff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}>
       {src
         ? <img src={src} alt="" style={{ height, maxWidth: 200, objectFit: 'contain', display: 'block' }} />
-        : <span style={{ width: 40, height: 40, borderRadius: 12, background: '#059669', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: 800, fontSize: 20 }}>{letter}</span>}
+        : <span style={{ width: 40, height: 40, borderRadius: 12, background: '#059669', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontWeight: 800, fontSize: 20 }}>{letter}</span>}
     </div>
   )
 }

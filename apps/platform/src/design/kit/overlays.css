@@ -1,0 +1,547 @@
+/* Overlay & form kit — SidePanel, Dialog, Popover/Menu, Dropdown, Toast, FormField, ApprovalRow,
+   PanelButton. Values come from design_handoff_hrms_redesign (PgCompanies, UtMore, HrmsPlatform,
+   TeamApprovals, EmpHome, README "Popups"). Colours only through the design tokens
+   var(--u-*, light default); the only fixed colours are white on the brand solid and the
+   always-dark toast. Class prefix: uko- (unified kit overlays). */
+
+/* ── Shared ─────────────────────────────────────────────────────────────── */
+.uko-sr {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.uko-layer { position: fixed; inset: 0; }
+.uko-backdrop {
+  position: absolute; inset: 0;
+  background: linear-gradient(270deg, rgba(14, 27, 22, .38), rgba(14, 27, 22, .2));
+  -webkit-backdrop-filter: blur(4px) saturate(.85);
+  backdrop-filter: blur(4px) saturate(.85);
+  animation: uko-fade .2s cubic-bezier(.2, .8, .2, 1) both;
+}
+.uko-panel, .uko-dialog, .uko-pop, .uko-toast, .uko-dd, .uko-field, .uko-toggle, .uko-check, .uko-appr, .uko-apprc, .uko-btn {
+  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+.uko-spin {
+  width: 15px; height: 15px; flex-shrink: 0; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent;
+  animation: uko-rotate .7s linear infinite;
+}
+
+/* Round close button (side panel header, dialog corner). */
+.uko-close {
+  width: 38px; height: 38px; flex-shrink: 0; padding: 0; border: 0; border-radius: 50%;
+  background: var(--u-hv, #F0F4F2); color: var(--u-ink2, #4A5A54);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+.uko-close:hover { background: var(--u-ln, #E3E9E6); color: var(--u-ink, #0E1B16); }
+.uko-close:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Focus rings: brand border + soft halo (README "Accessibility"). */
+.uko-close:focus-visible, .uko-step:focus-visible, .uko-menu-item:focus-visible, .uko-dd-foot:focus-visible,
+.uko-appr-no:focus-visible, .uko-appr-yes:focus-visible, .uko-appr-undo:focus-visible, .uko-appr-link:focus-visible,
+.uko-toast-act:focus-visible, .uko-toast-x:focus-visible, .uko-switch:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--u-br, #0F6E56), 0 0 0 3px var(--u-brs, #E8F3EE);
+}
+.uko-panel:focus, .uko-dialog:focus, .uko-pop:focus, .uko-section-title:focus { outline: none; }
+
+/* ── Buttons (PanelButton) ─────────────────────────────────────────────── */
+.uko-btn {
+  position: relative; height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 0 14px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font-size: 13.5px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; text-decoration: none;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+.uko-btn[data-size="lg"] { height: 44px; padding: 0 18px; border-radius: 12px; font-size: 14px; }
+.uko-btn:hover { border-color: var(--u-br, #0F6E56); }
+.uko-btn[data-variant="primary"] {
+  border-color: transparent; background: var(--u-br, #0F6E56); color: #fff;
+  box-shadow: 0 12px 24px -14px rgba(15, 110, 86, .9), inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+.uko-btn[data-variant="primary"][data-size="lg"] { padding: 0 20px; }
+.uko-btn[data-variant="primary"]:hover { background: var(--u-brh, #0B5A46); }
+/* Danger fill stays the light red in both themes (like the brand fill), so white text keeps 6.9:1;
+   the dark theme's lighter --u-rd is for dots and icons. */
+.uko-btn[data-variant="danger"] { border-color: transparent; background: #C4453A; color: #fff; }
+.uko-btn[data-variant="danger"]:hover { background: #B23A2F; }
+.uko-btn[data-variant="ghost"] { border-color: transparent; background: transparent; color: var(--u-brt, #0F6E56); padding: 0 10px; }
+.uko-btn[data-variant="ghost"]:hover { background: var(--u-brs, #E8F3EE); }
+.uko-btn[data-tone="reject"]:hover { border-color: var(--u-rd, #C4453A); color: var(--u-rdt, #B42318); }
+.uko-btn:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uko-btn[data-variant="primary"]:focus-visible, .uko-btn[data-variant="danger"]:focus-visible {
+  box-shadow: 0 0 0 2px var(--u-sf, #fff), 0 0 0 4px var(--u-br, #0F6E56);
+}
+.uko-btn:disabled { opacity: .55; cursor: not-allowed; }
+.uko-btn[aria-busy="true"] { cursor: progress; }
+/* Inactive until the form is ready: the design's pale brand, with the reason as a tooltip. */
+.uko-btn[data-blocked] { cursor: not-allowed; box-shadow: none; }
+.uko-btn[data-variant="primary"][data-blocked] {
+  background: var(--u-g3, #A9D6C6); /* plain fallback where color-mix is missing */
+  background: color-mix(in oklab, var(--u-br, #0F6E56) 42%, var(--u-sf, #fff));
+  color: #fff;
+}
+.uko-btn[data-blocked]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); right: 0;
+  width: max-content; max-width: 260px; padding: 7px 10px; border-radius: 8px;
+  background: var(--u-ink, #0E1B16); color: var(--u-sf, #fff);
+  font-size: 12.5px; font-weight: 500; line-height: 1.35; white-space: normal; text-align: left;
+  box-shadow: 0 10px 24px -12px rgba(14, 27, 22, .5);
+  opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .15s, transform .15s; z-index: 2;
+}
+.uko-btn[data-blocked][data-tip-align="start"]::after { right: auto; left: 0; }
+.uko-btn[data-blocked]:hover::after, .uko-btn[data-blocked]:focus-visible::after { opacity: 1; transform: none; }
+
+/* ── Side panel ────────────────────────────────────────────────────────── */
+.uko-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  border-left: 1px solid var(--u-ln, #E3E9E6); border-radius: 0;
+  box-shadow: -30px 0 70px -30px rgba(14, 27, 22, .45);
+  animation: uko-slide-in .26s cubic-bezier(.2, .8, .2, 1) both;
+}
+.uko-panel-head {
+  flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 22px 24px 16px; box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF);
+}
+.uko-panel-headtext { min-width: 0; }
+.uko-panel-title { margin: 0; color: inherit; font-size: 20px; line-height: 1.25; font-weight: 500; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.uko-panel-sub { margin: 4px 0 0; font-size: 13.5px; line-height: 1.3; color: var(--u-ink3, #6A7A73); }
+.uko-panel-body { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.uko-panel-main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.uko-panel-main[data-plain] { display: block; }
+.uko-panel-foot {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 16px 24px; background: var(--u-sf, #fff); box-shadow: inset 0 1px 0 var(--u-ln2, #EDF1EF);
+}
+.uko-panel-foot[data-align="between"] { justify-content: space-between; }
+
+.uko-steps {
+  flex: 0 0 196px; box-sizing: content-box; margin: 0; padding: 20px 12px 20px 20px; list-style: none; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px; white-space: nowrap;
+  box-shadow: inset -1px 0 0 var(--u-ln2, #EDF1EF);
+}
+.uko-steps > li { margin: 0; padding: 0; }
+.uko-step {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px; border: 0; border-radius: 10px;
+  background: transparent; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+  transition: background .15s;
+}
+.uko-step:hover { background: var(--u-hv, #F0F4F2); }
+.uko-step[aria-disabled="true"] { cursor: not-allowed; }
+.uko-step-dot {
+  width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500;
+}
+.uko-step[data-state="done"] .uko-step-dot { background: var(--u-br, #0F6E56); color: #fff; }
+.uko-step[data-state="current"] .uko-step-dot { border: 2px solid var(--u-brt, #0F6E56); color: var(--u-brt, #0F6E56); font-weight: 600; }
+.uko-step[data-state="todo"] .uko-step-dot { border: 1.5px solid var(--u-ln, #E3E9E6); color: var(--u-ink3, #6A7A73); }
+.uko-step-label { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+
+.uko-step-pane { display: flex; flex-direction: column; gap: 14px; }
+.uko-step-pane[hidden] { display: none; }
+.uko-section-head { display: flex; align-items: center; gap: 12px; }
+.uko-section-icon {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+  display: flex; align-items: center; justify-content: center;
+}
+.uko-section-text { min-width: 0; }
+.uko-section-title { font-size: 15.5px; line-height: 1.3; font-weight: 500; }
+.uko-section-sub { margin-top: 1px; font-size: 12.5px; line-height: 1.4; color: var(--u-ink3, #6A7A73); }
+
+/* ── Dialog ────────────────────────────────────────────────────────────── */
+.uko-dialog-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; pointer-events: none; }
+.uko-dialog {
+  pointer-events: auto; position: relative; width: 100%; max-height: calc(100vh - 32px); overflow-y: auto;
+  padding: 22px 24px 20px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  box-shadow: var(--u-shp, 0 24px 60px -20px rgba(14, 27, 22, .35));
+  animation: uko-pop .26s cubic-bezier(.2, .8, .2, 1) both;
+}
+.uko-dialog-head { display: flex; align-items: flex-start; gap: 14px; }
+.uko-dialog[data-closable] .uko-dialog-head { padding-right: 36px; }
+.uko-dialog-icon {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+}
+.uko-dialog-icon[data-tone="danger"] { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.uko-dialog-icon[data-tone="warning"] { background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); }
+.uko-dialog-headtext { min-width: 0; flex: 1; }
+.uko-dialog-title { margin: 0; color: inherit; font-size: 18px; line-height: 24px; font-weight: 500; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.uko-dialog-sub { margin-top: 4px; font-size: 13.5px; line-height: 1.5; color: var(--u-ink2, #4A5A54); }
+.uko-dialog-body { margin-top: 16px; font-size: 14px; line-height: 1.5; color: var(--u-ink2, #4A5A54); }
+.uko-dialog-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.uko-dialog-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; }
+
+/* ── Popover & menu ────────────────────────────────────────────────────── */
+.uko-pop {
+  position: fixed; display: flex; flex-direction: column; overflow: hidden; overflow-y: auto;
+  max-width: calc(100vw - 32px); box-sizing: border-box;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  box-shadow: var(--u-shp, 0 24px 60px -20px rgba(14, 27, 22, .35));
+  animation: uko-pop .26s cubic-bezier(.2, .8, .2, 1) both;
+}
+.uko-pop[data-side="top"] { animation-name: uko-pop-up; }
+.uko-menu-pop { padding: 8px; }
+.uko-menu-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 10px 8px; }
+.uko-menu-headtext { min-width: 0; }
+.uko-menu-title { font-size: 15px; font-weight: 500; line-height: 1.35; }
+.uko-menu-headsub { margin-top: 2px; font-size: 12.5px; line-height: 1.45; color: var(--u-ink3, #6A7A73); }
+.uko-menu { display: flex; flex-direction: column; outline: none; }
+.uko-menu-item {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px; border: 0; border-radius: 12px;
+  background: transparent; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer;
+  transition: background .15s;
+}
+.uko-menu-item:hover, .uko-menu-item:focus { background: var(--u-hv, #F0F4F2); outline: none; }
+.uko-menu-item[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.uko-menu-item[data-danger] { color: var(--u-rdt, #B42318); }
+.uko-menu-avatar {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+  display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600;
+}
+.uko-menu-icon { flex-shrink: 0; display: inline-flex; color: var(--u-ink2, #4A5A54); }
+.uko-menu-item[data-danger] .uko-menu-icon { color: inherit; }
+.uko-menu-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.uko-menu-label { font-size: 14px; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; }
+.uko-menu-sub { font-size: 12.5px; line-height: 1.4; color: var(--u-ink2, #4A5A54); }
+.uko-menu-meta { font-size: 12px; line-height: 1.4; color: var(--u-ink3, #6A7A73); }
+.uko-menu-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--u-gd, #C8912E); }
+.uko-menu-tick { flex-shrink: 0; color: var(--u-brt, #0F6E56); }
+.uko-menu-sep { height: 1px; margin: 6px 10px; background: var(--u-ln2, #EDF1EF); }
+.uko-menu-heading { margin: 12px 10px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--u-ink3, #6A7A73); }
+.uko-menu-empty { padding: 14px 10px; font-size: 13.5px; color: var(--u-ink3, #6A7A73); }
+.uko-menu-foot { display: flex; align-items: center; gap: 10px; margin: 4px -8px -8px; padding: 10px 18px; box-shadow: inset 0 1px 0 var(--u-ln2, #EDF1EF); font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+
+/* ── Dropdown ──────────────────────────────────────────────────────────── */
+.uko-dd { position: relative; min-width: 0; }
+.uko-dd-trigger {
+  width: 100%; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 14px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: border-color .2s, box-shadow .2s;
+}
+.uko-dd-trigger[data-variant="rich"] {
+  height: 66px; gap: 12px; padding: 0 16px 0 11px; border-radius: 14px;
+  box-shadow: var(--u-shc, 0 1px 2px rgba(14, 27, 22, .05));
+}
+.uko-dd-trigger:hover { border-color: var(--u-br, #0F6E56); }
+.uko-dd-trigger[aria-expanded="true"] { border-color: var(--u-br, #0F6E56); }
+.uko-dd-trigger:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uko-dd-trigger[aria-invalid="true"] { border-color: var(--u-rd, #C4453A); }
+.uko-dd-trigger:disabled { background: var(--u-sf2, #F7F9F8); color: var(--u-ink3, #6A7A73); cursor: not-allowed; }
+.uko-dd-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uko-dd-value[data-empty] { color: var(--u-ink3, #6A7A73); }
+.uko-dd-richtext { flex: 1; min-width: 0; }
+.uko-dd-eyebrow { display: block; font-size: 11.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--u-ink3, #6A7A73); }
+.uko-dd-name { display: block; margin-top: 2px; font-size: 15.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uko-dd-hint { font-size: 12.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; }
+.uko-dd-chev { flex-shrink: 0; color: var(--u-ink2, #4A5A54); }
+.uko-dd-tile {
+  flex-shrink: 0; border-radius: 11px; background: var(--u-br, #0F6E56); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 600; letter-spacing: .01em;
+}
+.uko-dd-tile[data-size="38"] { width: 38px; height: 38px; font-size: 13px; }
+.uko-dd-tile[data-size="44"] { width: 44px; height: 44px; border-radius: 12px; font-size: 15px; }
+.uko-dd-lead { flex-shrink: 0; display: inline-flex; }
+.uko-dd-pop { padding: 0; }
+.uko-dd-search {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px; height: 50px; padding: 0 16px;
+  box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF); color: var(--u-ink3, #6A7A73); cursor: text;
+}
+.uko-dd-search input {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 14px; color: var(--u-ink, #0E1B16);
+}
+.uko-dd-search input::placeholder { color: var(--u-ink3, #6A7A73); }
+.uko-dd-count { font-size: 12px; color: var(--u-ink3, #6A7A73); white-space: nowrap; }
+.uko-dd-list { flex: 1 1 auto; min-height: 0; max-height: 320px; overflow-y: auto; padding: 6px; outline: none; }
+.uko-dd-option {
+  display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 10px; cursor: pointer;
+  transition: background .12s;
+}
+.uko-dd-option[data-active] {
+  background: var(--u-brs, #E8F3EE);
+  background: color-mix(in srgb, var(--u-brs, #E8F3EE) 70%, var(--u-sf, #fff));
+}
+.uko-dd-option[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.uko-dd-otext { flex: 1; min-width: 0; }
+.uko-dd-otitle { display: block; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uko-dd-osub { display: block; margin-top: 1px; font-size: 12.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uko-dd-tick { flex-shrink: 0; color: var(--u-brt, #0F6E56); }
+.uko-dd-empty { padding: 18px 12px; font-size: 13.5px; color: var(--u-ink3, #6A7A73); }
+.uko-dd-foot {
+  flex-shrink: 0; width: 100%; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  border: 0; box-shadow: inset 0 1px 0 var(--u-ln2, #EDF1EF); background: var(--u-sf2, #F7F9F8);
+  color: var(--u-brt, #0F6E56); font: inherit; font-size: 13.5px; font-weight: 500; text-align: left; cursor: pointer;
+}
+.uko-dd-foot:hover {
+  background: var(--u-brs, #E8F3EE);
+  background: color-mix(in srgb, var(--u-brs, #E8F3EE) 70%, var(--u-sf, #fff));
+}
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
+/* Light theme: the design's dark toast. Dark theme: inverted (the design's #0E1B16 would be
+   1.08:1 against the dark page, i.e. invisible — foundation audit §2.2 / DECISIONS 14). */
+.uko-toasts {
+  position: fixed; left: 50%; bottom: 24px; z-index: 1400; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.uko-toast {
+  --uko-t-bg: #0E1B16; --uko-t-fg: #fff; --uko-t-sub: rgba(255, 255, 255, .72); --uko-t-mute: rgba(255, 255, 255, .55);
+  --uko-t-chip: rgba(255, 255, 255, .08); --uko-t-chip2: rgba(255, 255, 255, .15);
+  --uko-t-ok: #8FD9BE; --uko-t-err: #F4A39B; --uko-t-info: #9CCBEE;
+  position: relative; pointer-events: auto; box-sizing: border-box; overflow: hidden;
+  width: max-content; min-width: min(360px, calc(100vw - 32px)); max-width: min(460px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; border-radius: 12px;
+  background: var(--uko-t-bg); color: var(--uko-t-fg); font-size: 13.5px; font-weight: 500; line-height: 1.35;
+  box-shadow: 0 18px 40px -14px rgba(14, 27, 22, .55);
+  animation: uko-pop-up .26s cubic-bezier(.2, .8, .2, 1) both;
+}
+[data-theme="dark"] .uko-toast {
+  --uko-t-bg: #E6EEEA; --uko-t-fg: #0E1B16; --uko-t-sub: rgba(14, 27, 22, .72); --uko-t-mute: rgba(14, 27, 22, .55);
+  --uko-t-chip: rgba(14, 27, 22, .07); --uko-t-chip2: rgba(14, 27, 22, .13);
+  --uko-t-ok: #0F6E56; --uko-t-err: #B42318; --uko-t-info: #1D6A9E;
+  box-shadow: 0 18px 40px -14px rgba(0, 0, 0, .8);
+}
+.uko-toast-icon { flex-shrink: 0; color: var(--uko-t-ok); }
+.uko-toast[data-tone="error"] .uko-toast-icon { color: var(--uko-t-err); }
+.uko-toast[data-tone="info"] .uko-toast-icon { color: var(--uko-t-info); }
+.uko-toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.uko-toast-msg { overflow-wrap: anywhere; }
+.uko-toast-detail { font-size: 12.5px; font-weight: 400; line-height: 1.45; color: var(--uko-t-sub); }
+.uko-toast-act {
+  flex-shrink: 0; height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border: 0; border-radius: 8px; background: var(--uko-t-chip); color: var(--uko-t-ok);
+  font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .15s;
+}
+.uko-toast-act:hover { background: var(--uko-t-chip2); }
+.uko-toast-count { font-size: 12px; font-weight: 500; color: var(--uko-t-mute); min-width: 18px; }
+.uko-toast-x {
+  flex-shrink: 0; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--uko-t-mute); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: color .15s, background .15s;
+}
+.uko-toast-x:hover { color: var(--uko-t-fg); background: var(--uko-t-chip); }
+.uko-toast-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--uko-t-ok); opacity: .7;
+  transform-origin: left center; animation: uko-countdown linear forwards;
+}
+
+/* ── Form fields ───────────────────────────────────────────────────────── */
+.uko-grid { display: grid; grid-template-columns: repeat(var(--uko-cols, 2), minmax(0, 1fr)); gap: 14px; }
+.uko-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.uko-field[data-full], .uko-toggle[data-full], .uko-check[data-full] { grid-column: 1 / -1; }
+.uko-label { font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--u-ink, #0E1B16); }
+.uko-req { color: var(--u-ink2, #4A5A54); }
+.uko-hint { font-size: 12.5px; line-height: 1.4; color: var(--u-ink3, #6A7A73); }
+.uko-error { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; line-height: 1.4; color: var(--u-rdt, #B42318); }
+.uko-error svg { flex-shrink: 0; margin-top: 1px; }
+.uko-control { position: relative; display: block; min-width: 0; }
+.uko-input {
+  display: block; width: 100%; height: 44px; margin: 0; padding: 0 14px; box-sizing: border-box;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff);
+  color: var(--u-ink, #0E1B16); font: inherit; font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-size: 14px; font-weight: 400; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.uko-input::placeholder { color: var(--u-ink3, #6A7A73); opacity: 1; }
+.uko-input:focus { border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uko-input[aria-invalid="true"] { border-color: var(--u-rd, #C4453A); }
+.uko-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px var(--u-rds, #FCEDEB); }
+.uko-input:disabled { background: var(--u-sf2, #F7F9F8); color: var(--u-ink3, #6A7A73); cursor: not-allowed; }
+:where(.uko-control[data-leading]) .uko-input { padding-left: 40px; }
+.uko-lead { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); display: inline-flex; color: var(--u-ink3, #6A7A73); pointer-events: none; }
+.uko-textarea { height: auto; min-height: 96px; padding: 10px 14px; line-height: 1.5; resize: vertical; }
+.uko-select { padding-right: 38px; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.uko-select-chev { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); color: var(--u-ink2, #4A5A54); pointer-events: none; }
+/* Section forms (UtSection "form"): 40px fields, radius 11, 13.5px, label 12.5px ink2. */
+/* (the size scope sits in :where() so the .pl-* / .pr-* overrides below still win) */
+:where(.uko-field[data-size="md"]) .uko-label { font-size: 12.5px; color: var(--u-ink2, #4A5A54); }
+:where(.uko-field[data-size="md"]) .uko-hint { font-size: 12px; }
+:where(.uko-field[data-size="md"]) .uko-input { height: 40px; padding: 0 12px; border-radius: 11px; font-size: 13.5px; }
+:where(.uko-field[data-size="md"]) .uko-textarea { height: auto; padding: 10px 12px; }
+:where(.uko-field[data-size="md"] .uko-control[data-leading]) .uko-input { padding-left: 38px; }
+:where(.uko-field[data-size="md"]) .uko-select { padding-right: 34px; }
+/* Tailwind padding utilities win over the base padding, like the .ut-input.pl-* overrides in globals.css. */
+.uko-input.pl-9  { padding-left: 2.25rem; }
+.uko-input.pl-10 { padding-left: 2.5rem; }
+.uko-input.pl-11 { padding-left: 2.75rem; }
+.uko-input.pl-12 { padding-left: 3rem; }
+.uko-input.pr-9  { padding-right: 2.25rem; }
+.uko-input.pr-10 { padding-right: 2.5rem; }
+.uko-input.pr-11 { padding-right: 2.75rem; }
+.uko-input.pr-12 { padding-right: 3rem; }
+/* Date fields are the shared calendar (DateField / MonthField / DateRangeField), dressed as a kit field. */
+.utc-field.uko-datebox {
+  height: 44px; border-color: var(--u-ln, #E3E9E6); border-radius: 12px;
+  background-color: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); font-size: 14px;
+}
+.uko-field[data-size="md"] .utc-field.uko-datebox { height: 40px; border-radius: 11px; font-size: 13.5px; }
+.utc-field.uko-datebox:focus-within, .utc-field.uko-datebox[data-open] {
+  border-color: var(--u-br, #0F6E56); background-color: var(--u-sf, #fff); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE);
+}
+.utc-field.uko-datebox[data-invalid] { border-color: var(--u-rd, #C4453A); box-shadow: none; }
+
+.uko-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.uko-toggle[data-disabled] { cursor: not-allowed; opacity: .6; }
+.uko-toggle-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.uko-toggle-label { font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--u-ink, #0E1B16); }
+.uko-toggle-desc { font-size: 12.5px; line-height: 1.4; color: var(--u-ink3, #6A7A73); }
+.uko-switch {
+  position: relative; width: 42px; height: 24px; flex-shrink: 0; padding: 0; border: 0; border-radius: 999px;
+  background: var(--u-gy, #C9D2CE); cursor: pointer; transition: background .2s;
+}
+.uko-switch::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(14, 27, 22, .18); transition: transform .2s cubic-bezier(.2, .8, .2, 1);
+}
+.uko-switch[aria-checked="true"] { background: var(--u-br, #0F6E56); }
+.uko-switch[aria-checked="true"]::after { transform: translateX(18px); }
+.uko-switch:disabled { cursor: not-allowed; }
+/* Section toggles (UtSection "toggles"): 38×22 switch, off = line colour, the row highlights on hover. */
+.uko-toggle[data-size="md"] { padding: 11px 12px; border-radius: 12px; transition: background .2s; }
+.uko-toggle[data-size="md"]:hover { background: var(--u-sf2, #F7F9F8); }
+.uko-toggle[data-size="md"] .uko-toggle-label { font-size: 13.5px; }
+.uko-toggle[data-size="md"] .uko-switch { width: 38px; height: 22px; background: var(--u-ln, #E3E9E6); }
+.uko-toggle[data-size="md"] .uko-switch::after { width: 16px; height: 16px; }
+.uko-toggle[data-size="md"] .uko-switch[aria-checked="true"] { background: var(--u-br, #0F6E56); }
+.uko-toggle[data-size="md"] .uko-switch[aria-checked="true"]::after { transform: translateX(16px); }
+
+.uko-slider { gap: 8px; }
+.uko-slider-head { display: block; }
+.uko-slider-value { font-weight: 500; }
+.uko-range { width: 100%; height: 20px; margin: 0; accent-color: var(--u-br, #0F6E56); cursor: pointer; }
+.uko-range:disabled { cursor: not-allowed; }
+.uko-range:focus-visible { outline: 2px solid var(--u-br, #0F6E56); outline-offset: 3px; border-radius: 4px; }
+.uko-slider-scale { display: flex; justify-content: space-between; gap: 12px; font-size: 11.5px; color: var(--u-ink3, #6A7A73); }
+
+.uko-check { position: relative; display: flex; align-items: flex-start; gap: 12px; cursor: pointer; color: var(--u-ink, #0E1B16); }
+.uko-check[data-card] { padding: 14px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 14px; background: var(--u-sf2, #F7F9F8); }
+.uko-check[data-disabled] { cursor: not-allowed; opacity: .6; }
+.uko-check-input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.uko-check-box {
+  width: 20px; height: 20px; flex-shrink: 0; box-sizing: border-box; border-radius: 6px; border: 2px solid var(--u-gy, #C9D2CE);
+  background: var(--u-sf, #fff); color: transparent; display: flex; align-items: center; justify-content: center;
+  transition: background .15s, border-color .15s;
+}
+.uko-check-input:checked + .uko-check-box { background: var(--u-br, #0F6E56); border-color: var(--u-br, #0F6E56); color: #fff; }
+.uko-check-input:focus-visible + .uko-check-box { border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uko-check-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.uko-check-title { font-size: 14px; font-weight: 500; line-height: 1.35; }
+.uko-check-desc { font-size: 12.5px; line-height: 1.4; color: var(--u-ink3, #6A7A73); }
+
+/* ── Approval rows ─────────────────────────────────────────────────────── */
+.uko-appr { display: flex; align-items: center; gap: 12px; padding: 12px 0; box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF); color: var(--u-ink, #0E1B16); }
+.uko-appr-av {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+  display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600;
+}
+.uko-appr-av[data-size="lg"] { width: 42px; height: 42px; font-size: 13px; }
+.uko-appr-main { flex: 1; min-width: 0; }
+.uko-appr-name { display: block; font-size: 14px; font-weight: 500; line-height: 1.35; }
+.uko-appr-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; border-radius: 4px; }
+.uko-appr-link:hover { color: var(--u-brt, #0F6E56); }
+.uko-appr-what { display: block; margin-top: 1px; font-size: 12.5px; color: var(--u-ink2, #4A5A54); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uko-appr-when { flex-shrink: 0; font-size: 12px; color: var(--u-ink3, #6A7A73); white-space: nowrap; }
+.uko-appr-no, .uko-appr-yes {
+  width: 36px; height: 36px; flex-shrink: 0; padding: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.uko-appr-no { border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-ink2, #4A5A54); }
+.uko-appr-no:hover { border-color: var(--u-rd, #C4453A); color: var(--u-rd, #C4453A); }
+.uko-appr-yes { border: 0; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.uko-appr-yes:hover { background: var(--u-br, #0F6E56); color: #fff; }
+.uko-appr-no:disabled, .uko-appr-yes:disabled { opacity: .55; cursor: not-allowed; }
+.uko-appr-pill { flex-shrink: 0; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 24px; white-space: nowrap; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.uko-appr-pill[data-status="rejected"] { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.uko-appr-undo {
+  flex-shrink: 0; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--u-brt, #0F6E56); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .15s;
+}
+.uko-appr-undo:hover { background: var(--u-brs, #E8F3EE); }
+.uko-appr-undo:disabled { opacity: .55; cursor: progress; }
+
+.uko-apprc {
+  border-radius: 18px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6);
+  box-shadow: var(--u-shc, 0 1px 2px rgba(14, 27, 22, .05)); overflow: hidden; color: var(--u-ink, #0E1B16);
+}
+.uko-apprc-open { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; }
+.uko-apprc-top { display: flex; align-items: flex-start; gap: 14px; }
+.uko-apprc-main { flex: 1; min-width: 0; }
+.uko-apprc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.uko-apprc-row .uko-appr-name, .uko-apprc-row .uko-appr-link { font-size: 15px; }
+.uko-apprc-kind { font-size: 11.5px; font-weight: 500; line-height: 20px; padding: 0 8px; border-radius: 999px; background: var(--u-hv, #F0F4F2); color: var(--u-ink2, #4A5A54); }
+.uko-apprc-what { margin-top: 4px; font-size: 14px; font-weight: 500; }
+.uko-apprc-reason { margin-top: 4px; font-size: 13.5px; color: var(--u-ink2, #4A5A54); }
+.uko-apprc-facts {
+  margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px 16px;
+  padding: 12px 14px; border-radius: 12px; background: var(--u-sf2, #F7F9F8);
+}
+.uko-apprc-fact { min-width: 0; }
+.uko-apprc-fact dt { font-size: 12px; color: var(--u-ink3, #6A7A73); }
+.uko-apprc-fact dd { margin: 2px 0 0; font-size: 13.5px; font-weight: 500; }
+.uko-apprc-flag {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45;
+  background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10);
+}
+.uko-apprc-flag svg { flex-shrink: 0; margin-top: 1px; }
+.uko-apprc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.uko-apprc-note {
+  flex: 1 1 220px; min-width: 0; height: 38px; box-sizing: border-box; padding: 0 12px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; background: var(--u-sf, #fff);
+  color: var(--u-ink, #0E1B16); font: inherit; font-size: 13.5px; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.uko-apprc-note::placeholder { color: var(--u-ink3, #6A7A73); }
+.uko-apprc-note:focus { border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uko-apprc-actions .uko-btn[data-variant="primary"] { padding: 0 18px; box-shadow: none; }
+.uko-apprc-done { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--u-sf2, #F7F9F8); }
+.uko-apprc-mark { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--u-ok, #1F9D6E); }
+.uko-apprc-mark[data-status="rejected"] { background: var(--u-rd, #C4453A); }
+.uko-apprc-line { flex: 1; min-width: 0; font-size: 13.5px; }
+.uko-apprc-line b { font-weight: 500; }
+
+/* ── Phones ────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .uko-panel-head { padding: 16px 16px 12px; }
+  .uko-panel-title { font-size: 18px; line-height: 24px; }
+  .uko-panel-body { flex-direction: column; }
+  .uko-steps {
+    flex: 0 0 auto; flex-direction: row; gap: 6px; padding: 10px 16px; overflow-x: auto; overflow-y: hidden;
+    box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF);
+  }
+  .uko-step { width: auto; padding: 6px 8px; }
+  .uko-step:not([data-state="current"]) .uko-step-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .uko-panel-main { padding: 16px; }
+  .uko-panel-foot { padding: 12px 16px; }
+  .uko-dialog { padding: 18px 18px 16px; }
+}
+@media (max-width: 480px) {
+  .uko-grid { grid-template-columns: minmax(0, 1fr); }
+  .uko-appr { flex-wrap: wrap; }
+  .uko-appr-main { flex-basis: calc(100% - 50px); }
+  .uko-appr > .uko-appr-when { margin-left: 50px; margin-right: auto; }
+  .uko-apprc-note { flex-basis: 100%; }
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────── */
+@keyframes uko-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes uko-slide-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes uko-pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes uko-pop-up { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes uko-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes uko-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .uko-backdrop, .uko-panel, .uko-dialog, .uko-pop, .uko-toast { animation: none; }
+  .uko-toast-bar { display: none; }
+  .uko-switch, .uko-switch::after { transition: none; }
+}
+[data-ufx="off"] .uko-backdrop, [data-ufx="off"] .uko-panel, [data-ufx="off"] .uko-dialog,
+[data-ufx="off"] .uko-pop, [data-ufx="off"] .uko-toast { animation: none; }

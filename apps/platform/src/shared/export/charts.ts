@@ -3,7 +3,7 @@
 // shows, so a downloaded chart always matches the screen.
 import { esc } from './fileExport'
 
-const FONT = "'Plus Jakarta Sans',Inter,Segoe UI,Arial,sans-serif"
+const FONT = "'Plus Jakarta Sans',Segoe UI,Arial,sans-serif"
 const niceStep = (raw: number) => [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000].find((x) => x >= raw) || Math.ceil(raw / 10000) * 10000
 const text = (x: number, y: number, s: string, o: { size?: number; weight?: number; fill?: string; anchor?: string } = {}) =>
   `<text x="${x}" y="${y}" font-family="${FONT}" font-size="${o.size ?? 12}" font-weight="${o.weight ?? 600}" fill="${o.fill ?? '#334155'}" text-anchor="${o.anchor ?? 'start'}">${esc(s)}</text>`
