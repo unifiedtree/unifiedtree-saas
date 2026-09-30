@@ -8,7 +8,10 @@ import com.hrms.pli.dto.PliAwardResponse;
 import com.hrms.pli.dto.PliDecisionRequest;
 import com.hrms.pli.dto.PliTargetRequest;
 import com.hrms.pli.dto.PliTargetResponse;
+import com.hrms.pli.enums.PliStatus;
 import com.hrms.pli.service.PliService;
+import com.hrms.api.advance.PayFinancialYear;
+import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,13 +45,19 @@ public class PliController {
     private final PliService pliService;
     private final EmployeeRepository employeeRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final PliReadService reads;
+    private final WorkforceDepartmentRepository departmentRepository;
 
     public PliController(PliService pliService,
                          EmployeeRepository employeeRepository,
-                         org.springframework.jdbc.core.JdbcTemplate jdbc) {
+                         org.springframework.jdbc.core.JdbcTemplate jdbc,
+                         PliReadService reads,
+                         WorkforceDepartmentRepository departmentRepository) {
         this.pliService = pliService;
         this.employeeRepository = employeeRepository;
         this.jdbc = jdbc;
+        this.reads = reads;
+        this.departmentRepository = departmentRepository;
     }
 
     @Operation(summary = "List PLI targets")
@@ -97,12 +106,24 @@ public class PliController {
                 .body(enrichOne(pliService.createAward(employeeId, companyId, request)));
     }
 
-    @Operation(summary = "List all incentive awards")
+    @Operation(summary = "List all incentive awards, optionally only some statuses (comma-separated)")
     @GetMapping("/awards")
     @PreAuthorize("hasAuthority('hrms.pli.read')")
     public ResponseEntity<PageResponse<PliAwardResponse>> listAwards(
+            @RequestParam(required = false) List<PliStatus> status,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(pliService.getAllAwards(pageable)));
+        // No status = today's call exactly (BW-63 adds the optional filter).
+        return ResponseEntity.ok(enrichPage(pliService.getAllAwards(status, pageable)));
+    }
+
+    @Operation(summary = "Totals of all incentive awards: proposed, approved to be paid, paid this financial year")
+    @GetMapping("/awards/summary")
+    @PreAuthorize("hasAuthority('hrms.pli.read')")
+    public ResponseEntity<PliReadService.AwardsSummary> awardsSummary(@AuthenticationPrincipal Jwt jwt) {
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        PayFinancialYear year = PayFinancialYear.of(jdbc, tenantId, jwt == null ? null : extractEmployeeId(jwt),
+                java.time.LocalDate.now(PayFinancialYear.IST));
+        return ResponseEntity.ok(reads.summary(tenantId, year));
     }
 
     @Operation(summary = "Approve or reject a proposed incentive award")
@@ -136,6 +157,14 @@ public class PliController {
                 page.page(), page.size(), page.totalElements(), page.totalPages(), page.last()));
     }
 
+    @Operation(summary = "Totals of my incentive awards: proposed for me, waiting, approved to be paid, paid")
+    @GetMapping("/my/summary")
+    @PreAuthorize("hasAuthority('hrms.pli.read.self')")
+    public ResponseEntity<PliReadService.MyAwardsSummary> mySummary(@AuthenticationPrincipal Jwt jwt) {
+        // The person comes from the token only.
+        return ResponseEntity.ok(reads.mySummary(com.hrms.core.tenant.TenantContext.getTenantId(), extractEmployeeId(jwt)));
+    }
+
     // ─── Awardee identity enrichment ─────────────────────────────────────────
     // The PLI module has no dependency on hrms-employee, so the awardee's name /
     // code are resolved here (the API layer) and folded into the response so the
@@ -152,8 +181,9 @@ public class PliController {
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
         Map<UUID, String> runs = runLabels(page.content());
+        Map<UUID, String> departments = departmentNames(employeeMap.values());
         List<PliAwardResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap.get(r.employeeId()), runs))
+                .map(r -> enrich(r, employeeMap.get(r.employeeId()), runs, departments))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
@@ -163,15 +193,30 @@ public class PliController {
         Employee employee = r.employeeId() == null
                 ? null
                 : employeeRepository.findById(r.employeeId()).orElse(null);
-        return enrich(r, employee, runLabels(List.of(r)));
+        return enrich(r, employee, runLabels(List.of(r)),
+                employee == null ? Map.of() : departmentNames(List.of(employee)));
     }
 
-    private PliAwardResponse enrich(PliAwardResponse r, Employee employee, Map<UUID, String> runs) {
+    private PliAwardResponse enrich(PliAwardResponse r, Employee employee, Map<UUID, String> runs,
+                                    Map<UUID, String> departments) {
         String employeeName = employee != null
                 ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim()
                 : null;
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
-        return withRun(r, employeeName, employeeCode, runs);
+        PliAwardResponse w = withRun(r, employeeName, employeeCode, runs);
+        UUID departmentId = employee != null ? employee.getDepartmentId() : null;
+        return new PliAwardResponse(w.id(), w.employeeId(), w.employeeName(), w.employeeCode(), w.companyId(),
+                w.planName(), w.period(), w.amount(), w.ratingBasis(), w.status(), w.notes(), w.createdAt(),
+                w.approvedAt(), w.payrollRunId(), w.payrollPeriod(), w.paidAt(),
+                departmentId, departmentId == null ? null : departments.get(departmentId));
+    }
+
+    private Map<UUID, String> departmentNames(java.util.Collection<Employee> employees) {
+        List<UUID> ids = employees.stream().map(Employee::getDepartmentId).filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, String> names = new java.util.HashMap<>();
+        departmentRepository.findAllById(ids).forEach(d -> names.put(d.getId(), d.getName()));
+        return names;
     }
 
     private static PliAwardResponse withRun(PliAwardResponse r, String employeeName, String employeeCode,

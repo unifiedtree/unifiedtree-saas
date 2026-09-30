@@ -107,6 +107,13 @@ public class PliService {
         return toPage(awardRepository.findAllByOrderByCreatedAtDesc(pageable));
     }
 
+    /** Awards in some statuses (BW-63); with none given it is exactly {@link #getAllAwards(Pageable)}. */
+    @Transactional(readOnly = true)
+    public PageResponse<PliAwardResponse> getAllAwards(java.util.Collection<PliStatus> statuses, Pageable pageable) {
+        if (statuses == null || statuses.isEmpty()) return getAllAwards(pageable);
+        return toPage(awardRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable));
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<PliAwardResponse> getMyAwards(UUID employeeId, Pageable pageable) {
         return toPage(awardRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));

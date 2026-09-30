@@ -14,4 +14,8 @@ public interface PliAwardRepository extends JpaRepository<PliAward, UUID> {
     Page<PliAward> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     Page<PliAward> findByEmployeeIdOrderByCreatedAtDesc(UUID employeeId, Pageable pageable);
+
+    /** The awards list's status filter (BW-63). */
+    Page<PliAward> findByStatusInOrderByCreatedAtDesc(java.util.Collection<com.hrms.pli.enums.PliStatus> statuses,
+                                                      Pageable pageable);
 }

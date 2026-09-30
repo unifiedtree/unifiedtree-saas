@@ -32,23 +32,23 @@ public class AdvanceRecoveryController {
     }
 
     @GetMapping("/{id}/schedule")
-    @PreAuthorize("hasAuthority('hrms.advance.read')")
+    @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public List<AdvanceRecoveryService.ScheduleRowDto> schedule(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        requireVisible(id, jwt);
+        requireReadable(id, jwt);
         return service.listSchedule(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/{id}/ledger")
-    @PreAuthorize("hasAuthority('hrms.advance.read')")
+    @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public List<AdvanceRecoveryService.LedgerRowDto> ledger(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        requireVisible(id, jwt);
+        requireReadable(id, jwt);
         return service.listLedger(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/{id}/summary")
-    @PreAuthorize("hasAuthority('hrms.advance.read')")
+    @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public AdvanceRecoveryService.RecoverySummaryDto summary(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        requireVisible(id, jwt);
+        requireReadable(id, jwt);
         return service.summary(TenantContext.getTenantId(), id);
     }
 
@@ -83,6 +83,29 @@ public class AdvanceRecoveryController {
             throw new org.springframework.security.access.AccessDeniedException("This advance is not routed to you for approval.");
         }
         return service.skipMonth(TenantContext.getTenantId(), id, req, actorId(jwt));
+    }
+
+    /**
+     * Who may read an advance's schedule, ledger and recovery summary. With
+     * {@code hrms.advance.read}: as before (everything with disburse, else your
+     * own or one routed to you). With only {@code hrms.advance.request.self}
+     * (BW-62): your own advance, nobody else's. The actions keep
+     * {@link #requireVisible} unchanged.
+     */
+    private void requireReadable(UUID id, Jwt jwt) {
+        if (hasPermission(jwt, "hrms.advance.read")) {
+            requireVisible(id, jwt);
+            return;
+        }
+        var advance = advances.getRequest(id);
+        if (!java.util.Objects.equals(advance.employeeId(), employeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException("Not permitted to view this advance.");
+        }
+    }
+
+    private static boolean hasPermission(Jwt jwt, String permission) {
+        var permissions = jwt.getClaimAsStringList("permissions");
+        return permissions != null && permissions.contains(permission);
     }
 
     private void requireVisible(UUID id, Jwt jwt) {

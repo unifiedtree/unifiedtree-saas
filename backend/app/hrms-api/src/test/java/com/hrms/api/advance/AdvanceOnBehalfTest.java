@@ -92,7 +92,9 @@ class AdvanceOnBehalfTest {
     private final AdvanceService advanceService = mock(AdvanceService.class);
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
     private final ApproverFallbackResolver approvers = mock(ApproverFallbackResolver.class);
-    private final AdvanceController controller = new AdvanceController(advanceService, employees, mock(AdvanceRecoveryService.class), approvers);
+    private final AdvanceController controller = new AdvanceController(advanceService, employees, mock(AdvanceRecoveryService.class), approvers,
+            mock(AdvanceReadService.class), mock(com.hrms.employee.workforce.repository.WorkforceDepartmentRepository.class),
+            mock(com.hrms.api.payroll.PayrollService.class), mock(JdbcTemplate.class));
 
     private Jwt jwtFor(UUID emp) {
         return Jwt.withTokenValue("t").header("alg", "none").subject(UUID.randomUUID().toString())
