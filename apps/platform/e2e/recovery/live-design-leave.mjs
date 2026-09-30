@@ -60,7 +60,8 @@ try {
   // ── employee applies ──
   const r = await session('reader@unifiedtree.demo')
   await r.page.goto(base + '/me'); await settle(r.page)
-  check('employee: Self-service tabs include Leave', (await r.page.getByRole('link', { name: 'Leave', exact: true }).count()) > 0)
+  // The redesign's rail names self-service Leave "My leave" (visible label "Leave"); the old tab row was "Leave".
+  check('employee: Self-service tabs include Leave', (await r.page.getByRole('link', { name: /^(My leave|Leave)$/ }).count()) > 0)
   await r.page.goto(base + '/hrms/leave'); await settle(r.page)
   const views = await r.page.getByRole('navigation', { name: 'Leave views' }).innerText().catch(async () => r.page.locator('[aria-label="Leave views"]').innerText())
   check('employee: views are My leave, Apply, Balances, Calendar, Leave types, Holidays', ['My leave', 'Apply', 'Balances', 'Calendar', 'Leave types', 'Holidays'].every((v) => views.includes(v)) && !views.includes('Approvals'), views.replace(/\s+/g, ' '))
