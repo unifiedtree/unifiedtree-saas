@@ -2,7 +2,7 @@
 // where people who manage the company can Edit it or Archive it (with the confirmation, as before). Five per
 // page with Newer / Older; read-only on a past date. Notice event date (BW-118) and audience are not built yet.
 import { useState } from 'react'
-import { Button } from '@/design/kit/display'
+import { Button, Skeleton } from '@/design/kit/display'
 import { DateInput, Input, SidePanel, Textarea } from '@/design/kit/overlays'
 import { dashIcon } from '@/design/dc/icons'
 import { fmtShort } from '@/design/dc/dates'
@@ -37,7 +37,7 @@ export function NoticesStrip({ notices, total, page, pages, isPast, sel, today, 
         <span className="ud-notices__ic" aria-hidden="true">{dashIcon('megaphone', 17)}</span>
         <div>
           <h3 id="ud-notices-title" className="ud-notices__title">Company notices</h3>
-          <div className="ud-notices__count">{loading ? 'Loading…' : error ? 'Couldn’t load' : countText}{pages > 1 && !loading ? ` · page ${page + 1} of ${pages}` : ''}</div>
+          <div className="ud-notices__count" aria-busy={loading || undefined}>{loading ? <><Skeleton width={72} height={10} /><span className="sr-only">Loading notices</span></> : error ? 'Couldn’t load' : countText}{pages > 1 && !loading ? ` · page ${page + 1} of ${pages}` : ''}</div>
         </div>
       </div>
       {error ? (
