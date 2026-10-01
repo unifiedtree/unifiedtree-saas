@@ -223,9 +223,14 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
   it('a page or tab of a package not shipped yet stays out of the app (READY_PAGES)', () => {
     const pending = ALL_PAGE_ENTRIES.filter((e) => e.pkg && !READY_PAGES.has(e.pkg)).map((e) => e.id)
     for (const id of pending) expect(PAGE_REGISTRY.some((e) => e.id === id), id).toBe(false)
-    // My team (P-TEAM), Daily tracking (P-ATT-DAY) and Attendance analytics / Shifts (P-ATT-PLAN) are released; other new tabs are still out.
-    expect([...READY_PAGES]).toEqual(['P-TEAM', 'P-ATT-DAY', 'P-ATT-PLAN'])
+    // My team (P-TEAM), Daily tracking (P-ATT-DAY), Attendance analytics / Shifts (P-ATT-PLAN) and Org chart (P-ORG) are released; other new tabs are still out.
+    expect([...READY_PAGES]).toEqual(['P-TEAM', 'P-ATT-DAY', 'P-ATT-PLAN', 'P-ORG'])
     expect(PAGE_REGISTRY.some((e) => e.id === 'att-daily:timesheet')).toBe(true)
+    // Org chart: every employee, and HR without an employee record; not someone with neither.
+    expect(ids(ctx(EMPLOYEE)).has('org-chart')).toBe(true)
+    expect(ids(ctx(HR_MANAGER, { self: false })).has('org-chart')).toBe(true)
+    expect(ids(ctx([], { self: false })).has('org-chart')).toBe(false)
+    expect(ids(ctx(EMPLOYEE)).has('m-org-chart')).toBe(false)
     expect(pending.sort()).toEqual(['exit:exited', 'exit:notice', 'exit:terminated', 'leave:all-balances',
       'workforce-analytics:attrition', 'workforce-analytics:diversity', 'workforce-analytics:headcount'])
     expect(PAGE_REGISTRY.length + pending.length).toBe(ALL_PAGE_ENTRIES.length)

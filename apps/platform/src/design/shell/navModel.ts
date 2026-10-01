@@ -50,7 +50,7 @@ export interface NavModule {
   app?: string
 }
 
-const MASTER_ORG = ['/hrms/master/companies', '/hrms/master/branches', '/hrms/master/departments', '/hrms/master/designations', '/hrms/master/grades']
+const MASTER_ORG = ['/hrms/master/companies', '/hrms/master/branches', '/hrms/master/departments', '/hrms/master/designations', '/hrms/master/grades', '/hrms/master/org-chart']
 
 export const NAV_MODULES: readonly NavModule[] = [
   // ── Home ──

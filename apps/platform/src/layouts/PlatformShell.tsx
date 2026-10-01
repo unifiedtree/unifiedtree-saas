@@ -275,10 +275,13 @@ export function PlatformShell() {
     }))
     .filter(g => g.rows.length > 0)
   const moreCount = overflowSections.reduce((n, g) => n + g.rows.length, 0)
+  // Org chart (P-ORG): for every role with HRMS; the server limits what each person sees.
+  const canSeeOrgChart = accessCtx.modules.includes('hrms') && (accessCtx.self || accessCtx.has('hrms.employee.read'))
   const mySpace: MoreSection = {
     key: 'my-space', label: 'My space', rows: [
       { key: 'my-workspace', label: 'My workspace', icon: 'grid', href: home.path, onClick: goHome },
       { key: 'my-profile', label: 'My profile', icon: 'user', href: '/profile', active: matchPath(pathname, '/profile'), onClick: () => goTo('/profile') },
+      ...(canSeeOrgChart ? [{ key: 'org-chart', label: 'Org chart', icon: 'users', href: '/hrms/org-chart', active: matchPath(pathname, '/hrms/org-chart'), onClick: () => goTo('/hrms/org-chart') }] : []),
       { key: 'all-apps', label: 'All apps', icon: 'layers', href: '/modules', active: matchPath(pathname, '/modules'), onClick: () => goTo('/modules') },
     ],
   }
