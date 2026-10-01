@@ -231,8 +231,13 @@ try {
         // My leave opens /hrms/leave itself; leave it (More → My profile) so search is a new arrival there.
         await clickRail(page, 'My leave')
         await (await openMore(page)).getByRole('link', { name: 'My profile', exact: true }).click(); await settle(page)
-        const input = page.locator('input[aria-controls="top-search-results"]').filter({ visible: true }).first()
-        await input.click(); await input.fill('leave')
+        // F3b: search is a dialog opened from the top bar's "Search everything" pill.
+        const input = page.getByTestId('top-search-input')
+        if (!(await input.isVisible().catch(() => false))) {
+          await page.getByRole('button', { name: 'Search everything' }).click()
+          await input.waitFor({ timeout: 10_000 })
+        }
+        await input.fill('leave')
         const opts = page.locator('[role=option]').filter({ visible: true })
         await opts.first().waitFor({ timeout: 15_000 }).catch(() => {})
         const texts = (await opts.allTextContents()).map((t) => t.trim())
