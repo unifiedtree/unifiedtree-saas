@@ -100,9 +100,11 @@ export function RequestOvertimePanel({ open, onClose, today, minimumMinutes }: {
           <Input label="Minutes" type="number" min={0} max={59} inputMode="numeric" value={f.minutes} onChange={(e) => setF({ ...f, minutes: e.target.value })} />
         </FieldGrid>
         <p className="apl-note">
-          {minimumMinutes != null && minimumMinutes > 0
-            ? `Overtime counts from ${hm(minimumMinutes)}. Under that it isn’t overtime; from it, all of the time counts.`
-            : 'Every extra minute counts.'}
+          {minimumMinutes == null
+            ? 'Overtime has a minimum (1 hour unless your company changed it). Under it, extra time isn’t overtime; from it, all of the time counts.'
+            : minimumMinutes > 0
+              ? `Overtime counts from ${hm(minimumMinutes)}. Under that it isn’t overtime; from it, all of the time counts.`
+              : 'Every extra minute counts.'}
         </p>
         <Textarea label="Reason" required rows={3} maxLength={500} placeholder="For example: month-end closing" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
       </div>

@@ -99,7 +99,7 @@ try {
   check('Overtime tab says approved overtime is "Recorded, not paid"', await page.getByText('Recorded, not paid').first().isVisible())
   check('Overtime tab no longer carries the shift-schedule CRUD table', (await page.getByRole('button', { name: /^Edit shift / }).count()) === 0)
   await page.getByRole('button', { name: 'This month' }).click()
-  check('Overtime tab keeps the monthly overtime table', await page.getByRole('heading', { name: 'Overtime requests' }).isVisible())
+  check('Overtime tab keeps the monthly overtime table', await page.getByRole('heading', { name: 'Overtime requests', exact: true }).isVisible())
 
   // Roster tab still mounts.
   await page.getByRole('tab', { name: /^Roster/ }).click()

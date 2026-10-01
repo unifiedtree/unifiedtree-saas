@@ -56,7 +56,8 @@ export function ShiftsPage() {
   })
   const me = useQuery({ queryKey: ['employees', 'me'], queryFn: () => apiJson<{ id: string }>('/v1/employees/me'), enabled: canSelf && !canTeam, staleTime: 300_000 })
   const myShift = useEmployeeShift(me.data?.id, { enabled: !canTeam })
-  const rules = useOvertimeRules(companyId, { enabled: !!companyId && (canTeam || canSelf) })
+  // The rules are read with attendance.team.read or attendance.policy.manage (contract); employees don't get them.
+  const rules = useOvertimeRules(companyId, { enabled: !!companyId && (canTeam || canPolicy) })
   // Counts on the tabs (the same queries the views read, so nothing loads twice).
   const pending = usePendingShiftRequests({ enabled: canApprove && canTeam })
   const prevMonthStart = (() => { const d = new Date(`${today.slice(0, 8)}01T00:00:00`); d.setDate(0); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` })()
