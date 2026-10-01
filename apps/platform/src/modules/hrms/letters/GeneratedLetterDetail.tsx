@@ -25,6 +25,7 @@ export const GeneratedLetterDetail: React.FC = () => {
   const toast = useToast()
   const confirm = useConfirmDialog()
   const canReadAll = usePermission(P.HRMS_LETTERS_READ)
+  const canAct = [usePermission(P.HRMS_LETTERS_SEND), usePermission(P.HRMS_LETTERS_VOID), usePermission(P.HRMS_LETTERS_DELETE)].some(Boolean)
   const { data: letter, isLoading, error, refetch } = useGeneratedLetter(id)
   const deleteMut = useDeleteGeneratedLetter()
   const [sending, setSending] = useState(false)
@@ -95,7 +96,7 @@ export const GeneratedLetterDetail: React.FC = () => {
           </Section>
         </SectionCell>
         <SectionCell width="half">
-          <Section title="Actions" cardClass={false}>
+          {canAct && <Section title="Actions" cardClass={false}>
             <div className="lt-actions">
               <Can code={P.HRMS_LETTERS_SEND}>
                 {!isVoid && <Button variant={letter.sentAt ? 'secondary' : 'primary'} icon="mail" block onClick={() => setSending(true)}>{letter.sentAt ? 'Send again' : 'Send letter'}</Button>}
@@ -107,7 +108,7 @@ export const GeneratedLetterDetail: React.FC = () => {
                 <Button variant="danger-outline" icon="trash" block loading={deleteMut.isPending} onClick={remove}>Delete letter</Button>
               </Can>
             </div>
-          </Section>
+          </Section>}
           <Section title="History" cardClass={false}>
             <Timeline variant="rail" label="Letter history" items={history} />
           </Section>
