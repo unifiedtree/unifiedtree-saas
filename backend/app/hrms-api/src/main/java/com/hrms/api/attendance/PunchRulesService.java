@@ -18,13 +18,15 @@ import java.util.UUID;
 /**
  * Where a person may punch from (V143.53 redesign):
  * <ul>
- *   <li><b>"Allow web check-in"</b> (BW-24), a company switch, OFF by default,
- *       in {@code settings.hr_configuration.allow_web_punch} (JDBC only; the
- *       HrConfiguration entity does not map it). The punch API refuses the WEB
- *       method while it is off, and also while the records' method checks don't
- *       accept WEB yet (the migration is applied by hand, in steps). A web punch
- *       needs the browser's location; the geofence rule is unchanged and there
- *       is no face check on the web.</li>
+ *   <li><b>"Allow web check-in"</b> (BW-24), a company switch, ON by default
+ *       (client decision, 1 Oct; a company with no HR configuration row counts
+ *       as on), in {@code settings.hr_configuration.allow_web_punch} (JDBC only;
+ *       the HrConfiguration entity does not map it). The punch API refuses the
+ *       WEB method while an admin has turned it off, while the column is
+ *       missing, and while the records' method checks don't accept WEB yet (the
+ *       migration is applied by hand, in steps). A web punch needs the
+ *       browser's location and a face scan ({@link WebPunchFace}); the geofence
+ *       rule is the phone's.</li>
  *   <li><b>"Anywhere (no geofence)"</b> (BW-28), per person, in
  *       {@code hrms.employee_punch_rules}. Check-in skips the geofence check for
  *       that person. No row, or no table, means the rule is off: today's
@@ -71,13 +73,13 @@ public class PunchRulesService {
     }
 
     /**
-     * Refuses a web punch unless the company switched web check-in on, the
-     * records accept WEB, and the browser sent its location.
+     * Refuses a web punch unless web check-in is on for the company (the
+     * default), the records accept WEB, and the browser sent its location.
      */
     public void assertWebPunch(UUID companyId, Double latitude, Double longitude) {
         if (!webPunchAllowed(companyId) || !webMethodStorable()) {
             throw new BusinessRuleException(
-                    "Web check-in isn't switched on for your company. Check in and out from the mobile app.",
+                    "Web check-in is turned off for your company. Check in and out from the mobile app.",
                     WEB_PUNCH_NOT_ALLOWED);
         }
         if (!hasLocation(latitude, longitude)) {
@@ -87,7 +89,11 @@ public class PunchRulesService {
         }
     }
 
-    /** The company's switch; false while it is off, the column is missing, or it can't be read. */
+    /**
+     * The company's switch: true when its row says so, and when it has no HR
+     * configuration row yet (on by default); false while an admin has turned it
+     * off, while the column is missing, or when it can't be read.
+     */
     public boolean webPunchAllowed(UUID companyId) {
         if (companyId == null) return false;
         try {
@@ -95,7 +101,7 @@ public class PunchRulesService {
             List<Boolean> on = jdbc.queryForList(
                     "SELECT allow_web_punch FROM settings.hr_configuration WHERE tenant_id = ? AND company_id = ?",
                     Boolean.class, TenantContext.requireTenantId(), companyId);
-            return !on.isEmpty() && Boolean.TRUE.equals(on.get(0));
+            return switchValue(on);
         } catch (DataAccessException | IllegalStateException e) {
             log.warn("Could not read the web check-in switch for company {}: {}", companyId, e.getMessage());
             return false;
@@ -124,6 +130,11 @@ public class PunchRulesService {
         }
     }
 
+    /** The switch from the company's row; no row means on (the default). */
+    static boolean switchValue(List<Boolean> row) {
+        return row.isEmpty() || Boolean.TRUE.equals(row.get(0));
+    }
+
     /** GET /web-punch-setting: FEATURE_NOT_READY while the column is missing. */
     @Transactional(readOnly = true)
     public WebPunchSetting setting(UUID companyId) {
@@ -132,32 +143,25 @@ public class PunchRulesService {
             List<Boolean> on = jdbc.queryForList(
                     "SELECT allow_web_punch FROM settings.hr_configuration WHERE tenant_id = ? AND company_id = ?",
                     Boolean.class, TenantContext.requireTenantId(), companyId);
-            return new WebPunchSetting(companyId, !on.isEmpty() && Boolean.TRUE.equals(on.get(0)));
+            return new WebPunchSetting(companyId, switchValue(on));
         });
     }
 
     /**
-     * PUT /web-punch-setting. Turning it on creates the company's HR
-     * configuration row when it has none yet (every other setting at its
-     * default, the values HR Configuration already shows); turning it off never
-     * creates one.
+     * PUT /web-punch-setting. Creates the company's HR configuration row when
+     * it has none yet (every other setting at its default, the values HR
+     * Configuration already shows, as the employee-code counter does), so
+     * turning it off sticks for a company that never saved HR configuration.
      */
     @Transactional
     public WebPunchSetting save(UUID companyId, boolean allowWebPunch) {
         requireCompany(companyId);
         UUID tenant = TenantContext.requireTenantId();
-        FeatureNotReady.run(() -> {
-            if (allowWebPunch) {
-                jdbc.update("""
-                        INSERT INTO settings.hr_configuration (id, tenant_id, company_id, allow_web_punch)
-                        VALUES (gen_random_uuid(), ?, ?, TRUE)
-                        ON CONFLICT (tenant_id, company_id) DO UPDATE SET allow_web_punch = TRUE, updated_at = now()
-                        """, tenant, companyId);
-            } else {
-                jdbc.update("UPDATE settings.hr_configuration SET allow_web_punch = FALSE, updated_at = now() "
-                        + "WHERE tenant_id = ? AND company_id = ?", tenant, companyId);
-            }
-        });
+        FeatureNotReady.run(() -> jdbc.update("""
+                INSERT INTO settings.hr_configuration (id, tenant_id, company_id, allow_web_punch)
+                VALUES (gen_random_uuid(), ?, ?, ?)
+                ON CONFLICT (tenant_id, company_id) DO UPDATE SET allow_web_punch = EXCLUDED.allow_web_punch, updated_at = now()
+                """, tenant, companyId, allowWebPunch));
         return new WebPunchSetting(companyId, allowWebPunch);
     }
 
