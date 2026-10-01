@@ -46,8 +46,10 @@ export function LetterPreviewPane({ request, ready, emptyHint, employeeLocked, t
   const [as, setAs] = useState<{ id: string; name: string } | null>(null)
   const [picking, setPicking] = useState(false)
   const [opening, setOpening] = useState(false)
-  const req = useSettled<LetterPreviewRequest>({ ...request, employeeId: request.employeeId ?? as?.id ?? undefined })
-  const q = useLetterPreview(req, { enabled: ready })
+  // The request and whether it is ready settle together, so a half-typed or stale request is never sent.
+  const settled = useSettled<{ req: LetterPreviewRequest; ready: boolean }>({ req: { ...request, employeeId: request.employeeId ?? as?.id ?? undefined }, ready })
+  const req = settled.req
+  const q = useLetterPreview(req, { enabled: settled.ready && ready })
   const p = q.data
 
   const openPdf = async () => {
