@@ -19,7 +19,7 @@ import { Ico, KPI_ICON, SECTION, isoDate, todayIso } from './ReportKit'
 import { REPORT_LABEL } from './reportSpec'
 import { ScheduledEmails } from './ReportSchedules'
 
-const FONT = "'Plus Jakarta Sans',sans-serif"
+const FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
 const ARROW = 'M5 12h14M12 5l7 7-7 7'
 const TILE: Record<string, [string, string, string]> = {
   green: ['#ecfdf5', '#d1fae5', '#0f6e56'], blue: ['#eff6ff', '#dbeafe', '#2563eb'], red: ['#fff1f2', '#fecdd3', '#e11d48'],

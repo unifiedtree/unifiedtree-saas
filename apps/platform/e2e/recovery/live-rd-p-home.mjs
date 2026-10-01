@@ -9,7 +9,8 @@
 //    show up in Your requests and on Home's My requests, then both are cancelled
 //    through the page's Cancel dialog.
 //  - mgr (DEPT_MANAGER): Home shows Punch for a team member right under the greeting
-//    (it opens the panel listing reader), Waiting for you, Today's team and the team
+//    (it opens the panel listing reader; picking reader opens P-ATT-DAY's assisted punch dialog
+//    on them, with the browser's fake camera; nobody is punched), Waiting for you, Today's team and the team
 //    cards. Shift change: a card is picked, From and Until are set, the request is
 //    sent with Until (the database keeps it), then withdrawn through the page.
 //  - light and dark at 1440, and 390 wide with no sideways scroll; screenshots go to
@@ -53,11 +54,12 @@ const dayRange = (a, b) => {
 }
 
 mkdirSync(SHOTS, { recursive: true })
-const browser = await chromium.launch({ headless: true })
-const created = { wfh: [], shift: [] }
+// The browser's fake camera (a test pattern) lets the assisted punch dialog open its camera headless.
+const browser = await chromium.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
+const created = { wfh: [], shift: [], enrollment: null }
 
 async function session(email, { width = 1440, height = 1000, theme = 'light' } = {}) {
-  const ctx = await browser.newContext({ viewport: { width, height } })
+  const ctx = await browser.newContext({ viewport: { width, height }, permissions: ['camera', 'geolocation'], geolocation: { latitude: 12.9716, longitude: 77.5946, accuracy: 20 } })
   await ctx.addInitScript((t) => { try { localStorage.setItem('ut.theme', t) } catch { /* private mode */ } }, theme)
   const page = await ctx.newPage()
   const errors = [], failed = []
@@ -187,6 +189,14 @@ try {
   }
 
   // ── 3. mgr: the manager Home ───────────────────────────────────────────────
+  // reader@ needs an enrolled face to be picked; when they have none, a temporary ACTIVE enrolment
+  // row stands in (no face templates, so no punch could ever match it) and is removed at the end.
+  const hadFace = sql(`SELECT count(*) FROM attendance.face_enrollments WHERE tenant_id=${lit(tenant)} AND employee_id=${lit(READER)}`) !== '0'
+  if (!hadFace) {
+    created.enrollment = sql(`INSERT INTO attendance.face_enrollments(id, tenant_id, employee_id, status, samples_required, samples_captured, consecutive_failures, enrolled_at, created_at, updated_at, version)
+      VALUES (gen_random_uuid(), ${lit(tenant)}, ${lit(READER)}, 'ACTIVE', 3, 3, 0, now(), now(), now(), 0) RETURNING id`).split(/\s+/)[0]
+  }
+  const readerToday = sql(`SELECT count(*) FROM attendance.records WHERE tenant_id=${lit(tenant)} AND employee_id=${lit(READER)} AND attendance_date=(now() AT TIME ZONE 'Asia/Kolkata')::date`)
   {
     const s = await session('mgr@unifiedtree.demo')
     const { page } = s
@@ -201,8 +211,23 @@ try {
     await panel.waitFor({ timeout: 10_000 })
     check('mgr: the panel lists Reader User', await panel.getByText('Reader User').first().waitFor({ timeout: 15_000 }).then(() => true).catch(() => false))
     await shot(page, 'mgr-punch-panel-1440')
-    await panel.getByRole('button', { name: 'Close panel' }).click()
-    await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
+    const readerRow = panel.getByRole('button', { name: 'Punch for Reader User' })
+    check('mgr: Reader User can be picked (face enrolled, not punched out)', (await readerRow.count()) === 1)
+    check('mgr: the panel no longer says to use the phone', !(await panel.getByText(/on your phone/i).count()))
+    if (await readerRow.count()) {
+      await readerRow.click()
+      const dlg = page.getByRole('dialog', { name: /^Punch (in|out) Reader User$/ })
+      check('mgr: picking Reader User opens the assisted punch dialog for them', await dlg.waitFor({ timeout: 15_000 }).then(() => true).catch(() => false))
+      check('mgr: the dialog shows the camera for Reader User', await dlg.getByLabel('Camera preview for Reader User').waitFor({ timeout: 15_000 }).then(() => true).catch(() => false))
+      await page.waitForTimeout(1500)
+      await shot(page, 'mgr-assisted-dialog-1440')
+      await page.keyboard.press('Escape')
+      await dlg.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
+      check('mgr: closing the dialog punched no one', sql(`SELECT count(*) FROM attendance.records WHERE tenant_id=${lit(tenant)} AND employee_id=${lit(READER)} AND attendance_date=(now() AT TIME ZONE 'Asia/Kolkata')::date`) === readerToday, readerToday)
+    } else {
+      await panel.getByRole('button', { name: 'Close panel' }).click()
+      await panel.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
+    }
     for (const h of ['Waiting for you', 'Today’s team', 'Needs you', 'My requests', 'Upcoming events']) {
       check(`mgr: "${h}" is on Home`, (await heading(page, h).count()) === 1)
     }
@@ -305,8 +330,12 @@ try {
     }
   } catch (e) { console.log('cleanup (shift):', String(e).split('\n')[0]) }
   try {
+    if (created.enrollment) sql(`DELETE FROM attendance.face_enrollments WHERE id = ${lit(created.enrollment)}`)
+  } catch (e) { console.log('cleanup (face):', String(e).split('\n')[0]) }
+  try {
     const left = Number(sql(`SELECT (SELECT count(*) FROM leave_mgmt.wfh_requests WHERE id IN (${created.wfh.map(lit).join(',') || 'NULL'}))
-      + (SELECT count(*) FROM attendance.shift_change_requests WHERE id IN (${created.shift.map(lit).join(',') || 'NULL'}))`))
+      + (SELECT count(*) FROM attendance.shift_change_requests WHERE id IN (${created.shift.map(lit).join(',') || 'NULL'}))
+      + (SELECT count(*) FROM attendance.face_enrollments WHERE id = ${created.enrollment ? lit(created.enrollment) : 'NULL'})`))
     check('cleanup: nothing the check made is left', left === 0, `${left} left`)
   } catch (e) { check('cleanup: nothing the check made is left', false, String(e).split('\n')[0]) }
   await browser.close()

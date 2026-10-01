@@ -10,7 +10,7 @@ import { SectionState } from './SectionState'
 export function AttCalendarView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start", minWidth: "0", fontFamily: "var(--u-font)", color: "#0f172a"}}>
         {v.isError ? (
           <>
             <div style={{flex: "1 1 100%", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", padding: "8px"}}>
@@ -30,7 +30,7 @@ export function AttCalendarView({ v }: { v: any }) {
             <section aria-labelledby="cal-title" style={{flex: "1.7 1 440px", minWidth: "0", display: "grid", gap: "14px", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: "10px 18px"}}>
                 <div>
-                  <h3 id="cal-title" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+                  <h3 id="cal-title" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                     {txt(v.monthLabel)}
                   </h3>
                   <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
@@ -84,7 +84,7 @@ export function AttCalendarView({ v }: { v: any }) {
                     {c?.isDay ? (
                       <>
                         <button type="button" onClick={c?.onClick} aria-pressed={c?.sel} aria-label={c?.aria} data-tip={c?.tip} style={{display: "block", width: "100%", padding: "0", border: "0", borderRadius: "12px", background: "none", font: "inherit", cursor: "pointer"}}>
-                          <svg viewBox={v.cv?.vb} aria-hidden="true" style={{display: "block", width: "100%", height: "auto", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontVariantNumeric: "tabular-nums"}}>
+                          <svg viewBox={v.cv?.vb} aria-hidden="true" style={{display: "block", width: "100%", height: "auto", fontFamily: "var(--u-font)", fontVariantNumeric: "tabular-nums"}}>
                             <rect x={v.cv?.inset} y={v.cv?.inset} width={v.cv?.w} height={v.cv?.h} rx={v.cv?.r} fill={c?.bg} stroke={c?.stroke} strokeWidth={c?.sw} />
                             <text x={v.cv?.tx} y={v.cv?.ty1} textAnchor={v.cv?.anchor} fontSize={v.cv?.fs1} fontWeight="800" fill={c?.fg}>
                               {c?.day}
@@ -102,7 +102,7 @@ export function AttCalendarView({ v }: { v: any }) {
             </section>
             <aside aria-live="polite" style={{flex: "1 1 280px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px"}}>
-                <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+                <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                   {txt(v.d?.title)}
                 </h3>
                 {v.d?.hasChip ? (
@@ -116,7 +116,7 @@ export function AttCalendarView({ v }: { v: any }) {
               {v.d?.isWork ? (
                 <>
                   <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "6px 12px"}}>
-                    <strong style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "34px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
+                    <strong style={{fontFamily: "var(--u-font)", fontSize: "34px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
                       {txt(v.d?.present)}
                     </strong>
                     <span style={{fontSize: "13.5px", color: "#475569", paddingBottom: "3px"}}>

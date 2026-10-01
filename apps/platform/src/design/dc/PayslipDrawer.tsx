@@ -37,7 +37,7 @@ export class PayslipDrawer extends DCLogic<{ slip: Payslip | null; runLabel: str
     if (!e) {
       // Not loaded yet, or it couldn't be: say which, instead of an empty drawer.
       const stateBlock = p.error
-        ? createElement('div', { role: 'alert', style: { display: 'grid', justifyItems: 'center', gap: 10, padding: '32px 12px', textAlign: 'center', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" } },
+        ? createElement('div', { role: 'alert', style: { display: 'grid', justifyItems: 'center', gap: 10, padding: '32px 12px', textAlign: 'center', fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)" } },
           createElement('span', { style: { width: 44, height: 44, borderRadius: 12, background: '#fff1f2', border: '1px solid #fecdd3', color: '#e11d48', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, dashIcon('alertTriangle', 20)),
           createElement('strong', { style: { fontSize: 15, color: '#0f172a' } }, 'Couldn\u2019t load this payslip'),
           createElement('span', { style: { fontSize: 13, lineHeight: 1.5, color: '#64748b', maxWidth: 300 } }, p.error),

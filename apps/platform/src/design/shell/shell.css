@@ -1,5 +1,5 @@
-/* The redesign shell: rail, Pages panel, top bar, More panel and the phone drawer
-   (HrmsPlatform.dc.html, UtMore.dc.html). Sizes and colours from the design; colours through the
+/* The redesign shell: rail, top bar (with the open module's pages as tabs), More panel and the phone
+   drawer (HrmsPlatform.dc.html, UtMore.dc.html). Sizes and colours from the design; colours through the
    --u-* tokens (design/theme/tokens.css). The rail is the same deep green in both themes, so its own
    white and gold values below don't change with the theme. */
 
@@ -12,7 +12,7 @@
   overflow: hidden;
   background: var(--u-bg, #F3F6F4);
   color: var(--u-ink, #0E1B16);
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
 .ut-shell__main { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -110,45 +110,6 @@
 .ut-rail__dot { position: absolute; top: -4px; right: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--ut-chip); box-shadow: 0 0 0 2px var(--ut-chip-ink); }
 .ut-rail__more[data-lit] .ut-rail__badge { color: var(--u-onbr, #fff); background: var(--u-br, #0F6E56); }
 
-/* ── Pages panel ──────────────────────────────────────────────────────────── */
-.ut-pages {
-  position: relative; z-index: 20; flex-shrink: 0; width: 248px;
-  display: flex; flex-direction: column;
-  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
-  box-shadow: inset -1px 0 0 var(--u-ln, #E3E9E6);
-  animation: ut-pop-left .22s cubic-bezier(.2, .8, .2, 1) both;
-}
-.ut-pages__head {
-  height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 10px;
-  padding: 0 10px 0 16px; box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF); box-sizing: border-box;
-}
-.ut-pages__icon {
-  width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
-}
-.ut-pages__title { flex: 1; min-width: 0; }
-.ut-pages__name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ut-pages__count { font-size: 12px; color: var(--u-ink3, #6A7A73); }
-.ut-pages__hide {
-  width: 32px; height: 32px; flex-shrink: 0; border: 0; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  background: transparent; color: var(--u-ink3, #6A7A73); cursor: pointer;
-}
-.ut-pages__hide:hover { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
-.ut-pages__list { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 2px; box-sizing: border-box; }
-.ut-pages__row {
-  position: relative; flex-shrink: 0; width: 100%; min-height: 40px; box-sizing: border-box;
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 14px; border-radius: 10px;
-  color: var(--u-ink2, #4A5A54); font-size: 13.5px; font-weight: 500; text-decoration: none; outline: none;
-}
-.ut-pages__row:hover { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
-.ut-pages__row[data-active], .ut-pages__row[data-active]:hover { background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
-.ut-pages__bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--u-br, #0F6E56); }
-.ut-pages__label { flex: 1; min-width: 0; }
-.ut-pages__tabs { font-size: 11.5px; font-weight: 500; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
-.ut-pages__row[data-active] .ut-pages__tabs { color: inherit; opacity: .75; }
-
 /* ── Top bar ──────────────────────────────────────────────────────────────── */
 .ut-topbar {
   position: relative; z-index: 30; height: 64px; flex-shrink: 0; box-sizing: border-box;
@@ -157,16 +118,7 @@
 }
 .ut-topbar__phone { display: none; }
 .ut-topbar__main { flex: 1 1 auto; min-width: 200px; display: flex; align-items: center; gap: 16px; }
-.ut-topbar__pages {
-  height: 34px; flex-shrink: 0; display: flex; align-items: center; gap: 7px; padding: 0 11px 0 9px;
-  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; background: var(--u-sf, #fff); color: var(--u-ink2, #4A5A54);
-  font-family: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
-}
-.ut-topbar__pages:hover { border-color: var(--u-brl, #BFDFD1); color: var(--u-brt, #0F6E56); }
-.ut-topbar__pageslabel { overflow: hidden; text-overflow: ellipsis; }
-.ut-topbar__slot { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
-.ut-topbar__slot[data-empty] { display: none; }
-.ut-topbar__pill { flex: 0 1 auto; }
+.ut-topbar__pill { flex: 0 1 auto; height: 36px; font-size: 13px; }
 .ut-topbar__right { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
 .ut-topbar__chip {
   height: 32px; max-width: 200px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px 0 12px;
@@ -175,7 +127,8 @@
 }
 .ut-topbar__chip > svg { flex-shrink: 0; }
 .ut-topbar__chiptext { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ut-topbar__search { flex: 0 1 400px; width: 400px; min-width: 200px; display: flex; }
+/* The search gives way first when the module's tabs need the room. */
+.ut-topbar__search { flex: 0 8 400px; width: 400px; min-width: 220px; display: flex; }
 .ut-topbar__icon {
   position: relative; width: 38px; height: 38px; flex-shrink: 0; border: 0; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
@@ -185,26 +138,76 @@
 .ut-topbar__searchicon { display: none; }
 .ut-bell__n {
   position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
-  border-radius: 999px; background: var(--u-gd, #C8912E); color: var(--u-onbr, #fff);
+  border-radius: 999px; background: var(--u-gd, #C8912E);
+  /* Dark ink on the gold (6.3:1 light, 7.7:1 dark): white on gold is under 3:1 in both themes. */
+  color: var(--u-ink, #0E1B16);
   font-size: 10px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums;
   box-shadow: 0 0 0 2px var(--u-sf, #fff);
 }
-/* Today's search field, kept in the new top bar until its dialog is rebuilt, in the design's pill look. */
-.ut-topbar__search > div { flex: 1 1 auto; max-width: none !important; }
-.ut-topbar__search > div > div:first-child {
-  height: 42px !important; padding: 0 8px 0 14px !important;
-  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 13px !important;
-  background: var(--u-sf2, #F7F9F8) !important; box-shadow: none !important;
-  transition: border-color .25s, box-shadow .25s, background .25s;
-}
-.ut-topbar__search > div > div:first-child:hover,
-.ut-topbar__search > div > div:first-child:focus-within {
-  border-color: var(--u-brl, #BFDFD1); background: var(--u-sf, #fff) !important;
-  box-shadow: 0 0 0 4px var(--u-brs, #E8F3EE) !important;
-}
-.ut-topbar__search > div > div:first-child > svg { color: var(--u-brt, #0F6E56); }
+[data-theme='dark'] .ut-bell__n { color: var(--u-bg, #0A110E); }
 
-/* Page tabs published into the header (HeaderTabs) */
+/* ── The open module's pages: tabs along the top bar (ModuleTabs) ──────────── */
+/* The first level of navigation: the module's name, then its pages as outlined pills with the page on
+   screen solid brand green (the design's header pills). A page's own views sit inside the page in the
+   lighter in-page pills (kit PillTabs, ModuleKit Views), so the two levels never look alike. */
+.ut-mtabs { flex: 1 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; gap: 12px; }
+.ut-mtabs__mod {
+  flex-shrink: 0; max-width: 190px; display: inline-flex; align-items: center; gap: 9px;
+  color: var(--u-ink, #0E1B16); font-size: 14px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap;
+}
+.ut-mtabs__ic {
+  width: 30px; height: 30px; flex-shrink: 0; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+}
+.ut-mtabs__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ut-mtabs__rule { flex-shrink: 0; width: 1px; height: 24px; background: var(--u-ln, #E3E9E6); }
+.ut-mtabs__track { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; }
+.ut-mtabs__nav {
+  position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 6px 2px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.ut-mtabs__nav::-webkit-scrollbar { display: none; }
+.ut-mtabs__track[data-end] .ut-mtabs__nav { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 64px), transparent); }
+.ut-mtabs__track[data-start] .ut-mtabs__nav { -webkit-mask-image: linear-gradient(90deg, transparent, #000 64px); mask-image: linear-gradient(90deg, transparent, #000 64px); }
+.ut-mtabs__track[data-start][data-end] .ut-mtabs__nav { -webkit-mask-image: linear-gradient(90deg, transparent, #000 64px, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(90deg, transparent, #000 64px, #000 calc(100% - 64px), transparent); }
+.ut-mtab {
+  position: relative; flex-shrink: 0; height: 36px; box-sizing: border-box;
+  display: inline-flex; align-items: center; padding: 0 15px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 999px; background: var(--u-sf, #fff); color: var(--u-ink2, #4A5A54);
+  font-size: 13px; font-weight: 500; white-space: nowrap; text-decoration: none; outline: none;
+  transition: border-color .25s, color .25s, background .25s, box-shadow .25s;
+}
+.ut-mtab:hover { border-color: var(--u-brl, #BFDFD1); color: var(--u-brt, #0F6E56); background: var(--u-brs, #E8F3EE); }
+.ut-mtab[aria-current="page"],
+.ut-mtab[aria-current="page"]:hover {
+  border-color: transparent; background: var(--u-br, #0F6E56); color: var(--u-onbr, #fff);
+  box-shadow: 0 8px 18px -10px rgba(15, 110, 86, .9), inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+.ut-mtab:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE), inset 0 0 0 1px var(--u-brl, #BFDFD1); }
+.ut-mtab[aria-current="page"]:focus-visible { box-shadow: 0 0 0 3px var(--u-brs2, #D2EADF); }
+.ut-mtab__label { min-width: 0; }
+.ut-mtabs__arrow {
+  position: absolute; top: 50%; z-index: 1; width: 30px; height: 30px; margin-top: -15px; padding: 0; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 50%; background: var(--u-sf, #fff); color: var(--u-ink2, #4A5A54);
+  box-shadow: 0 6px 14px -8px rgba(14, 27, 22, .35); cursor: pointer;
+  animation: ut-fade .18s ease both;
+}
+.ut-mtabs__arrow:hover { border-color: var(--u-brl, #BFDFD1); color: var(--u-brt, #0F6E56); }
+.ut-mtabs__arrow--start { left: -2px; }
+.ut-mtabs__arrow--end { right: -2px; }
+[data-theme='dark'] .ut-mtabs__arrow { box-shadow: 0 6px 14px -8px rgba(0, 0, 0, .8); }
+/* Narrower desktops: the module's icon stands for its name. */
+@media (max-width: 1180px) { .ut-mtabs__name { display: none; } }
+
+/* A page that still draws its module's pages itself (Payroll's "Payroll sections", Workforce's "Master
+   sections") hides that copy while the top bar shows the same pages as tabs; it goes when each page is
+   rebuilt. (The Attendance page keeps its own bar for now: navModel's OWN_PAGES_BAR.) */
+.workspace-content[data-module-tabs="payroll-hr"] nav[aria-label="Payroll sections"],
+.workspace-content[data-module-tabs="master"] [role="navigation"][aria-label="Master sections"] { display: none; }
+
+/* A page's own views (HeaderTabs, which now always sit in the page): their count badges. */
 .ut-htabs.ut-htabs--inline { flex: 0 1 auto; }
 .ut-htab-n {
   min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
@@ -213,7 +216,7 @@
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .ut-htab-n.is-urgent { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
-.ut-htab-n.is-on { background: rgba(255, 255, 255, .22); color: var(--u-onbr, #fff); }
+.ut-htab-n.is-on { background: var(--u-sf, #fff); color: var(--u-brt, #0F6E56); }
 
 /* ── More panel ───────────────────────────────────────────────────────────── */
 /* The blurred backdrop is a sibling of the panel (never a filter on the panel itself). It covers the
@@ -235,7 +238,7 @@
   box-shadow: 28px 0 60px -32px rgba(14, 27, 22, .5);
   animation: ut-pop-left .22s cubic-bezier(.2, .8, .2, 1) both;
 }
-[data-theme='dark'] .ut-more, [data-theme='dark'] .ut-drawer, [data-theme='dark'] .ut-pages.ut-pages--overlay { box-shadow: 28px 0 60px -32px rgba(0, 0, 0, .85); }
+[data-theme='dark'] .ut-more, [data-theme='dark'] .ut-drawer { box-shadow: 28px 0 60px -32px rgba(0, 0, 0, .85); }
 .ut-more__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 20px 14px 24px; }
 .ut-more__headtext { flex: 1; min-width: 0; white-space: nowrap; }
 .ut-more__title { margin: 0; font-size: 23px; line-height: 28px; font-weight: 600; letter-spacing: -.02em; }
@@ -300,7 +303,7 @@
 .ut-more__signout:hover { background: var(--u-rds, #FCEDEB); }
 
 /* Focus rings (design: soft brand ring + brand border) */
-.ut-pages__row:focus-visible, .ut-pages__hide:focus-visible, .ut-topbar__pages:focus-visible, .ut-topbar__chip:focus-visible,
+.ut-topbar__chip:focus-visible,
 .ut-topbar__icon:focus-visible, .ut-more__close:focus-visible, .ut-more__who:focus-visible, .ut-more__view:focus-visible,
 .ut-more__row:focus-visible, .ut-theme__opt:focus-visible, .ut-more__signout:focus-visible {
   outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE), inset 0 0 0 1px var(--u-brl, #BFDFD1);
@@ -318,9 +321,8 @@
 .ut-help__mail { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 13px; color: var(--u-brt, #0F6E56); text-decoration: none; overflow-wrap: anywhere; }
 .ut-help__mail:hover { text-decoration: underline; }
 
-/* ── Phone: the drawer and the Pages sheet ────────────────────────────────── */
-.ut-pages-layer, .ut-drawer-layer { position: fixed; inset: 0; z-index: 70; }
-.ut-pages.ut-pages--overlay { position: absolute; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); z-index: 1; outline: none; box-shadow: 28px 0 60px -32px rgba(14, 27, 22, .5); }
+/* ── Phone: the drawer ─────────────────────────────────────────────────────── */
+.ut-drawer-layer { position: fixed; inset: 0; z-index: 70; }
 .ut-drawer {
   position: absolute; top: 0; left: 0; bottom: 0; width: min(320px, 88vw); z-index: 1;
   display: flex; flex-direction: column; overflow-y: auto; outline: none;
@@ -343,6 +345,19 @@
   font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: rgba(255, 255, 255, .8);
 }
 .ut-drawer .ut-rail__item { height: 44px; }
+/* The open module's pages, first in the drawer (the same list as the top bar's tabs). */
+.ut-drawer__pages { display: flex; flex-direction: column; gap: 2px; margin: 0 12px; padding: 4px 0 12px; box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .12); }
+.ut-drawer__label--pages { color: #fff; }
+.ut-drawer__page {
+  position: relative; height: 40px; box-sizing: border-box; display: flex; align-items: center; padding: 0 14px 0 32px;
+  border-radius: 10px; color: rgba(255, 255, 255, .84); font-size: 13.5px; font-weight: 500; text-decoration: none; outline: none;
+}
+.ut-drawer__page::before { content: ''; position: absolute; left: 17px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: rgba(255, 255, 255, .4); }
+.ut-drawer__page:hover { background: rgba(255, 255, 255, .1); color: var(--ut-on); }
+.ut-drawer__page[aria-current="page"] { background: rgba(255, 255, 255, .16); color: var(--ut-on); font-weight: 600; }
+.ut-drawer__page[aria-current="page"]::before { background: var(--ut-chip); }
+.ut-drawer__page:focus-visible { box-shadow: 0 0 0 2px rgba(255, 255, 255, .55); }
+.ut-drawer__pagelabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ut-drawer__more { display: flex; flex-direction: column; }
 .ut-drawer__more .ut-more__body { flex: none; overflow: visible; padding-top: 16px; }
 
@@ -357,7 +372,7 @@
 
 /* ── Phones and small tablets ─────────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .ut-railwrap, .ut-more-backdrop, .ut-pages:not(.ut-pages--overlay) { display: none; }
+  .ut-railwrap, .ut-more-backdrop { display: none; }
   .ut-topbar {
     position: sticky; top: 0; height: auto; min-height: 56px; flex-wrap: wrap; align-items: center;
     gap: 0 4px; padding: 0 8px;
@@ -377,24 +392,28 @@
   .ut-topbar__searchicon { display: flex; }
   .ut-topbar__chip { max-width: 120px; }
   .ut-topbar__main { order: 3; flex: 1 1 100%; min-width: 0; gap: 8px; padding: 0 4px 10px; }
-  .ut-topbar__main .uk-ptab, .ut-topbar__main .uk-ppill { height: 36px; }
-  .ut-topbar__pageslabel { max-width: 132px; }
+  .ut-topbar__main .uk-ppill { height: 34px; }
+  /* The tabs are the bar's second row, a sideways scroller: no module label or arrows (the drawer has them). */
+  .ut-mtabs { height: auto; gap: 0; }
+  .ut-mtabs__mod, .ut-mtabs__rule, .ut-mtabs__arrow { display: none; }
+  .ut-mtabs__nav { padding: 2px 0; }
+  .ut-mtab { height: 34px; padding: 0 13px; }
 }
 
 /* ── Motion ───────────────────────────────────────────────────────────────── */
 @keyframes ut-pop-left { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 @keyframes ut-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .ut-rail, .ut-pages, .ut-more, .ut-drawer, .ut-backdrop, .ut-more-backdrop, .ut-more__row { animation: none !important; transition: none !important; }
+  .ut-rail, .ut-more, .ut-drawer, .ut-backdrop, .ut-more-backdrop, .ut-more__row, .ut-mtab, .ut-mtabs__arrow { animation: none !important; transition: none !important; }
 }
-:root[data-ufx='off'] :is(.ut-rail, .ut-pages, .ut-more, .ut-drawer, .ut-backdrop, .ut-more-backdrop) { animation: none !important; transition: none !important; }
+:root[data-ufx='off'] :is(.ut-rail, .ut-more, .ut-drawer, .ut-backdrop, .ut-more-backdrop, .ut-mtab, .ut-mtabs__arrow) { animation: none !important; transition: none !important; }
 
 /* ── /no-access (a signed-in person with no page to open) ─────────────────── */
 .ut-noaccess {
   min-height: 100vh; min-height: 100dvh; box-sizing: border-box; padding: 24px 16px;
   display: flex; align-items: center; justify-content: center;
   background: var(--u-bg, #F3F6F4); color: var(--u-ink, #0E1B16);
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
 }
 .ut-noaccess__card {
   width: 100%; max-width: 440px; box-sizing: border-box; padding: 32px 28px 28px;

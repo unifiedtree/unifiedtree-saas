@@ -330,7 +330,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
     body = (
       <div role="status" style={{ display: 'grid', justifyItems: 'center', gap: 12, padding: '36px 8px', textAlign: 'center' }}>
         <span aria-hidden="true" style={{ width: 64, height: 64, borderRadius: 99, display: 'grid', placeItems: 'center', background: 'var(--u-brs,#E8F3EE)', color: GREEN, border: '1px solid var(--u-brl,#BFDFD1)' }}>{dashIcon('check', 30)}</span>
-        <h4 style={{ margin: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: 20, fontWeight: 700, color: INK }}>{reenroll ? 'Face re-enrolled' : 'Face enrolled'}</h4>
+        <h4 style={{ margin: 0, fontFamily: "var(--u-font)", fontSize: 20, fontWeight: 700, color: INK }}>{reenroll ? 'Face re-enrolled' : 'Face enrolled'}</h4>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--u-ink2,#4A5A54)', maxWidth: 340 }}>
           {self ? 'You can now punch in with your face.' : `${first} can now punch in with their face.`}
         </p>
@@ -341,7 +341,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
 
   return (
     <HrDrawer title={title} onClose={close} footer={footer}>
-      <div style={{ fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: INK }}>{body}</div>
+      <div style={{ fontFamily: "var(--u-font)", color: INK }}>{body}</div>
     </HrDrawer>
   )
 }

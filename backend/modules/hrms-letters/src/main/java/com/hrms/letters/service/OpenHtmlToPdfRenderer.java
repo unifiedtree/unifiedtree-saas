@@ -13,6 +13,17 @@ import java.io.ByteArrayOutputStream;
 @Service
 public class OpenHtmlToPdfRenderer implements PdfRenderer {
 
+    /**
+     * The page every letter is printed on: A4, with the renderer's 0.5in page
+     * margin plus the body's 40pt margin on each side (26.8 mm in all). These
+     * were the renderer's defaults before they were written down here; the
+     * letter preview (redesign) shows the same page.
+     */
+    public static final String PAGE_SIZE = "A4";
+    public static final double PAGE_WIDTH_MM = 210;
+    public static final double PAGE_HEIGHT_MM = 297;
+    public static final double PAGE_MARGIN_MM = 26.8;
+
     private static final Logger log = LoggerFactory.getLogger(OpenHtmlToPdfRenderer.class);
 
     @Override
@@ -60,6 +71,7 @@ public class OpenHtmlToPdfRenderer implements PdfRenderer {
                <head>
                <meta charset="UTF-8"/>
                <style>
+                 @page { size: A4; margin: 0.5in; }
                  body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6;
                         margin: 40pt; color: #1a1a1a; }
                  h1 { font-size: 18pt; } h2 { font-size: 15pt; } h3 { font-size: 13pt; }

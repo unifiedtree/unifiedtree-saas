@@ -14,7 +14,7 @@ import './ShiftRequests.view.css'
 export function ShiftRequestsView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "grid", gap: "16px", minWidth: "0", fontFamily: "var(--u-font)", color: "#0f172a"}}>
         {v.isError ? (
           <>
             <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", padding: "8px"}}>
@@ -30,7 +30,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
         {v.showHr ? (
           <>
             <section aria-labelledby="sr-wait" style={{display: "grid", gap: "10px"}}>
-              <h3 id="sr-wait" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+              <h3 id="sr-wait" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                 {"Waiting for your OK"}
               </h3>
               {v.caughtUp ? (
@@ -141,7 +141,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
             {v.hasDecided ? (
               <>
                 <section aria-labelledby="sr-done" style={{display: "grid", gap: "10px"}}>
-                  <h3 id="sr-done" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+                  <h3 id="sr-done" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                     {"Already decided"}
                   </h3>
                   <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", overflow: "hidden"}}>
@@ -186,7 +186,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
                     <p style={{margin: "0", fontSize: "11px", fontWeight: "800", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
                       {"Your shift"}
                     </p>
-                    <h3 style={{margin: "2px 0 0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "22px", fontWeight: "800", letterSpacing: "-.01em"}}>
+                    <h3 style={{margin: "2px 0 0", fontFamily: "var(--u-font)", fontSize: "22px", fontWeight: "800", letterSpacing: "-.01em"}}>
                       {txt(v.my?.name)}
                     </h3>
                   </div>
@@ -206,7 +206,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
                   </>
                 ) : null}
               </div>
-              <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontVariantNumeric: "tabular-nums"}}>
+              <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", fontFamily: "var(--u-font)", fontVariantNumeric: "tabular-nums"}}>
                 <span style={{fontSize: "24px", fontWeight: "800", letterSpacing: "-.02em"}}>
                   {txt(v.my?.startLabel)}
                 </span>
@@ -234,7 +234,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
               </ul>
             </article>
             <section aria-labelledby="sr-mine" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 20px", display: "grid", gap: "12px"}}>
-              <h3 id="sr-mine" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+              <h3 id="sr-mine" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                 {"Your requests"}
               </h3>
               {v.myEmpty ? (
@@ -270,7 +270,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
       {v.askOpen ? (
         <>
           <HrDrawer title="Ask for a different shift" onClose={v.close} footer={v.footer} width="max-w-md">
-            <div style={{display: "grid", gap: "16px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+            <div style={{display: "grid", gap: "16px", fontFamily: "var(--u-font)", color: "#0f172a"}}>
               <div style={{display: "grid", gap: "8px"}}>
                 <span style={{fontSize: "13px", fontWeight: "600"}}>
                   {"Which shift would you like? *"}

@@ -7,7 +7,7 @@ import './DatePicker.view.css'
 
 export function DatePickerView({ v }: { v: any }) {
   return (
-    <div style={{ position: 'relative', width: '100%', minWidth: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>
+    <div style={{ position: 'relative', width: '100%', minWidth: 0, fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)" }}>
       <DateField
         className="dcdp"
         value={v.value || ''}

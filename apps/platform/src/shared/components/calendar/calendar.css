@@ -123,7 +123,7 @@
   border: 1px solid var(--u-ln, #E3E9E6);
   border-radius: 16px;
   box-shadow: var(--u-shp, 0 24px 60px -20px rgba(14, 27, 22, .35));
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   font-size: 13px;
   font-weight: 500;
   color: var(--u-ink, #0E1B16);
@@ -152,7 +152,7 @@
   border-radius: 10px;
   background: transparent;
   color: var(--u-ink, #0E1B16);
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -.01em;
@@ -186,7 +186,7 @@
   padding-left: 2px;
   align-items: center;
   height: 36px;
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -.01em;
