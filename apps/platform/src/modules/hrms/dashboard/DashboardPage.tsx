@@ -143,7 +143,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
 
   return (
     <div ref={rootRef}>
-      <PageFrame gap={34} top={14} className="ud-page" label="Dashboard">
+      <PageFrame gap={30} top={14} className="ud-page" label="Dashboard">
         {pills.length > 1 && (
           <>
             <span ref={sentinel} className="ud-secnav__mark" aria-hidden="true" />

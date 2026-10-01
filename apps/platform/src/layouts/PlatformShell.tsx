@@ -29,7 +29,7 @@ import { useHome } from '@/design/shell/useHome'
 import { guardedGo } from '@/design/shell/navigationGuard'
 import { pageTitleLabel } from '@/design/shell/pageTitle'
 import {
-  SETTINGS_MODULE, activePage, clearLastPages, drawsOwnPages, fitRail, isMorePath, isSettingsPath, matchPath, moduleTarget, owningModules,
+  SETTINGS_MODULE, clearLastPages, drawsOwnPages, fitRail, isMorePath, isSettingsPath, litPage, matchPath, moduleTarget, owningModules,
   preferencesTarget, railGroups, readLastPages, readPinned, routeOf, saveLastPage, savePinned, settingsActive, settingsPages,
   type NavPage, type VisibleModule,
 } from '@/design/shell/navModel'
@@ -188,7 +188,7 @@ export function PlatformShell() {
   const current: { key: string; label: string; icon: string; pages: NavPage[] } | null = settingsScope
     ? { key: SETTINGS_MODULE.key, label: SETTINGS_MODULE.label, icon: SETTINGS_MODULE.icon, pages: sPages }
     : litModule ? { key: litModule.key, label: litModule.name, icon: litModule.icon, pages: litModule.pages } : null
-  const currentPage = settingsScope ? settingsActive(sPages, pathname) : litModule ? activePage(litModule.pages, pathname) : undefined
+  const currentPage = settingsScope ? settingsActive(sPages, pathname) : litModule ? litPage(litModule.key, litModule.pages, pathname) : undefined
   // The module's pages show as tabs along the top bar when it has several (a page that draws the
   // module's pages itself keeps its own bar: navModel.drawsOwnPages).
   const tabPages = current && current.pages.length > 1 && !drawsOwnPages(current.key)

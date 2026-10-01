@@ -24,16 +24,16 @@
    pieces are tightened on the dashboard only. */
 .ud-page .uk-ph--greet { margin-bottom: 0; }
 .ud-page .uk-ph--greet .uk-ph__title { font-size: 27px; line-height: 34px; }
-.ud-page .uk-stat.uk-stat--live { min-height: 110px; padding: 15px 16px; gap: 14px; }
+.ud-page .uk-stat.uk-stat--live { min-height: 104px; padding: 14px 15px; gap: 14px; }
 .ud-page .uk-stat--live .uk-stat__tile { width: 44px; height: 44px; border-radius: 13px; }
 .ud-page .uk-stat--live .uk-stat__label { font-size: 13.5px; line-height: 19px; }
 .ud-page .uk-stat--live .uk-stat__value { font-size: 27px; line-height: 32px; }
 .ud-page .uk-stat--live .uk-stat__note { font-size: 12.5px; line-height: 17px; }
-.ud-page .uk-qa { min-height: 122px; padding: 14px 14px 13px; gap: 12px; border-radius: 15px; }
-.ud-page .uk-qa__tile { width: 48px; height: 48px; border-radius: 14px; }
+.ud-page .uk-qa { min-height: 114px; padding: 13px 14px 12px; gap: 10px; border-radius: 15px; }
+.ud-page .uk-qa__tile { width: 44px; height: 44px; border-radius: 13px; }
 .ud-page .uk-qa__label { font-size: 13.5px; }
 .ud-page .uk-sec.uk-sec--dashboard { border-radius: 15px; }
-.ud-page .uk-sec--dashboard > .uk-sec__head { padding: 15px 18px 11px; }
+.ud-page .uk-sec--dashboard > .uk-sec__head { padding: 14px 18px 10px; }
 .ud-page .uk-sec--dashboard .uk-sec__title { font-size: 14.5px; }
 .ud-page .uk-shead__icon { width: 32px; height: 32px; border-radius: 10px; }
 .ud-page .uk-shead__icon svg { width: 16px; height: 16px; }
@@ -164,7 +164,7 @@
 .ud-selbox b { font-weight: 500; color: var(--u-ink, #0E1B16); }
 .ud-selbox span { display: inline-flex; align-items: center; gap: 5px; }
 .ud-selbox i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-.ud-chart { position: relative; height: 210px; margin: 0 18px; }
+.ud-chart { position: relative; height: 196px; margin: 0 18px; }
 .ud-chart__grid { position: absolute; left: 0; right: 0; top: 6px; bottom: 28px; display: flex; flex-direction: column; justify-content: space-between; }
 .ud-chart__grid > div { display: flex; align-items: center; gap: 6px; height: 0; }
 .ud-chart__grid span:first-child { width: 28px; flex-shrink: 0; text-align: right; font-size: 11px; color: var(--u-ink3, #6A7A73); }
@@ -270,7 +270,7 @@
 .ud-pay__meta { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
 .ud-pay__meta b { color: var(--u-brt, #0F6E56); font-weight: 500; }
 .ud-pay__meta b.is-down { color: var(--u-rdt, #B42318); }
-.ud-pay__bars { display: flex; align-items: flex-end; gap: 8px; height: 150px; margin-top: 12px; }
+.ud-pay__bars { display: flex; align-items: flex-end; gap: 8px; height: 136px; margin-top: 12px; }
 .ud-pay__col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }
 .ud-pay__col:focus-visible { outline: none; }
 .ud-pay__col:focus-visible .ud-pay__bar { box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }

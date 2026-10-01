@@ -164,8 +164,10 @@ async function look(s, path) {
 }
 
 const digits = (t) => t.replace(/\d+/g, '').trim()
-// Time of day in the greeting ("Good morning, …") is not a difference.
-const heading = (h) => h.map((t) => t.replace(/^Good (morning|afternoon|evening)/, 'Good <time of day>'))
+// Time of day in the greeting ("Good morning, …") is not a difference, and neither is the greeting's full
+// name (Release 1.1: the client's "full name everywhere"; the baseline has the first name): the first name
+// must still lead it.
+const heading = (h) => h.map((t) => t.replace(/^Good (morning|afternoon|evening)/, 'Good <time of day>').replace(/^(Good <time of day>, \S+) .*$/, '$1'))
 const barsOf = (bars) => bars.map((b) => ({ bar: b.bar, items: b.items.map(digits), ...(LIT_BARS.test(b.bar) ? { lit: b.lit.map(digits) } : {}) }))
 
 // What the old settings row becomes in the Settings pages panel: Document types after Integrations,
@@ -305,12 +307,14 @@ try {
           if (now.title !== was.title) diff.push(`title: before ${show(was.title)}, now ${show(now.title)}`)
           if (show(heading(now.heading)) !== show(heading(was.heading))) diff.push(`heading: before ${show(was.heading)}, now ${show(now.heading)}`)
           if (now.restricted !== was.restricted) diff.push(`restricted: before ${was.restricted}, now ${now.restricted}`)
-          // A page's own module bar that the top bar's tabs show now: compared with those tabs instead.
-          const moved = was.bars.filter((b) => TOP_FOR_BAR[b.bar])
-          const wasBars = was.bars.filter((b) => !TOP_FOR_BAR[b.bar])
+          // A page's own module bar that the top bar's tabs show now: compared with those tabs instead. When
+          // the top bar shows no tabs for it (the person has one page of that module), the page keeps its bar.
+          const topTabs = await pagesPanel(s.page)
+          const moved = was.bars.filter((b) => TOP_FOR_BAR[b.bar] && topTabs?.bar === TOP_FOR_BAR[b.bar])
+          const wasBars = was.bars.filter((b) => !moved.includes(b))
           if (show(barsOf(now.bars)) !== show(barsOf(wasBars))) diff.push(`bars: before ${show(barsOf(wasBars))}, now ${show(barsOf(now.bars))}`)
           for (const b of moved) {
-            const tabs = await pagesPanel(s.page)
+            const tabs = topTabs
             const want = { bar: TOP_FOR_BAR[b.bar], items: b.items.map(digits), lit: b.lit.map(digits) }
             if (!tabs || show({ bar: tabs.bar, items: tabs.items.map(digits), lit: tabs.lit.map(digits) }) !== show(want)) diff.push(`page bar → top tabs: before ${show(b)}, now ${show(tabs)} (want ${show(want)})`)
           }

@@ -291,6 +291,18 @@ export function activePage(pages: readonly NavPage[], pathname: string): NavPage
   return best
 }
 
+/**
+ * The page of a module to light for this address, among the pages this person sees. The best match is
+ * found among ALL the module's pages, so an address that belongs to a page the person doesn't see
+ * (Workforce's Rules & Policies for Finance) lights none, rather than a shorter page that also matches
+ * (Overview at /hrms/master).
+ */
+export function litPage(moduleKey: string, visible: readonly NavPage[], pathname: string): NavPage | undefined {
+  const all = NAV_MODULES.find((m) => m.key === moduleKey)?.pages ?? visible
+  const best = activePage(all, pathname)
+  return best ? visible.find((p) => p.path === best.path) : undefined
+}
+
 /** The rail modules that own this address (railLit decides which one to light). */
 export function owningModules(groups: readonly VisibleGroup[], pathname: string): VisibleModule[] {
   return groups.flatMap((g) => g.modules).filter((m) => m.pages.some((p) => pageScore(p, pathname) > 0))
