@@ -7,6 +7,7 @@
 // Read-only: no fixtures are written.
 //
 // Run from apps/platform:  node e2e/recovery/live-dead-entrypoints.mjs
+/* global process, console, fetch, URL */
 import { chromium } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 

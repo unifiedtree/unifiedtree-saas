@@ -13,7 +13,7 @@
 //
 //   live-slot.sh /c/REACT/ut-wt/rd-p-profile 3133 node e2e/recovery/live-rd-p-profile.mjs
 //   env: RECOVERY_APP_URL, RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev), SHOTS_DIR
-/* global process, console, fetch */
+/* global process, console, fetch, setTimeout, localStorage, document, getComputedStyle */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -93,7 +93,6 @@ async function pickDate(page, trigger, iso) {
 }
 
 const owner = await session('owner@unifiedtree.demo')
-const hrm = await session('hrm@unifiedtree.demo')
 const mgr = await session('mgr@unifiedtree.demo')
 const reader = await session('reader@unifiedtree.demo')
 const readerUser = sql(`select id from auth.user_credentials where lower(email)='reader@unifiedtree.demo' limit 1`)

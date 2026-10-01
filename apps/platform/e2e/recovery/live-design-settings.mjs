@@ -7,6 +7,7 @@
 // button is not pressed (it sends an email).
 //
 //   node e2e/recovery/live-design-settings.mjs
+/* global process, console, document */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
