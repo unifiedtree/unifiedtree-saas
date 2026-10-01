@@ -61,6 +61,9 @@ export function TeamDashboard() {
   const waiting = inbox.data?.counts.all ?? 0
   const members = summary.data?.members
   const teamLabel = summary.data?.scope === 'DEPARTMENT' && summary.data.departmentNames.length ? summary.data.departmentNames.join(', ') : null
+  // A message goes to the person's own team (their departments or direct reports), never the whole company,
+  // so a company-wide summary (attendance.workforce.admin) doesn't tell its size.
+  const reach = members && summary.data?.scope !== 'COMPANY' ? members.length : null
 
   return (
     <PageFrame width="narrow" label="My team" className="tm-page">
@@ -78,8 +81,7 @@ export function TeamDashboard() {
       {view === 'schedule' && <TeamSchedule canOpenPeople={canOpenPeople} onView={go} />}
       {view === 'approvals' && <div className="tm-approvals"><TeamApprovals tab={tab} onTab={(t) => go('approvals', t)} /></div>}
       {canMessage && (
-        <MessageTeamPanel open={messaging} onClose={() => setMessaging(false)}
-          teamSize={members ? members.length : null} teamLabel={teamLabel} />
+        <MessageTeamPanel open={messaging} onClose={() => setMessaging(false)} teamSize={reach} teamLabel={teamLabel} />
       )}
     </PageFrame>
   )
