@@ -19,6 +19,8 @@ export interface PayDashData {
   monthLabel: string; monthShort: string
   prevGross: number | null
   pendingDisb: number | null
+  /** Rupees still to send to the bank (P-PAY-CORE BW-54, additive to the old count). */
+  pendingDisbAmount: number | null
   bars: { m: string; value: number }[]
   dues: { what: string; when: string; amount: number | null; note: string }[]
   recent: { id: string; label: string; employees: number; paidOn: string; net: number }[]
@@ -39,6 +41,8 @@ export class PayDashboard extends DCLogic {
     const gross = run?.gross ?? null, emp = run?.employees ?? null, prev = D?.prevGross ?? null
     const change = gross && prev ? ((gross - prev) / prev) * 100 : null
     const pend = D?.pendingDisb ?? null
+    // BW-54: show rupees pending if the server returned them; fall back to the old run count only when it didn't.
+    const pendAmount = D?.pendingDisbAmount ?? null
     const stats = [
       {
         label: `Total payroll cost · ${short}`, value: gross ? shortInr(gross) : '—', sub: emp ? `Gross pay for ${emp} ${emp === 1 ? 'person' : 'people'}` : 'Calculated when the run is processed',
@@ -47,8 +51,13 @@ export class PayDashboard extends DCLogic {
       },
       { label: 'Average salary', value: gross && emp ? inr(Math.round(gross / emp)) : '—', sub: 'Per employee, gross', icon: dashTileIcon('users', 22), color: 'teal', onClick: () => go('salary') },
       {
-        label: 'Pending disbursals', value: pend === null ? '—' : String(pend),
-        sub: pend === null ? 'Needs bank-file access' : pend === 0 ? 'Nothing waiting for the bank' : `${pend === 1 ? 'Run' : 'Runs'} waiting for a bank file`,
+        label: 'Pending disbursals',
+        value: pendAmount != null ? shortInr(pendAmount) : (pend === null ? '—' : String(pend)),
+        sub: pendAmount != null
+          ? (pendAmount === 0
+            ? 'Nothing waiting for the bank'
+            : `${pend && pend > 0 ? `${pend} ${pend === 1 ? 'run' : 'runs'} · ` : ''}after lock, before the bank file`)
+          : pend === null ? 'Needs bank-file access' : pend === 0 ? 'Nothing waiting for the bank' : `${pend === 1 ? 'Run' : 'Runs'} waiting for a bank file`,
         icon: dashTileIcon('building', 22), color: 'teal', onClick: () => go('bank'),
       },
       { label: 'TDS this month', value: '—', sub: 'Not calculated in payroll yet', icon: dashTileIcon('receipt', 22), color: 'green', onClick: openRun },
