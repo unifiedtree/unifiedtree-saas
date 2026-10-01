@@ -230,7 +230,7 @@ export function ProgramRoster({ program }: { program: TrainingProgram }) {
           </div>
           <div className="grw-row grw-row--between">
             <span className="grw-muted">{`${picked.length} picked`}</span>
-            <Button size={32} loading={bulkEnroll.isPending} disabled={picked.length === 0} onClick={onEnroll}>Enroll picked</Button>
+            <Button variant="primary" size={32} loading={bulkEnroll.isPending} disabled={picked.length === 0} onClick={onEnroll}>Enroll picked</Button>
           </div>
         </div>
       )}

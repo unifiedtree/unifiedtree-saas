@@ -14,7 +14,7 @@ import {
   useDropEnrollment, useEnroll, useMyEnrollments, useMySkillAssessments, useMySkills, useTrainingPrograms, useWithdrawSkillAssessment,
   type Enrollment, type SkillAssessment, type SkillAssessmentStatus,
 } from '../api/useLearning'
-import { dateLong, skillTone, skillWord } from '../performance/growModel'
+import { dateLong, istDay, skillTone, skillWord } from '../performance/growModel'
 import { ENROLLMENT_LABEL, ENROLLMENT_TONE, isOpenEnrollment, modeLabel, schedule } from './programs'
 
 const PROPOSAL_LABEL: Record<SkillAssessmentStatus, string> = { PENDING: 'Waiting for approval', APPROVED: 'Approved', REJECTED: 'Not approved', WITHDRAWN: 'Withdrawn' }
@@ -66,7 +66,7 @@ export function MyTrainingView({ canAssess, canBrowse, onPropose }: { canAssess:
               <div className="grw-row"><span className="grw-course__title">{e.programTitle || 'Program'}</span><StatusPill tone={ENROLLMENT_TONE[e.status]} size="sm">{ENROLLMENT_LABEL[e.status]}</StatusPill></div>
               <div className="grw-muted" style={{ marginTop: 3 }}>
                 {[schedule({ startDate: e.programStartDate, endDate: e.programEndDate }, today), e.programMode || e.programLocation ? modeLabel(e.programMode, e.programLocation) : null,
-                  e.completedAt ? `Completed ${dateLong(e.completedAt.slice(0, 10))}${e.score != null ? ` · score ${e.score}` : ''}` : `Enrolled ${dateLong(e.createdAt.slice(0, 10))}`].filter(Boolean).join(' · ')}
+                  e.completedAt ? `Completed ${dateLong(istDay(e.completedAt))}${e.score != null ? ` · score ${e.score}` : ''}` : `Enrolled ${dateLong(istDay(e.createdAt))}`].filter(Boolean).join(' · ')}
               </div>
             </div>
             <div className="grw-row">

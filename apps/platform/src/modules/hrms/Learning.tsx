@@ -55,8 +55,8 @@ export const Learning = () => {
     setParams(sp, { replace: true })
   }
   const selfOnly = !canRead && !canViewSkills && !canApprove
-  const action = view === 'programs' && canWrite ? <Button icon="plus" onClick={() => setAdding((n) => n + 1)}>New program</Button>
-    : (view === 'skills' || view === 'my') && canAssess ? <Button icon="plus" onClick={() => setProposing(true)}>Propose a skill</Button>
+  const action = view === 'programs' && canWrite ? <Button variant="primary" icon="plus" onClick={() => setAdding((n) => n + 1)}>New program</Button>
+    : (view === 'skills' || view === 'my') && canAssess ? <Button variant="primary" icon="plus" onClick={() => setProposing(true)}>Propose a skill</Button>
       : undefined
 
   if (!view) {

@@ -9,10 +9,10 @@ import { SectionCell, SectionGrid } from '@/design/kit/data'
 import { Checkbox, DateInput, FieldGrid, Input, PanelButton, Select, SidePanel, useToast } from '@/design/kit/overlays'
 import { istToday } from '@/design/dc/dates'
 import { useEmployeeSkills, useUpsertSkill, type EmployeeSkill } from '../api/useLearning'
-import { SKILL_WORDS, dateLong, skillTone, skillWord } from '../performance/growModel'
+import { SKILL_WORDS, dateLong, istDay, skillTone, skillWord } from '../performance/growModel'
 import { PersonSearch, personName } from '../performance/PersonSearch'
 
-const changed = (s: EmployeeSkill) => (s.updatedAt || s.createdAt || '').slice(0, 10)
+const changed = (s: EmployeeSkill) => { const v = s.updatedAt || s.createdAt; return v ? istDay(v) : '' }
 
 export function SkillMatrixView({ canWrite }: { canWrite: boolean }) {
   const [employeeId, setEmployeeId] = useState('')

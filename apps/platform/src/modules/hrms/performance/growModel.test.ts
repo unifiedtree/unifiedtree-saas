@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  certificationState, currentCycle, cycleStatus, cycleSteps, dayMon, daysLeft, fnfState, kindWords, myCycleSteps,
+  certificationState, currentCycle, istDay, cycleStatus, cycleSteps, dayMon, daysLeft, fnfState, kindWords, myCycleSteps,
   periodLabel, personStatus, ratingText, ratingWord, reviewStatus, skillWord,
 } from './growModel'
 import type { PerformanceReview, ReviewCycle } from '../api/usePerformance'
@@ -14,6 +14,10 @@ describe('dates', () => {
     expect(dayMon('2026-09-30', today)).toBe('Wed, 30 Sep')
     expect(dayMon('2025-12-31', today)).toBe('Wed, 31 Dec 2025')
     expect(dayMon(null)).toBe('—')
+  })
+  it('reads instants as India dates', () => {
+    expect(istDay('2026-10-01T23:05:00Z')).toBe('2026-10-02')
+    expect(istDay('2026-10-01')).toBe('2026-10-01')
   })
   it('names a period by months', () => {
     expect(periodLabel('2026-07-01', '2026-09-30')).toBe('Jul – Sep 2026')

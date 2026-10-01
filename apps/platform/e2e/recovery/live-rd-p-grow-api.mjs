@@ -239,9 +239,23 @@ try {
 
   // ── tenant isolation ─────────────────────────────────────────────────────
   await run('tenant', async () => {
+    // A cycle (with dates and a hold) that belongs to another tenant: none of the new endpoints reach it.
     const other = '00000000-0000-0000-0000-00000000beef'
-    const r = await fetch(`${base}/v1/performance/cycles/${cycleId}/stages`, { headers: { ...U.owner.h, 'X-Tenant-ID': other } })
-    check('another tenant header can\'t read this cycle', r.status >= 400, `status=${r.status}`)
+    const foreign = sql(`insert into performance_mgmt.review_cycles (id, tenant_id, company_id, name, status) values (gen_random_uuid(), '${other}', '${company}', 'QA grow foreign ${stamp}', 'ACTIVE') returning id`).split('\n')[0]
+    try {
+      sql(`insert into performance_mgmt.review_cycle_milestones (tenant_id, cycle_id, hold_until_shared) values ('${other}', '${foreign}', true)`)
+      const stages = await call(U.owner, 'GET', `/v1/performance/cycles/${foreign}/stages`)
+      const ratings = await call(U.owner, 'GET', `/v1/performance/cycles/${foreign}/ratings`)
+      const share = await call(U.owner, 'POST', `/v1/performance/cycles/${foreign}/share`)
+      const dates = await call(U.owner, 'PUT', `/v1/performance/cycles/${foreign}/milestones`, { holdUntilShared: false })
+      check('another tenant\'s cycle: not found on stages, ratings, share and dates', [stages, ratings, share, dates].every((r) => r.status === 404),
+        [stages, ratings, share, dates].map((r) => r.status).join(','))
+      check('another tenant\'s cycle stays untouched', sql(`select hold_until_shared::text || coalesce(shared_at::text, '') from performance_mgmt.review_cycle_milestones where cycle_id='${foreign}'`) === 'true')
+      const listed = ((await call(U.owner, 'GET', '/v1/performance/cycles/summary')).json || []).some((c) => c.cycleId === foreign)
+      check('another tenant\'s cycle isn\'t in the summary', !listed)
+    } finally {
+      sql(`delete from performance_mgmt.review_cycle_milestones where cycle_id='${foreign}'; delete from performance_mgmt.review_cycles where id='${foreign}'`)
+    }
   })
 
   // ── FEATURE_NOT_READY (renames in ut_w3_dev only) ────────────────────────

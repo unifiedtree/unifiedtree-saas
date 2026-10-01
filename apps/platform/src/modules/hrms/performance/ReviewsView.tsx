@@ -14,7 +14,7 @@ import { Select, SidePanel, useToast } from '@/design/kit/overlays'
 import { istToday } from '@/design/dc/dates'
 import { useReviewCycles, useReviews, type PerformanceReview } from '../api/usePerformance'
 import { useRemindReview } from '../api/usePerformanceAdmin'
-import { dayMon, isSubmitted, isWaiting, ratingText, reviewStatus, reviewerTypeLabel } from './growModel'
+import { istDay, dayMon, isSubmitted, isWaiting, ratingText, reviewStatus, reviewerTypeLabel } from './growModel'
 import { ReviewGoalsPanel } from './shared'
 
 type Seg = 'all' | 'WAITING' | 'SUBMITTED'
@@ -70,7 +70,7 @@ export function ReviewsView() {
       {!canWrite && <Callout tone="neutral">You see your team: everyone in the departments you head, or your direct reports if you don’t head one. Your own reviews are under My reviews.</Callout>}
       <Section title="Employee reviews" body="flush" error={reviews.error ?? cycles.error} onRetry={() => { void reviews.refetch(); void cycles.refetch() }}
         actions={(
-          <div className="grw-filters" style={{ justifyContent: 'flex-end' }}>
+          <div className="grw-filters" style={{ justifyContent: 'flex-end', width: 'min(100%, 560px)' }}>
             <SegmentedControl label="Review status" size="sm" value={seg} onChange={(v) => { setSeg(v); setPage(0) }}
               options={[{ value: 'all', label: 'All' }, { value: 'WAITING', label: 'Waiting' }, { value: 'SUBMITTED', label: 'Submitted' }]} />
             <div className="grw-filters__fixed">
@@ -96,7 +96,7 @@ export function ReviewsView() {
                 { label: 'Rating', value: selected.overallRating == null ? 'Not submitted' : ratingText(selected.overallRating) },
                 { label: 'Strengths', value: selected.strengths || 'No feedback submitted.' },
                 { label: 'Areas to improve', value: selected.improvements || 'No feedback submitted.' },
-                { label: 'Submitted', value: selected.submittedAt ? dayMon(selected.submittedAt.slice(0, 10), today) : '—' },
+                { label: 'Submitted', value: selected.submittedAt ? dayMon(istDay(selected.submittedAt), today) : '—' },
               ]} />
             </Section>
             {selected.status === 'MISSED' && <Callout tone="warning">The cycle closed before this review was submitted.</Callout>}

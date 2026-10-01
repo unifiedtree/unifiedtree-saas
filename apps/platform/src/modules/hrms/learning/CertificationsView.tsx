@@ -25,7 +25,7 @@ export function CertificationsView() {
   return (
     <Section title="Certifications" body="flush" error={q.error} onRetry={() => q.refetch()}
       actions={(
-        <div className="grw-filters" style={{ justifyContent: 'flex-end' }}>
+        <div className="grw-filters" style={{ justifyContent: 'flex-end', width: 'min(100%, 620px)' }}>
           <FilterPills label="Certification status" size="sm" value={filter} onChange={(v) => { setFilter(v); setPage(0) }}
             options={[{ value: 'all', label: 'All' }, { value: 'expiring', label: 'Expiring soon' }, { value: 'expired', label: 'Expired' }]} />
           <div className="grw-filters__fixed"><Input label="Search certifications" type="search" value={search} placeholder="Name, code or certification" onChange={(e) => { setSearch(e.target.value); setPage(0) }} /></div>

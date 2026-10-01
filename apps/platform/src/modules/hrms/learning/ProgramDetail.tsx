@@ -67,7 +67,7 @@ export function ProgramDetail() {
         sub={p ? [p.category, modeLabel(p.mode, p.location) === 'Not set' ? null : modeLabel(p.mode, p.location), schedule(p, today)].filter(Boolean).join(' · ') : undefined}
         actions={<>
           <Button variant="secondary" icon="chevronLeft" onClick={() => navigate('/hrms/learning?view=programs')}>Programs</Button>
-          {canWrite && p && !closed && <Button icon="pencil" onClick={() => setEditing(true)}>Edit details</Button>}
+          {canWrite && p && !closed && <Button variant="primary" icon="pencil" onClick={() => setEditing(true)}>Edit details</Button>}
         </>} />
       {q.isLoading ? <SkeletonStats />
         : q.isError || !p ? <ErrorState title="Couldn’t load this program" error={q.error} onRetry={() => q.refetch()} />

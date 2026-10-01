@@ -32,7 +32,7 @@ export function MyGoalsView({ addKey }: { addKey: number }) {
       <section aria-label="Goals" className="grw-stack">
         <h2 className="grw-h2">{live.length ? `Goals · ${done.length} of ${live.length} done` : 'Goals'}</h2>
         {isLoading ? <SkeletonList rows={3} /> : goals.length === 0 ? (
-          <EmptyState icon="target" title="No goals yet" hint="Add your first goal to start tracking progress." action={<Button icon="plus" onClick={() => setAdding(true)}>Add a goal</Button>} />
+          <EmptyState icon="target" title="No goals yet" hint="Add your first goal to start tracking progress." action={<Button variant="primary" icon="plus" onClick={() => setAdding(true)}>Add a goal</Button>} />
         ) : (
           <div className="grw-cards">
             {goals.map((g) => {

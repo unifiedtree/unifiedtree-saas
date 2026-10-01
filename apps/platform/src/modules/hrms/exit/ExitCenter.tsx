@@ -100,7 +100,7 @@ export function ExitCenter() {
       </Link>
     ),
   }
-  const reason: TableColumn<ExitRow> = { key: 'reason', header: 'Reason', render: (r) => <span className="grw-clip" title={r.exitReason || undefined}>{r.exitReason || '—'}</span> }
+  const reason: TableColumn<ExitRow> = { key: 'reason', header: 'Reason', render: (r) => <span className="grw-clip" style={{ maxWidth: 220 }} title={r.exitReason || undefined}>{r.exitReason || '—'}</span> }
   const settlement: TableColumn<ExitRow> = {
     key: 'fnf', header: 'Full & final', render: (r) => {
       if (!canSettle) return '—'
@@ -127,11 +127,10 @@ export function ExitCenter() {
     { key: 'lwd', header: 'Last working day', render: (r) => dayMon(r.lastWorkingDay, today) },
     { key: 'left', header: 'Days left', render: (r) => <DaysLeft lwd={r.lastWorkingDay} today={today} /> },
     ...(canWrite ? [reason] : [{ key: 'type', header: 'Exit type', render: (r: ExitRow) => exitTypeLabel(r.exitType) }]),
-    ...(canWrite || canSettle ? [{
+    ...(canWrite ? [{
       key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right' as const, render: (r: ExitRow) => (
         <CellActions>
           {canWrite && <Button variant="secondary" size={30} onClick={() => setEditing(r)}>Edit dates</Button>}
-          {canSettle && <Button variant="secondary" size={30} onClick={() => navigate('/hrms/fnf')}>F&amp;F</Button>}
           {canWrite && <Button variant="soft" size={30} disabled={exitEmployee.isPending} onClick={() => markExited(r)}>Mark exited</Button>}
         </CellActions>
       ),
@@ -163,7 +162,7 @@ export function ExitCenter() {
   return (
     <PageFrame label="Resignation & exit" className="grw-page">
       <PageHeader eyebrow="Employee exit" title="Resignation & exit" sub={current.sub}
-        actions={canWrite ? <Button icon="plus" onClick={() => setStarting(true)}>Start notice period</Button> : undefined} />
+        actions={canWrite ? <Button variant="primary" icon="plus" onClick={() => setStarting(true)}>Start notice period</Button> : undefined} />
       <PillTabs label="Exit views" semantics="toggle" activeKey={tab} onSelect={setTab}
         items={TABS.map((t) => ({ key: t.key, label: t.label }))} />
       <Section title="Leavers" loading={stats.isLoading || (stats.notAvailable && counts.isLoading)} skeleton="stats" error={stats.error ?? counts.error}
@@ -186,7 +185,7 @@ export function ExitCenter() {
         <Table label={current.label} columns={columns} rows={rows} rowKey={(r) => r.employeeId} loading={list.isLoading} mobile="cards"
           empty={<EmptyState variant="plain" icon="userMinus" title={empty}
             hint={tab === 'notice' ? 'Start a notice period from here or from an employee’s Exit tab.' : 'Employees appear here once HR marks them as exited or terminated.'}
-            action={tab === 'notice' && canWrite && !searching ? <Button icon="plus" onClick={() => setStarting(true)}>Start notice period</Button> : undefined} />} />
+            action={tab === 'notice' && canWrite && !searching ? <Button variant="primary" icon="plus" onClick={() => setStarting(true)}>Start notice period</Button> : undefined} />} />
       </Section>
       {starting && <StartNoticePanel onClose={() => setStarting(false)} onDone={() => { setStarting(false); setTab('notice') }} />}
       {editing && <SeparationPanel row={editing} onClose={() => setEditing(null)} />}

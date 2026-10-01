@@ -39,7 +39,7 @@ export function MyReviewsView() {
     { key: 'due', header: 'Due', render: (r) => (r.dueDate ? dayMon(r.dueDate, today) : '—') },
     { key: 'status', header: 'Status', render: (r) => <StatusPill tone={r.status === 'IN_PROGRESS' ? 'info' : 'warning'}>{r.status === 'IN_PROGRESS' ? 'Draft saved' : 'To write'}</StatusPill> },
     { key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (r) => (
-      <CellActions><Button size={30} onClick={() => setWriting(r)}>Write review</Button></CellActions>
+      <CellActions><Button variant="primary" size={30} onClick={() => setWriting(r)}>Write review</Button></CellActions>
     ) },
   ]
 
@@ -168,7 +168,6 @@ function SelfReviewCard({ review, cycle, today }: { review: PerformanceReview; c
         <Callout tone="success" icon="check">{sentLine(manager, first, cycle, today)}</Callout>
       ) : (
         <div className="grw-form">
-          <ReviewGoalsPanel reviewId={review.id} selfReview />
           <Textarea label="What went well this period?" rows={3} maxLength={5000} value={strengths} onChange={(e) => setStrengths(e.target.value)} />
           <Textarea label="What would you do differently?" rows={3} maxLength={5000} value={improvements} onChange={(e) => setImprovements(e.target.value)}
             placeholder={first ? `Be honest. ${first} reads this before your chat.` : undefined} />
@@ -176,7 +175,7 @@ function SelfReviewCard({ review, cycle, today }: { review: PerformanceReview; c
           {error && <Callout tone="danger" icon="alert"><span role="alert">{error}</span></Callout>}
           <div className="grw-row" style={{ justifyContent: 'flex-end' }}>
             <Button variant="secondary" loading={draft.isPending} disabled={busy} onClick={save}>Save draft</Button>
-            <Button loading={submit.isPending} disabled={busy} onClick={send}>{first ? `Send to ${first}` : 'Send'}</Button>
+            <Button variant="primary" loading={submit.isPending} disabled={busy} onClick={send}>{first ? `Send to ${first}` : 'Send'}</Button>
           </div>
         </div>
       )}

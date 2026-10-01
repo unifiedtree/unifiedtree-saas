@@ -10,6 +10,13 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`)
 
+/** The India date (yyyy-MM-dd) of an instant such as submittedAt; a plain date passes through. */
+export function istDay(instant: string): string {
+  if (instant.length <= 10) return instant
+  const t = Date.parse(instant)
+  return Number.isNaN(t) ? instant.slice(0, 10) : new Date(t + 5.5 * 3_600_000).toISOString().slice(0, 10)
+}
+
 /** "Wed, 30 Sep" (the year only when it isn't `today`'s). */
 export function dayMon(iso: string | null | undefined, today?: string): string {
   if (!iso) return '—'
@@ -82,7 +89,7 @@ export function kindWords(reviews: PerformanceReview[], me: string | undefined, 
     .filter((r) => r.employeeId === me && r.reviewerId && r.reviewerId !== me && isSubmitted(r.status) && (r.strengths ?? '').trim())
     .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''))
     .slice(0, limit)
-    .map((r) => ({ id: r.id, quote: (r.strengths ?? '').trim(), who: r.reviewerName || 'A colleague', date: r.submittedAt ? r.submittedAt.slice(0, 10) : null }))
+    .map((r) => ({ id: r.id, quote: (r.strengths ?? '').trim(), who: r.reviewerName || 'A colleague', date: r.submittedAt ? istDay(r.submittedAt) : null }))
 }
 
 // ── Cycles ──────────────────────────────────────────────────────────────────
@@ -130,7 +137,7 @@ export function cycleSteps(s: CycleStages, today: string): StepItem[] {
     self ? `${counts(self)} done` : 'Not assigned',
     mgr ? counts(mgr) : 'Not assigned',
     m?.managerReviewBy && m?.shareOn ? `${dayMon(m.managerReviewBy, today)} – ${dayMon(m.shareOn, today)}` : 'Before sharing',
-    m?.sharedAt ? `Shared ${dayMon(m.sharedAt.slice(0, 10), today)}` : m?.shareOn ? `From ${dayMon(m.shareOn, today)}` : m?.holdUntilShared ? 'Held until shared' : 'As each one is submitted',
+    m?.sharedAt ? `Shared ${dayMon(istDay(m.sharedAt), today)}` : m?.shareOn ? `From ${dayMon(m.shareOn, today)}` : m?.holdUntilShared ? 'Held until shared' : 'As each one is submitted',
   ]
   const labels = ['Goals set', 'Self review', 'Manager review', 'Calibration', 'Shared']
   const current = done.findIndex((d) => !d)
@@ -152,7 +159,7 @@ export function myCycleSteps(c: {
   const first = (c.managerReview?.reviewerName || '').split(' ')[0]
   const steps = [
     { label: 'Goals set', done: goalsDone, meta: c.goals > 0 ? `Done · ${c.goals} ${c.goals === 1 ? 'goal' : 'goals'}` : m?.goalsBy ? `By ${dayMon(m.goalsBy, today)}` : 'No goals yet' },
-    { label: 'Your self-review', done: selfDone, meta: !c.selfReview ? 'Not assigned' : selfDone ? `Sent ${dayMon((c.selfReview.submittedAt ?? today).slice(0, 10), today)}` : m?.selfReviewBy ? `Due ${dayMon(m.selfReviewBy, today)}` : c.selfReview.status === 'IN_PROGRESS' ? 'Draft saved' : 'To write' },
+    { label: 'Your self-review', done: selfDone, meta: !c.selfReview ? 'Not assigned' : selfDone ? `Sent ${dayMon(istDay(c.selfReview.submittedAt ?? today), today)}` : m?.selfReviewBy ? `Due ${dayMon(m.selfReviewBy, today)}` : c.selfReview.status === 'IN_PROGRESS' ? 'Draft saved' : 'To write' },
     { label: first ? `${first}’s review` : 'Manager’s review', done: mgrDone, meta: !c.managerReview ? 'Not assigned' : mgrDone ? 'Done' : m?.managerReviewBy ? `By ${dayMon(m.managerReviewBy, today)}` : 'Waiting' },
     { label: 'Shared with you', done: shown, meta: shown ? 'You can read it' : m?.shareOn ? `By ${dayMon(m.shareOn, today)}` : c.feedbackHeld ? 'When HR shares it' : 'As soon as it’s written' },
   ]

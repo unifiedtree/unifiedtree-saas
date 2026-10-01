@@ -20,7 +20,7 @@ import {
   useCloseCycle, useCycleProgress, useCycleRatings, useCycleStages, useCycleSummary, useInitiateReviews, useSaveMilestones, useShareCycle,
   type InitiationResult, type MilestonesPayload,
 } from '../api/usePerformanceAdmin'
-import { closesOn, currentCycle, cycleStatus, cycleSteps, dayMon, periodLabel, RATING_WORDS } from './growModel'
+import { istDay, closesOn, currentCycle, cycleStatus, cycleSteps, dayMon, periodLabel, RATING_WORDS } from './growModel'
 import { PersonSearch, personName } from './PersonSearch'
 
 const words = (v: string) => v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
@@ -255,7 +255,7 @@ function CyclePanel({ cycle, canWrite, canInitiate, datesReady, onClose }: {
               <div className="grw-form">
                 <DatesFields value={dates} onChange={setDates} />
                 <div className="grw-row">
-                  <Button size={32} loading={saveDates.isPending} onClick={saveCycleDates}>Save dates</Button>
+                  <Button variant="primary" size={32} loading={saveDates.isPending} onClick={saveCycleDates}>Save dates</Button>
                   <Button size={32} variant="secondary" disabled={saveDates.isPending} onClick={() => setEditingDates(false)}>Cancel</Button>
                 </div>
               </div>
@@ -265,11 +265,11 @@ function CyclePanel({ cycle, canWrite, canInitiate, datesReady, onClose }: {
                   { label: 'Goals set by', value: m?.goalsBy ? dayMon(m.goalsBy, today) : 'Not set' },
                   { label: 'Self-reviews by', value: m?.selfReviewBy ? dayMon(m.selfReviewBy, today) : 'Not set' },
                   { label: 'Manager reviews by', value: m?.managerReviewBy ? dayMon(m.managerReviewBy, today) : 'Not set' },
-                  { label: 'Shared on', value: m?.sharedAt ? `Shared ${dayMon(m.sharedAt.slice(0, 10), today)}` : m?.shareOn ? dayMon(m.shareOn, today) : 'Not set' },
+                  { label: 'Shared on', value: m?.sharedAt ? `Shared ${dayMon(istDay(m.sharedAt), today)}` : m?.shareOn ? dayMon(m.shareOn, today) : 'Not set' },
                   { label: 'Feedback', value: m?.holdUntilShared ? (m.sharedAt ? 'Shared with the people reviewed' : 'Held until shared') : 'Shown as each review is submitted' },
                 ]} />
                 {canWrite && m?.holdUntilShared && !m.sharedAt && (
-                  <div><Button size={32} icon="megaphone" onClick={() => setConfirmShare(true)}>Share feedback</Button></div>
+                  <div><Button variant="primary" size={32} icon="megaphone" onClick={() => setConfirmShare(true)}>Share feedback</Button></div>
                 )}
               </div>
             )}
@@ -334,7 +334,7 @@ function CyclePanel({ cycle, canWrite, canInitiate, datesReady, onClose }: {
               ) : <Callout tone="brand">Assigns the chosen reviewer types for every active employee in the cycle’s company, and starts a draft cycle.</Callout>}
               {error && <Callout tone="danger" icon="alert"><span role="alert">{error}</span></Callout>}
               <div>
-                <Button loading={initiate.isPending} disabled={busy || !!progress.error} onClick={assign}>
+                <Button variant="primary" loading={initiate.isPending} disabled={busy || !!progress.error} onClick={assign}>
                   {scope === 'all' ? 'Assign to all active employees' : `Assign reviews${people.length ? ` (${people.length})` : ''}`}
                 </Button>
               </div>

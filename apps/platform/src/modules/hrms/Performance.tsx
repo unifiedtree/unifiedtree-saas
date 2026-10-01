@@ -55,9 +55,9 @@ export const Performance = () => {
     setParams(sp, { replace: true })
   }
   const selfOnly = !canRead && canSelf
-  const action = view === 'cycles' && canWrite ? <Button icon="plus" onClick={() => add('cycles')}>New cycle</Button>
-    : view === 'kpis' && canManageKpi ? <Button icon="plus" onClick={() => add('kpis')}>Add goal</Button>
-      : view === 'my-goals' ? <Button icon="plus" onClick={() => add('my-goals')}>Add a goal</Button>
+  const action = view === 'cycles' && canWrite ? <Button variant="primary" icon="plus" onClick={() => add('cycles')}>New cycle</Button>
+    : view === 'kpis' && canManageKpi ? <Button variant="primary" icon="plus" onClick={() => add('kpis')}>Add goal</Button>
+      : view === 'my-goals' ? <Button variant="primary" icon="plus" onClick={() => add('my-goals')}>Add a goal</Button>
         : undefined
 
   if (!view) {

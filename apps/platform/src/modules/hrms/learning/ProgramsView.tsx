@@ -70,7 +70,7 @@ export function ProgramsView({ canWrite, canEnroll, addKey }: { canWrite: boolea
       return (
         <CellActions>
           {canEnroll && !closed && (enrolledIn.has(p.id) ? <StatusPill tone="success">You’re enrolled</StatusPill>
-            : <Button size={30} disabled={enroll.isPending || full} onClick={() => onEnroll(p)}>{full ? 'Full' : 'Enroll'}</Button>)}
+            : <Button variant="primary" size={30} disabled={enroll.isPending || full} onClick={() => onEnroll(p)}>{full ? 'Full' : 'Enroll'}</Button>)}
           <Button variant="secondary" size={30} onClick={() => navigate(`/hrms/learning/programs/${p.id}`)}>{canWrite && !closed ? 'Details & edit' : 'Details'}</Button>
           {canWrite && <Button variant="secondary" size={30} onClick={() => setRoster(p)}>Roster</Button>}
         </CellActions>

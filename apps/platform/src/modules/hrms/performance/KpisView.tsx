@@ -116,7 +116,7 @@ export function KpisView({ addKey }: { addKey: number }) {
       {teamOnly && <Callout tone="neutral">You see your team: everyone in the departments you head, or your direct reports if you don’t head one. Your own reviews and goals are under My reviews and My goals.</Callout>}
       <Section title={teamOnly ? 'Your team’s goals & KPIs' : 'All goals & KPIs'} body="flush" error={query.error} onRetry={() => query.refetch()}
         actions={(
-          <div className="grw-filters">
+          <div className="grw-filters" style={{ width: 'min(100%, 560px)' }}>
             <Input label="Search KPI titles" type="search" value={search} placeholder="Search goals" onChange={(e) => { setSearch(e.target.value); setPage(0) }} />
             <div className="grw-filters__fixed">
               <Select label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(0) }}
@@ -246,7 +246,7 @@ export function KpiDetails({ initial, canWrite, canManage, onClose }: { initial:
               <Input label="New current value" type="number" min={0} step="any" value={value} onChange={(e) => setValue(e.target.value)} />
               <Textarea label="Progress note" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What changed since the last update?" />
               {validation && <Callout tone="danger" icon="alert"><span role="alert">{validation}</span></Callout>}
-              <div><Button loading={update.isPending} disabled={busy} onClick={record}>Record progress</Button></div>
+              <div><Button variant="primary" loading={update.isPending} disabled={busy} onClick={record}>Record progress</Button></div>
             </div>
           </Section>
         )}

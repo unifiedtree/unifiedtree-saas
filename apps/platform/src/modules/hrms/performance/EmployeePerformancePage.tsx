@@ -17,7 +17,7 @@ import { TrendChart } from '../reports/ReportKit'
 import { useEmployeePerformanceProfile, type EmployeeKpiRow, type ProfileReview } from '../api/usePerformance'
 import { KpiDetails } from './KpisView'
 import { ReviewGoalsPanel, goalMeasure, statusWords } from './shared'
-import { dateLong, kpiStatus, periodLabel, ratingText, reviewStatus, reviewerTypeLabel } from './growModel'
+import { istDay, dateLong, kpiStatus, periodLabel, ratingText, reviewStatus, reviewerTypeLabel } from './growModel'
 import './grow.css'
 
 const rating = (v?: number | null) => (v == null ? '—' : `${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })} / 5`)
@@ -54,7 +54,7 @@ export function EmployeePerformancePage() {
     { key: 'reviewer', header: 'Reviewer', render: reviewer },
     { key: 'rating', header: 'Rating', render: (r) => <span className="grw-num">{r.overallRating == null ? 'Not submitted' : rating(r.overallRating)}</span> },
     { key: 'status', header: 'Status', render: (r) => <StatusPill tone={reviewStatus(r.status).tone}>{reviewStatus(r.status).label}</StatusPill> },
-    { key: 'submitted', header: 'Submitted', render: (r) => (r.submittedAt ? dateLong(r.submittedAt.slice(0, 10)) : '—') },
+    { key: 'submitted', header: 'Submitted', render: (r) => (r.submittedAt ? dateLong(istDay(r.submittedAt)) : '—') },
     { key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (r) => <CellActions><Button variant="secondary" size={30} onClick={() => setReview(r)}>View review</Button></CellActions> },
   ]
 
