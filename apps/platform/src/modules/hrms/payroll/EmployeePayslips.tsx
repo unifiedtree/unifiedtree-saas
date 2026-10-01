@@ -9,10 +9,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { AmountMask, AmountToggle } from '@/design/kit/AmountMask'
-import { Button, PageHeader, Section, StatusPill, Skeleton, EmptyState, errorText } from '@/design/kit/display'
+import { Button, PageHeader, Skeleton, EmptyState, errorText } from '@/design/kit/display'
 import { useToast } from '@/design/kit/overlays'
 import {
-  downloadMyPayslipPdf, inr, inr2, useMyPayslip, useMyPayslips, type MyPayslip,
+  downloadMyPayslipPdf, inr, useMyPayslip, useMyPayslips, type MyPayslip,
 } from '../api/usePayrollRuns'
 import { AskPayrollCard } from './my/AskPayrollCard'
 import { PayScheduleCard } from './my/PayScheduleCard'

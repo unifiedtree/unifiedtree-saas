@@ -7,7 +7,7 @@
 // DELETE /v1/payroll/queries/{id} (BW-59).
 import { useState } from 'react'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { Button, Section, StatusPill, Skeleton, EmptyState, errorText } from '@/design/kit/display'
+import { Button, Section, StatusPill, Skeleton, errorText } from '@/design/kit/display'
 import { SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { fmtShort } from '@/design/dc/dates'
 import { useAnswerPayQuery, useDeletePayQuery, usePayQueries, type PayslipQuery } from '../../api/usePayrollRuns'
