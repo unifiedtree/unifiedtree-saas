@@ -21,7 +21,7 @@ import './AttendancePage.view.css'
 export function AttendancePageView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font)", color: "#0f172a"}}>
         <nav aria-label="Attendance sections" style={{position: "relative", marginBottom: "8px", background: "#fff", boxShadow: "0 0 0 100vmax #fff", clipPath: "inset(0 -100vmax)"}}>
           <span aria-hidden="true" style={{position: "absolute", left: "0", right: "0", bottom: "0", height: "1px", background: "#e2e8f0", boxShadow: "0 0 0 100vmax #e2e8f0", clipPath: "inset(0 -100vmax)"}} />
           <div style={{position: "relative", display: "flex", alignItems: "stretch", gap: "28px", overflowX: "auto", scrollbarWidth: "none"}}>
@@ -81,7 +81,7 @@ export function AttendancePageView({ v }: { v: any }) {
                     {txt(v.crumbSec)}
                   </span>
                 </p>
-                <h1 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "clamp(22px,2.4vw,30px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
+                <h1 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "clamp(22px,2.4vw,30px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
                   {txt(v.title)}
                 </h1>
                 <p style={{margin: "0", maxWidth: "720px", fontSize: "14.5px", lineHeight: "1.5", color: "#475569", textWrap: "pretty"}}>

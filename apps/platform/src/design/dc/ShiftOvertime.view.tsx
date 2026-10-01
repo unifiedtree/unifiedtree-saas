@@ -14,7 +14,7 @@ import { SubTabs } from './SubTabs'
 export function ShiftOvertimeView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "grid", gap: "16px", minWidth: "0", fontFamily: "var(--u-font)", color: "#0f172a"}}>
         <SubTabs items={v.views} label="Overtime views" />
         {v.isError ? (
           <>
@@ -37,7 +37,7 @@ export function ShiftOvertimeView({ v }: { v: any }) {
               </span>
             </p>
             <section aria-labelledby="ot-wait" style={{display: "grid", gap: "10px"}}>
-              <h3 id="ot-wait" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+              <h3 id="ot-wait" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                 {"Waiting for your OK"}
               </h3>
               {v.isLoading ? (
@@ -70,7 +70,7 @@ export function ShiftOvertimeView({ v }: { v: any }) {
             {v.hasDecided ? (
               <>
                 <section aria-labelledby="ot-done" style={{display: "grid", gap: "10px"}}>
-                  <h3 id="ot-done" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+                  <h3 id="ot-done" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                     {"Already decided"}
                   </h3>
                   <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", overflow: "hidden"}}>
@@ -109,7 +109,7 @@ export function ShiftOvertimeView({ v }: { v: any }) {
             </div>
             <section aria-labelledby="ot-month" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", overflow: "hidden"}}>
               <div style={{padding: "18px 20px 12px"}}>
-                <h3 id="ot-month" style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800"}}>
+                <h3 id="ot-month" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                   {"Overtime · "}{txt(v.monthLabel)}
                 </h3>
                 <p style={{margin: "4px 0 0", fontSize: "13px", color: "#64748b"}}>
