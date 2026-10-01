@@ -54,18 +54,27 @@ function todayLine(e: EligibleEmployee): string {
   return 'Not checked in today'
 }
 
+/** Why this person can't be punched from here now, or null (the dialog's own rules, said briefly). */
+function cantPunch(e: EligibleEmployee): string | null {
+  if (e.faceStatus === 'NOT_ENROLLED') return 'No face enrolled yet: they enrol once, in the app or on the web'
+  if (e.faceStatus === 'NO_LOGIN') return 'No app login, so no enrolled face to check'
+  if (e.faceStatus === 'LOCKED') return 'Face check locked after failed tries: HR can reset it'
+  if (e.todayStatus === 'PUNCHED_OUT') return 'Already punched in and out today'
+  return null
+}
+
 /**
- * Who the manager may punch for (GET /v1/attendance/assisted-punch/eligible). The punch itself
- * scans the person's face on the manager's phone (POST needs the face image); the web has no
- * camera flow for someone else yet, so the panel lists the people and says where to punch.
+ * Who the manager may punch for (GET /v1/attendance/assisted-punch/eligible), with their face and
+ * today's punch. Picking someone opens P-ATT-DAY's AssistedPunchDialog for them (this computer's
+ * camera, the same server checks as the phone).
  */
-export function AssistedPunchPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AssistedPunchPanel({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (employeeId: string) => void }) {
   const [q, setQ] = useState('')
   const list = useAssistedPunchEligible(open, q.trim())
   const people = list.data?.employees ?? []
   return (
     <SidePanel open={open} onClose={onClose} title="Punch for a team member" closeLabel="Close panel"
-      sub="Open UnifiedTree on your phone and choose Punch for team member. Their face is scanned on your phone."
+      sub="Pick someone to check them in or out with their face, using this computer’s camera."
       footer={<PanelButton variant="secondary" size="lg" onClick={onClose}>Done</PanelButton>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Input type="search" aria-label="Search your team" placeholder="Search by name or code" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -84,10 +93,12 @@ export function AssistedPunchPanel({ open, onClose }: { open: boolean; onClose: 
           <ListRows label="People you can punch for">
             {people.map((e) => {
               const face = FACE[e.faceStatus] ?? { label: e.faceStatus, tone: 'muted' as StatusTone }
+              const why = cantPunch(e)
               return (
-                <ListRow key={e.employeeId} variant="divided" density="default"
+                <ListRow key={e.employeeId} variant="divided" density="default" chevron={!why}
+                  onClick={why ? undefined : () => onPick(e.employeeId)} ariaLabel={why ? undefined : `Punch for ${e.fullName}`}
                   leading={<Avatar name={e.fullName} src={e.profilePhotoUrl} size={34} />}
-                  title={e.fullName} sub={[e.jobTitle || e.departmentName, todayLine(e)].filter(Boolean).join(' · ')}
+                  title={e.fullName} sub={[e.jobTitle || e.departmentName, why ?? todayLine(e)].filter(Boolean).join(' · ')}
                   end={<StatusPill tone={face.tone} size="xs">{face.label}</StatusPill>} />
               )
             })}
