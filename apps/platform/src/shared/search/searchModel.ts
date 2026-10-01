@@ -13,6 +13,8 @@ import type { QuickAction } from './actionRegistry'
 import { rankWithRanges, highlightRanges, type Range } from './rank'
 import type { GlobalSearchGroup, GlobalSearchHit } from './useGlobalSearch'
 import type { EmployeeSearchHit } from './useEmployeeSearch'
+import type { StaffStatusResponse, TeamDashboardResponse } from '@/modules/hrms/api/useAttendance'
+import { dayBuckets } from '@/modules/hrms/attendance/attendanceBuckets'
 
 export type Scope = 'all' | 'people' | 'pages' | 'actions' | 'records'
 export type RowKind = 'person' | 'page' | 'action' | 'record' | 'filter'
@@ -99,8 +101,8 @@ const actionRow = (a: QuickAction, ranges: Range[]): SearchRow => ({
 export function badgeTone(text: string): BadgeTone {
   const s = text.toLowerCase()
   if (/reject|cancel|void|expired|withdrawn|declin|fail/.test(s)) return 'danger'
-  if (/pending|waiting|awaiting|submitted|processed|review|draft/.test(s)) return 'warning'
-  if (/approved|verified|paid|locked|sent|accepted|hired|reimbursed|open|signed|active/.test(s)) return 'success'
+  if (/pending|waiting|awaiting|submitted|requested|processed|review|draft/.test(s)) return 'warning'
+  if (/approved|verified|paid|locked|sent|accepted|hired|reimbursed|disbursed|open|signed|active/.test(s)) return 'success'
   return 'neutral'
 }
 
@@ -108,6 +110,7 @@ export function badgeTone(text: string): BadgeTone {
 export const RECORD_ICON: Record<string, string> = {
   employee: 'users', leave: 'calendarDays', expense: 'receipt', payslip: 'creditCard', document: 'fileText',
   letter: 'filePen', candidate: 'userPlus', offer: 'briefcase', job: 'briefcase', policy: 'shield', holiday: 'sun',
+  wfh: 'home', shift_change: 'swap', correction: 'pencil', advance: 'banknote', overtime_request: 'timer',
 }
 /** Payslips sit behind the Payroll module; everything else behind HRMS. */
 const RECORD_MODULE: Record<string, string> = { payslip: 'payroll' }
@@ -227,6 +230,11 @@ export function searchHints(ctx: AccessContext, hasActions: boolean): string[] {
   if (hr && ['hrms.leave.employee.read', 'hrms.leave.approve.l1', 'leave.request.self', 'leave.balance.read'].some(ctx.has)) words.push('leave requests')
   if (hr && ['hrms.document.read', 'hrms.document.read.self'].some(ctx.has)) words.push('documents')
   if (hr && ['hrms.report.headcount', 'hrms.report.attrition', 'hrms.report.attendance', 'hrms.report.leave', 'hrms.report.diversity'].some(ctx.has)) words.push('reports')
+  // Holidays and requests: the server finds them for people who open their pages (GlobalSearchAccess).
+  if (hr && ['hrms.leave.read', 'hrms.ess.read', 'leave.request.self'].some(ctx.has)) words.push('holidays')
+  const ownRequests = ctx.self && ['wfh.request.self', 'attendance.checkin.self', 'hrms.advance.request.self'].some(ctx.has)
+  const othersRequests = ['wfh.approve', 'attendance.regularization.approve', 'attendance.team.read', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse'].some(ctx.has)
+  if (ownRequests || othersRequests) words.push('requests')
   words.push('pages')
   if (hasActions) words.push('quick actions')
   return words
@@ -259,3 +267,27 @@ export function personFacts(d: PersonDetails | undefined): { k: string; v: strin
 
 /** "Senior Engineer · Engineering" (whatever is set). */
 export const personRole = (d: PersonDetails | undefined) => [d?.jobTitle, d?.departmentName].filter(Boolean).join(' · ')
+
+/** The preview's status pill: what today looks like for the person, or that they have left. */
+export interface PersonStatus { tone: 'brand' | 'mint' | 'success' | 'warning' | 'danger' | 'info' | 'leave' | 'amber' | 'neutral' | 'muted'; text: string }
+
+const LEFT = new Set(['EXITED', 'TERMINATED', 'RESIGNED', 'RETIRED'])
+
+/**
+ * Today's status for one person from the team's own attendance dashboard row (GET /v1/attendance/dashboard,
+ * the caller's team only), put in ONE bucket by the unchanged dashboard rule (attendanceBuckets.dayBuckets),
+ * so search says exactly what the dashboard counts. Someone who has left reads "Exited" instead.
+ */
+export function personStatus(employmentStatus: string | null | undefined, row: StaffStatusResponse | undefined, date: string, today: string): PersonStatus | null {
+  if (employmentStatus && LEFT.has(employmentStatus)) return { tone: 'muted', text: 'Exited' }
+  if (!row) return null
+  const b = dayBuckets({ date, staffStatuses: [row] } as Pick<TeamDashboardResponse, 'date' | 'staffStatuses'> as TeamDashboardResponse, today)
+  if (b.regular) return { tone: 'brand', text: 'Present today' }
+  if (b.late) return { tone: 'warning', text: 'Late today' }
+  if (b.halfDay) return { tone: 'amber', text: 'Half day today' }
+  if (b.wfh) return { tone: 'mint', text: 'Working from home' }
+  if (b.onLeave) return { tone: 'leave', text: 'On leave today' }
+  if (b.absent) return { tone: 'danger', text: 'Absent today' }
+  if (b.notMarked) return { tone: 'muted', text: 'Not marked yet' }
+  return { tone: 'neutral', text: 'Off today' }
+}

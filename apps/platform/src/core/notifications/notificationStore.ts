@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Notification } from '@/types'
 import { apiJson } from '@/core/api/client'
-import { groupFor, iconForGroup, severityFor, webRouteFor, type AppNotificationType } from './notificationRoutes'
+import { LAST_DAYS, groupFor, iconForGroup, severityFor, webRouteFor, type AppNotificationType } from './notificationRoutes'
 
 export type { AppNotificationType } from './notificationRoutes'
 
@@ -104,8 +104,10 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   fetch: async () => {
     set({ loading: true, error: null })
     try {
-      // size=50 keeps the bell useful without paying full-history cost on every open.
-      const page = await apiJson<PageResponse<ServerNotificationDto>>('/v1/notifications?page=0&size=50')
+      // size=50 keeps the bell useful without paying full-history cost on every open. `since` asks only for
+      // the bell's last 7 days (BW-05); a server without it ignores the parameter and the bell filters itself.
+      const since = new Date(Date.now() - LAST_DAYS * 86_400_000).toISOString()
+      const page = await apiJson<PageResponse<ServerNotificationDto>>(`/v1/notifications?page=0&size=50&since=${encodeURIComponent(since)}`)
       set({
         notifications: (page.content ?? []).map(toDisplay),
         loading: false,

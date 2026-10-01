@@ -23,9 +23,12 @@ import { buildSlashTargets, isSlashQuery, suggestSlash } from '@/shared/search/s
 import { clearRecent, pushRecent, readRecent, writeRecent, type RecentItem } from '@/shared/search/recent'
 import { GLOBAL_SEARCH_MIN_CHARS, normalizeGlobalQuery, useGlobalSearch } from '@/shared/search/useGlobalSearch'
 import { EMPLOYEE_SEARCH_PERMISSION, normalizeEmployeeQuery, useEmployeeSearch, type EmployeeSearchHit } from '@/shared/search/useEmployeeSearch'
+import { usePersonFacts } from '@/shared/search/usePersonFacts'
+import { useTeamDashboard } from '@/modules/hrms/api/useAttendance'
 import type { Range } from '@/shared/search/rank'
 import {
-  PERSON_RECENT, buildResults, jumpRows, pageItems, personFacts, personRole, quickTiles,
+  PERSON_RECENT, buildResults, jumpRows, pageItems, personFacts, personRole, personStatus, quickTiles,
+  type PersonDetails, type PersonStatus,
   type BadgeTone, type JumpModule, type Scope, type SearchGroup, type SearchRow,
 } from '@/shared/search/searchModel'
 import { railGroups } from '../navModel'
@@ -53,6 +56,8 @@ const SCOPE_LABEL: Record<Scope, string> = { all: 'All', people: 'People', pages
 const TONE: Record<BadgeTone, 'success' | 'warning' | 'danger' | 'neutral'> = { success: 'success', warning: 'warning', danger: 'danger', neutral: 'neutral' }
 const MONO = 'ui-monospace,SFMono-Regular,Menlo,monospace'
 const ORG_CHART = '/hrms/org-chart'
+/** Today on this device, YYYY-MM-DD. */
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 /** Text with the matched parts marked. */
 function Highlight({ text, ranges }: { text: string; ranges: Range[] }) {
@@ -122,6 +127,10 @@ export function SearchDialog({ onOpen, onThisPage }: SearchDialogProps) {
     return m
   }, [peopleActive, people.data])
   const truncated = peopleActive && !people.isError && people.data?.truncated === true && !!data?.groups.some((g) => g.type === 'employee')
+  // The people's facts for the preview (one request per result list; nothing until the server has it).
+  const personIds = useMemo(() => (data?.groups.find((g) => g.type === 'employee')?.items ?? []).map((h) => h.id), [data])
+  const factsQ = usePersonFacts(personIds, canSearchPeople && !slashMode)
+  const canTeam = ctx.has('attendance.team.read') && ctx.modules.includes('hrms')
 
   // Recent rows still allowed for this person right now.
   const allowedPaths = useMemo(() => new Set([...entries.map((e) => e.path), ...actions.map((a) => a.path), ...slashTargets.map((t) => t.target.path)]), [entries, actions, slashTargets])
@@ -210,7 +219,14 @@ export function SearchDialog({ onOpen, onThisPage }: SearchDialogProps) {
   const activeId = current ? `tbs-row-${cursor}` : undefined
   let flatIndex = -1
 
-  const preview = current && !phone ? <Preview row={current} details={current.personId ? details.get(current.personId) : undefined} orgChart={orgChartLive} onGo={go} /> : null
+  // The preview's person: what /v1/search said, the facts (BW-02) and today's status (the team dashboard's own row, team only).
+  const previewId = current?.kind === 'person' ? current.personId : undefined
+  const teamDay = useTeamDashboard(undefined, undefined, canTeam && !!previewId && !phone)
+  const todayRow = previewId ? teamDay.data?.staffStatuses.find((s) => s.employeeId === previewId) : undefined
+  const previewFacts = previewId ? factsQ.data?.get(previewId) : undefined
+  const previewDetails: PersonDetails | undefined = previewId ? { ...details.get(previewId), ...(previewFacts ?? {}) } : undefined
+  const status = previewId ? personStatus(previewFacts?.employmentStatus, todayRow, teamDay.data?.date ?? localToday(), localToday()) : null
+  const preview = current && !phone ? <Preview row={current} details={previewDetails} status={status} orgChart={orgChartLive} onGo={go} /> : null
 
   return createPortal(
     <div className="uko-layer ut-sd-layer" style={{ zIndex: 1100 }} data-uko-layer="">
@@ -373,7 +389,7 @@ export function SearchDialog({ onOpen, onThisPage }: SearchDialogProps) {
 }
 
 /** The right-hand preview of the highlighted row, with its main action. */
-function Preview({ row, details, orgChart, onGo }: { row: SearchRow; details?: EmployeeSearchHit; orgChart: boolean; onGo: (row: SearchRow, path?: string) => void }) {
+function Preview({ row, details, status, orgChart, onGo }: { row: SearchRow; details?: PersonDetails; status?: PersonStatus | null; orgChart: boolean; onGo: (row: SearchRow, path?: string) => void }) {
   let body: ReactNode
   let cta = 'Open'
   let path = row.path
@@ -387,8 +403,9 @@ function Preview({ row, details, orgChart, onGo }: { row: SearchRow; details?: E
         <Avatar name={row.label} src={details?.profilePhotoUrl} size={60} tone="solid" ring="brand" decorative />
         <div>
           <div className="ut-sdp__title">{row.label}</div>
-          {(details ? role : row.sub) && <div className="ut-sdp__role">{details ? role : row.sub}</div>}
+          {(details?.displayName !== undefined ? role : row.sub) && <div className="ut-sdp__role">{details?.displayName !== undefined ? role : row.sub}</div>}
         </div>
+        {status && <StatusPill tone={status.tone} size="md" dot>{status.text}</StatusPill>}
         {facts.length > 0 && (
           <dl className="ut-sdp__facts">
             {facts.map((f) => <div key={f.k}><dt>{f.k}</dt><dd>{f.v}</dd></div>)}

@@ -5,7 +5,7 @@ import { canOpen } from '../navigation/access'
 import { QUICK_ACTIONS } from './actionRegistry'
 import type { GlobalSearchGroup } from './useGlobalSearch'
 import {
-  PERSON_RECENT, badgeTone, buildResults, jumpRows, pageItems, personFacts, personRole, quickTiles, searchHints, type JumpModule,
+  PERSON_RECENT, RECORD_ICON, badgeTone, buildResults, jumpRows, pageItems, personFacts, personRole, personStatus, quickTiles, searchHints, type JumpModule,
 } from './searchModel'
 
 const ctx = (perms: string[], extra: Partial<AccessContext> = {}): AccessContext => ({
@@ -104,9 +104,11 @@ describe('empty dialog', () => {
 
 describe('search pill words', () => {
   it('follow the permissions', () => {
-    expect(searchHints(ctx(HR), true)).toEqual(['people', 'payslips', 'leave requests', 'reports', 'pages', 'quick actions'])
-    expect(searchHints(ctx(EMP), true)).toEqual(['payslips', 'leave requests', 'documents', 'pages', 'quick actions'])
-    expect(searchHints(ctx(EMP, { modules: ['hrms'] }), false)).toEqual(['leave requests', 'documents', 'pages'])
+    expect(searchHints(ctx(HR), true)).toEqual(['people', 'payslips', 'leave requests', 'reports', 'holidays', 'requests', 'pages', 'quick actions'])
+    expect(searchHints(ctx(EMP), true)).toEqual(['payslips', 'leave requests', 'documents', 'holidays', 'requests', 'pages', 'quick actions'])
+    // Own requests need an employee record; holidays need the Leave page.
+    expect(searchHints(ctx(['attendance.checkin.self'], { self: false }), false)).toEqual(['pages'])
+    expect(searchHints(ctx(EMP, { modules: ['hrms'] }), false)).toEqual(['leave requests', 'documents', 'holidays', 'requests', 'pages'])
   })
 })
 
@@ -129,5 +131,31 @@ describe('people', () => {
     expect(badgeTone('Awaiting HR')).toBe('warning')
     expect(badgeTone('Verified')).toBe('success')
     expect(badgeTone('Something')).toBe('neutral')
+  })
+})
+
+describe('person status (the dashboard row, one bucket)', () => {
+  const row = (over: Record<string, unknown>) => ({ employeeId: 'e1', employeeCode: 'E1', fullName: 'A', status: 'PRESENT', ...over }) as never
+  it('says exactly what the dashboard counts', () => {
+    expect(personStatus(null, row({ checkInAt: '2026-10-02T03:30:00Z', status: 'PRESENT' }), '2026-10-02', '2026-10-02')?.text).toBe('Present today')
+    expect(personStatus(null, row({ checkInAt: '2026-10-02T04:30:00Z', status: 'LATE' }), '2026-10-02', '2026-10-02')?.text).toBe('Late today')
+    expect(personStatus(null, row({ checkInAt: '2026-10-02T03:30:00Z', attendanceType: 'WFH' }), '2026-10-02', '2026-10-02')?.text).toBe('Working from home')
+    expect(personStatus(null, row({ checkInAt: null, onLeave: true }), '2026-10-02', '2026-10-02')?.text).toBe('On leave today')
+    expect(personStatus(null, row({ checkInAt: null }), '2026-10-02', '2026-10-02')?.text).toBe('Not marked yet')
+    expect(personStatus(null, row({ checkInAt: null }), '2026-10-01', '2026-10-02')?.text).toBe('Absent today')
+    expect(personStatus(null, row({ effectiveStatus: 'HALF_DAY' }), '2026-10-02', '2026-10-02')?.text).toBe('Half day today')
+  })
+  it('shows nothing outside the team (no row) and "Exited" for someone who left', () => {
+    expect(personStatus(null, undefined, '2026-10-02', '2026-10-02')).toBeNull()
+    expect(personStatus('ACTIVE', undefined, '2026-10-02', '2026-10-02')).toBeNull()
+    expect(personStatus('EXITED', undefined, '2026-10-02', '2026-10-02')).toEqual({ tone: 'muted', text: 'Exited' })
+  })
+})
+
+describe('request results', () => {
+  it('give each request type an icon and a tone for its status', () => {
+    for (const t of ['wfh', 'shift_change', 'correction', 'advance', 'overtime_request', 'holiday']) expect(RECORD_ICON[t]).toBeTruthy()
+    expect(badgeTone('Requested')).toBe('warning')
+    expect(badgeTone('Disbursed')).toBe('success')
   })
 })
