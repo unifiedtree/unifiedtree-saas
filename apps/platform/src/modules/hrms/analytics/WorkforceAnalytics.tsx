@@ -269,7 +269,7 @@ export function WorkforceAnalytics() {
                     <MiniStat label="Attrition rate" value={`${annualised.toFixed(1)}%`} note="Annualised" tone="warning" countUp={false} />
                     <MiniStat label="Resigned" value={num(ex.resign)} tone="info" countUp={false} />
                     <MiniStat label="Terminated" value={num(ex.term)} tone="danger" countUp={false} />
-                    <MiniStat label="Other" value={num(ex.other)} note="Retirement, absconding and other exits" tone="neutral" countUp={false} />
+                    <MiniStat label="Other" value={num(ex.other)} note="Any other exit type" tone="neutral" countUp={false} />
                   </MiniStatGrid>
                 </Section>
                 <div className="rp-row">
