@@ -1,3 +1,4 @@
+/* global process, console, fetch, Buffer */
 // Live check of the 2026-09-25 performance access rules (V143.9 + PerformanceTeamScope):
 //  - Department manager sees only their team (same team as the My team page:
 //    departments they head, else direct reports) in KPIs, reviews, cycle
@@ -28,7 +29,7 @@ async function login(email) {
   const d = await r.json()
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
   return { call, perms: JSON.parse(Buffer.from(d.accessToken.split('.')[1], 'base64url').toString()).permissions || [] }

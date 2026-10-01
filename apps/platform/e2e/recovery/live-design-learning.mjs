@@ -1,3 +1,4 @@
+/* global process, console */
 // Live check of the redesigned Learning page (/hrms/learning):
 //  - owner: Programs, My training, Skill matrix, Certifications; creates a
 //    QA program and opens its roster

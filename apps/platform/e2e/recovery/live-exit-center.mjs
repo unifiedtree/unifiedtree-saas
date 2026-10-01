@@ -1,3 +1,4 @@
+/* global process, console, fetch, URL */
 // Resignation & Exit page (/hrms/exit) — browser acceptance against the local
 // recovery runtime. Creates a throw-away active employee through the real API,
 // starts a notice period from the page, checks the row, the reload, the API

@@ -1,3 +1,4 @@
+/* global process, console */
 // Live check of the redesigned Performance page (/hrms/performance):
 //  - owner: Review cycles, Employee reviews, Goals & KPIs, People, My reviews, My goals,
 //    each once (the old page listed the three admin views twice). Redesign (P-GROW): the
