@@ -1,3 +1,4 @@
+/* global process, console */
 // Runs live-rd-theme (both themes, every role) WITH unread notifications present, so the bell's
 // unread count is on screen and its contrast is checked. Gives each demo person one unread
 // notification in the disposable database (RECOVERY_DB, ut_w3_dev only), runs the theme test,
@@ -20,7 +21,7 @@ sql(`INSERT INTO notif.notifications(tenant_id, user_id, type, title, body, data
       WHERE uc.tenant_id = '${tenant}' AND uc.employee_id IS NOT NULL
         AND uc.email IN ('owner@unifiedtree.demo', 'hrm@unifiedtree.demo', 'fin@unifiedtree.demo', 'mgr@unifiedtree.demo', 'reader@unifiedtree.demo')`)
 console.log(`fixture: ${sql(`SELECT count(*) FROM notif.notifications WHERE body = '${marker}'`)} unread notifications added`)
-let code = 1
+let code
 try {
   const r = spawnSync(process.execPath, ['e2e/recovery/live-rd-theme.mjs'], { stdio: 'inherit', env: process.env })
   code = r.status ?? 1
@@ -28,4 +29,4 @@ try {
   sql(`DELETE FROM notif.notifications WHERE body = '${marker}'`)
   console.log(`cleanup: test notifications deleted (${sql(`SELECT count(*) FROM notif.notifications WHERE body = '${marker}'`)} left)`)
 }
-process.exit(code)
+process.exit(code ?? 1)

@@ -1,3 +1,4 @@
+/* global process, console, fetch */
 // Redesign F3b, Step 2: the API half, against a backend built from this branch (live slot, ut_w3_dev).
 //
 //  - BW-01 GET /v1/workspace/admin-contacts: anyone signed in; the people who can manage users or
@@ -38,7 +39,7 @@ async function login(email) {
   if (!d.accessToken) throw new Error(`login failed for ${email}: ${r.status}`)
   return async (path) => {
     const res = await fetch(api + path, { headers: { 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` } })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
 }
@@ -91,13 +92,13 @@ try {
     INSERT INTO leave_mgmt.wfh_requests(id, tenant_id, employee_id, from_date, to_date, reason, status)
       VALUES ('${ids.wfh}', '${tenant}', '${READER}', CURRENT_DATE + 3, CURRENT_DATE + 3, '${stamp}', 'PENDING');
     INSERT INTO attendance.shift_change_requests(id, tenant_id, employee_id, requested_shift_policy_id, reason, status)
-      VALUES ('${ids.shift}', '${tenant}', '${READER}', (SELECT id FROM attendance.shift_policies WHERE tenant_id = '${tenant}' ORDER BY name LIMIT 1), '${stamp}', 'PENDING');
+      VALUES ('${ids.shift}', '${tenant}', '${READER}', (SELECT id FROM attendance.shift_policies WHERE tenant_id = '${tenant}' ORDER BY name LIMIT 1), '${stamp}', 'REJECTED');
     INSERT INTO attendance.regularization_requests(id, tenant_id, employee_id, request_date, missing_for_date, reason, status)
       VALUES ('${ids.fix}', '${tenant}', '${READER}', CURRENT_DATE, CURRENT_DATE - 2, '${stamp}', 'PENDING');
     INSERT INTO advance_mgmt.advance_requests(id, tenant_id, employee_id, company_id, amount, repayment_months, monthly_deduction, reason, status, approver_id)
       VALUES ('${ids.adv}', '${tenant}', '${READER}', '${company}', 12000, 6, 2000, '${stamp}', 'REQUESTED', '${MANAGER}');
     INSERT INTO attendance.overtime_requests(tenant_id, id, employee_id, company_id, request_date, minutes, reason, status)
-      VALUES ('${tenant}', '${ids.ot}', '${READER}', '${company}', CURRENT_DATE - 1, 80, '${stamp}', 'PENDING');
+      VALUES ('${tenant}', '${ids.ot}', '${READER}', '${company}', CURRENT_DATE - 1, 80, '${stamp}', 'REJECTED');
     COMMIT;`)
 
   // ── BW-04 holidays ──

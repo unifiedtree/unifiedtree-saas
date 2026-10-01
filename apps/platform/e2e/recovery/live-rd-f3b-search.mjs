@@ -1,3 +1,4 @@
+/* global process, console, fetch, URL, localStorage, document, window, setTimeout */
 // Redesign F3b: the one search dialog and the notifications popover, per role.
 //
 // For owner, hrm, fin, mgr and reader (desktop, light; owner and reader also dark):
@@ -38,7 +39,7 @@ async function login(email) {
   if (!d.accessToken) throw new Error(`login failed for ${email}: ${r.status}`)
   return async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
 }
