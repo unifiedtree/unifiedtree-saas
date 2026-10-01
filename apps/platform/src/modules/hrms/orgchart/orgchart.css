@@ -96,7 +96,7 @@
 
 /* The company card above several top-level people */
 .uoc-card--company { background: var(--u-sf, #fff); }
-.uoc-card--company .uoc-card__name { font-size: 14.5px; }
+.uoc-card--company .uoc-card__name { font-size: 14.5px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 
 /* The count pill: number of reports; opens and closes them */
 .uoc-pill {
@@ -182,6 +182,9 @@
   .uoc-bar { padding: 12px; }
   .uoc-search { max-width: none; flex-basis: 100%; }
   .uoc-co { min-width: 0; max-width: none; flex: 1 1 100%; }
+  .uoc-list { padding: 6px 6px 12px; }
+  .uoc-row__guide { width: 12px; }
+  .uoc-row__guide::before { left: 5px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .uoc-stage.is-gliding, .uoc-view.is-gliding, .uoc-card, .uoc-pill, .uoc-row__toggle svg { transition: none; }

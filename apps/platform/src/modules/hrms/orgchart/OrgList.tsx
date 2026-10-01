@@ -6,6 +6,8 @@ import { Avatar } from '@/design/kit/display'
 import { COMPANY_ROOT, listRows, plural, statusLabel, type OrgTree } from './orgTree'
 import type { CardHandlers } from './OrgCards'
 
+const MAX_INDENT = 8
+
 interface OrgListProps extends CardHandlers {
   tree: OrgTree
   expanded: ReadonlySet<string>
@@ -37,8 +39,9 @@ export const OrgList = memo(function OrgList({ tree, expanded, found, companyNam
         const sub = p ? [p.designation, p.department].filter(Boolean).join(' · ') : plural(tree.size, 'person', 'people')
         const status = p ? statusLabel(p.status) : null
         return (
-          <li key={r.id} data-row={r.id} className={`uoc-row${you ? ' is-you' : ''}${r.id === found ? ' is-found' : ''}`}>
-            {Array.from({ length: r.depth }, (_, i) => <span key={i} className="uoc-row__guide" aria-hidden="true" />)}
+          <li key={r.id} data-row={r.id} data-depth={r.depth} className={`uoc-row${you ? ' is-you' : ''}${r.id === found ? ' is-found' : ''}`}>
+            {/* Indent by level, up to eight levels so deep lines keep room for the name on a phone. */}
+            {Array.from({ length: Math.min(r.depth, MAX_INDENT) }, (_, i) => <span key={i} className="uoc-row__guide" aria-hidden="true" />)}
             {r.hasChildren
               ? (
                 <button type="button" className="uoc-row__toggle" aria-expanded={r.open}

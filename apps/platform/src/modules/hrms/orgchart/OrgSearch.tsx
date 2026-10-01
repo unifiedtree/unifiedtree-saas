@@ -44,7 +44,8 @@ export function OrgSearch({ tree, onPick }: OrgSearchProps) {
       <input
         ref={inputRef}
         className="uoc-search__in"
-        type="search"
+        type="text"
+        enterKeyHint="search"
         role="combobox"
         aria-label="Search employee"
         aria-autocomplete="list"
