@@ -57,6 +57,7 @@ describe('hero change lines', () => {
     const rows = [{ gender: 'FEMALE', count: 2 }, { gender: 'MALE', count: 6 }] as DiversityRow[]
     expect(womenPct(rows)).toBe(25)
     expect(womenPct([])).toBeNull()
+    expect(womenPct([{ gender: 'NOT_SPECIFIED', count: 19 }] as DiversityRow[])).toBeNull()
     expect(womenPct(undefined)).toBeNull()
   })
 })

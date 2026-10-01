@@ -264,7 +264,8 @@ async function uiPhase() {
   const ownerUser = sql(`select id from auth.user_credentials where tenant_id='${tenant}' and email='owner@unifiedtree.demo'`)
   const started = sql('select now()')
   const ui = async (email, { width = 1440, theme = 'light' } = {}) => {
-    const ctx = await browser.newContext({ viewport: { width, height: 900 }, acceptDownloads: true })
+    // Reduced motion: no entrance animations, so clicks and screenshots see settled pages.
+    const ctx = await browser.newContext({ viewport: { width, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce' })
     await ctx.addInitScript((t) => { try { localStorage.setItem('ut.theme', t) } catch { /* private mode */ } }, theme)
     const page = await ctx.newPage()
     const errors = [], failed = [], calls = []
@@ -290,6 +291,8 @@ async function uiPhase() {
   const employed = num(employedSql(today))
   const exitsThisMonth = num(`select count(*) from hrms.employees e where e.tenant_id='${tenant}' and e.company_id='${company}' and e.employment_status in ('EXITED','TERMINATED','RESIGNED') and coalesce(e.last_working_day, e.date_of_termination) between '${monthStart(today)}' and '${today}'`)
   const divNow = num(`select count(*) from hrms.employees where tenant_id='${tenant}' and company_id='${company}' and employment_status in ('ACTIVE','PROBATION','NOTICE_PERIOD')`)
+  // The hero shows the women share only when someone has a gender on file (as of today, by the diversity rule).
+  const womenRecorded = num(bucketedSql(today).replace('select count(*) from', 'select count(*) filter (where e.gender is not null and e.gender <> \'NOT_SPECIFIED\') from')) > 0
   const mstat = (page, label) => page.locator('.uk-mstat').filter({ has: page.locator('.uk-mstat__label', { hasText: new RegExp(`^${label}$`) }) }).locator('.uk-mstat__value').first()
 
   try {
@@ -300,7 +303,8 @@ async function uiPhase() {
     const heroHead = await o.page.locator('.rp-hero [data-hero="Headcount"] .rp-hero__v').innerText().catch(() => '')
     check('center: hero headcount = SQL', heroHead === fmt(employed), `hero ${heroHead}, sql ${employed}`)
     check('center: hero shows the change this month, attrition and women', (await o.page.locator('.rp-hero [data-hero="Headcount"] .rp-hero__d').innerText().catch(() => '')).includes('this month')
-      && (await o.page.locator('.rp-hero [data-hero="Attrition"]').count()) === 1 && (await o.page.locator('.rp-hero [data-hero="Women"] .rp-hero__d').innerText().catch(() => '')).includes('since'))
+      && (await o.page.locator('.rp-hero [data-hero="Attrition"]').count()) === 1
+      && (womenRecorded ? (await o.page.locator('.rp-hero [data-hero="Women"] .rp-hero__d').innerText().catch(() => '')).includes('since') : (await o.page.locator('.rp-hero [data-hero="Women"]').count()) === 0))
     check('center: six report tiles, each with its live chart', (await o.page.locator('.rp-tile').count()) === 6
       && (await o.page.locator('.rp-tile').evaluateAll((els) => els.every((e) => e.querySelector('[role="img"], .rp-mini-empty')))), String(await o.page.locator('.rp-tile').count()))
     check('center: tiles say Live', (await o.page.locator('.rp-tile').filter({ hasText: 'Live' }).count()) === 6)

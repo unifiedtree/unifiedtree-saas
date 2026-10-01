@@ -71,11 +71,13 @@ export const ptsSince = (delta: number, since: string) => {
   const r = Math.round(delta)
   return r > 0 ? `+${r} pts since ${since}` : r < 0 ? `${-r} pts lower since ${since}` : `No change since ${since}`
 }
+/** Women as a share of everyone counted; null when nobody is counted or nobody has a gender on file (0% would mislead). */
 export const womenPct = (rows: DiversityRow[] | undefined) => {
   if (!rows) return null
   const all = rows.reduce((a, r) => a + Number(r.count || 0), 0)
+  const recorded = rows.filter((r) => r.gender && r.gender !== 'NOT_SPECIFIED').reduce((a, r) => a + Number(r.count || 0), 0)
   const w = rows.filter((r) => r.gender === 'FEMALE').reduce((a, r) => a + Number(r.count || 0), 0)
-  return all ? (w * 100) / all : null
+  return all && recorded ? (w * 100) / all : null
 }
 
 // ── scheduled emails ──
