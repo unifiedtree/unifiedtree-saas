@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { useToast } from '@/design/kit/overlays'
 import { format } from 'date-fns'
 import { Search, X } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
@@ -39,6 +39,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10)
 
 /** `bare`: drop the card's own heading and intro (a settings section supplies them). */
 export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
+  const toast = useToast()
   const qc = useQueryClient()
   const list = useQuery({
     queryKey: ['me', 'delegation'],
@@ -54,7 +55,7 @@ export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
       qc.invalidateQueries({ queryKey: ['me', 'delegation'] })
       toast.success('Delegation removed')
     },
-    onError: (err) => toast.error('Could not remove delegation', { description: (err as Error).message }),
+    onError: (err) => toast.error('Could not remove delegation', { detail: (err as Error).message }),
   })
 
   return (
@@ -65,7 +66,7 @@ export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className="text-xs font-medium text-[#059669] hover:underline"
+            className="text-xs font-medium text-[var(--u-brt)] hover:underline"
           >
             + Add delegation
           </button>
@@ -103,7 +104,7 @@ export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
                 <p className="text-sm font-medium text-text-primary">
                   → {d.delegateName || d.delegateEmployeeId.slice(0, 8)}
                   {d.active && (
-                    <span className="ml-2 rounded-full bg-[#059669]/10 px-2 py-0.5 text-[10px] font-semibold text-[#047857]">
+                    <span className="ml-2 rounded-full bg-[var(--u-brs)] px-2 py-0.5 text-[10px] font-semibold text-[var(--u-brt)]">
                       Active
                     </span>
                   )}
@@ -136,6 +137,7 @@ export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
 }
 
 const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = ({ onDone, onCancel }) => {
+  const toast = useToast()
   const [query, setQuery] = useState('')
   const [delegate, setDelegate] = useState<EmployeeSearchHit | null>(null)
   const [fromDate, setFromDate] = useState(todayIso())
@@ -154,13 +156,13 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
     },
     onError: (err) => {
       const msg = (err as Error).message
-      toast.error('Could not add delegation', { description: msg })
+      toast.error('Could not add delegation', { detail: msg })
     },
   })
 
   const submit = () => {
-    if (!delegate) return toast.error('Pick a colleague to delegate to.')
-    if (!fromDate || !toDate) return toast.error('Both dates are required.')
+    if (!delegate) { toast.error('Pick a colleague to delegate to.'); return }
+    if (!fromDate || !toDate) { toast.error('Both dates are required.'); return }
     createMut.mutate({
       delegateEmployeeId: delegate.id,
       fromDate,
@@ -194,11 +196,11 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by name or employee ID"
-                className="w-full rounded-xl border border-border-default bg-white pl-9 pr-3 py-2 text-sm outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
+                className="w-full rounded-xl border border-border-default bg-[var(--u-sf)] pl-9 pr-3 py-2 text-sm outline-none focus:border-[var(--u-brl)] focus:ring-4 focus:ring-[var(--u-brs)]"
               />
             </div>
             {query.trim().length >= EMPLOYEE_SEARCH_MIN_CHARS && (
-              <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-white">
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-[var(--u-sf)]">
                 {search.isError ? (
                   <p className="p-3 text-xs text-red-600">
                     You don't have permission to look up colleagues. Ask HR to set the delegation for you.
@@ -235,7 +237,7 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
             aria-label="From"
-            className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
+            className="w-full rounded-xl border border-border-default bg-[var(--u-sf)] px-3 py-2 text-sm outline-none focus:border-[var(--u-brl)] focus:ring-4 focus:ring-[var(--u-brs)]"
           />
         </div>
         <div>
@@ -245,7 +247,7 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
             min={fromDate}
             onChange={(e) => setToDate(e.target.value)}
             aria-label="To"
-            className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
+            className="w-full rounded-xl border border-border-default bg-[var(--u-sf)] px-3 py-2 text-sm outline-none focus:border-[var(--u-brl)] focus:ring-4 focus:ring-[var(--u-brs)]"
           />
         </div>
       </div>
@@ -257,7 +259,7 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Off-site training, annual leave, …"
-          className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
+          className="w-full rounded-xl border border-border-default bg-[var(--u-sf)] px-3 py-2 text-sm outline-none focus:border-[var(--u-brl)] focus:ring-4 focus:ring-[var(--u-brs)]"
         />
       </div>
 
@@ -265,7 +267,7 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-border-default bg-white px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-subtle"
+          className="rounded-lg border border-border-default bg-[var(--u-sf)] px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-subtle"
         >
           Cancel
         </button>
