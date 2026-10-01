@@ -328,7 +328,10 @@ try {
   calls.length = 0
   await page.goto(`${base}/hrms/attendance?tab=team`)
   await page.waitForLoadState('networkidle')
-  check('today: the Attendance page asks as before (no includeLeavers)', calls.some((c) => c.startsWith('/v1/attendance/dashboard?')) && !calls.some((c) => c.includes('includeLeavers')), calls.filter((c) => c.startsWith('/v1/attendance/dashboard?')).join(' | '))
+  // Today's own roster has no includeLeavers. (Daily tracking, P-ATT-DAY, also reads the day before for its
+  // "vs yesterday" figures; that is a past day, so it rightly takes the team as it was.)
+  const todayCalls = calls.filter((c) => c.startsWith(`/v1/attendance/dashboard?date=${TODAY}`))
+  check('today: the Attendance page asks as before (no includeLeavers)', todayCalls.length > 0 && !todayCalls.some((c) => c.includes('includeLeavers')), calls.filter((c) => c.startsWith('/v1/attendance/dashboard?')).join(' | '))
 
   check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
   check('no failed API calls', failed.length === 0, failed.slice(0, 4).join(' | '))
