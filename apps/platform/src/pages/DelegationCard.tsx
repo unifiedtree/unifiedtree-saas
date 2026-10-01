@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/design/kit/overlays'
+import { istToday } from '@/design/dc/dates'
 import { format } from 'date-fns'
 import { Search, X } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
@@ -35,7 +36,8 @@ interface DelegationDto {
   active: boolean
 }
 
-const todayIso = () => new Date().toISOString().slice(0, 10)
+// Today in India (the app's calendar): the UTC date is still yesterday before 05:30.
+const todayIso = () => istToday()
 
 /** `bare`: drop the card's own heading and intro (a settings section supplies them). */
 export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
