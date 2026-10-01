@@ -76,7 +76,11 @@ export const PendingDocuments: React.FC = () => {
   const columns: TableColumn<Row>[] = [
     {
       key: 'employee', header: 'Employee', label: 'Employee', primary: true,
-      render: (r) => <CellPerson name={r.employeeName || 'Employee'} sub={r.departmentName || r.employeeCode} />,
+      render: (r) => (
+        <Link to={`/hrms/employees/${r.employeeId}?tab=documents`} className="lt-plain-link" title="Open their documents">
+          <CellPerson name={r.employeeName || 'Employee'} sub={r.departmentName || r.employeeCode} />
+        </Link>
+      ),
     },
     {
       key: 'document', header: 'Document', render: (r) => (
@@ -88,10 +92,9 @@ export const PendingDocuments: React.FC = () => {
     { key: 'uploaded', header: 'Uploaded', render: (r) => shortDay(localDay(r.createdAt)) },
     { key: 'expiry', header: 'Expiry', render: (r) => (r.expiryDate ? day(r.expiryDate) : '—') },
     {
-      key: 'actions', header: <span className="sr-only">Actions</span>, label: 'Actions', align: 'right', render: (r) => (
+      key: 'actions', header: <span className="sr-only">Actions</span>, label: 'Actions', align: 'right', width: 300, render: (r) => (
         <CellActions>
           <Button size={30} variant="ghost" loading={opening === r.id} onClick={() => open(r.id)} aria-label={`View file: ${r.title}`}>View file</Button>
-          <Link to={`/hrms/employees/${r.employeeId}?tab=documents`} className="lt-link lt-small" aria-label={`Open their documents: ${r.employeeName ?? 'employee'}`}>Their file</Link>
           <Button size={30} variant="secondary" onClick={() => { setRejecting(r); setReason('') }} aria-label={`Reject ${r.title}`}>Reject</Button>
           <Button size={30} variant="soft" loading={verifying === r.id} onClick={() => onVerify(r)} aria-label={`Verify ${r.title}`}>Verify</Button>
         </CellActions>

@@ -237,7 +237,7 @@ try {
   // ── 7. vault and the review queue ───────────────────────────────────────
   const typeId = sql(`select id from document_mgmt.document_types where tenant_id='${tenant}' and code='PAN' limit 1`)
   docId = sql(`insert into document_mgmt.employee_documents (tenant_id, employee_id, company_id, title, category, file_url, verification_status, original_filename, file_size_bytes, document_type_id, expiry_date)
-    values ('${tenant}','${readerId}','${company}','${docTitle}','TAX','r2://employee-documents/${tenant}/qa-${stamp}.pdf','PENDING','qa.pdf',20480,${typeId ? `'${typeId}'` : 'null'}, current_date + 400) returning id`).split('\n')[0]
+    values ('${tenant}','${readerId}','${company}','${docTitle}','TAX','r2://employee-documents/${tenant}/qa-${stamp}.pdf','PENDING','qa.pdf',20480,${typeId ? `'${typeId}'` : 'null'}, current_date + 400) returning id`).split(/\r?\n/)[0].trim()
   await p.goto(base + '/hrms/documents?view=all'); await settle(p)
   check('vault: counts across everyone', (await p.getByRole('heading', { name: /^Across \d+ (people|person)$/ }).count()) === 1 && (await p.getByText('Expiring soon', { exact: true }).count()) >= 1)
   await p.getByLabel('Find employee').fill('Reader')
@@ -280,7 +280,7 @@ try {
 
   // ── 9. my assets: confirm and report ────────────────────────────────────
   assetId = sql(`insert into hrms.onboarding_assets (id, tenant_id, company_id, employee_id, asset_tag, asset_type, asset_name, status, assigned_at, created_at, updated_at, version)
-    values (gen_random_uuid(), '${tenant}', '${company}', '${readerId}', '${assetTag}', 'Monitor', 'QA monitor ${stamp}', 'ASSIGNED', current_date, now(), now(), 0) returning id`).split('\n')[0]
+    values (gen_random_uuid(), '${tenant}', '${company}', '${readerId}', '${assetTag}', 'Monitor', 'QA monitor ${stamp}', 'ASSIGNED', current_date, now(), now(), 0) returning id`).split(/\r?\n/)[0].trim()
   sql(`insert into hrms.asset_allocations (id, tenant_id, asset_id, employee_id, assigned_at, created_at) values (gen_random_uuid(), '${tenant}', '${assetId}', '${readerId}', current_date, now())`)
   await r2.page.goto(base + '/me/assets'); await settle(r2.page)
   const acard = r2.page.locator('article').filter({ hasText: `QA monitor ${stamp}` })
