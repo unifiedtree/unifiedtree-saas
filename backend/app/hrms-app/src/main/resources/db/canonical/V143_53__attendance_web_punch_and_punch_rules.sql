@@ -2,14 +2,19 @@
 -- (HRMS redesign, package P-ATT-DAY: BW-24, BW-28).
 --
 -- 1. settings.hr_configuration.allow_web_punch — the company switch "Allow web
---    check-in", OFF by default. JDBC only: the HrConfiguration entity does NOT
---    map it (ddl-auto=validate ignores extra columns, and JPA updates of the row
---    never touch it). While it is off, or while this column is missing, the punch
---    API refuses the WEB method (WEB_PUNCH_NOT_ALLOWED).
+--    check-in", ON by default (client decision, 1 Oct): adding the column gives
+--    every existing company TRUE (a constant default, so no table rewrite), and
+--    a company with no HR configuration row yet counts as on. An admin turns it
+--    OFF in HR configuration -> Attendance rules. A web punch also needs a face
+--    scan that matches the person's enrolled face (the phone's face check). JDBC
+--    only: the HrConfiguration entity does NOT map it (ddl-auto=validate ignores
+--    extra columns, and JPA updates of the row never touch it). While it is off,
+--    or while this column is missing, the punch API refuses the WEB method
+--    (WEB_PUNCH_NOT_ALLOWED).
 -- 2. WEB added to the two method CHECKs on attendance.records
 --    (ck_attendance_records_check_in_method / _check_out_method). The Java enum
 --    CheckInMethod gains WEB; that is not a mapping change (the column stays
---    VARCHAR). WEB rows only appear once an admin switches web check-in on.
+--    VARCHAR). WEB rows appear once people punch from the browser.
 --
 --    attendance.records is PARTITIONED (monthly partitions plus a default one,
 --    all inheriting these CHECKs). Swapping a CHECK the plain way (DROP, then
@@ -39,10 +44,10 @@
 
 -- ── 1. the company switch ────────────────────────────────────────────────────
 ALTER TABLE settings.hr_configuration
-    ADD COLUMN IF NOT EXISTS allow_web_punch BOOLEAN NOT NULL DEFAULT FALSE;
+    ADD COLUMN IF NOT EXISTS allow_web_punch BOOLEAN NOT NULL DEFAULT TRUE;
 
 COMMENT ON COLUMN settings.hr_configuration.allow_web_punch IS
-    'Allow web check-in (V143.53): people may check in and out from the browser, with the browser''s location. Off by default. JDBC only; the HrConfiguration entity does not map it.';
+    'Allow web check-in (V143.53): people may check in and out from the browser, with the browser''s location and a face scan. On by default; an admin can turn it off. JDBC only; the HrConfiguration entity does not map it.';
 
 -- ── 2. WEB in the method CHECKs (see the header for why four steps) ─────────
 -- 2a. the new CHECKs, NOT VALID, under temporary names
