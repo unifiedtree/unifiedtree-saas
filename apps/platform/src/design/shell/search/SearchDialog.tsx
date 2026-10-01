@@ -387,7 +387,7 @@ function Preview({ row, details, orgChart, onGo }: { row: SearchRow; details?: E
         <Avatar name={row.label} src={details?.profilePhotoUrl} size={60} tone="solid" ring="brand" decorative />
         <div>
           <div className="ut-sdp__title">{row.label}</div>
-          {(role || row.sub) && <div className="ut-sdp__role">{role || row.sub}</div>}
+          {(details ? role : row.sub) && <div className="ut-sdp__role">{details ? role : row.sub}</div>}
         </div>
         {facts.length > 0 && (
           <dl className="ut-sdp__facts">

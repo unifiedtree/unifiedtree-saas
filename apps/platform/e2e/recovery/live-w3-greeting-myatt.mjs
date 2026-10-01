@@ -72,15 +72,16 @@ async function openDaily(page, query = '') {
   return { tabs, selected, heading }
 }
 
-/** Search the ⌘K palette and return the text of every result row. */
+/** Search in the ⌘K dialog and return the text of every result row. */
 async function search(page, text) {
   await page.keyboard.press('Control+k')
-  const input = page.locator('input[aria-controls="global-search-results"]')
+  const input = page.locator('input[aria-controls="top-search-results"]')
   await input.waitFor({ timeout: 10_000 })
   await input.fill(text)
-  await page.locator('#global-search-results [role=option], #global-search-results [role=status]').first().waitFor({ timeout: 10_000 }).catch(() => {})
+  await page.locator('#top-search-results [role=option], #top-search-results [role=status]').first().waitFor({ timeout: 10_000 }).catch(() => {})
+  await page.getByTestId('top-search-loading').waitFor({ state: 'detached', timeout: 20_000 }).catch(() => {})
   await page.waitForTimeout(700)
-  const rows = await page.locator('#global-search-results [role=option]').allInnerTexts()
+  const rows = await page.locator('#top-search-results [role=option]').allInnerTexts()
   await page.keyboard.press('Escape')
   await page.waitForTimeout(200)
   return rows.map((r) => r.replace(/\s+/g, ' ').trim())
