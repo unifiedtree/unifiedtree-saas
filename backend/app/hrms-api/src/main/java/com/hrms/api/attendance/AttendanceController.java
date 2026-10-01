@@ -98,6 +98,9 @@ public class AttendanceController {
     /** Web check-in switch and "Anywhere (no geofence)" per person (V143.53). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private PunchRulesService punchRules;
+    /** The face scan on a web punch (the phone's face check, V143.53). Without it, web punches are refused. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private WebPunchFace webPunchFace;
     /** The roster's leave facts and branch names (BW-13), read with JDBC. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.jdbc.core.JdbcTemplate jdbc;
@@ -140,17 +143,23 @@ public class AttendanceController {
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
-        // Web check-in (V143.53, BW-24): only while the company switched it on and
-        // the records accept WEB, and only with the browser's location. The zone
-        // rule below applies as to any punch; there is no face check on the web,
-        // and no offline queue, so the server clock stamps it.
+        // Web check-in (V143.53, BW-24): only while web check-in is on for the
+        // company (the default) and the records accept WEB, and only with the
+        // browser's location. The zone rule below applies as to any punch; then
+        // the face scan must match the person's enrolled face (the phone's face
+        // check, WebPunchFace). No offline queue, so the server clock stamps it.
         boolean web = PunchRulesService.isWeb(request.checkInMethod());
         if (web) {
-            if (punchRules == null) {
-                throw new BusinessRuleException("Web check-in isn't switched on for your company. Check in and out from the mobile app.",
+            if (punchRules == null || webPunchFace == null) {
+                throw new BusinessRuleException("Web check-in is turned off for your company. Check in and out from the mobile app.",
                         PunchRulesService.WEB_PUNCH_NOT_ALLOWED);
             }
             punchRules.assertWebPunch(ctx.companyId(), request.latitude(), request.longitude());
+            // One check-in a day (checkInJson refuses it too): said before the
+            // face scan, so nobody spends a face try on a punch that can't happen.
+            if (attendanceService.getTodayRecord(employeeId).filter(r -> r.checkInTime() != null).isPresent()) {
+                throw new BusinessRuleException("Already checked in today", "ALREADY_CHECKED_IN");
+            }
         }
         GeoValidateResponse geoValidation = geoValidationService.validate(
                 new GeoValidateRequest(employeeId, request.latitude(), request.longitude()),
@@ -183,6 +192,11 @@ public class AttendanceController {
                     (geoValidation.message() != null ? geoValidation.message() : "You are outside the attendance zone.")
                             + " Check in from inside your office zone, or ask HR for a work-from-home day.",
                     "OUTSIDE_GEOFENCE");
+        }
+        // The web punch's face scan, against the signed-in person's enrolment
+        // (refuses with the face module's code: FACE_NOT_ENROLLED, FAIL_MATCH, …).
+        if (web) {
+            webPunchFace.verify(jwt, request.faceImageBase64(), request.latitude(), request.longitude(), request.deviceId(), true);
         }
 
         AttendanceDto dto = attendanceService.checkInJson(
@@ -218,7 +232,7 @@ public class AttendanceController {
         }
         // Put the phone / kiosk on the face check that cleared this punch, so
         // the Face tab can say where it happened (V143.25). Best effort. A web
-        // punch has no face check.
+        // punch's face check already carries its device ("Web browser").
         if (facePunchDevices != null && !web) {
             try {
                 facePunchDevices.link(jwt.getSubject(), request.deviceId(), request.checkInMethod());
@@ -253,15 +267,25 @@ public class AttendanceController {
         // add a NEW endpoint POST /v1/attendance/team/force-checkout guarded
         // by @PreAuthorize("hasAuthority('attendance.regularization.approve')").
         UUID employeeId = extractEmployeeId(jwt);
-        // Web check-out (V143.53, BW-24): the same switch and the browser's
-        // location as a web check-in; no offline queue on the web.
+        // Web check-out (V143.53, BW-24): the same switch, the browser's location
+        // and the face scan as a web check-in; no offline queue on the web. The
+        // zone is checked before the camera opens, by the same pre-punch check
+        // the phone app makes for its punch out (POST /geo-fence/check).
         boolean web = request != null && PunchRulesService.isWeb(request.checkOutMethod());
         if (web) {
-            if (punchRules == null) {
-                throw new BusinessRuleException("Web check-in isn't switched on for your company. Check in and out from the mobile app.",
+            if (punchRules == null || webPunchFace == null) {
+                throw new BusinessRuleException("Web check-in is turned off for your company. Check in and out from the mobile app.",
                         PunchRulesService.WEB_PUNCH_NOT_ALLOWED);
             }
             punchRules.assertWebPunch(contextResolver.resolve(employeeId).companyId(), request.latitude(), request.longitude());
+            // Something to check out (today's open day, or last night's shift),
+            // said before the face scan.
+            if (attendanceService.openRecord(employeeId, java.time.Instant.now()).isEmpty()) {
+                boolean out = attendanceService.getTodayRecord(employeeId).filter(r -> r.checkOutTime() != null).isPresent();
+                throw out ? new BusinessRuleException("Already checked out today", "ALREADY_CHECKED_OUT")
+                        : new BusinessRuleException("You haven't checked in yet, so there's nothing to check out.", "NOT_CHECKED_IN");
+            }
+            webPunchFace.verify(jwt, request.faceImageBase64(), request.latitude(), request.longitude(), request.deviceId(), false);
         }
         AttendanceDto out = attendanceService.checkOut(
                 employeeId,

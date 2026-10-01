@@ -46,7 +46,7 @@ export interface PageEntry {
  * package is listed here, so nothing points at a page that isn't built yet; today's page is all there
  * is. Add a package's key when it ships, e.g. new Set(['P-TEAM']).
  */
-export const READY_PAGES: ReadonlySet<string> = new Set<string>(['P-TEAM'])
+export const READY_PAGES: ReadonlySet<string> = new Set<string>(['P-TEAM', 'P-ATT-DAY'])
 /** Whether a page or tab is live in this release. */
 export const isReadyPage = (e: Pick<PageEntry, 'pkg'>, ready: ReadonlySet<string> = READY_PAGES) => !e.pkg || ready.has(e.pkg)
 
@@ -169,7 +169,8 @@ tab('att-daily', 'face', 'Face Punch', 'tab=face', 'attendance/face-punch', [{ a
 tab('att-daily', 'corrections', 'Regularization', 'tab=corrections', 'attendance/regularization', [], { aliases: ['attendance/corrections', 'attendance/fix', 'attendance/fixes'], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'fix'] })
 tab('att-daily', 'review', 'Review', 'tab=review', 'attendance/review', [{ allOf: ['attendance.team.read', 'attendance.status.review'] }], { aliases: ['attendance/exceptions', 'attendance/status-review'], keywords: ['excuse', 'change status', 'late', 'half day', 'absent', 'no check-out', 'outside zone'] })
 tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['attendance/my', 'attendance/mine'] })
-tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'], pkg: 'P-ATT-DAY' })
+// Your own week (not for owners and admins), or the weeks your team submits (hrms.timesheet.approve).
+tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self', 'hrms.timesheet.approve'), when: (ctx) => !ctx.adminRole || ctx.has('hrms.timesheet.approve') }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'], pkg: 'P-ATT-DAY' })
 page('att-shifts', 'Shifts & Overtime', '/hrms/shifts', 'Attendance & Time', 'attendance/shifts', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/shifts-overtime', 'shifts'], keywords: ['shift', 'overtime', 'ot', 'roster'] })
 tab('att-shifts', 'schedules', 'Shift Schedules', 'tab=schedules', 'attendance/shift-schedules', [any('attendance.team.read')], { aliases: ['attendance/schedules'], keywords: ['shift timings', 'general shift', 'night shift'] })
 tab('att-shifts', 'roster', 'Shift Roster', 'tab=roster', 'attendance/roster', [any('attendance.team.read')], { keywords: ['assign shift', 'change shift', 'who works when'] })

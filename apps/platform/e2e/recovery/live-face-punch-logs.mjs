@@ -1,3 +1,4 @@
+/* global process, console, fetch, URL */
 // Attendance → Face Punch Logs tab (/hrms/attendance?tab=face) — browser
 // acceptance against the local recovery runtime. The tab used to render two
 // hard-coded rows; it now reads GET /v1/attendance/face/admin/events.
@@ -92,7 +93,8 @@ try {
   await page.goto(base + '/hrms/attendance?tab=face')
   await page.getByRole('heading', { name: 'Face Punch Logs' }).waitFor({ timeout: 30_000 })
   check('Face Punch Logs tab renders', true)
-  const table = page.locator('table')
+  // The log is one of the Face Punch view's tables (P-ATT-DAY rebuild): pick it by its name.
+  const table = page.getByRole('table', { name: 'Face punch logs' })
   await table.getByText('Verified').first().waitFor({ timeout: 20_000 })
   const bodyRows = table.locator('tbody tr')
   const shown = await bodyRows.count()
@@ -132,8 +134,8 @@ try {
     check('empty state shown when the API has no events', true)
     await page.screenshot({ path: 'test-results/recovery/face-punch-logs-empty.png', fullPage: true })
   } else {
-    await page.locator('table tbody tr').first().waitFor({ timeout: 20_000 })
-    check('table shows remaining real events after cleanup', (await page.locator('table tbody tr').count()) === Math.min(20, apiAfter.length))
+    await page.getByRole('table', { name: 'Face punch logs' }).locator('tbody tr').first().waitFor({ timeout: 20_000 })
+    check('table shows remaining real events after cleanup', (await page.getByRole('table', { name: 'Face punch logs' }).locator('tbody tr').count()) === Math.min(20, apiAfter.length))
   }
   check('owner: no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))
   check('owner: no failed API calls from the page', failedApi.length === 0, failedApi.slice(0, 3).join(' | '))
@@ -145,8 +147,10 @@ try {
   watch(page2)
   await uiLogin(page2, 'reader@unifiedtree.demo')
   await page2.goto(base + '/hrms/attendance?tab=face')
-  await page2.getByText('Face punch logs are restricted').waitFor({ timeout: 30_000 })
-  check('employee sees the restricted state', true)
+  // Since the P-ATT-DAY rebuild a view someone may not open isn't offered at all: ?tab=face opens their own month.
+  await page2.getByRole('tab', { name: /^My Attendance/ }).waitFor({ timeout: 30_000 })
+  check('employee sees the restricted state', (await page2.getByRole('tab', { name: /^Face Punch/ }).count()) === 0
+    && (await page2.getByRole('tab', { name: /^My Attendance/ }).getAttribute('aria-selected')) === 'true')
   check('employee page never calls the admin face endpoints', faceCalls.length === 0, faceCalls.join(' | '))
   check('employee: no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))
   check('employee: no failed API calls from the page', failedApi.length === 0, failedApi.slice(0, 3).join(' | '))

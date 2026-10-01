@@ -240,8 +240,9 @@ try {
   await page.waitForURL((u) => u.searchParams.get('date') === A, { timeout: 10_000 }).catch(() => {})
   check('Daily Logs URL has the day', url().searchParams.get('date') === A, page.url().replace(base, ''))
   await page.getByText(new RegExp(`· ${Number(A.slice(8))} Mar ${py}, IST`)).waitFor({ timeout: 15_000 })
-  const logTile = page.getByRole('group', { name: 'Filter by status' }).getByRole('button').filter({ hasText: 'Came in' })
-  const logCame = Number((await logTile.innerText()).split('\n').map((s) => s.trim()).filter(Boolean)[1])
+  // Daily Logs' "Present" card counts everyone who came in (its "Came in" tile before the P-ATT-DAY rebuild).
+  const logTile = page.getByRole('button', { name: /^Present \d+/ }).first()
+  const logCame = Number(((await logTile.getAttribute('aria-label')) || '').match(/\d+/)?.[0] ?? NaN)
   check('Daily Logs "Came in" = SQL for that day', logCame === sqlOnA, `page ${logCame} · SQL ${sqlOnA}`)
   check('Daily Logs lists the reader that day', (await page.getByText('Reader User').count()) > 0)
   await page.screenshot({ path: `${SHOTS}/analytics-1440-daily-logs-last-year.png`, fullPage: true })

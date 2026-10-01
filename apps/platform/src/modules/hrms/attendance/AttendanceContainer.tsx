@@ -32,6 +32,7 @@ import { usePendingShiftRequests, useDecidedShiftRequests, useDecideShiftRequest
 import { useHolidays } from '../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
 import { useRoles } from '@/shared/hooks/useRoles'
+import { DailyTracking } from './daily/DailyTracking'
 
 type St = 'live' | 'loading' | 'empty' | 'error'
 interface Q { isLoading: boolean; isError: boolean }
@@ -83,7 +84,19 @@ async function loadOvertime(from: string, to: string) {
   }
   return all
 }
+
+/**
+ * /hrms/attendance renders the rebuilt Daily tracking (daily/DailyTracking.tsx, redesign
+ * P-ATT-DAY). Attendance analytics and Shifts & overtime (their own seams, AnalyticsRoute and
+ * ShiftsRoute) keep today's design page below until their package replaces them.
+ */
 export function AttendanceContainer() {
+  const location = useLocation()
+  const daily = !location.pathname.startsWith('/hrms/att-analytics') && !location.pathname.startsWith('/hrms/shifts')
+  return daily ? <DailyTracking /> : <ModuleAttendancePage />
+}
+
+function ModuleAttendancePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [params] = useSearchParams()
