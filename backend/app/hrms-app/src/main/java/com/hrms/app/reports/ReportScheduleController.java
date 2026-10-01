@@ -23,13 +23,13 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Weekly / monthly report emails. Everything here needs
+ * Daily, weekday, weekly and monthly report emails. Everything here needs
  * hrms.report.schedule.manage, plus (checked in the service) the permission of
  * the report being scheduled; recipients must be able to open it too.
  */
 @RestController
 @RequestMapping("/v1/reports/schedules")
-@Tag(name = "Report schedules", description = "Weekly and monthly report emails")
+@Tag(name = "Report schedules", description = "Daily, weekday, weekly and monthly report emails")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAuthority('hrms.report.schedule.manage')")
 public class ReportScheduleController {
@@ -44,6 +44,12 @@ public class ReportScheduleController {
     @Operation(summary = "Every report email in this workspace")
     public List<Map<String, Object>> list() {
         return schedules.list();
+    }
+
+    @GetMapping("/options")
+    @Operation(summary = "What a report email may be set to: every day and every weekday, and a send hour, once V143.62 is applied")
+    public ReportScheduleService.Options options() {
+        return schedules.options();
     }
 
     @GetMapping("/recipients")
