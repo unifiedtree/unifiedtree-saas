@@ -42,6 +42,9 @@ public class InboxQueries {
         this.jdbc = jdbc;
     }
 
+    /** The row kind of a submitted timesheet week (the web's {@code ApprovalKind} 'TIMESHEET'); it has no Undo. */
+    public static final String TIMESHEET = "TIMESHEET";
+
     /** One inbox row, as the web's {@code InboxRow}. Facts and warnings are filled in for the page's rows. */
     public static final class Row {
         public final String kind;
@@ -68,7 +71,14 @@ public class InboxQueries {
         Row(DecisionKind kind, UUID requestId, UUID employeeId, String employeeName, String employeeCode,
             String departmentName, Instant createdAt, String title, LocalDate fromDate, LocalDate toDate, Double days,
             BigDecimal amount, String currency, String reason) {
-            this.kind = kind.name();
+            this(kind.name(), InboxAccess.rejectNeedsReason(kind), requestId, employeeId, employeeName, employeeCode,
+                    departmentName, createdAt, title, fromDate, toDate, days, amount, currency, reason);
+        }
+
+        Row(String kind, boolean rejectNeedsReason, UUID requestId, UUID employeeId, String employeeName,
+                    String employeeCode, String departmentName, Instant createdAt, String title, LocalDate fromDate,
+                    LocalDate toDate, Double days, BigDecimal amount, String currency, String reason) {
+            this.kind = kind;
             this.requestId = requestId;
             this.employeeId = employeeId;
             this.employeeName = employeeName;
@@ -82,11 +92,12 @@ public class InboxQueries {
             this.amount = amount;
             this.currency = currency;
             this.reason = reason;
-            this.rejectNeedsReason = InboxAccess.rejectNeedsReason(kind);
+            this.rejectNeedsReason = rejectNeedsReason;
         }
 
+        /** The undoable kind, or null for a row that has none (a timesheet week). */
         DecisionKind decisionKind() {
-            return DecisionKind.valueOf(kind);
+            return TIMESHEET.equals(kind) ? null : DecisionKind.valueOf(kind);
         }
     }
 
@@ -243,6 +254,40 @@ public class InboxQueries {
                     r.extra.put("receipts", rs.getInt("receipt_count"));
                     out.add(r);
                 }, args.toArray());
+        return out;
+    }
+
+    /** Whether the submitted-weeks table (V143_65, BW-36) is there; never fails. */
+    public boolean timesheetsReady() {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT to_regclass('hrms.timesheet_weeks') IS NOT NULL", Boolean.class));
+    }
+
+    /**
+     * Submitted timesheet weeks of the caller's team, as GET
+     * /v1/timesheets/approvals lists them (SUBMITTED, TeamEmployeeScope; HR and
+     * admins: the company). Nothing before V143_65 is applied. Facts: the hours
+     * logged.
+     */
+    public List<Row> timesheets(UUID tenantId, InboxAccess a, Set<UUID> team) {
+        List<Row> out = new ArrayList<>();
+        if (team.isEmpty() || !timesheetsReady()) return out;
+        jdbc.query("SELECT w.id, w.employee_id, w.submitted_at, w.week_start, w.total_minutes, " + PERSON
+                        + " FROM hrms.timesheet_weeks w " + PERSON_JOIN.formatted("w")
+                        + " WHERE w.tenant_id = ? AND w.status = 'SUBMITTED' AND w.employee_id <> ?"
+                        + " AND w.employee_id = ANY(CAST(? AS uuid[]))",
+                (RowCallbackHandler) rs -> {
+                    LocalDate start = rs.getObject("week_start", LocalDate.class);
+                    Timestamp at = rs.getTimestamp("submitted_at");
+                    Row r = new Row(TIMESHEET, false, rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                            rs.getString("employee_name"), rs.getString("employee_code"), rs.getString("department_name"),
+                            at == null ? Instant.EPOCH : at.toInstant(), "Timesheet", start,
+                            start == null ? null : start.plusDays(6), null, null, null, null);
+                    r.extra.put("status", rs.getString("employment_status"));
+                    r.extra.put("firstName", firstNonBlank(rs.getString("employee_first_name"), rs.getString("employee_name")));
+                    r.facts.add(new Fact("hours", "Hours logged", hours(Duration.ofMinutes(rs.getInt("total_minutes")))));
+                    out.add(r);
+                }, tenantId, a.me(), uuidArray(team));
         return out;
     }
 
