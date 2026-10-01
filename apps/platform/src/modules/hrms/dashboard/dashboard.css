@@ -39,6 +39,10 @@
 .ud-page .uk-shead__icon svg { width: 16px; height: 16px; }
 .ud-page .uk-shead--group .uk-shead__title { font-size: 17px; line-height: 22px; }
 .ud-page .uk-shead--group .uk-shead__sub { font-size: 12.5px; line-height: 17px; }
+/* Empty cards say so in less room. */
+.ud-page .uk-empty { padding: 18px 20px; }
+.ud-page .uk-empty__icon { width: 46px; height: 46px; margin-bottom: 6px; border-radius: 14px; box-shadow: 0 0 0 1px var(--u-ln, #E3E9E6), 0 10px 20px -14px rgba(15, 110, 86, .45), 0 0 0 7px var(--u-brs, #E8F3EE); }
+.ud-page .uk-empty__title { font-size: 14px; line-height: 20px; }
 /* Probation confirmations take the row under Upcoming events: two or three people across when wide. */
 .ud-prob-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); column-gap: 8px; }
 
