@@ -13,11 +13,14 @@ export function EmployeePayslips({ employeeId }: { employeeId: string }) {
   const q = useEmployeePayslips(employeeId, true)
   const [busy, setBusy] = useState<string | null>(null)
   const rows = [...(q.data ?? [])].sort((a, b) => (b.periodYear - a.periodYear) || (b.periodMonth - a.periodMonth))
-  const forbidden = (q.error as { status?: number } | null)?.status === 403
+  const status = (q.error as { status?: number } | null)?.status
+  const forbidden = status === 403
   const get = async (runId: string) => {
     setBusy(runId)
     try { await downloadPayslipPdf(runId, employeeId) } catch (e) { toast.error('Couldn’t download the payslip', { detail: (e as Error)?.message }) } finally { setBusy(null) }
   }
+  // An older server without the per-person list (BW-58) answers 404: leave the card out.
+  if (status === 404 || status === 400) return null
   return (
     <Section title="Payslips" count={rows.length || undefined} sub="Months whose payroll is locked or paid." variant="section" body="list"
       loading={q.isLoading} error={forbidden ? undefined : q.error} onRetry={() => void q.refetch()}

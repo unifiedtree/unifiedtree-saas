@@ -32,6 +32,7 @@ export function EmployeeExpenses({ employeeId, firstName, self, name }: { employ
   // New claim on behalf (BW-61): never for yourself (that is your own claim, from Expenses).
   const canOthers = usePermission(P.HRMS_EXPENSE_CLAIM_OTHERS) && !self
   const [onBehalf, setOnBehalf] = useState(false)
+  const canClaimSelf = usePermission('hrms.expense.claim.self')
   const [page, setPage] = useState(0)
   const [open, setOpen] = useState<string | null>(null)
   const claims = useEmployeeClaims(employeeId, page, PAGE_SIZE)
@@ -41,8 +42,9 @@ export function EmployeeExpenses({ employeeId, firstName, self, name }: { employ
   return (
     <>
     <SubSection title="Expense claims" hint={`Submitted by ${firstName}, newest first. Open a claim to see its line items and receipts.`}
-      action={(canOthers || canApprove || canReimburse) ? <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6 }}>
+      action={(canOthers || canApprove || canReimburse || (self && canClaimSelf)) ? <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6 }}>
         {canOthers && <Button size={30} variant="secondary" icon="plus" onClick={() => setOnBehalf(true)}>New claim</Button>}
+        {self && canClaimSelf && <Button size={30} variant="secondary" icon="plus" onClick={() => navigate('/hrms/expenses?tab=my')}>New claim</Button>}
         {(canApprove || canReimburse) && <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/expenses')}>Open Expense centre</HrButton>}
       </span> : undefined}>
       <SectionState

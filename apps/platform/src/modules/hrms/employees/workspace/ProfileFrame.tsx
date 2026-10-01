@@ -6,7 +6,7 @@
 //
 // The tabs are a real ARIA tablist (role=tab + aria-selected, arrow keys move), as
 // today's tabs are; the design draws plain buttons.
-import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Avatar, StatusPill, type StatusTone } from '@/design/kit/display'
 import banner from './profile-banner.png'
 import './profile.css'
@@ -67,6 +67,32 @@ export interface ProfileFrameProps {
 export function ProfileFrame({ back, avatar, name, status, roleLine, email, fields, footer, tabs, active, onTab, screenLabel, children }: ProfileFrameProps) {
   const uid = useId()
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState<{ left: boolean; right: boolean }>({ left: false, right: false })
+  // When the tabs don't fit, the strip scrolls sideways: keep the open tab in view and fade the
+  // edge that has more tabs behind it.
+  const measure = () => {
+    const el = stripRef.current
+    if (!el) return
+    const left = el.scrollLeft > 2, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+    setMore((m) => (m.left === left && m.right === right ? m : { left, right }))
+  }
+  useEffect(() => {
+    const el = stripRef.current, tab = tabRefs.current[active]
+    if (el && tab) {
+      const l = tab.offsetLeft - el.offsetLeft, r = l + tab.offsetWidth
+      if (l < el.scrollLeft) el.scrollLeft = Math.max(0, l - 24)
+      else if (r > el.scrollLeft + el.clientWidth) el.scrollLeft = r - el.clientWidth + 24
+    }
+    measure()
+  }, [active, tabs.length])
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     const n = tabs.length
     const to = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1
@@ -109,7 +135,8 @@ export function ProfileFrame({ back, avatar, name, status, roleLine, email, fiel
           {footer}
         </aside>
         <section className="upf-card upf-right" aria-label="Details">
-          <div role="tablist" aria-label="Profile sections" className="upf-tabs">
+          <div className="upf-tabs-wrap" data-more-left={more.left || undefined} data-more-right={more.right || undefined}>
+          <div ref={stripRef} role="tablist" aria-label="Profile sections" className="upf-tabs" onScroll={measure}>
             {tabs.map((t, i) => {
               const on = t.key === active
               return (
@@ -120,6 +147,7 @@ export function ProfileFrame({ back, avatar, name, status, roleLine, email, fiel
                 </button>
               )
             })}
+          </div>
           </div>
           <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${active}`} className="upf-panel">{children}</div>
         </section>

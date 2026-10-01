@@ -20,13 +20,17 @@ export function EmployeeMonth({ employeeId, name }: { employeeId: string; name: 
   const history = useEmployeeMonth(employeeId, y, m, true)
   const stats = useEmployeeMonthStats(employeeId, y, m, true)
   const cells = useMemo(() => (history.data ?? []).map((d) => dayCell(d, today)), [history.data, today])
-  const forbidden = (history.error as { status?: number } | null)?.status === 403
+  const status = (history.error as { status?: number } | null)?.status
+  const forbidden = status === 403
+  // An older server without the one-person month (BW-16) answers 404: leave the card out.
+  const missing = status === 404 || status === 400
   const s = stats.data
   const noOut = cells.filter((c) => c.tone === 'fix').length
   const summary = s ? [
     `${s.presentDays} present`, `${s.lateDays} late`, `${s.absentDays} absent`,
     s.leaveDays != null ? `${s.leaveDays} on leave` : '', noOut ? `${noOut} incomplete` : '',
   ].filter(Boolean).join(' · ') : ''
+  if (missing) return null
   return (
     <Section title={`${MONTH_NAMES[m - 1]} ${y}`} sub={summary || (history.isLoading ? '' : `${name}’s days this month`)} variant="section"
       actions={<span style={{ display: 'inline-flex', gap: 6 }}>

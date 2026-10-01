@@ -69,7 +69,6 @@ const STATUS: Record<string, [string, StatusTone]> = {
 const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full time', PART_TIME: 'Part time', INTERN: 'Intern', CONTRACT: 'Contract', CONSULTANT: 'Consultant' }
 const humanize = (k: string) => k.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase())
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : '')
-const NON_WORKING = new Set(['WEEKEND', 'WEEKLY_OFF', 'HOLIDAY'])
 
 export function EmployeeDetail() {
   const { id = '' } = useParams<{ id: string }>()
@@ -167,7 +166,6 @@ export function EmployeeDetail() {
     ]
 
     // ── Overview: glance ──
-    const scheduled = w?.dailyTargetHours ? w.dailyTargetHours * (w.days?.filter((d) => !NON_WORKING.has(d.status)).length ?? 0) : 0
     const late = w?.days?.filter((x) => x.status === 'LATE').length ?? 0
     const docTotal = documents.data?.totalElements
     const docRows = documents.data?.content ?? []
@@ -176,7 +174,7 @@ export function EmployeeDetail() {
     const leaveLeft = (balances.data ?? []).reduce((n, b) => n + (b.available || 0), 0)
     const glance: Glance[] = [
       canAttendance
-        ? { label: 'This week', value: w ? hrs(w.totalHours) : null, loading: week.isLoading, icon: 'clock', tone: 'brand', note: w ? (scheduled ? `of ${hrs(scheduled)} scheduled` : `${w.presentDays} present${late ? ` · ${late} late` : ''}`) : week.error ? 'Couldn’t load' : '', onClick: () => setTab('attendance') }
+        ? { label: 'This week', value: w ? hrs(w.totalHours) : null, loading: week.isLoading, icon: 'clock', tone: 'brand', note: w ? `${plural(w.presentDays, 'day')} present${late ? ` · ${late} late` : ''}` : week.error ? 'Couldn’t load' : '', onClick: () => setTab('attendance') }
         : { label: 'This week', value: null, icon: 'clock', tone: 'gray', note: 'No access', onClick: () => setTab('overview') },
       canSalary
         ? { label: 'Annual CTC', value: structure.data ? inr(Number(structure.data.ctcAnnual || 0)) : structure.isLoading ? null : '—', loading: structure.isLoading, icon: 'rupee', tone: 'brand', note: structure.data?.effectiveFrom ? `since ${fmtDate(structure.data.effectiveFrom)}` : structure.isLoading ? '' : 'No salary structure yet', onClick: () => setTab('payroll') }

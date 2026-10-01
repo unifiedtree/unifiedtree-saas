@@ -94,3 +94,16 @@
   .upf-left { padding: 18px; }
   .upf-right { padding: 4px 16px 18px; }
 }
+
+/* Overview "Employment": two columns of facts with hairlines (PgProfile). */
+.upf-emp { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 0 24px; margin: 0; }
+.upf-emp__item { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF); min-width: 0; }
+.upf-emp__k { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.upf-emp__v { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+
+/* More tabs than fit: the strip scrolls; the edge with hidden tabs fades. */
+.upf-tabs-wrap { position: relative; min-width: 0; }
+.upf-tabs-wrap::before, .upf-tabs-wrap::after { content: ''; position: absolute; top: 0; bottom: 1px; width: 36px; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 1; }
+.upf-tabs-wrap::before { left: 0; background: linear-gradient(90deg, var(--u-sf, #fff), transparent); }
+.upf-tabs-wrap::after { right: 0; background: linear-gradient(270deg, var(--u-sf, #fff), transparent); }
+.upf-tabs-wrap[data-more-left]::before, .upf-tabs-wrap[data-more-right]::after { opacity: 1; }

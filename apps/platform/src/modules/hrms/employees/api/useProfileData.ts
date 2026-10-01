@@ -10,7 +10,9 @@
 //   POST /v1/expense/receipts/for/{id}, /claims/for/{id}     a claim raised in their name (BW-61; hrms.expense.claim.others)
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
-import type { DayRecordResponse, MonthlyStatsResponse } from '../../api/useAttendance'
+import type { DayRecordResponse, MonthlyStatsResponse, WeeklySummaryResponse } from '../../api/useAttendance'
+import type { LeaveBalanceResponse } from '../../api/useLeave'
+import type { Goal, PerformanceReview } from '../../api/usePerformance'
 import type { ExpenseClaim, StoredReceipt, SubmitClaimPayload } from '../../api/useExpense'
 import type { WorkforceEmployee } from '../../api/useWorkforce'
 import { SHARED_KEYS } from '../../api/shared/contracts'
@@ -109,5 +111,65 @@ export function useClaimOnBehalf() {
       qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
       qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox }),
     ]),
+  })
+}
+
+// ── My profile: the signed-in person's own figures, each only for people who may read it ──
+// (same query keys as the self-service pages' hooks, so their caches are shared)
+
+export function useMyLeaveBalancesIf(year: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['hrms', 'leave', 'balances', year],
+    queryFn: () => apiJson<LeaveBalanceResponse[]>(`/v1/leave/my/balances?year=${year}`),
+    enabled, staleTime: 30_000, retry: false,
+  })
+}
+
+export function useMyDocumentsIf(enabled: boolean, pageSize = 20) {
+  return useQuery({
+    queryKey: ['hrms', 'document', 'my', 0, pageSize],
+    queryFn: () => apiJson<{ content: Array<{ id: string; verificationStatus?: string }>; totalElements: number }>(`/v1/document/my?page=0&size=${pageSize}`),
+    enabled, staleTime: 30_000, retry: false,
+  })
+}
+
+export function useMyMissingDocumentsIf(enabled: boolean) {
+  return useQuery({
+    queryKey: ['hrms', 'document', 'my', 'missing'],
+    queryFn: () => apiJson<Array<{ id: string; code: string; displayName: string }>>('/v1/document/my/missing'),
+    enabled, staleTime: 30_000, retry: false,
+  })
+}
+
+export function useMyGoalsIf(enabled: boolean) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'goals', 'my'],
+    queryFn: () => apiJson<Goal[]>('/v1/performance/goals/my'),
+    enabled, retry: false,
+  })
+}
+
+export function useMyReviewsIf(enabled: boolean) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'reviews', 'my'],
+    queryFn: () => apiJson<PerformanceReview[]>('/v1/performance/reviews/my'),
+    enabled, retry: false,
+  })
+}
+
+/** GET /v1/attendance/weekly-summary: your own week (attendance.checkin.self). */
+export function useMyWeekIf(enabled: boolean) {
+  return useQuery({
+    queryKey: ['hrms', 'attendance', 'weekly-summary', 'me'],
+    queryFn: () => apiJson<WeeklySummaryResponse>('/v1/attendance/weekly-summary'),
+    enabled, staleTime: 60_000, retry: false,
+  })
+}
+
+export function useMyMonthIf(year: number, month: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['hrms', 'attendance', 'history', year, month],
+    queryFn: () => apiJson<DayRecordResponse[]>(`/v1/attendance/history?year=${year}&month=${month}`),
+    enabled, staleTime: 30_000, retry: false,
   })
 }

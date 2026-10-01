@@ -36,6 +36,7 @@ export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: 
   // Apply on behalf (BW-43): never for yourself (that is your own request, from Leave).
   const canOthers = usePermission(P.HRMS_LEAVE_APPLY_OTHERS) && !self && !!companyId
   const [onBehalf, setOnBehalf] = useState(false)
+  const canApplySelf = usePermission('leave.request.self')
   const year = Number(istToday().slice(0, 4))
   const [page, setPage] = useState(0)
   const balances = useEmployeeLeaveBalances(employeeId, year)
@@ -47,7 +48,8 @@ export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: 
   return (
     <div className="flex flex-col gap-3">
       <SubSection title={`Balances · ${year}`} hint="Available after pending requests"
-        action={canOthers ? <Button size={30} variant="secondary" icon="plus" onClick={() => setOnBehalf(true)}>Apply on behalf</Button> : undefined}>
+        action={canOthers ? <Button size={30} variant="secondary" icon="plus" onClick={() => setOnBehalf(true)}>Apply on behalf</Button>
+          : self && canApplySelf ? <Button size={30} variant="secondary" icon="plus" onClick={() => navigate('/hrms/leave?tab=my')}>Apply leave</Button> : undefined}>
         <SectionState
           isLoading={balances.isLoading} error={balances.error} onRetry={() => balances.refetch()}
           isEmpty={!balances.isLoading && !balances.error && bal.length === 0}

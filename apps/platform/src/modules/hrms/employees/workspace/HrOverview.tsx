@@ -54,7 +54,10 @@ export function MonthCard({ ym, days, loading, error, onRetry, onOpen, noAccess 
   ym: string; days: CalendarDay[]; loading: boolean; error: unknown; onRetry: () => void; onOpen: () => void; noAccess?: boolean
 }) {
   const m = Number(ym.slice(5, 7)), y = Number(ym.slice(0, 4))
-  const forbidden = (error as { status?: number } | null)?.status === 403
+  const status = (error as { status?: number } | null)?.status
+  const forbidden = status === 403
+  // An older server without the one-person month (BW-16) answers 404: leave the card out.
+  if (status === 404 || status === 400) return null
   return (
     <Section title={MONTH_NAMES[m - 1]} sub={String(y)} variant="section"
       actions={<Button size={30} variant="ghost" onClick={onOpen}>Attendance</Button>}
@@ -155,7 +158,14 @@ export function OnboardingCard({ o }: { o: OnboardingView }) {
 export function EmploymentCard({ items, onEdit }: { items: { label: string; value: ReactNode }[]; onEdit?: () => void }) {
   return (
     <Section title="Employment" variant="section" actions={onEdit ? <Button size={30} variant="ghost" onClick={onEdit}>Edit</Button> : undefined}>
-      <KeyValueGrid items={items} />
+      <dl className="upf-emp">
+        {items.map((it) => (
+          <div key={it.label} className="upf-emp__item">
+            <dt className="upf-emp__k">{it.label}</dt>
+            <dd className="upf-emp__v">{it.value == null || it.value === '' ? '—' : it.value}</dd>
+          </div>
+        ))}
+      </dl>
     </Section>
   )
 }
