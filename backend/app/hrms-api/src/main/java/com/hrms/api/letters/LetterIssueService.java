@@ -4,6 +4,8 @@ import com.hrms.letters.dto.GenerateLetterRequest;
 import com.hrms.letters.dto.GeneratedLetterDto;
 import com.hrms.letters.dto.SendLetterRequest;
 import com.hrms.letters.service.LetterGenerationService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,9 @@ public class LetterIssueService {
 
     private final LetterGenerationService letters;
     private final LetterSigningService signing;
+    /** The letter is saved through JPA and the signature row with JDBC: flush first, so its foreign key sees the letter. */
+    @PersistenceContext
+    private EntityManager em;
 
     public LetterIssueService(LetterGenerationService letters, LetterSigningService signing) {
         this.letters = letters;
@@ -32,6 +37,7 @@ public class LetterIssueService {
         if (req.requestSignature()) signing.requireReady();
         GeneratedLetterDto letter = letters.generate(req, userId);
         if (req.requestSignature()) {
+            if (em != null) em.flush();
             signing.request(letter, userId);
             signing.notifyIfAsked(letter);
         }
