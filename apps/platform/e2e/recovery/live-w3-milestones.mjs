@@ -1,5 +1,6 @@
 /* global process, console, URL, URLSearchParams, fetch, document */
-// Live check for w3 "Upcoming milestones: date ranges" (26 Sep 2026), against a
+// Live check for w3 "Upcoming milestones: date ranges" (26 Sep 2026; the card is "Upcoming events" since
+// Release 1.1 and adds a Holidays list from the holiday calendar endpoint), against a
 // local backend + web app (the shared live slot):
 //  1. API: each list (birthdays, work anniversaries, retirements) follows its
 //     own range — every preset, a custom range across the year end, 29 February
@@ -243,7 +244,7 @@ try {
     // This feature's calls must not fail; anything else that fails is printed as a note.
     page.on('response', (r) => {
       if (!r.url().includes('/api/')) return
-      const mine = /\/milestones|\/retirements\/due|milestone=/.test(r.url())
+      const mine = /\/milestones|\/retirements\/due|milestone=|\/settings\/holidays\?.*from=/.test(r.url())
       if (mine) asked.push(decodeURIComponent(r.url()))
       if (r.status() >= 400) (mine ? failed : other).push(`${r.status()} ${new URL(r.url()).pathname}${new URL(r.url()).search}`)
     })
@@ -302,9 +303,25 @@ try {
     const card = page.locator('[data-milestones-card]')
     await card.waitFor({ timeout: 30_000 })
     await settle(page)
-    check('UI owner: the card shows three lists, each on its old window', (await col(page, 'birthdays').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 14 days')
+    check('UI owner: the card is "Upcoming events"', (await card.getByText('Upcoming events', { exact: true }).count()) > 0 && (await card.getByText('Upcoming milestones').count()) === 0)
+    check('UI owner: the card shows the three people lists, each on its old window, and Holidays on the next 3 months', (await col(page, 'birthdays').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 14 days')
       && (await col(page, 'anniversaries').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 31 days')
-      && (await col(page, 'retirements').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 6 months'))
+      && (await col(page, 'retirements').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 6 months')
+      && (await col(page, 'holidays').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 3 months'))
+    // Holidays: a preset asks the holiday calendar for its dates and lists what it answers.
+    {
+      asked.length = 0
+      await choose(page, 'holidays', 'This year')
+      const r = PRESETS['This year']
+      const req = asked.find((u) => u.includes('/settings/holidays?'))
+      const api = await owner.call(`/v1/settings/holidays?companyId=${company}&from=${r.from}&to=${r.to}`)
+      const names = (Array.isArray(api.json) ? api.json : []).map((h) => h.holidayName)
+      const t = await listText(page, 'holidays')
+      check('UI owner holidays "This year": asks the holiday calendar for those dates and lists its holidays', !!req && req.includes(`from=${r.from}`) && req.includes(`to=${r.to}`) && api.status === 200
+        && names.every((n) => t.includes(n)) && (names.length > 0 || t.includes('No holidays in the rest of this year.')), `req=${req || 'none'} api=${api.status} ${names.length}`)
+      const viewAll = col(page, 'holidays').getByRole('button', { name: /View all/ })
+      check('UI owner holidays: View all is there (the Leave page’s Holidays view opens for the owner)', (await viewAll.count()) === 1)
+    }
     await card.scrollIntoViewIfNeeded()
     await card.screenshot({ path: `${shots}/milestones-card-1440.png` })
     const seen = {}

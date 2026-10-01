@@ -33,7 +33,8 @@ async function signIn(email) {
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(600) }
   return { page, errors, failed, settle }
 }
-const bar = (page) => page.getByRole('navigation', { name: 'Payroll sections' })
+// The module's section bar: the top bar's "Payroll pages" tabs since Release 1.1 (the page's own copy is hidden).
+const bar = (page) => page.getByRole('navigation', { name: 'Payroll pages' })
 const dialogButton = (page, name) => page.getByRole('dialog').getByRole('button', { name })
 
 let testRunId = ''
@@ -49,7 +50,7 @@ try {
     const ok = await bar(page).count() === 1 && await page.getByRole('heading', { name: heading, exact: true }).count() > 0
     check(`${route} renders the design with its section bar`, ok)
   }
-  check('shell sub-nav hidden on payroll pages', (await page.getByRole('navigation', { name: 'Payroll sections' }).count()) === 1 && (await page.getByRole('navigation', { name: /^Payroll sections$/ }).count()) === 1)
+  check('one section bar on payroll pages (the top bar’s tabs; the page’s own copy hidden)', (await page.getByRole('navigation', { name: 'Payroll pages' }).count()) === 1 && (await page.getByRole('navigation', { name: 'Payroll sections' }).count()) === 0)
 
   // ── a test run: create → process → payslip → lock → reopen ──
   await page.goto(base + '/hrms/payroll/runs'); await hr.settle()
