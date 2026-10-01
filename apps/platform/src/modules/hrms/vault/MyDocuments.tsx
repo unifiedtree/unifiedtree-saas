@@ -64,7 +64,7 @@ export function MyDocuments() {
             })}
             {needed.map((t, i) => (
               <ActionCard key={`need-${t.id}`} index={docs.length + i} icon="file" title={t.displayName}
-                sub={`HR needs this · ${t.allowedFormats.toUpperCase()}, up to ${t.maxSizeMb} MB`} status="Not uploaded yet" tone="action"
+                sub={`HR needs this · ${t.allowedFormats.split(',').map((f) => f.trim().toUpperCase()).join(', ')}, up to ${t.maxSizeMb} MB`} status="Not uploaded yet" tone="action"
                 primary={canUpload ? { label: 'Upload', onClick: () => setUpload({ typeId: t.id }), ariaLabel: `Upload ${t.displayName}` } : undefined} />
             ))}
           </ActionCardGrid>

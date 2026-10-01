@@ -194,7 +194,7 @@ export const LetterTemplateEditor: React.FC = () => {
         actions={<>
           {back}
           <Button variant="secondary" icon="eye" onClick={showPreview}>Preview as employee</Button>
-          {canSave && <Button icon="check" loading={saving} onClick={handleSave}>Save template</Button>}
+          {canSave && <Button variant="primary" icon="check" loading={saving} onClick={handleSave}>Save template</Button>}
         </>} />
 
       <div className="lt-editor-grid">

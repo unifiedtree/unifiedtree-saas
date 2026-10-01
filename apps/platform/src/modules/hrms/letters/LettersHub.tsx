@@ -60,11 +60,11 @@ export function LettersHub() {
 
   const onlyMine = views.length === 1 && views[0] === 'my'
   const action = active === 'templates' && canCreateTemplate
-    ? <Button icon="plus" onClick={() => navigate('/hrms/letters/templates/new')}>Create template</Button>
+    ? <Button variant="primary" icon="plus" onClick={() => navigate('/hrms/letters/templates/new')}>Create template</Button>
     : active === 'generated' && canGenerate
-      ? <Button icon="plus" onClick={() => setGenerateOpen(true)}>Generate letter</Button>
+      ? <Button variant="primary" icon="plus" onClick={() => setGenerateOpen(true)}>Generate letter</Button>
       : active === 'distributions' && access.distribute
-        ? <Button icon="plus" onClick={() => setWizardOpen(true)}>New distribution</Button>
+        ? <Button variant="primary" icon="plus" onClick={() => setWizardOpen(true)}>New distribution</Button>
         : undefined
 
   return (

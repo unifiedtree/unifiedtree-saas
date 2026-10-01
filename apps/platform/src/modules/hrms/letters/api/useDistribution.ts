@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
-import { asAvailable, useAvailableQuery } from '../../api/shared/available'
+import { asAvailable, unmatchedPathParam, useAvailableQuery } from '../../api/shared/available'
 
 export type DistributionStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED'
 export type RecipientSendStatus = 'PENDING' | 'GENERATING' | 'SENT' | 'FAILED' | 'SKIPPED'
@@ -130,7 +130,8 @@ export interface ScheduleDistributionRequest extends CreateDistributionRequest {
 export function useScheduledDistributions(opts?: { enabled?: boolean }) {
   return useAvailableQuery<ScheduledDistribution[]>({
     queryKey: ['hrms', 'letters', 'distributions', 'scheduled'],
-    queryFn: () => asAvailable(() => apiJson<ScheduledDistribution[]>('/v1/letters/distributions/scheduled')),
+    // On a server without it, /scheduled falls into /{jobId} and answers 400 INVALID_PARAMETER: not built yet.
+    queryFn: () => asAvailable(() => apiJson<ScheduledDistribution[]>('/v1/letters/distributions/scheduled'), unmatchedPathParam),
     enabled: opts?.enabled ?? true,
     staleTime: 10_000,
     retry: false,

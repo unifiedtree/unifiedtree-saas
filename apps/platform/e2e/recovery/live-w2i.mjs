@@ -1,7 +1,7 @@
 // Live API check of the w2i batch (no browser):
 //  - Letters hub: each view's endpoint answers for the roles that see the view
 //    and refuses the rest; a letter generated for an employee shows in their
-//    My letters.
+//    My letters once it is sent to them (an unsent draft stays with HR, BW-75).
 //  - Attendance day rules shared with the alternate JDBC service: today with no
 //    punch is NOT_MARKED, and someone without their own weekly offs gets their
 //    company's (HR Configuration), not a fixed Saturday + Sunday.
@@ -72,6 +72,11 @@ try {
     check('letters: owner generates a letter for the employee', gen.status === 201 && !!gen.json?.id, `status=${gen.status}`)
     if (gen.json?.id) {
       check('letters: the letter is stored for the employee', sql(`select employee_id from letters.generated where id='${gen.json.id}'`) === READER)
+      // BW-75 (P-DOCS): HR's unsent draft is not the employee's yet; once sent, it is.
+      const draft = await reader.call('/v1/letters/my?page=0&size=50')
+      check('letters: an unsent draft is not in My letters yet', draft.status === 200 && !(draft.json?.content || []).some((l) => l.id === gen.json.id), `status=${draft.status}`)
+      // Sending emails the letter through the mail provider, which a local server doesn't have; record the send instead.
+      sql(`update letters.generated set status='SENT', sent_at=now(), sent_to_email='reader@unifiedtree.demo' where id='${gen.json.id}'`)
       const mine = await reader.call('/v1/letters/my?page=0&size=50')
       check('letters: the employee sees it in My letters', mine.status === 200 && (mine.json?.content || []).some((l) => l.id === gen.json.id), `status=${mine.status}`)
       const open = await reader.call(`/v1/letters/generated/${gen.json.id}`)

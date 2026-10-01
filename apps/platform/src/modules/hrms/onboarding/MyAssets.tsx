@@ -53,7 +53,7 @@ export function MyAssets() {
                     })}
                   </ActionCardGrid>
                 )}
-                <p className="lt-foot">Lost or broken something? Report it the same day.</p>
+                {withMe.length > 0 && <p className="lt-foot">Lost or broken something? Report it the same day.</p>}
                 {returned.length > 0 && (
                   <Section title="Returned" count={returned.length} body="list" cardClass={false}>
                     <ListRows>

@@ -67,7 +67,7 @@ export function LetterTemplates() {
   const canCreate = usePermission(P.HRMS_LETTERS_TEMPLATE_CREATE)
   return (
     <div className="lt-stack">
-      {canCreate && <div className="lt-row-end"><Button icon="plus" onClick={() => navigate('/hrms/letters/templates/new')}>Create template</Button></div>}
+      {canCreate && <div className="lt-row-end"><Button variant="primary" icon="plus" onClick={() => navigate('/hrms/letters/templates/new')}>Create template</Button></div>}
       <LetterTemplatesList />
     </div>
   )

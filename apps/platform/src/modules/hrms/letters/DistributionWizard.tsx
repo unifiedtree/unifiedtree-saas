@@ -193,7 +193,7 @@ export function DistributionWizard({ onClose, onCreated, onScheduled }: {
             { label: 'Message', value: message ? (message.length > 80 ? `${message.slice(0, 80)}…` : message) : '' },
           ]} />
           {canSchedule && (
-            <SegmentedControl label="When" value={when} onChange={(v) => setWhen(v as 'now' | 'later')}
+            <SegmentedControl label="When" semantics="radio" value={when} onChange={(v) => setWhen(v as 'now' | 'later')}
               options={[{ value: 'now', label: 'Send now' }, { value: 'later', label: 'Send on a date' }]} />
           )}
           {later

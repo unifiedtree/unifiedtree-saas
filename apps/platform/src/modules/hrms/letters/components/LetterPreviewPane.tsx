@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { Button, Callout, EmptyState, Section, SkeletonBlock } from '@/design/kit/display'
 import { useToast } from '@/design/kit/overlays'
+import { httpStatusOf, isFeatureNotReady } from '@/core/api/featureNotReady'
 import { openPreviewPdf, useLetterPreview, type LetterPreviewRequest } from '../api/useLetters'
 import { LetterPaper } from './LetterPaper'
 import { PersonSearch, fullName } from './PersonSearch'
@@ -60,6 +61,7 @@ export function LetterPreviewPane({ request, ready, emptyHint, employeeLocked, t
       actions={ready && p ? <Button size={32} variant="secondary" icon="download" loading={opening} onClick={openPdf}>Open as PDF</Button> : undefined}>
       <div className="lt-preview">
         {!ready ? <EmptyState icon="fileText" title="Nothing to preview yet" hint={emptyHint ?? 'Write the letter to see it here.'} />
+          : q.isError && !p && (isFeatureNotReady(q.error) || [404, 405].includes(httpStatusOf(q.error) ?? 0)) ? <Callout tone="neutral">The preview isn’t switched on yet on this server.</Callout>
           : q.isError && !p ? <Callout tone="danger">{(q.error as Error)?.message || 'Couldn’t render the preview.'}</Callout>
             : !p ? <SkeletonBlock style={{ height: 420 }} />
               : <>

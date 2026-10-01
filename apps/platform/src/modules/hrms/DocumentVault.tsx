@@ -63,7 +63,7 @@ export const DocumentVault: React.FC = () => {
     <PageFrame label="Employee vault" width={onlyMine ? 'narrow' : 'wide'} className="lt-page">
       <PageHeader eyebrow={onlyMine ? undefined : 'Hiring & onboarding'} title={onlyMine ? 'My documents' : 'Employee vault'}
         sub={views.length ? SUB[tab] : undefined}
-        actions={canWrite ? <><Button variant="secondary" icon="upload" onClick={() => setBulk(true)}>Bulk upload</Button><Button icon="plus" onClick={() => setAdding(true)}>Add document</Button></> : undefined} />
+        actions={canWrite ? <><Button variant="secondary" icon="upload" onClick={() => setBulk(true)}>Bulk upload</Button><Button variant="primary" icon="plus" onClick={() => setAdding(true)}>Add document</Button></> : undefined} />
       {views.length > 1 && <PillTabs label="Document views" semantics="toggle" activeKey={tab} onSelect={setTab} items={views} />}
       {views.length === 0 && (canWrite ? <Callout tone="neutral">Use “Add document” to store a document on someone’s file.</Callout>
         : <EmptyState icon="lock" title="No document access" hint="Ask an admin if you should see documents." />)}
