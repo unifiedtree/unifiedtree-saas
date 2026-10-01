@@ -49,10 +49,21 @@ public class AppraisalCycleService {
     private static final int REMINDER_THROTTLE_HOURS = 24;
 
     private final JdbcTemplate jdbc;
+    private final com.unifiedtree.notifications.service.NotificationDispatcher dispatcher;
+    private final com.unifiedtree.audit.AuditService audit;
 
-    public AppraisalCycleService(JdbcTemplate jdbc) {
+    public AppraisalCycleService(JdbcTemplate jdbc,
+                                 com.unifiedtree.notifications.service.NotificationDispatcher dispatcher,
+                                 com.unifiedtree.audit.AuditService audit) {
         this.jdbc = jdbc;
+        this.dispatcher = dispatcher;
+        this.audit = audit;
     }
+
+    /** The in-app event Remind sends (redesign BW-80, contract C0). */
+    static final String REMINDER_EVENT = "performance.review_reminder";
+    private static final java.time.format.DateTimeFormatter LONG =
+            java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH);
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
 
@@ -288,30 +299,35 @@ public class AppraisalCycleService {
     // ── Reminders ─────────────────────────────────────────────────────────────
 
     /**
-     * Nudge the reviewer to complete a PENDING review. Server-side 24h throttle
-     * prevents accidental double-clicks and (more importantly) prevents an
-     * HR admin from spamming the reviewer to death.
+     * Nudge the reviewer to finish a review that is still to be written (PENDING,
+     * or a saved draft: IN_PROGRESS). Server-side 24h throttle per review prevents
+     * accidental double-clicks and an HR admin spamming the reviewer.
+     *
+     * <p>Redesign BW-80: the reviewer now gets the {@code performance.review_reminder}
+     * notification (in the app, and by email or phone per their notification
+     * choices; the dispatcher applies them). Nothing is sent when the review has
+     * no writer on record; the reminder is still counted, as before.
      */
     @Transactional
     public RemindResultDto remind(UUID tenantId, UUID reviewId, UUID actorId) {
         bindTenant(tenantId);
-        Object[] row = jdbc.query("""
-                SELECT status, reminder_sent_at, reminder_count
-                  FROM performance_mgmt.performance_reviews WHERE id = ?
-                """, rs -> {
-                    if (!rs.next()) return null;
-                    return new Object[] {
-                        rs.getString("status"),
-                        rs.getTimestamp("reminder_sent_at"),
-                        rs.getInt("reminder_count")
-                    };
-                }, reviewId);
+        ReminderTarget row = jdbc.query("""
+                SELECT r.status, r.reminder_sent_at, r.reminder_count, r.employee_id, r.reviewer_id,
+                       c.name AS cycle_name,
+                       NULLIF(TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')), '') AS reviewee_name
+                  FROM performance_mgmt.performance_reviews r
+                  LEFT JOIN performance_mgmt.review_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id
+                  LEFT JOIN hrms.employees e ON e.id = r.employee_id AND e.tenant_id = r.tenant_id
+                 WHERE r.tenant_id = ? AND r.id = ?
+                """, rs -> rs.next() ? new ReminderTarget(rs.getString("status"), rs.getTimestamp("reminder_sent_at"),
+                        rs.getInt("reminder_count"), rs.getObject("employee_id", UUID.class),
+                        rs.getObject("reviewer_id", UUID.class), rs.getString("cycle_name"), rs.getString("reviewee_name")) : null,
+                tenantId, reviewId);
         if (row == null) throw new BusinessRuleException("Review not found", "REVIEW_NOT_FOUND");
-        String status = (String) row[0];
-        if (!"PENDING".equals(status)) throw new BusinessRuleException(
-                "Cannot remind for a review in status " + status, "REVIEW_NOT_PENDING");
+        if (!"PENDING".equals(row.status()) && !"IN_PROGRESS".equals(row.status())) throw new BusinessRuleException(
+                "Cannot remind for a review in status " + row.status(), "REVIEW_NOT_PENDING");
 
-        java.sql.Timestamp lastSent = (java.sql.Timestamp) row[1];
+        java.sql.Timestamp lastSent = row.lastSent();
         if (lastSent != null) {
             long hoursSince = ChronoUnit.HOURS.between(lastSent.toInstant(), Instant.now());
             if (hoursSince < REMINDER_THROTTLE_HOURS) {
@@ -321,14 +337,68 @@ public class AppraisalCycleService {
                         "REMINDER_THROTTLED");
             }
         }
-        int newCount = ((Integer) row[2]) + 1;
+        int newCount = row.count() + 1;
         jdbc.update("""
                 UPDATE performance_mgmt.performance_reviews
                    SET reminder_sent_at = now(), reminder_count = ?,
                        updated_at = now(), version = version + 1
-                 WHERE id = ?
-                """, newCount, reviewId);
+                 WHERE tenant_id = ? AND id = ?
+                """, newCount, tenantId, reviewId);
+
+        UUID writer = row.reviewerId() != null ? row.reviewerId() : row.employeeId();
+        boolean self = writer != null && writer.equals(row.employeeId());
+        java.time.LocalDate due = dueDate(tenantId, reviewId, self);
+        java.util.Map<String, String> values = reminderValues(self, row.revieweeName(), row.cycleName(), due);
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("type", "PERFORMANCE_REVIEW_REMINDER");
+        data.put("reviewId", reviewId.toString());
+        data.put("route", "/hrms/performance?view=my-reviews");
+        try {
+            if (dispatcher != null && writer != null) dispatcher.dispatch(tenantId, writer, REMINDER_EVENT, values, data);
+        } catch (RuntimeException e) {
+            // The reminder is counted either way; a delivery problem must not undo it.
+            log.warn("Review reminder {} could not be delivered: {}", reviewId, e.getMessage());
+        }
+        try {
+            if (audit != null) audit.record("performance", "REVIEW_REMINDER", "performance_review", reviewId,
+                    "Reminder sent for " + values.get("reviewText") + " in " + values.get("cycleName"));
+        } catch (Exception e) {
+            log.warn("Audit of a review reminder failed (non-fatal): {}", e.getMessage());
+        }
         return new RemindResultDto(reviewId, newCount, Instant.now().toString());
+    }
+
+    private record ReminderTarget(String status, java.sql.Timestamp lastSent, int count, UUID employeeId,
+                                  UUID reviewerId, String cycleName, String revieweeName) {}
+
+    /** The message's placeholders: which review, which cycle, and the due date when the cycle has one. */
+    static java.util.Map<String, String> reminderValues(boolean self, String revieweeName, String cycleName,
+                                                        java.time.LocalDate due) {
+        java.util.Map<String, String> values = new java.util.HashMap<>();
+        String who = revieweeName == null || revieweeName.isBlank() ? "a colleague" : revieweeName;
+        values.put("reviewText", self ? "your self-review" : "your review of " + who);
+        values.put("revieweeName", who);
+        values.put("cycleName", cycleName == null || cycleName.isBlank() ? "the review cycle" : cycleName);
+        values.put("dueDate", due == null ? "" : LONG.format(due));
+        values.put("dueText", due == null ? "" : " by " + LONG.format(due));
+        return values;
+    }
+
+    /** The review's due date from the cycle's dates (V143.61); null when none, or the table isn't there yet. */
+    private java.time.LocalDate dueDate(UUID tenantId, UUID reviewId, boolean self) {
+        Boolean ready = jdbc.queryForObject(
+                "SELECT to_regclass('performance_mgmt.review_cycle_milestones') IS NOT NULL", Boolean.class);
+        if (!Boolean.TRUE.equals(ready)) return null;
+        return jdbc.query("""
+                SELECT m.self_review_by, m.manager_review_by
+                  FROM performance_mgmt.performance_reviews r
+                  JOIN performance_mgmt.review_cycle_milestones m ON m.cycle_id = r.cycle_id AND m.tenant_id = r.tenant_id
+                 WHERE r.tenant_id = ? AND r.id = ?
+                """, rs -> {
+                    if (!rs.next()) return null;
+                    java.sql.Date d = rs.getDate(self ? "self_review_by" : "manager_review_by");
+                    return d == null ? null : d.toLocalDate();
+                }, tenantId, reviewId);
     }
 
     // ── Close cycle ───────────────────────────────────────────────────────────

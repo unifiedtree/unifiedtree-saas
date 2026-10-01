@@ -67,7 +67,11 @@ public class PerformanceEmployeeService {
             BigDecimal scorePct,           // rating / 5.0 × 100, HALF_UP, 1 dp; NULL if no review
             String     lastReviewCycleName,
             String     lastReviewSubmittedAt,
-            String     lastReviewStatus) {}
+            String     lastReviewStatus,
+            // Redesign BW-82 (added): ACTIVE, PROBATION, NOTICE_PERIOD, …; and whether a
+            // review about the person is still to be written in an open (ACTIVE) cycle.
+            String     employmentStatus,
+            boolean    pendingInOpenCycle) {}
 
     public record PageDto<T>(
             List<T> items,
@@ -102,9 +106,10 @@ public class PerformanceEmployeeService {
         // ── Filter fragment shared by count + list. Kept identical so the
         //    total always matches the pageable slice.
         StringBuilder where = new StringBuilder("""
-                WHERE e.is_active = TRUE
+                WHERE e.tenant_id = ? AND e.is_active = TRUE
                 """);
         List<Object> args = new ArrayList<>();
+        args.add(tenantId);
         PerformanceTeamScope.appendIn(where, args, "e.id", visibleEmployeeIds);
         if (departmentId != null) {
             where.append(" AND e.department_id = ?");
@@ -125,7 +130,9 @@ public class PerformanceEmployeeService {
         if (total == null) total = 0L;
 
         // Page args come AFTER the filter args.
-        List<Object> pageArgs = new ArrayList<>(args);
+        List<Object> pageArgs = new ArrayList<>();
+        pageArgs.add(tenantId);   // the latest_review CTE comes first in the statement
+        pageArgs.addAll(args);
         pageArgs.add(size);
         pageArgs.add(page * size);
 
@@ -144,6 +151,7 @@ public class PerformanceEmployeeService {
                       FROM performance_mgmt.performance_reviews pr
                       LEFT JOIN performance_mgmt.review_cycles rc
                              ON rc.id = pr.cycle_id AND rc.tenant_id = pr.tenant_id
+                     WHERE pr.tenant_id = ?
                      ORDER BY pr.employee_id,
                               pr.submitted_at DESC NULLS LAST,
                               pr.created_at   DESC
@@ -156,7 +164,12 @@ public class PerformanceEmployeeService {
                        lr.overall_rating                          AS overall_rating,
                        lr.cycle_name                              AS cycle_name,
                        lr.submitted_at                            AS submitted_at,
-                       lr.review_status                           AS review_status
+                       lr.review_status                           AS review_status,
+                       e.employment_status                        AS employment_status,
+                       EXISTS (SELECT 1 FROM performance_mgmt.performance_reviews op
+                                 JOIN performance_mgmt.review_cycles oc ON oc.id = op.cycle_id AND oc.tenant_id = op.tenant_id
+                                WHERE op.tenant_id = e.tenant_id AND op.employee_id = e.id AND oc.status = 'ACTIVE'
+                                  AND op.status IN ('PENDING', 'IN_PROGRESS')) AS pending_open
                   FROM hrms.employees e
                   LEFT JOIN hrms.departments d
                          ON d.id = e.department_id AND d.tenant_id = e.tenant_id
@@ -181,7 +194,9 @@ public class PerformanceEmployeeService {
                     pct,
                     rs.getString("cycle_name"),
                     ts(rs.getTimestamp("submitted_at")),
-                    rs.getString("review_status"));
+                    rs.getString("review_status"),
+                    rs.getString("employment_status"),
+                    rs.getBoolean("pending_open"));
         }, pageArgs.toArray());
 
         return new PageDto<>(rows, page, size, total);
