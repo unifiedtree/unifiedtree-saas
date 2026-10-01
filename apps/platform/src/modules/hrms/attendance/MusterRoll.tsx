@@ -67,10 +67,11 @@ export function MusterRoll() {
     id: s.employeeId, name: s.fullName?.trim() || s.employeeCode || 'Employee', code: s.employeeCode, dept: s.departmentName || '—',
     shift: s.shiftName || '—', inAt: s.checkInAt, outAt: s.checkOutAt,
     worked: s.workedMinutes ?? workedMinutes(s.checkInAt, s.checkOutAt, isToday ? Date.now() : undefined),
-    status: statusOnDay(rowStatus(s), isToday), punches: punches.get(s.employeeId) ?? 0,
+    // Today nobody is absent yet: no punch and no leave is "not marked yet" until the day is over (client rule).
+    status: isToday && rowStatus(s) === 'ABSENT' ? 'NOT_MARKED' : statusOnDay(rowStatus(s), isToday), punches: punches.get(s.employeeId) ?? 0,
   })).sort((a, b) => a.name.localeCompare(b.name)), [dash.data, punches, isToday])
   const shown = rows.filter((r) => { const t = q.trim().toLowerCase(); return !t || `${r.name} ${r.code} ${r.dept}`.toLowerCase().includes(t) })
-  const split = SPLIT.filter((s) => isToday || s.key !== 'NOT_MARKED').map((s) => ({ ...s, n: rows.filter((r) => r.status === s.key).length }))
+  const split = SPLIT.filter((s) => (isToday ? s.key !== 'ABSENT' : s.key !== 'NOT_MARKED')).map((s) => ({ ...s, n: rows.filter((r) => r.status === s.key).length }))
 
   // Departments: the org list plus the ones on the day's roster (for roles without org reads).
   const deptOptions = useMemo(() => {
