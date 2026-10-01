@@ -1,10 +1,10 @@
-package com.hrms.api.orgchart;
+package com.hrms.api.workforce;
 
-import com.hrms.api.orgchart.OrgChartScope.Link;
-import com.hrms.api.orgchart.OrgChartScope.Note;
-import com.hrms.api.orgchart.OrgChartScope.Placed;
-import com.hrms.api.orgchart.OrgChartScope.Relation;
-import com.hrms.api.orgchart.OrgChartScope.Result;
+import com.hrms.api.workforce.OrgChartScope.Link;
+import com.hrms.api.workforce.OrgChartScope.Note;
+import com.hrms.api.workforce.OrgChartScope.Placed;
+import com.hrms.api.workforce.OrgChartScope.Relation;
+import com.hrms.api.workforce.OrgChartScope.Result;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

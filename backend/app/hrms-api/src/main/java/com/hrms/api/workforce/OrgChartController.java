@@ -1,4 +1,4 @@
-package com.hrms.api.orgchart;
+package com.hrms.api.workforce;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;

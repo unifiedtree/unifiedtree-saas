@@ -1,9 +1,9 @@
-package com.hrms.api.orgchart;
+package com.hrms.api.workforce;
 
-import com.hrms.api.orgchart.OrgChartScope.Link;
-import com.hrms.api.orgchart.OrgChartService.Card;
-import com.hrms.api.orgchart.OrgChartService.OrgChart;
-import com.hrms.api.orgchart.OrgChartService.Person;
+import com.hrms.api.workforce.OrgChartScope.Link;
+import com.hrms.api.workforce.OrgChartService.Card;
+import com.hrms.api.workforce.OrgChartService.OrgChart;
+import com.hrms.api.workforce.OrgChartService.Person;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.FeatureNotReady;
 import com.unifiedtree.rbac.security.PermissionChecker;

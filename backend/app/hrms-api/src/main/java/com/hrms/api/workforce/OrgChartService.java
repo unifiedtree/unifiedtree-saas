@@ -1,6 +1,5 @@
-package com.hrms.api.orgchart;
+package com.hrms.api.workforce;
 
-import com.hrms.api.workforce.WorkforceAccess;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.FeatureNotReady;
 import com.unifiedtree.rbac.security.PermissionChecker;

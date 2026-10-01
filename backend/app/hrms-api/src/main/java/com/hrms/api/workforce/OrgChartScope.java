@@ -1,4 +1,4 @@
-package com.hrms.api.orgchart;
+package com.hrms.api.workforce;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
