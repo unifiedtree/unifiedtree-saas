@@ -164,8 +164,10 @@ try {
     check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /My Attendance/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
     if (who === 'employee') await s.page.screenshot({ path: `${shots}/greeting-myatt-employee-tab-my.png` })
     if (who === 'dept manager') {
-      const g = await greetingOn(s.page, '/team')
-      check('dept manager: My team greeting shows the first name ("Dept")', /, Dept\b/.test(g) && !/Dept Manager/.test(g), g)
+      // P-TEAM: My team's title is "Team today"; the manager's greeting moved to Home (AUDIT §5.14), where P-HOME checks it.
+      await s.page.goto(base + '/team')
+      const ok = await s.page.getByRole('heading', { level: 1, name: 'Team today' }).waitFor({ timeout: 30_000 }).then(() => true, () => false)
+      check('dept manager: My team shows "Team today" (the greeting moved to Home)', ok)
     }
     check(`${who}: no page errors`, s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
     check(`${who}: no failed API calls`, s.failedApi.length === 0, s.failedApi.slice(0, 4).join(' | '))

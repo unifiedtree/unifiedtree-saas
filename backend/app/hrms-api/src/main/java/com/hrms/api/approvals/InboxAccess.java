@@ -19,6 +19,8 @@ import java.util.UUID;
  *       <td>the caller's team (TeamEmployeeScope)</td><td>ApproverScopeGuard</td></tr>
  *   <tr><td>Shift change</td><td>attendance.regularization.approve (/v1/shifts/change-requests/pending)</td>
  *       <td>attendance.workforce.admin → the tenant; else the team</td><td>the same scope</td></tr>
+ *   <tr><td>Timesheet week</td><td>@perm.check hrms.timesheet.approve (/v1/timesheets/approvals, SUBMITTED)</td>
+ *       <td>the caller's team (TeamEmployeeScope)</td><td>the same scope</td></tr>
  *   <tr><td>Expense</td><td>hrms.expense.claim.approve (/v1/expense/claims/approvals, SUBMITTED only)</td>
  *       <td>hrms.expense.reimbursement → the tenant; else claims routed to the caller</td>
  *       <td>@perm.check hrms.expense.claim.approve + the same scope</td></tr>
@@ -29,13 +31,14 @@ import java.util.UUID;
  * refuses) comes back with {@code canDecide=false}; the guard is not widened.
  */
 public record InboxAccess(UUID me, boolean leave, boolean wfh, boolean corrections, boolean shifts, boolean expenses,
-                          boolean leaveL2, boolean workforceAdmin, boolean reimbursement, boolean expenseDecide) {
+                          boolean leaveL2, boolean workforceAdmin, boolean reimbursement, boolean expenseDecide,
+                          boolean timesheets) {
 
     /** The design's tabs, in its order. */
     public static final List<String> TAB_ORDER = List.of("all", "leave", "attendance", "requests", "expenses");
 
     public boolean any() {
-        return leave || wfh || corrections || shifts || expenses;
+        return leave || wfh || corrections || shifts || expenses || timesheets;
     }
 
     /** The tabs this caller may open; "all" whenever any other is there. */
@@ -45,7 +48,7 @@ public record InboxAccess(UUID me, boolean leave, boolean wfh, boolean correctio
         out.add("all");
         if (leave) out.add("leave");
         if (corrections) out.add("attendance");
-        if (wfh || shifts) out.add("requests");
+        if (wfh || shifts || timesheets) out.add("requests");
         if (expenses) out.add("expenses");
         return out;
     }
@@ -60,6 +63,20 @@ public record InboxAccess(UUID me, boolean leave, boolean wfh, boolean correctio
         if (shifts && (all || "requests".equals(tab))) out.add(DecisionKind.SHIFT_CHANGE);
         if (expenses && (all || "expenses".equals(tab))) out.add(DecisionKind.EXPENSE);
         return out;
+    }
+
+    /** Whether a tab shows submitted timesheet weeks (under Requests; not an undoable kind). */
+    public boolean timesheetsIn(String tab) {
+        return timesheets && ("all".equals(tab) || "requests".equals(tab));
+    }
+
+    /**
+     * Whether POST /v1/timesheets/weeks/{id}/decision would accept this caller:
+     * never their own week, and only for someone in their team scope (the same
+     * scope the timesheet approvals list reads).
+     */
+    public boolean canDecideTimesheet(UUID requesterId, Set<UUID> team) {
+        return timesheets && requesterId != null && !requesterId.equals(me) && team.contains(requesterId);
     }
 
     /** The tab a kind is counted under. */

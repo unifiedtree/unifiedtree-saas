@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { SHARED_KEYS } from './shared/contracts'
 
 // Mirrors backend ApprovalStatus enum. Same set that LeaveApprovalStatus uses so
 // pill styles + cancel gating logic can be reused between leave and WFH.
@@ -122,6 +123,9 @@ export function useWfhDecision() {
       // The leave approvals queue includes WFH now — invalidate both so the
       // union list re-renders without a stale row.
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'approvals'] })
+      // Every decision changes the Approvals inbox and the Undo offers (approval Undo, BW-06).
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox })
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions })
     },
   })
 }

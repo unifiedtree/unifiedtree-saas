@@ -1,6 +1,7 @@
 // Live check of the redesigned My team page (/team) against the local API:
-// the department manager sees today's tiles, who's in, leave waiting for them
-// and the shift roster, with no refused API calls; an employee can't open it.
+// the department manager sees today's tiles, who's in and what is waiting for
+// them on Team today, and the shift roster on Team schedule (/team?view=schedule,
+// where it moved with P-TEAM), with no refused API calls; an employee can't open it.
 //
 //   node e2e/recovery/live-design-team.mjs
 import { chromium } from '@playwright/test'
@@ -28,13 +29,18 @@ const settle = async (page) => { await page.waitForLoadState('networkidle').catc
 try {
   const m = await session('mgr@unifiedtree.demo')
   await m.page.goto(base + '/team'); await settle(m.page)
-  for (const t of ['Present', 'Not marked yet', 'On leave']) check(`manager: "${t}" tile`, (await m.page.getByText(t, { exact: true }).count()) > 0)
-  for (const h of ['Who’s in today', 'Shift roster']) check(`manager: "${h}" section`, (await m.page.getByText(h, { exact: true }).count()) > 0)
+  // P-TEAM: the design's one-bucket-per-person tiles (Present → In the office, Not marked yet → Not in yet).
+  for (const t of ['In the office', 'Not in yet', 'On leave']) check(`manager: "${t}" tile`, (await m.page.getByText(t, { exact: true }).count()) > 0)
+  check('manager: "Who’s in" section', (await m.page.getByRole('heading', { name: /^Who’s in/ }).count()) > 0)
+  check('manager: "Waiting for you" section (leave and every other request waiting for them)', (await m.page.getByRole('heading', { name: 'Waiting for you' }).count()) > 0)
+  // The shift roster is the Team schedule view now.
+  await m.page.goto(base + '/team?view=schedule'); await settle(m.page)
+  check('manager: "Shift roster" section (the Team schedule view)', (await m.page.getByRole('heading', { name: 'Team schedule' }).count()) > 0 && (await m.page.getByRole('grid').count()) === 1)
   check('manager: no refused API calls or page errors', !m.failed.length && !m.errors.length, m.failed[0] || m.errors[0] || '')
   await m.ctx.close()
   const r = await session('reader@unifiedtree.demo')
   await r.page.goto(base + '/team'); await settle(r.page)
-  check('employee: My team stays closed', (await r.page.getByText('Who’s in today', { exact: true }).count()) === 0)
+  check('employee: My team stays closed', (await r.page.getByRole('heading', { name: /^Who’s in/ }).count()) === 0 && (await r.page.getByRole('heading', { name: 'Team today' }).count()) === 0)
   await r.ctx.close()
 } catch (e) {
   check('run finished', false, String(e.message || e).slice(0, 300))

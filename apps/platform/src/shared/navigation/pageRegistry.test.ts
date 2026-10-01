@@ -221,17 +221,20 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
   it('a page or tab of a package not shipped yet stays out of the app (READY_PAGES)', () => {
     const pending = ALL_PAGE_ENTRIES.filter((e) => e.pkg && !READY_PAGES.has(e.pkg)).map((e) => e.id)
     for (const id of pending) expect(PAGE_REGISTRY.some((e) => e.id === id), id).toBe(false)
-    // Release 1 ships none of the page packages: every new tab is out, today's pages are all in.
-    expect(READY_PAGES.size).toBe(0)
+    // My team (P-TEAM) has shipped; the other packages' new tabs are still out, today's pages are all in.
+    expect([...READY_PAGES]).toEqual(['P-TEAM'])
     expect(pending.sort()).toEqual(['att-analytics:punctuality', 'att-daily:timesheet', 'exit:exited', 'exit:notice', 'exit:terminated', 'leave:all-balances',
-      'team:approvals', 'team:schedule', 'workforce-analytics:attrition', 'workforce-analytics:diversity', 'workforce-analytics:headcount'])
+      'workforce-analytics:attrition', 'workforce-analytics:diversity', 'workforce-analytics:headcount'])
     expect(PAGE_REGISTRY.length + pending.length).toBe(ALL_PAGE_ENTRIES.length)
     const hr = ids(ctx([...HR_MANAGER, 'hrms.leave.employee.read']))
     expect(hr.has('leave:all-balances') || hr.has('att-analytics:punctuality') || hr.has('exit:notice')).toBe(false)
-    expect(ids(ctx(DEPT_MANAGER)).has('team:approvals')).toBe(false)
-    // Listing a package brings its pages in.
+    // The shipped package's views are live: Team schedule and Approvals for a department manager.
+    expect(ids(ctx(DEPT_MANAGER)).has('team:approvals') && ids(ctx(DEPT_MANAGER)).has('team:schedule')).toBe(true)
+    expect(ids(ctx(EMPLOYEE)).has('team:approvals')).toBe(false)
+    // Listing a package brings its pages in; one that isn't listed stays out.
     expect(isReadyPage({ pkg: 'P-TEAM' }, new Set(['P-TEAM']))).toBe(true)
-    expect(isReadyPage({ pkg: 'P-TEAM' })).toBe(false)
+    expect(isReadyPage({ pkg: 'P-TEAM' }, new Set())).toBe(false)
+    expect(isReadyPage({ pkg: 'P-LEAVE' })).toBe(false)
     expect(isReadyPage({})).toBe(true)
   })
 })

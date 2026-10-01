@@ -84,7 +84,7 @@ async function session(email) {
 // ── fixtures ────────────────────────────────────────────────────────────────
 const A = randomUUID(), UA = randomUUID(), P = randomUUID()
 const aEmail = `qa-team-undo-${A.slice(0, 8)}@example.invalid`
-const created = { leave: [], wfh: [], corrections: [], shifts: [], claims: [], records: [], batches: [], messages: [], rawLeave: [] }
+const created = { leave: [], wfh: [], corrections: [], shifts: [], claims: [], records: [], batches: [], messages: [], rawLeave: [], weeks: [] }
 const offDay = ((dow(today) + 2) % 7) + 1 // a weekly off that isn't today, so today's reminder can be tested
 const tomorrowIst = addDays(today, 1)
 
@@ -141,6 +141,12 @@ async function main() {
   created.shifts.push(S0?.id)
   const E0 = (await a.call('/v1/expense/claims', 'POST', { title: 'QA team undo claim', currency: 'INR', notes: 'QA', items: [{ category: 'TRAVEL', description: 'Taxi', amount: 500, expenseDate: addDays(today, -2) }] })).json
   created.claims.push(E0?.id)
+  // A submitted timesheet week (BW-36): last week, with one entry.
+  const lastMonday = addDays(today, -(dow(today) - 1) - 7)
+  const entry = await a.call('/v1/ess/timesheets', 'POST', { workDate: lastMonday, description: 'QA team inbox timesheet', minutes: 480 })
+  const T0 = entry.status === 200 ? (await a.call(`/v1/ess/timesheets/weeks/${lastMonday}/submit`, 'POST')).json : null
+  if (T0?.id) created.weeks.push(T0.id)
+  check('fixture: a submitted timesheet week', T0?.status === 'SUBMITTED', `entry=${entry.status} week=${JSON.stringify(T0)?.slice(0, 120)}`)
   check('fixture: one waiting request of each kind', L0?.id && W0?.id && C0?.id && S0?.id && E0?.id,
     `leave=${!!L0?.id} wfh=${!!W0?.id} fix=${!!C0?.id} shift=${!!S0?.id} claim=${!!E0?.id}`)
 
@@ -161,6 +167,7 @@ async function main() {
     const fixes = content(await get('/v1/attendance/corrections/approvals?status=PENDING&size=1000'))
     const shiftList = content(await get('/v1/shifts/change-requests/pending'))
     const claims = content(await get('/v1/expense/claims/approvals?size=1000'))
+    const weeks = content(await get('/v1/timesheets/approvals?size=100'))
     return {
       LEAVE: leave && own(s, leave).map((r) => r.id),
       WFH: wfh && own(s, wfh).map((r) => r.id),
@@ -168,6 +175,7 @@ async function main() {
       SHIFT_CHANGE: shiftList && own(s, shiftList).map((r) => r.id),
       // the inbox lists claims for those who decide them (claim.approve), SUBMITTED only
       EXPENSE: claims && s.permissions.has('hrms.expense.claim.approve') ? own(s, claims).filter((r) => r.status === 'SUBMITTED').map((r) => r.id) : null,
+      TIMESHEET: weeks && own(s, weeks).map((r) => r.id),
     }
   }
   async function inboxAll(s) {
@@ -188,7 +196,7 @@ async function main() {
     if (!anyList) { check(`inbox: ${name} has no approval list, so no inbox (403)`, box.status === 403, `status=${box.status}`); continue }
     check(`inbox: ${name} can open it`, box.status === 200, `status=${box.status}`)
     if (box.status !== 200) continue
-    for (const kind of ['LEAVE', 'WFH', 'CORRECTION', 'SHIFT_CHANGE', 'EXPENSE']) {
+    for (const kind of ['LEAVE', 'WFH', 'CORRECTION', 'SHIFT_CHANGE', 'EXPENSE', 'TIMESHEET']) {
       const expected = l[kind] || []
       const got = box.rows.filter((r) => r.kind === kind).map((r) => r.requestId)
       check(`inbox: ${name} ${kind} = its own list (${expected.length})`, sorted(expected) === sorted(got), `list=${expected.length} inbox=${got.length}`)
@@ -204,6 +212,13 @@ async function main() {
   check('inbox: leave rows carry facts (balance after, others out)', row(L0.id)?.facts?.some((f) => f.key === 'balanceAfter') && row(L0.id)?.facts?.some((f) => f.key === 'othersOut'))
   check('inbox: the fix says what was asked for', row(C0.id)?.facts?.some((f) => f.key === 'askedFor'))
   check('inbox: the claim shows its amount', Number(row(E0.id)?.amount) === 500 && row(E0.id)?.currency === 'INR')
+  check('inbox: the submitted timesheet week sits under Requests, decidable, with its hours', row(T0?.id)?.kind === 'TIMESHEET' && row(T0?.id)?.canDecide === true
+    && row(T0?.id)?.facts?.some((f) => f.key === 'hours' && f.value === '8h 0m'), JSON.stringify(row(T0?.id))?.slice(0, 200))
+  const reqTab = await mgr.call('/v1/team/approvals?kind=requests&size=100')
+  check('inbox: the Requests tab lists the timesheet week', (reqTab.json?.rows || []).some((r) => r.requestId === T0?.id))
+  const decidedWeek = await mgr.call(`/v1/timesheets/weeks/${T0?.id}/decision`, 'POST', { status: 'APPROVED', comment: 'QA' })
+  check('inbox: once decided the week leaves the inbox', decidedWeek.status === 200
+    && !((await mgr.call('/v1/team/approvals?kind=requests&size=100')).json?.rows || []).some((r) => r.requestId === T0?.id), `decide=${decidedWeek.status}`)
   const refusedJane = await mgr.call(`/v1/leave/${Jl}/decision`, 'POST', { status: 'APPROVED', comment: 'QA' })
   check('inbox: …and deciding it is refused by the decide endpoint (403)', refusedJane.status === 403, `status=${refusedJane.status}`)
   const finBox = await fin.call('/v1/team/approvals?kind=all')
@@ -509,7 +524,7 @@ async function main() {
 }
 
 function cleanup() {
-  const reqIds = [...created.leave, ...created.wfh, ...created.corrections, ...created.shifts, ...created.claims, ...created.rawLeave, ...created.messages].filter(Boolean)
+  const reqIds = [...created.leave, ...created.wfh, ...created.corrections, ...created.shifts, ...created.claims, ...created.rawLeave, ...created.messages, ...created.weeks].filter(Boolean)
   const idList = reqIds.map((x) => `'${x}'`).join(',') || `'${randomUUID()}'`
   const everyone = [A, P, ...reqIds]
   const pattern = everyone.join('|')
@@ -522,6 +537,7 @@ function cleanup() {
   run('claims', `BEGIN; DELETE FROM expense_mgmt.expense_items WHERE claim_id IN (SELECT id FROM expense_mgmt.expense_claims WHERE employee_id='${A}'); DELETE FROM expense_mgmt.expense_claims WHERE employee_id='${A}'; COMMIT;`)
   run('overtime', `DELETE FROM attendance.overtime_decisions WHERE record_id IN (SELECT id FROM attendance.records WHERE employee_id='${A}')`)
   run('attendance', `BEGIN; DELETE FROM attendance.event_logs WHERE employee_id='${A}'; DELETE FROM attendance.records WHERE employee_id='${A}'; DELETE FROM attendance.regularization_requests WHERE employee_id='${A}'; DELETE FROM attendance.shift_change_requests WHERE employee_id='${A}'; DELETE FROM attendance.employee_shift_assignments WHERE employee_id='${A}'; COMMIT;`)
+  run('timesheets', `BEGIN; DELETE FROM hrms.timesheet_weeks WHERE employee_id='${A}'; DELETE FROM hrms.time_entries WHERE employee_id='${A}'; COMMIT;`)
   run('leave', `BEGIN; DELETE FROM leave_mgmt.leave_requests WHERE employee_id='${A}' OR id IN (${idList}); DELETE FROM leave_mgmt.wfh_requests WHERE employee_id='${A}'; DELETE FROM leave_mgmt.leave_balance_ledger WHERE employee_id='${A}'; DELETE FROM leave_mgmt.leave_balances WHERE employee_id='${A}'; COMMIT;`)
   for (const t of sql(`select table_schema||'.'||table_name from information_schema.columns c join information_schema.tables t using (table_schema, table_name)
       where c.column_name='user_id' and t.table_type='BASE TABLE' and c.table_schema='auth'`).split('\n').filter(Boolean)) {

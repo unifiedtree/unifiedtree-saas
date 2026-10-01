@@ -70,7 +70,7 @@ public class TeamController {
     @Operation(summary = "The Approvals inbox: every request waiting for the caller, newest first, with counts per tab")
     @GetMapping("/approvals")
     @PreAuthorize("hasAnyAuthority('wfh.approve','attendance.regularization.approve','hrms.expense.claim.approve')"
-            + " or @perm.check('hrms.leave.approve.l1')")
+            + " or @perm.check('hrms.leave.approve.l1') or @perm.check('hrms.timesheet.approve')")
     public ApprovalsInboxService.Inbox approvals(@RequestParam(defaultValue = "all") String kind,
                                                  @RequestParam(defaultValue = "0") int page,
                                                  @RequestParam(defaultValue = "20") int size,
