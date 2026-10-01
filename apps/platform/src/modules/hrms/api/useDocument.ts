@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { asAvailable, useAvailableQuery } from './shared/available'
 
 // Mirrors backend com.hrms.document.enums.DocumentCategory
 export type DocumentCategory =
@@ -229,6 +230,8 @@ export function usePendingDocumentQueue(enabled = true) {
       id: string; employeeId: string; employeeName?: string; employeeCode?: string;
       title: string; documentTypeId?: string; documentTypeCode?: string; documentTypeName?: string;
       originalFilename?: string; fileSizeBytes?: number; createdAt: string;
+      /** BW-77 (additive): the document's expiry and the person's department. */
+      expiryDate?: string | null; departmentName?: string | null;
     }>>('/v1/document/pending'),
     enabled,
     staleTime: 15_000,
@@ -313,5 +316,62 @@ export function useRejectDocument() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'document'] }),
+  })
+}
+
+// ── BW-77: counts over every document (not the page on screen) ────────────────
+
+/**
+ * Document counts. Expired = the expiry date has passed; expiring soon = within
+ * 30 days; rejected documents count in neither. `people` (workspace only): how
+ * many people have documents on file. `waitingForReview`: only for reviewers.
+ */
+export interface DocumentSummary {
+  onFile: number
+  expiringSoon: number
+  expired: number
+  people?: number | null
+  waitingForReview?: number | null
+  waitingForHr: number
+  rejected: number
+  expiringTitles: string[]
+  expiredTitles: string[]
+}
+
+export interface ReviewSummary { waiting: number; verifiedThisWeek: number; rejectedThisWeek: number }
+
+/** Every employee's documents (hrms.document.read). `notAvailable` on servers without it. */
+export function useDocumentSummary(enabled = true) {
+  return useAvailableQuery<DocumentSummary>({
+    queryKey: ['hrms', 'document', 'summary', 'all'],
+    queryFn: () => asAvailable(() => apiJson<DocumentSummary>('/v1/document/summary')),
+    enabled, staleTime: 30_000, retry: false,
+  })
+}
+
+/** My own documents (hrms.document.read.self). */
+export function useMyDocumentSummary(enabled = true) {
+  return useAvailableQuery<DocumentSummary>({
+    queryKey: ['hrms', 'document', 'summary', 'my'],
+    queryFn: () => asAvailable(() => apiJson<DocumentSummary>('/v1/document/my/summary')),
+    enabled, staleTime: 30_000, retry: false,
+  })
+}
+
+/** One person's documents (hrms.document.read). */
+export function useEmployeeDocumentSummary(employeeId: string | undefined, enabled = true) {
+  return useAvailableQuery<DocumentSummary>({
+    queryKey: ['hrms', 'document', 'summary', 'employee', employeeId],
+    queryFn: () => asAvailable(() => apiJson<DocumentSummary>(`/v1/document/employee/${employeeId}/summary`)),
+    enabled: enabled && !!employeeId, staleTime: 15_000, retry: false,
+  })
+}
+
+/** The review queue: waiting, verified and rejected this week (hrms.document.verify). */
+export function useReviewSummary(enabled = true) {
+  return useAvailableQuery<ReviewSummary>({
+    queryKey: ['hrms', 'document', 'summary', 'review'],
+    queryFn: () => asAvailable(() => apiJson<ReviewSummary>('/v1/document/pending/summary')),
+    enabled, staleTime: 15_000, retry: false,
   })
 }
