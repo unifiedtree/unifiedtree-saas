@@ -169,7 +169,6 @@ try {
     const focused = await s.page.locator(`.uoc-node.is-found[data-person="${READER}"]`).waitFor({ timeout: 15_000 }).then(() => true, () => false)
     check('owner: View in org chart opens the chart focused on the person', new URL(s.page.url()).searchParams.get('focus') === READER && focused, s.page.url())
     await s.shot('hr-orgchart-focus-1440-light')
-    await s.go(`/hrms/employees/${READER}?tab=payroll`)
     await s.go(`/hrms/employees/${READER}?tab=documents`)
     const docSum = await owner.call(`/v1/document/employee/${READER}/summary`)
     const hint = await s.page.getByRole('heading', { name: 'Filed documents' }).locator('xpath=ancestor::section[1]').innerText().catch(() => '')
@@ -177,6 +176,7 @@ try {
     await s.go(`/hrms/employees/${READER}?tab=letters`)
     check('owner: Letters lists generated letters with their signed or issued date (BW-71)', await s.page.getByRole('heading', { name: 'Generated letters' }).count() === 1
       && (await s.page.getByText(/^(Signed|Issued) \d/).count() > 0 || await s.page.getByText('No letters generated').count() > 0))
+    await s.go(`/hrms/employees/${READER}?tab=payroll`)
     check('owner: Payroll lists payslips (or says there are none)', await s.page.getByRole('heading', { name: 'Payslips' }).count() > 0)
     await s.go(`/hrms/employees/${READER}?tab=exit`)
     check('owner: Exit shows the F&F card with its link', await s.page.getByRole('link', { name: 'Open full & final settlements' }).count() > 0)

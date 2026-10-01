@@ -114,20 +114,31 @@ function useKeepAnchor(active: boolean, rootRef: React.RefObject<HTMLDivElement>
     if (!active) return
     const h = window.location.hash.slice(1)
     if (!h.startsWith('st-')) return
-    let holdUntil = 0, ro: ResizeObserver | undefined
+    // Until the section is drawn (its card may wait for permissions or data) keep looking for up to
+    // 10 s; once it is placed, keep it in place for 3 s while cards above it finish loading.
+    const giveUpAt = Date.now() + 10_000
+    let holdUntil = 0, ro: ResizeObserver | undefined, done = false
     const place = () => {
       const el = document.getElementById(h), sc = scrollerOf(rootRef.current)
-      if (el && sc) sc.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 88) })
+      if (!el || !sc) return false
+      sc.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 88) })
+      return true
     }
-    const release = () => { holdUntil = 0; ro?.disconnect(); ro = undefined }
+    const release = () => { done = true; ro?.disconnect(); ro = undefined }
+    const tick = () => {
+      if (done) return
+      const now = Date.now()
+      if (holdUntil ? now > holdUntil : now > giveUpAt) { release(); return }
+      if (place() && !holdUntil) holdUntil = now + 3000
+    }
     const t = setTimeout(() => {
-      place(); holdUntil = Date.now() + 2000
-      if (rootRef.current && typeof ResizeObserver !== 'undefined') {
-        ro = new ResizeObserver(() => { if (Date.now() < holdUntil) place(); else release() })
+      tick()
+      if (!done && rootRef.current && typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(tick)
         ro.observe(rootRef.current)
       }
     }, 60)
-    const userScroll = () => { if (holdUntil) release() }
+    const userScroll = () => release()
     window.addEventListener('wheel', userScroll, { passive: true })
     window.addEventListener('touchmove', userScroll, { passive: true })
     window.addEventListener('keydown', userScroll)
