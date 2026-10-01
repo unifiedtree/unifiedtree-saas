@@ -209,7 +209,7 @@ try {
     check('a day before any attendance shows “no data”, not 0%', (await boxBefore.getAttribute('aria-label')) === `${first - 1} Mar: no data`, await boxBefore.getAttribute('aria-label'))
   }
   await page.getByRole('button', { name: new RegExp(`^${Number(B.slice(8))} Mar: `) }).click()
-  const side = page.locator('aside[aria-live=polite]')
+  const side = page.locator('[aria-live=polite]').filter({ hasText: 'expected came in' }).first()
   check(`side panel for ${B} matches the trend`, (await side.innerText()).includes(`of ${came(dayB) + dayB.absent} expected came in`) && (await side.innerText()).includes(String(came(dayB))), (await side.innerText()).split('\n').slice(0, 3).join(' | '))
   await page.screenshot({ path: `${SHOTS}/analytics-1440-past-calendar.png`, fullPage: true })
   await page.getByRole('tab', { name: 'Overview' }).click()

@@ -125,7 +125,7 @@ export function ShiftsPage() {
       {tab === 'overtime' && (
         <OvertimeView today={today} companyId={companyId} canTeam={canTeam} canDecide={canOt} canPolicy={canPolicy} canSelf={canSelf} who={who} />
       )}
-      {tab === 'requests' && <RequestsView canApprove={canApprove} />}
+      {tab === 'requests' && <RequestsView canApprove={canApprove} shifts={shifts} />}
       {tab === 'myshift' && (
         <MyShiftView shifts={shifts} shiftsLoading={policies.isLoading || !companyId} mine={mine} today={today} canSelf={canSelf}
           minimumMinutes={rules.data?.minimumMinutes ?? null} />

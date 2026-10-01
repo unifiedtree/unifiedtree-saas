@@ -9,11 +9,12 @@ import { fmtShort, istToday } from '@/design/dc/dates'
 import { usePendingShiftRequests, useDecidedShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../../api/useShiftRequests'
 import { useRecentDecisions } from '../../api/shared/useRecentDecisions'
 import { useDecisionUndo } from '../../api/shared/useDecisionUndo'
-import { changeRange, statusOf } from './shiftModel'
+import type { ShiftPolicy } from '../../api/useShiftPolicies'
+import { changeRange, statusOf, timeRange } from './shiftModel'
 
 const first = (n?: string | null) => (n || 'Employee').split(' ')[0]
 
-export function RequestsView({ canApprove }: { canApprove: boolean }) {
+export function RequestsView({ canApprove, shifts }: { canApprove: boolean; shifts: ShiftPolicy[] }) {
   const toast = useToast()
   const pending = usePendingShiftRequests({ enabled: canApprove })
   const decided = useDecidedShiftRequests(30, { enabled: canApprove })
@@ -31,7 +32,7 @@ export function RequestsView({ canApprove }: { canApprove: boolean }) {
     mark(r.id, approve ? 'approve' : 'reject')
     try {
       await decide.mutateAsync({ id: r.id, approved: approve, comment: note.trim() || undefined })
-      toast.success(approve ? `${r.employeeName || 'Employee'} moves to ${r.requestedShiftName || 'the new shift'}` : 'Shift change rejected', { detail: `${first(r.employeeName)} has been told.` })
+      toast.success(approve ? `${r.employeeName || 'Employee'} moves to ${r.requestedShiftName || 'the new shift'}` : `Shift request rejected — ${r.employeeName || 'Employee'} stays on ${r.currentShiftName || 'their shift'}`, { detail: `${first(r.employeeName)} has been told.` })
     } catch (e) {
       toast.error('Couldn’t record the decision', { detail: errorText(e, 'Try again in a moment.') })
       void pending.refetch()
@@ -48,6 +49,7 @@ export function RequestsView({ canApprove }: { canApprove: boolean }) {
     } finally { mark(requestId) }
   }
 
+  const byId = new Map(shifts.map((s) => [s.id, s]))
   const waiting = pending.data ?? []
   const undoable = (recent.data ?? []).filter((d) => d.kind === 'SHIFT_CHANGE')
   const pendingIds = new Set(waiting.map((r) => r.id))
@@ -79,17 +81,18 @@ export function RequestsView({ canApprove }: { canApprove: boolean }) {
             ))}
             {waiting.map((r) => (
               <ApprovalRow key={r.id} variant="card" name={r.employeeName || 'Employee'} kind="Shift change"
-                meta={`Asked ${fmtShort(istToday(new Date(r.createdAt)))}`}
+                meta={[r.employeeCode, `Submitted ${fmtShort(istToday(new Date(r.createdAt)))}`].filter(Boolean).join(" · ")}
                 title={`${r.currentShiftName || 'No shift yet'} → ${r.requestedShiftName || 'another shift'}`}
                 reason={r.reason || undefined}
                 facts={[
                   { label: 'When', value: changeRange(r.requestedEffectiveDate, r.requestedEndDate) },
+                  ...(byId.get(r.requestedShiftPolicyId) ? [{ label: 'New hours', value: timeRange(byId.get(r.requestedShiftPolicyId)!.startTime, byId.get(r.requestedShiftPolicyId)!.endTime) }] : []),
                   ...(r.requestedEndDate ? [{ label: 'Then', value: `Back to ${r.currentShiftName || 'no shift'}` }] : []),
                 ]}
                 status="pending" busy={busy[r.id] ?? false} withNote notePlaceholder={`Note for ${first(r.employeeName)} (optional)`}
                 onApprove={(note) => run(r, true, note)} onReject={(note) => run(r, false, note)} />
             ))}
-            {!waiting.length && !undoable.length && (
+            {!waiting.length && (
               <EmptyState variant="success" title="All caught up" hint="New shift change requests from your team show up here and in the bell." />
             )}
           </div>

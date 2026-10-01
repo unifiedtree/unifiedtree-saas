@@ -114,7 +114,7 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
     { key: 'date', header: 'Date', render: (r) => fmtWd(r.date) },
     { key: 'extra', header: 'Extra time', render: (r) => <span className="apl-num">{hm(r.minutes)}</span> },
     { key: 'reason', header: 'Reason', render: (r) => <span>{r.source === 'request' ? `Asked for · ${r.reason}` : r.reason}</span> },
-    { key: 'status', header: 'Status', render: (r) => <StatusPill tone={statusOf(r.status).tone} title={r.note || undefined}>{statusOf(r.status).label}</StatusPill> },
+    { key: 'status', header: 'Status', render: (r) => <span style={{ display: 'grid', gap: 2, justifyItems: 'start' }}><StatusPill tone={statusOf(r.status).tone}>{statusOf(r.status).label}</StatusPill>{r.note && <span className="apl-muted" style={{ fontSize: 12 }}>{r.note}</span>}</span> },
     ...(canDecide ? [{
       key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right' as const, render: (r: Row) => (r.status === 'PENDING' ? (
         <CellActions>

@@ -1,6 +1,6 @@
 // Attendance analytics · Overview (prototype PgTime a-analytics tab 0, plus today's blocks the page already had;
 // AUDIT C12: the design's four figures and the department and branch bars on top, today's blocks restyled below).
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BarList, Card, CellPerson, EmptyState, ErrorState, MiniStat, MiniStatGrid, Section, SectionLink, SkeletonStats, StatCard, Table,
@@ -234,10 +234,10 @@ function MonthBlock({ m, today, a, mobile, onOpenLogs }: { m: Props['m']; today:
             </div>
             <svg className="apl-trend" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={chart.aria}>
               {chart.grid.map((g) => (
-                <g key={g.label}>
+                <Fragment key={g.label}>
                   <line x1={g.x1} x2={g.x2} y1={g.y} y2={g.y} className="apl-trend__grid" strokeDasharray={g.dashed ? '3 4' : undefined} />
                   <text x={g.x1 - 6} y={g.y + 3.5} textAnchor="end" fontSize="10.5" className="apl-trend__axis">{g.label}</text>
-                </g>
+                </Fragment>
               ))}
               {chart.days.map((x) => (
                 <g key={x.iso} className={`apl-trend__day${x.today ? ' apl-trend__day--today' : ''}`} data-tip={x.tip} onClick={() => onOpenLogs('', x.iso)}>

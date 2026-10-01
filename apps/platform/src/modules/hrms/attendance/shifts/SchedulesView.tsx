@@ -89,9 +89,9 @@ export function SchedulesView({ companyId, shifts, loading, error, onRetry, canE
     {
       key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (s) => (
         <CellActions>
-          <Button variant="secondary" size={30} onClick={() => onSeePeople(s.id)}>People</Button>
-          {canEdit && <Button variant="secondary" size={30} onClick={() => edit(s)}>Edit</Button>}
-          {canEdit && <Button variant="ghost" size={30} onClick={() => setConfirm(s)} aria-label={`Delete ${s.name}`}>Delete</Button>}
+          <Button variant="secondary" size={30} onClick={() => onSeePeople(s.id)} aria-label={`See who works ${s.name}`}>People</Button>
+          {canEdit && <Button variant="secondary" size={30} onClick={() => edit(s)} aria-label={`Edit shift ${s.name}`}>Edit</Button>}
+          {canEdit && <Button variant="ghost" size={30} onClick={() => setConfirm(s)} aria-label={`Delete shift ${s.name}`}>Delete</Button>}
         </CellActions>
       ),
     },
