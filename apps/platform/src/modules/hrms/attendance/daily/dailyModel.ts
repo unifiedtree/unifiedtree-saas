@@ -4,6 +4,7 @@
 // the dashboard's own counts stay in attendanceBuckets.ts, unchanged.
 import type { StatusTone } from '@/design/kit/display'
 import type { StaffStatusResponse } from '../../api/useAttendance'
+import { MON } from '@/design/dc/dates'
 
 /** "09:24" in IST (24-hour, as the design writes times), or an em dash. */
 export function hhmmIst(iso?: string | null): string {
@@ -92,7 +93,7 @@ export function leaveLine(s: Pick<StaffStatusResponse, 'leaveTypeName' | 'leaveF
   if (!s.leaveFrom) return type
   const d = (iso: string) => {
     const x = new Date(iso.slice(0, 10) + 'T00:00:00')
-    return { day: x.getDate(), mon: x.toLocaleString('en-GB', { month: 'short' }) }
+    return { day: x.getDate(), mon: MON[x.getMonth()] }
   }
   const a = d(s.leaveFrom), b = s.leaveTo ? d(s.leaveTo) : a
   const range = s.leaveTo && s.leaveTo !== s.leaveFrom

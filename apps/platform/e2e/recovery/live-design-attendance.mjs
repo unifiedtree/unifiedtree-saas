@@ -2,9 +2,10 @@
 //
 //   node e2e/recovery/live-design-attendance.mjs
 //
-// Owner (HR): the three sections render with the page's own section bar (no
-// shell sub-nav), tiles add up to the table, a status tile filters, "Fix this
-// day" opens manual entry for that person, a shift is added → edited → deleted,
+// Owner (HR): Daily tracking (rebuilt by P-ATT-DAY: its views are inline pills;
+// the module's sections are the shell's) and the analytics and shifts pages
+// (still with their own section bar), tiles add up to the table, a status tile
+// filters, "Fix this day" opens manual entry for that person, a shift is added → edited → deleted,
 // rejecting overtime without a note is stopped before any call is made.
 // Reader (employee): only their own tabs; asks for a fix, which the owner then
 // rejects (attendance unchanged). Nothing irreversible is approved.
@@ -32,6 +33,9 @@ async function signIn(email) {
   return { page, errors, failed, sent, settle }
 }
 const sections = (page) => page.getByRole('navigation', { name: 'Attendance sections' })
+// Daily tracking's own views (inline pill tabs since the P-ATT-DAY rebuild).
+const views = (page) => page.getByRole('tablist', { name: 'Daily tracking views' })
+const isOpen = async (tab) => (await tab.count()) > 0 && (await tab.first().getAttribute('aria-selected')) === 'true'
 
 const stamp = Date.now() % 100000
 const shiftName = `E2E Shift ${stamp}`
@@ -41,22 +45,24 @@ try {
   const hr = await signIn('owner@unifiedtree.demo')
   const { page } = hr
 
-  await page.goto(base + '/hrms/attendance'); await hr.settle()
+  // The analytics page keeps its section bar with all three sections; Daily tracking is the shell's.
+  await page.goto(base + '/hrms/att-analytics'); await hr.settle()
   const secText = (await sections(page).innerText().catch(() => '')).replace(/\s+/g, ' ')
   check('section bar shows the three sections', /Attendance Analytics/.test(secText) && /Daily Tracking/.test(secText) && /Shifts & Overtime/.test(secText), secText)
+  await page.goto(base + '/hrms/attendance'); await hr.settle()
   check('shell sub-nav is hidden on the designed page', (await page.getByRole('navigation', { name: 'Attendance & Time sections' }).count()) === 0)
-  check('Daily Logs opens by default', await page.getByRole('heading', { name: 'Daily Logs' }).count() > 0)
+  check('Daily Logs opens by default', await isOpen(views(page).getByRole('tab', { name: /^Daily Logs/ })))
 
   // Tiles count the same rows the table shows.
-  const came = Number((await page.getByRole('button', { name: /Came in/ }).first().innerText()).match(/\d+/)?.[0] ?? NaN)
+  const came = Number(((await page.getByRole('button', { name: /^Present \d+/ }).first().getAttribute('aria-label')) || '').match(/\d+/)?.[0] ?? NaN)
   const rows = await page.locator('tbody tr').count()
-  const showing = (await page.getByText(/^Showing \d+ of \d+/).first().innerText().catch(() => '')).trim()
+  const showing = (await page.getByText(/Showing \d+ of \d+/).first().innerText().catch(() => '')).replace(/^Live · /, '').trim()
   check('result line matches the table', new RegExp(`^Showing ${rows} of ${rows}\\b`).test(showing), `${showing} · ${rows} rows · came in ${came}`)
-  await page.getByRole('button', { name: /Not marked/ }).first().click(); await page.waitForTimeout(300)
+  await page.getByRole('button', { name: /^Not marked \d+/ }).first().click(); await page.waitForTimeout(300)
   const notMarkedRows = await page.locator('tbody tr').count()
-  const nm = (await page.getByText(/^Showing \d+ of \d+/).first().innerText()).trim()
+  const nm = (await page.getByText(/Showing \d+ of \d+/).first().innerText()).trim()
   check('a status tile filters the table', /not marked/.test(nm) && notMarkedRows > 0 && notMarkedRows <= rows, nm)
-  await page.getByRole('button', { name: /Not marked/ }).first().click(); await page.waitForTimeout(300)
+  await page.getByRole('button', { name: /^Not marked \d+/ }).first().click(); await page.waitForTimeout(300)
 
   // Open a person, "Fix this day" → manual entry for them.
   await page.locator('tbody tr').first().click()
@@ -118,9 +124,12 @@ try {
   // ─────────────────────────────── reader / employee ────────────────────────
   const me = await signIn('reader@unifiedtree.demo')
   await me.page.goto(base + '/hrms/attendance'); await me.settle()
-  const meSec = (await sections(me.page).innerText().catch(() => '')).replace(/\s+/g, ' ')
-  check('employee sees no Analytics section', !/Attendance Analytics/.test(meSec) && /Daily Tracking/.test(meSec), meSec)
-  check('employee opens on My Attendance', await me.page.getByRole('heading', { name: 'My Attendance' }).count() > 0)
+  const meSec = (await views(me.page).innerText().catch(() => '')).replace(/\s+/g, ' ')
+  await me.page.goto(base + '/hrms/att-analytics'); await me.settle()
+  const meAnalytics = (await sections(me.page).innerText().catch(() => '')).replace(/\s+/g, ' ')
+  check('employee sees no Analytics section', !/Attendance Analytics/.test(meAnalytics) && !/Analytics/.test(meSec) && /My Attendance/.test(meSec), `${meSec} | ${meAnalytics}`)
+  await me.page.goto(base + '/hrms/attendance'); await me.settle()
+  check('employee opens on My Attendance', await isOpen(views(me.page).getByRole('tab', { name: /^My Attendance/ })))
   check('employee has no Daily Logs tab', (await me.page.getByRole('tab', { name: /^Daily Logs/ }).count()) === 0)
 
   await me.page.goto(base + '/hrms/attendance?tab=corrections'); await me.settle()

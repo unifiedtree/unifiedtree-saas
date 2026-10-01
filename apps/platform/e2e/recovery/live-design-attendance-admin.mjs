@@ -16,7 +16,7 @@ import { chromium } from '@playwright/test'
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const readerId = '22222222-2222-2222-2222-222222222222'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -53,7 +53,7 @@ try {
   check('muster: today has a "Not marked yet" tile, not "Absent"', (await o.page.getByText('Not marked yet', { exact: true }).count()) > 0 && (await o.page.getByText('Absent', { exact: true }).count()) === 0)
   check('muster: the day’s split donut', (await o.page.getByText('How the day splits', { exact: true }).count()) === 1)
   const downloading = o.page.waitForEvent('download')
-  await o.page.getByRole('button', { name: /Export CSV/ }).click()
+  await o.page.getByRole('button', { name: /Download muster/ }).click()
   const dl = await downloading
   check('muster: CSV downloads', /^muster-roll-\d{4}-\d{2}-\d{2}\.csv$/.test(dl.suggestedFilename()) && !(await dl.failure()), dl.suggestedFilename())
   const recorded = await o.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('ut.recentDownloads') || '[]')[0]?.report } catch { return null } })

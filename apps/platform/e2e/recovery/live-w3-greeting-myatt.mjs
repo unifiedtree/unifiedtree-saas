@@ -117,7 +117,7 @@ try {
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-daily.png` })
 
     const f = await openDaily(s.page, '?tab=my')
-    check('owner: ?tab=my opens the first tab they have (Daily Logs)', /Daily Logs/.test(f.selected) && /Daily Logs/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
+    check('owner: ?tab=my opens the first tab they have (Daily Logs)', /Daily Logs/.test(f.selected) && /^Today$/.test(f.heading) /* Daily Logs' title is the design's "Today" (P-ATT-DAY) */, `selected="${f.selected}" heading="${f.heading}"`)
     check('owner: ?tab=my shows no My Attendance tab', !f.tabs.some((t) => /My Attendance/i.test(t)), f.tabs.join(', '))
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-tab-my.png` })
 
@@ -161,7 +161,7 @@ try {
     const d = await openDaily(s.page)
     check(`${who}: Daily Tracking still has the My Attendance tab`, d.tabs.some((t) => /My Attendance/.test(t)), d.tabs.join(', '))
     const f = await openDaily(s.page, '?tab=my')
-    check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /My Attendance/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
+    check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /^Attendance$/.test(f.heading) /* the design's title (P-ATT-DAY) */, `selected="${f.selected}" heading="${f.heading}"`)
     if (who === 'employee') await s.page.screenshot({ path: `${shots}/greeting-myatt-employee-tab-my.png` })
     if (who === 'dept manager') {
       const g = await greetingOn(s.page, '/team')

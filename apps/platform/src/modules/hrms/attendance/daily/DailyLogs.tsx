@@ -16,7 +16,7 @@ import {
 } from '@/design/kit/display'
 import { BulkBar, DateChip } from '@/design/kit/data'
 import { Menu, Select, SidePanel, useToast } from '@/design/kit/overlays'
-import { addDays, fmtLong, fmtWd, istToday } from '@/design/dc/dates'
+import { addDays, fmtLong, fmtShort, fmtWd, istToday } from '@/design/dc/dates'
 import { dashIcon } from '@/design/dc/icons'
 import { apiBlob } from '@/core/api/client'
 import { saveServerFile } from '@/shared/export/fileExport'
@@ -280,7 +280,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
 
   const statusWord = status ? CARD[status as TileKey]?.label.toLowerCase() || statusLabel(status).toLowerCase() : ''
   const resultLine = loading ? 'Loading this day’s roster…'
-    : `Showing ${filtered.length > PAGE ? `${page * PAGE + 1}–${Math.min(filtered.length, page * PAGE + PAGE)}` : filtered.length} of ${status ? counts[status] ?? filtered.length : rows.length}${status ? ' · ' + statusWord : ' people'}${dept ? ' in ' + dept : ''} · ${fmtWd(date)}, IST`
+    : `Showing ${filtered.length > PAGE ? `${page * PAGE + 1}–${Math.min(filtered.length, page * PAGE + PAGE)}` : filtered.length} of ${status ? counts[status] ?? filtered.length : rows.length}${status ? ' · ' + statusWord : ' people'}${dept ? ' in ' + dept : ''} · ${fmtShort(date)}, IST`
 
   // ── side cards ──
   const attention = useMemo(() => {
