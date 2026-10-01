@@ -20,7 +20,7 @@ import { saveAndRecord, saveServerFile, svgToPng, xlsxBlob, type ExportFilters, 
 import { EXPORT_SPEC, type ReportKey } from './reportSpec'
 import { slug, type useReportCompany } from './useReportCompany'
 
-const FONT = "'Plus Jakarta Sans',sans-serif"
+const FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
 export const SECTION: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.05)', padding: '16px 18px 14px', minWidth: 0, display: 'flex', flexDirection: 'column' }
 const PATH = {
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',

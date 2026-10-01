@@ -1,14 +1,14 @@
 // Live check of the redesign theme (design/theme): light by default, dark from
-// localStorage['ut.theme'], the sign-in page always light, one font (Plus
-// Jakarta Sans, nothing else loaded) and a readable dark theme on real pages
-// for every role (owner, hrm, fin, mgr, reader).
+// localStorage['ut.theme'], the sign-in page always light, one font (Inter,
+// nothing else loaded; the sign-in page too) and a readable dark theme on real
+// pages for every role (owner, hrm, fin, mgr, reader).
 //  - light: <html data-theme="light">, color-scheme light, data-ufx="full",
 //    the page background is the redesign's #F3F6F4
 //  - dark: applied before the first paint, stays on through in-app navigation,
 //    page background #0A110E, no text below 3:1 against what is behind it
 //    (dark-on-dark / light-on-light) and no large light panel left over
 //  - the sign-in page renders light even with dark saved
-//  - no Inter / JetBrains Mono / Tabler font is loaded or used anywhere
+//  - no Plus Jakarta Sans / JetBrains Mono / Tabler font is loaded or used anywhere
 // Read-only: it only opens pages; the theme lives in each test browser's own
 // storage, which is thrown away at the end.
 //
@@ -49,7 +49,7 @@ const fontFacts = (page) => page.evaluate(async () => {
   const families = new Set([...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/["']/g, '')))
   const firstFamilies = new Set()
   for (const el of document.querySelectorAll('body *')) firstFamilies.add(getComputedStyle(el).fontFamily.split(',')[0].trim().replace(/["']/g, ''))
-  return { links, loaded: [...families], firstFamilies: [...firstFamilies], jakarta: document.fonts.check('500 14px "Plus Jakarta Sans"') }
+  return { links, loaded: [...families], firstFamilies: [...firstFamilies], inter: document.fonts.check('500 14px "Inter"') }
 })
 
 // Text that cannot be read against what is painted behind it (< 3:1), and large
@@ -112,6 +112,7 @@ try {
     await page.goto(base + '/login'); await settle(page)
     const f = await facts(page)
     check('sign-in page: light even with dark saved', f.theme === 'light' && f.scheme === 'light', `${f.theme} / ${f.scheme}`)
+    check('sign-in page: the same font as the app (Inter)', /^"?Inter\b/.test(f.bodyFont), f.bodyFont)
     if (shots) await page.screenshot({ path: `${shots}/rd-theme-login-dark-saved.png` })
     await ctx.close()
   }
@@ -125,10 +126,10 @@ try {
     const light = await facts(page)
     check(`${who}: light by default (data-theme, color-scheme, motion level)`, light.theme === 'light' && light.scheme === 'light' && light.ufx === 'full', `${light.theme} / ${light.scheme} / ufx=${light.ufx}`)
     check(`${who}: light page background is #F3F6F4`, light.bodyBg === 'rgb(243, 246, 244)', light.bodyBg)
-    check(`${who}: body font is Plus Jakarta Sans`, /^"?Plus Jakarta Sans/.test(light.bodyFont), light.bodyFont)
+    check(`${who}: body font is Inter`, /^"?Inter\b/.test(light.bodyFont), light.bodyFont)
     const ff = await fontFacts(page)
-    check(`${who}: only Plus Jakarta Sans is loaded (no Inter, JetBrains Mono or Tabler)`, ff.jakarta && !ff.links.some((h) => /Inter|JetBrains|tabler/i.test(h)) && !ff.loaded.some((f) => /Inter|JetBrains|tabler/i.test(f)), `loaded: ${ff.loaded.join(', ')}`)
-    check(`${who}: no element asks for Inter`, !ff.firstFamilies.includes('Inter'), ff.firstFamilies.join(' | '))
+    check(`${who}: only Inter is loaded (no Plus Jakarta Sans, JetBrains Mono or Tabler)`, ff.inter && !ff.links.some((h) => /Jakarta|JetBrains|tabler/i.test(h)) && !ff.loaded.some((f) => /Jakarta|JetBrains|tabler/i.test(f)), `loaded: ${ff.loaded.join(', ')}`)
+    check(`${who}: no element asks for Plus Jakarta Sans`, !ff.firstFamilies.includes('Plus Jakarta Sans'), ff.firstFamilies.join(' | '))
     if (shots) for (const p of paths) {
       await page.goto(base + p); await settle(page)
       const name = p.replace(/\W+/g, '-').replace(/^-|-$/g, '')

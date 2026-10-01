@@ -10,11 +10,11 @@ import './PayrollOverview.view.css'
 export function PayrollOverviewView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
         <div style={{flex: "3 1 520px", minWidth: "0", display: "grid", gap: "16px"}}>
           <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "16px"}}>
             <div style={{display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "4px 12px"}}>
-              <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
+              <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                 {"Pay breakdown"}
               </h3>
               <span style={{fontSize: "12.5px", color: "#64748b"}}>
@@ -102,7 +102,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
                       {txt(v.netNote)}
                     </span>
                   </span>
-                  <strong style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", letterSpacing: "-.02em", color: "#0f6e56", fontVariantNumeric: "tabular-nums"}}>
+                  <strong style={{fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "24px", fontWeight: "800", letterSpacing: "-.02em", color: "#0f6e56", fontVariantNumeric: "tabular-nums"}}>
                     {txt(v.netLabel)}
                   </strong>
                 </div>
@@ -138,7 +138,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
           </section>
           <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "4px"}}>
             <div style={{display: "grid", gap: "3px", marginBottom: "8px"}}>
-              <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
+              <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                 {txt(v.checksTitle)}
               </h3>
               <p style={{margin: "0", fontSize: "13px", color: "#64748b"}}>
@@ -180,7 +180,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
         </div>
         <div style={{flex: "2 1 320px", minWidth: "0", display: "grid", gap: "16px"}}>
           <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "14px"}}>
-            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
+            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
               {"Run details"}
             </h3>
             <dl style={{margin: "0", display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: "10px 16px", fontSize: "13px"}}>
@@ -211,7 +211,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
             <>
               <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "12px"}}>
                 <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
-                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
+                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                     {"Bank disbursement"}
                   </h3>
                   <HrStatusPill tone={v.bankTone}>
@@ -259,7 +259,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
             </>
           ) : null}
           <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "14px"}}>
-            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
+            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
               {"Activity"}
             </h3>
             <ol style={{listStyle: "none", margin: "0", padding: "0", display: "grid", gap: "14px"}}>

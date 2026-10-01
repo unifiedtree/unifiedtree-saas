@@ -1,6 +1,6 @@
 /* hand-owned (F2d). TimePicker in the redesign's look — tokens only, weights 400–600.
    Trigger = the 42px field (like the DatePicker's); popover = 12px corners, hairline, popover shadow. */
-.dctp { position: relative; width: 100%; min-width: 0; font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif); color: var(--u-ink, #0E1B16); }
+.dctp { position: relative; width: 100%; min-width: 0; font-family: var(--u-font, 'Inter', system-ui, sans-serif); color: var(--u-ink, #0E1B16); }
 .dctp-trigger {
   position: relative; width: 100%; height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 12px; box-sizing: border-box;
   border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff);
@@ -20,7 +20,7 @@
   position: fixed; top: 0; left: 0; z-index: 1200; width: 276px; box-sizing: border-box; padding: 12px;
   display: grid; gap: 10px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff);
   box-shadow: var(--u-shp, 0 24px 60px -20px rgba(14, 27, 22, .35));
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif); font-size: 13px; font-weight: 500; color: var(--u-ink, #0E1B16);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif); font-size: 13px; font-weight: 500; color: var(--u-ink, #0E1B16);
   text-align: left; user-select: none;
 }
 .dctp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 4px 0; }

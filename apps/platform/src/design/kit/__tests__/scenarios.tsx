@@ -19,7 +19,7 @@ declare global { interface Window { __log: string[] } }
 export const log = (entry: string) => { (window.__log ||= []).push(entry) }
 
 function Frame({ children }: { children: ReactNode }) {
-  return <div style={{ padding: 24, display: 'grid', gap: 16, justifyItems: 'start', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>{children}</div>
+  return <div style={{ padding: 24, display: 'grid', gap: 16, justifyItems: 'start', fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)" }}>{children}</div>
 }
 
 // ── Stepped side panel ──
