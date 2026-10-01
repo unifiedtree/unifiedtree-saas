@@ -12,6 +12,7 @@ import { apiJson } from '@/core/api/client'
 import type { EmploymentStatus, WorkforceEmployee } from '@/modules/hrms/api/useWorkforce'
 import { useEmergencyContacts, useEmployeeAddresses } from '@/modules/hrms/api/useEmployeeProfile'
 import { useMyEmployeeRecord } from '@/modules/hrms/api/shared/useMyEmployeeRecord'
+import { useMyDocumentSummary } from '@/modules/hrms/api/useDocument'
 import { dayCell } from '@/modules/hrms/attendance/daily/MyAttendance'
 import {
   useInvitationStatus, useMyDocumentsIf, useMyGoalsIf, useMyLeaveBalancesIf, useMyMissingDocumentsIf, useMyMonthIf, useMyReviewsIf, useMyWeekIf,
@@ -179,6 +180,7 @@ export const Profile: React.FC = () => {
   const monthQ = useMyMonthIf(year, month, linked && showAttendance)
   const balances = useMyLeaveBalancesIf(year, linked && canLeave)
   const docs = useMyDocumentsIf(linked && canDocs)
+  const docSummary = useMyDocumentSummary(linked && canDocs)
   const missing = useMyMissingDocumentsIf(linked && canDocs)
   const goals = useMyGoalsIf(linked && canPerf)
   const reviews = useMyReviewsIf(linked && canPerf)
@@ -292,9 +294,11 @@ export const Profile: React.FC = () => {
   // ── Overview ──
   const w = week.data
   const leaveLeft = (balances.data ?? []).reduce((n, b) => n + (b.available || 0), 0)
+  // Exact counts over all your documents (BW-77); older servers fall back to the first page.
+  const docSum = docSummary.data
   const docRows = docs.data?.content ?? []
-  const docTotal = docs.data?.totalElements
-  const docPending = docTotal != null && docTotal <= docRows.length ? docRows.filter((x) => (x.verificationStatus || 'PENDING') === 'PENDING').length : null
+  const docTotal = docSum ? docSum.onFile : docs.data?.totalElements
+  const docPending = docSum ? docSum.waitingForHr : docTotal != null && docTotal <= docRows.length ? docRows.filter((x) => (x.verificationStatus || 'PENDING') === 'PENDING').length : null
   const goalList = (goals.data ?? []).filter((g) => g.status !== 'DROPPED')
   const onTrack = goalList.filter((g) => g.status === 'ACTIVE' || g.status === 'COMPLETED').length
   const glance: Glance[] = linked ? [
@@ -322,6 +326,7 @@ export const Profile: React.FC = () => {
   if (emp?.employmentStatus === 'NOTICE_PERIOD') attention.push({ tone: 'amber', title: 'You are serving notice', sub: rec?.lastWorkingDay ? `Last working day ${fmtDate(rec.lastWorkingDay)}` : undefined })
   const miss = missing.data ?? []
   if (miss.length) attention.push({ tone: 'red', title: `${plural(miss.length, 'document')} still to upload`, sub: miss.slice(0, 3).map((m) => m.displayName).join(', ') + (miss.length > 3 ? '…' : ''), cta: { label: 'Upload', onClick: () => setTab('documents') } })
+  if (docSum?.expired) attention.push({ tone: 'red', title: `${plural(docSum.expired, 'document')} expired`, sub: docSum.expiredTitles.slice(0, 3).join(', ') + (docSum.expiredTitles.length > 3 ? '…' : ''), cta: { label: 'Upload again', onClick: () => setTab('documents') } })
   const due = (reviews.data ?? []).filter((r) => r.status === 'PENDING' || r.status === 'IN_PROGRESS')
   if (due.length) attention.push({ tone: 'amber', title: due.length === 1 ? `Self-review to finish${due[0].cycleName ? ` · ${due[0].cycleName}` : ''}` : `${due.length} reviews to finish`, cta: { label: 'Review', onClick: () => setTab('performance') } })
   const cells: CalendarDay[] = (monthQ.data ?? []).map((x) => dayCell(x, today))

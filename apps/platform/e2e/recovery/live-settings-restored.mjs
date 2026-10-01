@@ -80,6 +80,18 @@ const BUSINESS_APPS = ['CRM', 'Accounts', 'Projects', 'Inventory', 'Purchase']
 const PANEL_FOR_ROW = { 'Settings sections': 'Settings pages', 'HR Setup sections': 'HR setup pages' }
 // Pages' own module bars that the top bar's page tabs show now (the page's copy is hidden).
 const TOP_FOR_BAR = { 'Payroll sections': 'Payroll pages', 'Master sections': 'Workforce pages' }
+// Pages a later redesign package rebuilt on purpose: what the baseline recorded, adjusted to the new page.
+// My profile (P-PROFILE, DECISIONS 17): the tabbed profile. Its heading is the person's name, and its bar is
+// the "Profile sections" tabs with Overview open (the person's own tabs, Preferences last). The old
+// "On this page" sections moved: Face enrollment and Employment to Overview (checked by its anchor below),
+// delegation and notification choices to Preferences, My documents to Documents.
+const REDESIGNED = {
+  '/profile': (was, now) => {
+    const tabs = now.bars.find((b) => b.bar === 'Profile sections')
+    const ok = tabs && tabs.items[0] === 'Overview' && tabs.items.at(-1) === 'Preferences'
+    return { ...was, heading: now.heading.length === 1 ? now.heading : ['(the person’s name)'], bars: [{ bar: 'Profile sections', items: ok ? tabs.items : ['Overview', '…', 'Preferences'], lit: ['Overview'] }] }
+  },
+}
 // Bars whose lit item is the chosen tab (the "On this page" jump bars light what is scrolled into view).
 const LIT_BARS = /(sections|views|Master inner sections)$/
 // API answers expected here: the session refresh probe (nothing to refresh), the admin contacts behind
@@ -300,6 +312,7 @@ try {
       const docsOpen = openBefore('/settings/documents')
       const compare = async (label, path, was) => {
         let now = await look(s, path)
+        if (REDESIGNED[path] && was) was = REDESIGNED[path](was, now)
         let diff = []
         const run = async () => {
           diff = []
@@ -336,6 +349,15 @@ try {
         return now
       }
       for (const path of PAGES) await compare(path, path, before.pages[path])
+      // My profile's "On this page" listed Face enrollment; it now lives on the Overview tab under the same anchor.
+      if (before.pages['/profile']?.bars?.some((b) => b.items.includes('Face enrollment'))) {
+        await s.page.goto(base + '/profile#st-face'); await settle(s.page)
+        const face = s.page.locator('#st-face')
+        const shown = await face.getByRole('heading', { name: 'Face enrollment', exact: true }).isVisible().catch(() => false)
+        const top = shown ? await face.evaluate((el) => el.getBoundingClientRect().top) : Infinity
+        const onOverview = (await s.page.getByRole('tab', { name: 'Overview', exact: true }).getAttribute('aria-selected').catch(() => null)) === 'true'
+        check(`${tag}: /profile#st-face opens My profile's Overview with Face enrollment scrolled into view`, shown && onOverview && top < 400, `shown ${shown}, overview ${onOverview}, top ${Math.round(top)}`)
+      }
       // ── the hub's addresses open the original page ──
       for (const [hub, page] of HUB) {
         if (before.pages[page]) await compare(`${hub} (the hub's address for ${page})`, hub, before.pages[page])

@@ -22,6 +22,7 @@ import { TableCard, HrStatusPill, HrButton, type PillTone } from '@/shared/compo
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import {
   useEmployeeDocuments,
+  useEmployeeDocumentSummary,
   useVerifyDocument,
   useRejectDocument,
   type DocumentCategory,
@@ -71,6 +72,9 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
     employeeId, page, canRead, EMPLOYEE_DOCUMENTS_PAGE_SIZE,
   )
 
+  // Exact counts over every document (BW-77), not just the page on screen; absent on older servers.
+  const summary = useEmployeeDocumentSummary(employeeId, canRead)
+  const sum = summary.data
   const docs = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 0
@@ -89,7 +93,9 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
   return (
     <SubSection
       title="Filed documents"
-      hint={total ? `${total} document${total === 1 ? '' : 's'} on record` : 'Contracts, ID proofs, certificates and tax records.'}
+      hint={sum
+        ? [`${sum.onFile} on file`, sum.waitingForHr ? `${sum.waitingForHr} waiting for review` : '', sum.expiringSoon ? `${sum.expiringSoon} expiring soon` : '', sum.expired ? `${sum.expired} expired` : '', sum.rejected ? `${sum.rejected} rejected` : ''].filter(Boolean).join(' · ')
+        : total ? `${total} document${total === 1 ? '' : 's'} on record` : 'Contracts, ID proofs, certificates and tax records.'}
       action={canWrite ? (
         <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/documents')}>
           Open Document Vault

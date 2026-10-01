@@ -31,7 +31,7 @@ import { useCompanies, useDepartments, useDesignations, useBranches, useEmployme
 import { useEmployeeWeeklySummary } from '../api/useAttendance'
 import { useEmployeeShift, useShiftPolicies } from '../api/useShiftPolicies'
 import { useEmployeeStructure } from '../api/usePayroll'
-import { useEmployeeDocuments } from '../api/useDocument'
+import { useEmployeeDocuments, useEmployeeDocumentSummary } from '../api/useDocument'
 import { useEmployeeKpis } from '../api/usePerformance'
 import { useEmployeeLeaveBalances } from '../api/useLeave'
 import type { OnboardingRecordData } from '../onboarding/OnboardingRecord'
@@ -117,6 +117,8 @@ export function EmployeeDetail() {
   const structure = useEmployeeStructure(canSalary && emp ? id : '')
   const balances = useEmployeeLeaveBalances(id, Number(today.slice(0, 4)), !canSalary && (canLeave || canLeaveTeam) && !!emp)
   const documents = useEmployeeDocuments(id, 0, canDocs && !!emp, EMPLOYEE_DOCUMENTS_PAGE_SIZE)
+  // Exact counts over all of this person's documents (BW-77); older servers fall back to the first page.
+  const docSummary = useEmployeeDocumentSummary(id, canDocs && !!emp)
   // Goals tile: only goals still being worked on (active or at risk), not completed or dropped ones.
   const kpis = useEmployeeKpis(id, { enabled: canPerf && !!emp, activeOnly: true })
   const invitation = useInvitationStatus(id, !!emp)
@@ -168,10 +170,12 @@ export function EmployeeDetail() {
 
     // ── Overview: glance ──
     const late = w?.days?.filter((x) => x.status === 'LATE').length ?? 0
-    const docTotal = documents.data?.totalElements
+    const sum = docSummary.data
+    const docTotal = sum ? sum.onFile : documents.data?.totalElements
     const docRows = documents.data?.content ?? []
-    // Pending can only be counted when every document is on this first page.
-    const docPending = docTotal != null && docTotal <= docRows.length ? docRows.filter((d) => ((d as { verificationStatus?: string }).verificationStatus || 'PENDING') === 'PENDING').length : null
+    // Waiting for review: the summary's exact count; without it, only when every document is on the first page.
+    const docPending = sum ? sum.waitingForHr
+      : docTotal != null && docTotal <= docRows.length ? docRows.filter((d) => ((d as { verificationStatus?: string }).verificationStatus || 'PENDING') === 'PENDING').length : null
     const leaveLeft = (balances.data ?? []).reduce((n, b) => n + (b.available || 0), 0)
     const glance: Glance[] = [
       canAttendance
@@ -235,6 +239,7 @@ export function EmployeeDetail() {
     const noOut = w?.days?.filter((x) => x.checkInTime && !x.checkOutTime && x.date < today) ?? []
     if (noOut.length) attention.push({ tone: 'amber', title: `${plural(noOut.length, 'day')} with no punch-out this week`, sub: noOut.map((x) => fmtDate(x.date)).join(', '), cta: { label: 'See attendance', onClick: () => setTab('attendance') } })
     if (docPending) attention.push({ tone: 'amber', title: `${plural(docPending, 'document')} to review`, sub: 'Verify each one before payroll uses it', cta: { label: 'Review', onClick: () => setTab('documents') } })
+    if (sum?.expired) attention.push({ tone: 'red', title: `${plural(sum.expired, 'document')} expired`, sub: sum.expiredTitles.slice(0, 3).join(', ') + (sum.expiredTitles.length > 3 ? '…' : ''), cta: { label: 'See documents', onClick: () => setTab('documents') } })
 
     // ── Overview: this month ──
     const cells: CalendarDay[] = (month.data ?? []).map((d) => dayCell(d, today))
@@ -364,7 +369,7 @@ export function EmployeeDetail() {
       ...(canSalary || canBank ? [{ key: 'payroll', label: 'Payroll' }] : []),
       ...(canLeave || canLeaveTeam || self ? [{ key: 'leave', label: 'Leave' }] : []),
       ...(canClaims || canClaimsTeam || self ? [{ key: 'expenses', label: 'Expenses' }] : []),
-      ...(canDocs ? [{ key: 'documents', label: 'Documents', badge: docTotal || undefined }] : []),
+      ...(canDocs ? [{ key: 'documents', label: 'Documents', badge: (documents.data?.totalElements ?? docTotal) || undefined }] : []),
       ...(canLetters ? [{ key: 'letters', label: 'Letters' }] : []),
       ...(canPerf || canSkills ? [{ key: 'performance', label: 'Performance' }] : []),
       { key: 'exit', label: 'Exit' },
@@ -387,7 +392,7 @@ export function EmployeeDetail() {
       },
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emp, companies, departments, designations, branches, types, shiftList, managers, week.data, week.isLoading, week.error, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, balances.data, balances.isLoading, balances.error, documents.data, documents.isLoading, kpis.data, kpis.isLoading, invitation.data, month.data, onboarding.data, onboarding.isLoading, onboarding.error, faceQ.data, faceQ.isLoading, inviting, today, me?.employeeId, canRead, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, canAccess, self])
+  }, [emp, companies, departments, designations, branches, types, shiftList, managers, week.data, week.isLoading, week.error, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, balances.data, balances.isLoading, balances.error, documents.data, documents.isLoading, docSummary.data, kpis.data, kpis.isLoading, invitation.data, month.data, onboarding.data, onboarding.isLoading, onboarding.error, faceQ.data, faceQ.isLoading, inviting, today, me?.employeeId, canRead, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, canAccess, self])
 
   if (empQ.isLoading) {
     return (

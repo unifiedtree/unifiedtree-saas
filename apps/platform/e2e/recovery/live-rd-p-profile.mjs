@@ -13,7 +13,7 @@
 //
 //   live-slot.sh /c/REACT/ut-wt/rd-p-profile 3133 node e2e/recovery/live-rd-p-profile.mjs
 //   env: RECOVERY_APP_URL, RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev), SHOTS_DIR
-/* global process, console, fetch, setTimeout, localStorage, document, getComputedStyle */
+/* global process, console, fetch, setTimeout, localStorage, document, getComputedStyle, URL */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -163,7 +163,20 @@ try {
     }
     await s.go(`/hrms/employees/${READER}?tab=job`)
     check('owner: Job shows the reporting line with View in org chart', await s.page.getByRole('button', { name: 'View in org chart' }).count() > 0)
+    await s.page.getByRole('button', { name: 'View in org chart' }).click()
+    await s.page.waitForURL((u) => u.pathname === '/hrms/org-chart', { timeout: 15_000 }).catch(() => {})
+    await s.settle()
+    const focused = await s.page.locator(`.uoc-node.is-found[data-person="${READER}"]`).waitFor({ timeout: 15_000 }).then(() => true, () => false)
+    check('owner: View in org chart opens the chart focused on the person', new URL(s.page.url()).searchParams.get('focus') === READER && focused, s.page.url())
+    await s.shot('hr-orgchart-focus-1440-light')
     await s.go(`/hrms/employees/${READER}?tab=payroll`)
+    await s.go(`/hrms/employees/${READER}?tab=documents`)
+    const docSum = await owner.call(`/v1/document/employee/${READER}/summary`)
+    const hint = await s.page.getByRole('heading', { name: 'Filed documents' }).locator('xpath=ancestor::section[1]').innerText().catch(() => '')
+    check('owner: Documents shows the exact counts from the summary (BW-77)', docSum.status === 200 && hint.includes(`${docSum.json.onFile} on file`), `${docSum.status} ${JSON.stringify(docSum.json).slice(0, 120)}`)
+    await s.go(`/hrms/employees/${READER}?tab=letters`)
+    check('owner: Letters lists generated letters with their signed or issued date (BW-71)', await s.page.getByRole('heading', { name: 'Generated letters' }).count() === 1
+      && (await s.page.getByText(/^(Signed|Issued) \d/).count() > 0 || await s.page.getByText('No letters generated').count() > 0))
     check('owner: Payroll lists payslips (or says there are none)', await s.page.getByRole('heading', { name: 'Payslips' }).count() > 0)
     await s.go(`/hrms/employees/${READER}?tab=exit`)
     check('owner: Exit shows the F&F card with its link', await s.page.getByRole('link', { name: 'Open full & final settlements' }).count() > 0)

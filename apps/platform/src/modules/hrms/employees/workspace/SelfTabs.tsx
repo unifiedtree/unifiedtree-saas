@@ -188,8 +188,8 @@ export function SelfLetters() {
       <ListRows label="Letters" inset>
         {rows.map((l) => (
           <ListRow key={l.id} variant="hover" leading={<IconTile icon="fileText" tone="brand" size={34} />}
-            title={l.subject || LETTER_TYPE[l.type] || 'Letter'} sub={`${LETTER_TYPE[l.type] || 'Letter'} · issued ${fmtDate(l.sentAt || l.createdAt)}`}
-            end={l.status === 'SIGNED' ? <StatusPill tone="brand">Signed</StatusPill> : undefined}
+            title={l.subject || LETTER_TYPE[l.type] || 'Letter'} sub={`${LETTER_TYPE[l.type] || 'Letter'} · ${l.signedAt ? `signed ${fmtDate(l.signedAt)}` : `issued ${fmtDate(l.issueDate || l.sentAt || l.createdAt)}`}`}
+            end={l.status === 'SIGNED' || l.signedAt ? <StatusPill tone="brand">Signed</StatusPill> : l.signatureRequested && l.status !== 'VOID' ? <StatusPill tone="warning">To sign</StatusPill> : undefined}
             actions={l.hasPdf ? <Button size={30} variant="secondary" onClick={() => downloadLetterPdf(l.id).catch((e) => toast.error('Couldn’t download the letter', { detail: (e as Error)?.message }))}>Download</Button> : undefined} />
         ))}
       </ListRows>
