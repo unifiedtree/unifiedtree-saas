@@ -105,7 +105,7 @@
 }
 
 /* Muster roll: how the day splits. */
-.umr-split { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: 10px; }
+.umr-split { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); gap: 10px; }
 .umr-tile { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--u-ln2, #EDF1EF); border-radius: 12px; background: var(--u-sf2, #F7F9F8); }
 .umr-tile__label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--u-ink2, #4A5A54); }
 .umr-tile__n { font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
