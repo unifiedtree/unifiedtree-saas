@@ -258,7 +258,7 @@ function MonthBlock({ m, today, a, mobile, onOpenLogs }: { m: Props['m']; today:
             <div className="apl-late">
               {d.lateMarks.map((l) => (
                 <button key={l.code} type="button" className="apl-late__item" onClick={() => l.id && navigate('/hrms/employees/' + l.id)}>
-                  <CellPerson name={l.name} sub={l.dept} />
+                  <CellPerson name={l.name} sub={l.dept !== '—' ? l.dept : undefined} />
                   <span className="apl-late__times">{l.n === 1 ? '1 time' : `${l.n} times`}</span>
                   <span className="apl-bar apl-bar--late" aria-hidden="true"><span style={{ width: `${((l.n / lmMax) * 100).toFixed(1)}%` }} /></span>
                 </button>

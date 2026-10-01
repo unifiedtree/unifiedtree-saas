@@ -63,7 +63,7 @@ export function RosterView({ rows, shifts, loading, error, onRetry, canEdit, fil
   }
 
   const columns: TableColumn<RosterRow>[] = [
-    { key: 'name', header: 'Employee', primary: true, render: (r) => <CellPerson name={r.name} sub={`${r.code} · ${r.dept}`} /> },
+    { key: 'name', header: 'Employee', primary: true, render: (r) => <CellPerson name={r.name} sub={[r.code, r.dept].filter((x) => x && x !== '—').join(' · ') || undefined} /> },
     {
       key: 'shift', header: 'Shift', render: (r) => {
         const s = r.shift ? byId.get(r.shift) : undefined

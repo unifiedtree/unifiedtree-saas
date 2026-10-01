@@ -144,6 +144,7 @@ button.apl-shiftcard:focus-visible { outline: none; box-shadow: var(--u-focus, 0
 .apl-pick__opt:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
 
 @media (max-width: 640px) {
+  .apl-row { align-items: flex-start; }
   .apl-grow-2, .apl-grow-15, .apl-grow-1, .apl-half { flex-basis: 100%; }
   .apl-search { flex-basis: 100%; min-width: 0; }
   .apl-shiftcard__time { font-size: 20px; }

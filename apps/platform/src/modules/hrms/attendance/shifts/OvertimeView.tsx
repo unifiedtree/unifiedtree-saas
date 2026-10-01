@@ -66,7 +66,7 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
     for (const o of (entries.data ?? []) as OvertimeEntry[]) {
       const iso = isoDay(o.date), p = who(o.employeeId)
       out.push({
-        key: `p-${o.id}`, id: o.id, source: 'punch', employeeId: o.employeeId, name: o.employeeName, sub: p ? `${p.code} · ${p.dept}` : '',
+        key: `p-${o.id}`, id: o.id, source: 'punch', employeeId: o.employeeId, name: o.employeeName, sub: p ? [p.code, p.dept].filter((x) => x && x !== '—').join(' · ') : '',
         date: iso, minutes: counted(o), reason: o.reason || 'None given', status: o.status, note: o.note || '',
         facts: [
           { label: 'Day', value: fmtWd(iso) },
@@ -81,7 +81,7 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
       const p = who(r.employeeId)
       out.push({
         key: `r-${r.id}`, id: r.id, source: 'request', employeeId: r.employeeId, name: r.employeeName || 'Employee',
-        sub: p ? `${p.code} · ${p.dept}` : r.employeeCode || '', date: r.date, minutes: r.minutes, reason: r.reason, status: r.status,
+        sub: p ? [p.code, p.dept].filter((x) => x && x !== '—').join(' · ') : r.employeeCode || '', date: r.date, minutes: r.minutes, reason: r.reason, status: r.status,
         note: r.decisionNote || '',
         facts: [{ label: 'Day', value: fmtWd(r.date) }, { label: 'Extra time', value: '+' + hm(r.minutes) }, { label: 'Asked', value: fmtShort(r.createdAt.slice(0, 10)) }],
       })
