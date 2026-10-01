@@ -36,7 +36,7 @@ interface Item { key: string; kind: 'day' | 'face'; name: string; sub: string; d
 function whatHappened(i: ReviewException): string {
   const f = i.flags[0]
   if (f === 'LATE' || f === 'HALF_DAY') return `Came in ${hhmmIst(i.checkIn)}${i.lateMinutes ? ` · ${i.lateMinutes} min late` : ''}${f === 'HALF_DAY' && i.workedMinutes != null ? ` · worked ${hm(i.workedMinutes)}` : ''}`
-  if (f === 'ABSENT') return 'No punch yet · not on leave'
+  if (f === 'ABSENT') return i.date < istToday() ? 'No punch · not on leave' : 'No punch yet · not on leave'
   if (f === 'EARLY_LEAVE') return `Left ${hhmmIst(i.checkOut)}${i.earlyByMinutes ? ` · ${i.earlyByMinutes} min early` : ''}`
   if (f === 'NO_CHECKOUT') return 'No check-out recorded'
   if (f === 'OUTSIDE_ZONE') return `Punched ${i.distanceMeters != null ? `${i.distanceMeters >= 1000 ? (i.distanceMeters / 1000).toFixed(1) + ' km' : i.distanceMeters + ' m'} from ` : 'outside '}${i.zoneName || i.branchName || 'the zone'}`

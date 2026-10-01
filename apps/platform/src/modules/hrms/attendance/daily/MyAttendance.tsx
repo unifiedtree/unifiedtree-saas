@@ -151,7 +151,7 @@ export function MyAttendance({ perms }: { perms: DailyPerms }) {
       )}
 
       <StatGrid min={170} label="This month at a glance">
-        <StatCard variant="stat" label="Present" icon="userCheck" tone="brand" loading={stats.isLoading} value={s ? s.presentDays : null} note={`of ${working} working days`} />
+        <StatCard variant="stat" label="Present" icon="userCheck" tone="brand" loading={stats.isLoading} value={s ? s.presentDays : null} note={`of ${working} working ${working === 1 ? 'day' : 'days'}`} />
         <StatCard variant="stat" label="Late" icon="clock" tone="gold" loading={history.isLoading} value={history.data ? lates.length : null}
           note={lates.length ? lates.slice(0, 3).map((d) => Number(d.date.slice(8, 10))).join(', ') + (lates.length > 3 ? '…' : '') : 'None this month'} />
         <StatCard variant="stat" label="Work from home" icon="home" tone="brand" loading={history.isLoading} value={history.data ? home : null} note="days this month" />

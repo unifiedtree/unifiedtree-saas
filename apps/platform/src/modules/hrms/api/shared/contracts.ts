@@ -572,7 +572,7 @@ export interface MyEmployeeRecord {
 
 export interface WebPunchSetting {
   companyId: string
-  /** "Allow web check-in": off by default. While off, the punch API refuses WEB and "Your day" has no Check in/out. */
+  /** "Allow web check-in": on by default (client decision, 1 Oct; a web punch needs a face scan). While off, the punch API refuses WEB and "Your day" has no Check in/out. */
   allowWebPunch: boolean
 }
 

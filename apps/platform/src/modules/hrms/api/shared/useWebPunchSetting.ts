@@ -1,7 +1,7 @@
-// The company switch "Allow web check-in" (off by default).
+// The company switch "Allow web check-in" (on by default since 1 Oct; an admin can turn it off).
 //
 // Contract C0 · BW-24 · owner P-ATT-DAY (migration V143_53:
-// settings.hr_configuration.allow_web_punch, JDBC only, default false)
+// settings.hr_configuration.allow_web_punch, JDBC only, default TRUE; no HR configuration row counts as on)
 //   GET /v1/attendance/web-punch-setting?companyId=   → WebPunchSetting
 //       Permission: anyone signed in.
 //   PUT /v1/attendance/web-punch-setting?companyId=  { allowWebPunch }   → WebPunchSetting
@@ -36,7 +36,7 @@ export function useWebPunchSetting(companyId: string | undefined, opts?: { enabl
   })
 }
 
-/** True only when the company has switched web check-in on (off while loading, on error and when not available). */
+/** True only when web check-in is on for the company (false while loading, on error and when not available). */
 export function webPunchAllowed(setting: { data: WebPunchSetting | undefined }): boolean {
   return setting.data?.allowWebPunch === true
 }

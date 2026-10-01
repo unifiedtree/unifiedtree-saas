@@ -14,6 +14,7 @@ import { Select, useToast } from '@/design/kit/overlays'
 import { Pager, Timeline, type TimelineItem } from '@/design/kit/data'
 import { MONTHS, addDays, fmtLong, fmtWd, istToday } from '@/design/dc/dates'
 import { useTeamDashboard } from '../../api/useAttendance'
+import { notAvailableReason } from '../../api/shared/available'
 import {
   useDecideFacePunch, useEmployeeFaceEvents, useFaceReviewEvents, statusLabel, type FaceReviewEvent,
 } from '../../api/useAttendanceReview'
@@ -159,7 +160,8 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
         </Section>
       )}
 
-      <div className="udt-split udt-split--cal">
+      {/* A server without the per-person endpoint yet (404 / FEATURE_NOT_READY): the block stays out. */}
+      {!notAvailableReason(month.error) && <div className="udt-split udt-split--cal">
         <Section title="Face punches by person" variant="section" body="tight" className="udt-main"
           sub={personName ? `${personName} · ${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}` : 'Pick a person to see their month.'}
           actions={
@@ -180,7 +182,7 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
           {timeline.length ? <Timeline variant="rail" label="The day’s face punches" items={timeline} />
             : <p className="udt-q">{person ? 'No face punches on this day.' : 'Pick a person.'}</p>}
         </Section>
-      </div>
+      </div>}
 
       {perms.face && (
         <Section title="Face Punch Logs" variant="section" body="flush"

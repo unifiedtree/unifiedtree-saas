@@ -44,13 +44,13 @@ export interface LogRow {
   punchedBy: string | null; punchedByDetail: string | null; outside: boolean; rejected: boolean
 }
 
-const CARD: Record<TileKey, { label: string; ani: 'present' | 'late' | 'wfh' | 'leave' | 'absent' | 'none'; accent: 'present' | 'late' | 'wfh' | 'leave' | 'absent' | 'none' }> = {
-  PRESENT: { label: 'Present', ani: 'present', accent: 'present' },
-  LATE: { label: 'Late', ani: 'late', accent: 'late' },
-  WFH: { label: 'Work from home', ani: 'wfh', accent: 'wfh' },
-  ON_LEAVE: { label: 'On leave', ani: 'leave', accent: 'leave' },
-  ABSENT: { label: 'Absent', ani: 'absent', accent: 'absent' },
-  NOT_MARKED: { label: 'Not marked', ani: 'none', accent: 'none' },
+const CARD: Record<TileKey, { label: string; icon: string; tone: 'brand' | 'gold' | 'red' | 'gray' }> = {
+  PRESENT: { label: 'Present', icon: 'userCheck', tone: 'brand' },
+  LATE: { label: 'Late', icon: 'clock', tone: 'gold' },
+  WFH: { label: 'Work from home', icon: 'home', tone: 'brand' },
+  ON_LEAVE: { label: 'On leave', icon: 'calendarDays', tone: 'gray' },
+  ABSENT: { label: 'Absent', icon: 'userX', tone: 'red' },
+  NOT_MARKED: { label: 'Not marked', icon: 'help', tone: 'gray' },
 }
 const PAGE = 50
 const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : null)
@@ -215,21 +215,25 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
     if (k === 'PRESENT') { const onTime = rows.filter((r) => r.status === 'PRESENT').length; return `${onTime} on time` }
     if (k === 'WFH') { const sched = rows.filter((r) => r.status !== 'ON_LEAVE' && r.status !== 'HOLIDAY' && r.status !== 'WEEKLY_OFF').length; return `${sched ? Math.round((counts.WFH / sched) * 100) : 0}% of scheduled` }
     if (k === 'ON_LEAVE') { const p = rows.filter((r) => r.pendingLeave).length; return p ? `approved · ${p} waiting` : 'approved' }
-    if (k === 'NOT_MARKED') return isToday && notMarked.length ? <span>No punch yet</span> : 'No punch recorded'
+    if (k === 'NOT_MARKED') return 'no punch yet'
     const v = versus(counts[k], yesterday?.[k])
-    return v ? `${v.delta === '0' ? 'Same as' : v.trend === 'up' ? `↗ ${v.delta}` : `↘ ${v.delta}`} vs yesterday` : 'vs yesterday'
+    return v && v.delta === '0' ? 'same as yesterday' : 'vs yesterday'
   }
-  const cards = TILE_KEYS.filter((k) => isToday || k !== 'NOT_MARKED').map((k, i) => (
-    <StatCard key={k} label={CARD[k].label} aniIcon={CARD[k].ani} accent={CARD[k].accent} index={i}
-      value={team.isError ? null : counts[k]} note={cardNote(k)} loading={loading}
-      active={status === k} onClick={() => setStatus(k)}
-      ariaLabel={`${CARD[k].label} ${counts[k] ?? ''}${status === k ? ', showing now' : ''}`} />
-  ))
+  const cards = TILE_KEYS.filter((k) => isToday || k !== 'NOT_MARKED').map((k, i) => {
+    const v = k === 'LATE' || k === 'ABSENT' ? versus(counts[k], yesterday?.[k]) : null
+    return (
+      <StatCard key={k} variant="stat" label={CARD[k].label} icon={CARD[k].icon} tone={CARD[k].tone} index={i}
+        value={team.isError ? null : counts[k]} note={cardNote(k)} loading={loading}
+        delta={v && v.delta !== '0' ? v.delta : undefined} trend={v?.trend} mood={v?.mood}
+        active={status === k} onClick={() => setStatus(k)}
+        ariaLabel={`${CARD[k].label} ${counts[k] ?? ''}${status === k ? ', showing now' : ''}`} />
+    )
+  })
 
   // ── table ──
   const columns: TableColumn<LogRow>[] = [
     { key: 'name', header: 'Employee', primary: true, render: (r) => <CellPerson name={r.name} sub={[r.code, r.dept !== '—' ? r.dept : null, r.punchedBy ? `Punched by ${r.punchedBy}` : null].filter(Boolean).join(' · ')} /> },
-    { key: 'shift', header: 'Shift', render: (r) => <span className="udt-two"><span>{r.shiftName || 'No shift yet'}</span>{r.shiftStart && <span className="udt-q">{r.shiftStart}{r.shiftEnd ? `–${r.shiftEnd}` : ''}</span>}</span> },
+    { key: 'shift', header: 'Shift', render: (r) => <span className="udt-two"><span>{r.shiftName || 'No shift yet'}</span>{r.shiftName && r.shiftStart && <span className="udt-q">{r.shiftStart}{r.shiftEnd ? `–${r.shiftEnd}` : ''}</span>}</span> },
     {
       key: 'in', header: 'Check-in', render: (r) => (
         <span className="udt-two">
@@ -259,7 +263,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
       },
     },
     {
-      key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', width: 52, hideOnCards: false, render: (r) => (
+      key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', width: 64, render: (r) => (
         <Menu label={`Actions for ${r.name}`} width={240} placement="bottom-end"
           trigger={({ props }) => <button type="button" {...props} className="udt-more" aria-label={`More for ${r.name}`} data-row-ignore="">⋮</button>}
           items={[
