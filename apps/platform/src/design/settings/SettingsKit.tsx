@@ -1,20 +1,23 @@
-// The settings-page pattern from the Payroll Settings design
-// (docs/Designs/UnifiedTree Payroll Settings.html, PaySettings.dc.html): a page
+// The settings-page pattern in the redesign's look (design_handoff_hrms_redesign:
+// PgSetup "HR configuration", PgAdmin "Settings", UtSection): the kit page
 // header, a sticky "On this page" list that follows the scroll, one card per
 // section with an on/off switch, a view-only note, loading / error / no-access
-// states, a sticky "You have unsaved changes" bar and dark toasts. Every style
-// value is copied from that design so other settings pages match it exactly.
-import { createElement, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { HrButton, HrPageHeader } from '@/shared/components/hr'
+// states, a sticky "You have unsaved changes" bar and the kit toast. Colours are
+// the design tokens only (SettingsKit.css), so light and dark both work.
+import { createElement, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { HrButton } from '@/shared/components/hr'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { SkeletonBlock } from '@/shared/components/SkeletonCard'
-import { Field, Input, Modal } from '@unifiedtree/ui-kit'
+import { Modal } from '@unifiedtree/ui-kit'
 import { dashIcon, dashIconComponent } from '@/design/dc/icons'
 import { useIsMobile } from '@/design/dc/DesignFrame'
 import { ToastSlot, TOAST_MS } from '@/design/kit/Toast'
+import { PageHeader } from '@/design/kit/PageHeader'
+import { StatusPill } from '@/design/kit/StatusPill'
+import '@/design/module/ModuleKit.css'
+import './SettingsKit.css'
 
 const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
-const CARD: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 }
 
 export interface SettingsNavItem { key: string; label: string; state: 'on' | 'off' | 'soon' | 'none'; errors?: number; meta?: string }
 
@@ -142,28 +145,25 @@ export function SettingsPage({
     if (sc) sc.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - offset), behavior: 'smooth' })
     ;(el.querySelector('h2') as HTMLElement | null)?.focus({ preventScroll: true })
   }
-  const dot = (s: SettingsNavItem['state']) => s === 'on' ? <span aria-hidden="true" style={{ flex: '0 0 auto', width: 7, height: 7, borderRadius: 999, background: '#10b981' }} />
-    : s === 'off' ? <span aria-hidden="true" style={{ flex: '0 0 auto', width: 7, height: 7, borderRadius: 999, background: '#cbd5e1' }} />
-      : s === 'soon' ? <span aria-hidden="true" style={{ flex: '0 0 auto', width: 7, height: 7, boxSizing: 'border-box', borderRadius: 999, border: '1.5px solid #cbd5e1' }} /> : null
+  const dot = (s: SettingsNavItem['state']) => s === 'on' || s === 'off' || s === 'soon' ? <span aria-hidden="true" className="uks-dot" data-state={s} /> : null
   const tocItem = (t: SettingsNavItem) => {
     const on = t.key === active
     return (
-      <a key={t.key} href={'#st-' + t.key} aria-current={on ? 'location' : undefined} onClick={(e) => { e.preventDefault(); jump(t.key) }} className={on ? undefined : 'ut-toc-idle'}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 12px', borderRadius: 10, background: on ? '#ecfdf5' : 'transparent', color: on ? '#0a5240' : '#475569', fontSize: 13.5, fontWeight: on ? 700 : 500, textDecoration: 'none', transition: 'background-color .15s,color .15s' }}>
+      <a key={t.key} href={'#st-' + t.key} aria-current={on ? 'location' : undefined} onClick={(e) => { e.preventDefault(); jump(t.key) }} className="uks-toc__item">
         {dot(t.state)}
         <span style={{ flex: '1 1 auto', minWidth: 0 }}>{t.label}</span>
-        {t.errors ? <span aria-label={`${t.errors} to fix`} style={{ flex: '0 0 auto', minWidth: 18, height: 18, boxSizing: 'border-box', padding: '0 5px', borderRadius: 999, background: '#fee2e2', color: '#b91c1c', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{t.errors}</span> : null}
-        {t.meta ? <span style={{ flex: '0 0 auto', fontSize: 11.5, fontWeight: 600, color: '#64748b' }}>{t.meta}</span> : null}
+        {t.errors ? <span aria-label={`${t.errors} to fix`} className="uks-toc__errors">{t.errors}</span> : null}
+        {t.meta ? <span className="uks-toc__meta">{t.meta}</span> : null}
       </a>
     )
   }
   const bar = (
     <>
-      <span aria-hidden="true" style={{ flex: '0 0 auto', width: 8, height: 8, borderRadius: 999, background: '#10b981', boxShadow: '0 0 0 4px #d1fae5' }} />
+      <span aria-hidden="true" className="uks-bar__dot" />
       <div style={{ flex: '1 1 200px', minWidth: 0, display: 'grid', gap: 1 }}>
-        <strong style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>You have unsaved changes</strong>
-        {errorCount ? <button type="button" onClick={onGoToError} style={{ justifySelf: 'start', padding: 0, border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 600, color: '#b91c1c', textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>{`Fix ${errorCount} ${errorCount === 1 ? 'error' : 'errors'} to save`}</button>
-          : <span style={{ fontSize: 12.5, color: '#64748b' }}>{`${changeCount} ${changeCount === 1 ? 'change' : 'changes'} · not saved yet`}</span>}
+        <strong className="uks-bar__title">You have unsaved changes</strong>
+        {errorCount ? <button type="button" onClick={onGoToError} className="uks-bar__fix">{`Fix ${errorCount} ${errorCount === 1 ? 'error' : 'errors'} to save`}</button>
+          : <span className="uks-bar__meta">{`${changeCount} ${changeCount === 1 ? 'change' : 'changes'} · not saved yet`}</span>}
       </div>
     </>
   )
@@ -171,65 +171,64 @@ export function SettingsPage({
   const discardBtn = <HrButton variant="ghost" onClick={onDiscard} disabled={saving} className={narrow ? 'w-full' : undefined}>Discard</HrButton>
 
   return (
-    <div ref={rootRef} style={{ minWidth: 0, fontFamily: FONT, color: '#0f172a' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: '24px 32px', minWidth: 0 }}>
-        <div style={{ flex: '0 0 100%', minWidth: 0, display: 'flex', justifyContent: 'center', marginBottom: -32 }}>
-          <div style={{ flex: '1 1 auto', maxWidth: 976, minWidth: 0 }}><HrPageHeader crumb={crumb} title={title} subtitle={subtitle} /></div>
+    <div ref={rootRef} className="uks" style={{ minWidth: 0, fontFamily: FONT, color: 'var(--u-ink,#0E1B16)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: '20px 32px', minWidth: 0 }}>
+        <div style={{ flex: '0 0 100%', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+          <div style={{ flex: '1 1 auto', maxWidth: 976, minWidth: 0 }}><PageHeader eyebrow={crumb} title={title} sub={subtitle} /></div>
         </div>
         {live && !narrow && nav.length > 1 && (
-          <nav aria-label="On this page" style={{ flex: '0 0 176px', alignSelf: 'flex-start', position: 'sticky', top: 88, display: 'grid', gap: 2, minWidth: 0, boxSizing: 'border-box', padding: '14px 8px 10px', ...CARD }}>
-            <p style={{ margin: '0 0 6px', padding: '0 12px', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#64748b' }}>On this page</p>
+          <nav aria-label="On this page" className="uks-toc">
+            <p className="uks-toc__head">On this page</p>
             {nav.map(tocItem)}
           </nav>
         )}
         <div style={{ flex: '1 1 480px', maxWidth: nav.length > 1 && !narrow ? 768 : 976, minWidth: 0, display: 'grid', gap: 16 }}>
           {live && narrow && nav.length > 1 && (
-            <div role="navigation" aria-label="On this page" style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0', background: '#f8fafc', scrollbarWidth: 'none' }}>
+            <div role="navigation" aria-label="On this page" className="uks-chips">
               {nav.map((t) => (
-                <button key={t.key} type="button" onClick={() => jump(t.key)} aria-current={t.key === active ? 'location' : undefined}
-                  style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 999, border: `1px solid ${t.key === active ? '#a7f3d0' : '#e2e8f0'}`, background: t.key === active ? '#ecfdf5' : '#fff', color: t.key === active ? '#0a5240' : '#475569', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <button key={t.key} type="button" onClick={() => jump(t.key)} aria-current={t.key === active ? 'location' : undefined} className="uks-chip">
                   {dot(t.state)}{t.label}
                 </button>
               ))}
             </div>
           )}
           {access === 'view' && status === 'live' && (
-            <div role="note" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderRadius: 14, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
-              <span aria-hidden="true" style={{ flex: '0 0 auto', width: 32, height: 32, borderRadius: 10, background: '#f1f5f9', color: '#475569', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('lock', 16)}</span>
+            <div role="note" className="uks-viewonly">
+              <span aria-hidden="true" className="uks-viewonly__icon">{dashIcon('lock', 16)}</span>
               <div style={{ display: 'grid', gap: 2, minWidth: 0, paddingTop: 1 }}>
-                <strong style={{ fontSize: 13.5, fontWeight: 700 }}>View only</strong>
-                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: '#475569' }}>{viewOnlyText || 'You can view these settings. Ask an admin to change them.'}</p>
+                <strong className="uks-viewonly__title">View only</strong>
+                <p className="uks-viewonly__text">{viewOnlyText || 'You can view these settings. Ask an admin to change them.'}</p>
               </div>
             </div>
           )}
           {access !== 'none' && status === 'loading' && (
             <div role="status" aria-label={`Loading ${entity}`} style={{ display: 'grid', gap: 16 }}>
               {[0, 1, 2].map((i) => (
-                <div key={i} style={CARD}>
+                <div key={i} className="uks-card">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
-                    <SkeletonBlock className="h-10 w-10 rounded-xl" />
-                    <div style={{ flex: '1 1 auto', display: 'grid', gap: 8 }}><SkeletonBlock className="h-4 w-40" /><SkeletonBlock className="h-3 w-64" /></div>
+                    <SkeletonBlock className="h-9 w-9 rounded-[11px]" />
+                    <div style={{ flex: '1 1 auto', display: 'grid', gap: 8 }}><SkeletonBlock className="h-4 w-40" /><SkeletonBlock className="h-3 w-64 max-w-full" /></div>
                   </div>
-                  {i < 2 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,180px),1fr))', gap: 16, padding: 20, borderTop: '1px solid #f1f5f9' }}>{[0, 1, 2].map((j) => <div key={j} style={{ display: 'grid', gap: 8 }}><SkeletonBlock className="h-3 w-24" /><SkeletonBlock className="h-10 w-full rounded-xl" /></div>)}</div>}
+                  {i < 2 && <div className="uks-card__body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,180px),1fr))', gap: 16 }}>{[0, 1, 2].map((j) => <div key={j} style={{ display: 'grid', gap: 8 }}><SkeletonBlock className="h-3 w-24" /><SkeletonBlock className="h-10 w-full rounded-[11px]" /></div>)}</div>}
                 </div>
               ))}
             </div>
           )}
           {access !== 'none' && status === 'error' && (
-            <div style={CARD}><EmptyState icon={dashIconComponent('alertTriangle') as any} title={`Couldn’t load ${entity}`} description="Something went wrong while loading. Nothing was changed — try again." action={onRetry ? { label: 'Try again', onClick: onRetry } : undefined} /></div>
+            <div className="uks-card"><EmptyState icon={dashIconComponent('alertTriangle') as any} title={`Couldn’t load ${entity}`} description="Something went wrong while loading. Nothing was changed — try again." action={onRetry ? { label: 'Try again', onClick: onRetry } : undefined} /></div>
           )}
           {access === 'none' && (
-            <div style={CARD}><EmptyState icon={dashIconComponent('lock') as any} title="Access restricted" description={noAccessText || 'These settings are only open to admins. Ask one of them if you need access.'} action={noAccessAction} /></div>
+            <div className="uks-card"><EmptyState icon={dashIconComponent('lock') as any} title="Access restricted" description={noAccessText || 'These settings are only open to admins. Ask one of them if you need access.'} action={noAccessAction} /></div>
           )}
           {live && children}
           {live && dirty && !narrow && (
-            <div role="region" aria-label="Unsaved changes" style={{ position: 'sticky', bottom: 16, zIndex: 6, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px 16px', padding: '12px 12px 12px 18px', borderRadius: 16, background: '#fff', border: '1px solid #d1fae5', boxShadow: '0 24px 48px -18px rgba(15,23,42,.32),0 2px 6px rgba(15,23,42,.06)' }}>
+            <div role="region" aria-label="Unsaved changes" className="uks-bar">
               {bar}
               <div style={{ flex: '0 0 auto', display: 'flex', gap: 8, marginLeft: 'auto' }}>{discardBtn}{saveBtn}</div>
             </div>
           )}
           {live && dirty && narrow && (
-            <div role="region" aria-label="Unsaved changes" style={{ position: 'sticky', bottom: 0, zIndex: 6, margin: '4px -16px -40px', display: 'grid', gap: 10, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff', borderTop: '1px solid #d1fae5', boxShadow: '0 -14px 28px -18px rgba(15,23,42,.35)' }}>
+            <div role="region" aria-label="Unsaved changes" className="uks-bar uks-bar--phone">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>{bar}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.4fr)', gap: 8 }}>{discardBtn}{saveBtn}</div>
             </div>
@@ -245,16 +244,11 @@ export function SettingsPage({
   )
 }
 
-/** The design's switch: 44×24 track on a 56×44 hit area. */
+/** The design's switch (42×24, brand when on) on a 56×44 hit area. */
 export function SettingsSwitch({ on, onToggle, label, disabled, title }: { on: boolean; onToggle: () => void; label: string; disabled?: boolean; title?: string }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} title={title} onClick={disabled ? undefined : onToggle} disabled={disabled}
-      onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) { e.currentTarget.style.outline = '2px solid #10b981'; e.currentTarget.style.outlineOffset = '-4px' } }}
-      onBlur={(e) => { e.currentTarget.style.outline = 'none' }}
-      style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 44, margin: '-10px -6px', padding: 0, border: 0, borderRadius: 999, background: 'none', cursor: disabled ? 'default' : 'pointer' }}>
-      <span aria-hidden="true" style={{ position: 'relative', display: 'block', width: 44, height: 24, borderRadius: 999, background: on ? '#0f6e56' : '#cbd5e1', transition: 'background-color .2s', opacity: disabled ? 0.6 : 1 }}>
-        <span style={{ position: 'absolute', top: 2, left: 2, width: 20, height: 20, borderRadius: 999, background: '#fff', boxShadow: '0 1px 3px rgba(15,23,42,.28)', transform: on ? 'translateX(20px)' : 'translateX(0px)', transition: 'transform .2s cubic-bezier(.2,.8,.2,1)' }} />
-      </span>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} title={title} onClick={disabled ? undefined : onToggle} disabled={disabled} className="uks-switch">
+      <span aria-hidden="true" className="uks-switch__track"><span className="uks-switch__knob" /></span>
     </button>
   )
 }
@@ -270,24 +264,24 @@ export function SettingsSection({ id, icon, title, summary, on, onToggle, locked
 }) {
   const active = soon ? false : on !== false
   return (
-    <section id={'st-' + id} aria-labelledby={`st-${id}-h`} style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
-        <span aria-hidden="true" style={{ flex: '0 0 auto', width: 40, height: 40, boxSizing: 'border-box', borderRadius: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${active ? '#d1fae5' : '#e2e8f0'}`, background: active ? '#ecfdf5' : '#f8fafc', color: active ? '#0f6e56' : '#94a3b8' }}>{dashIcon(icon, 20)}</span>
+    <section id={'st-' + id} aria-labelledby={`st-${id}-h`} className="uks-card uks-sec">
+      <div className="uks-sec__head">
+        <span aria-hidden="true" className="uks-sec__icon" data-off={active ? undefined : ''}>{dashIcon(icon, 18)}</span>
         <div style={{ flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 3 }}>
-          <h2 id={`st-${id}-h`} tabIndex={-1} style={{ margin: 0, fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: 16, fontWeight: 700, letterSpacing: '-.01em', lineHeight: 1.3, outline: 'none' }}>{title}</h2>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: '#64748b', textWrap: 'pretty' as any }}>{summary}</p>
+          <h2 id={`st-${id}-h`} tabIndex={-1} className="uks-sec__title">{title}</h2>
+          <p className="uks-sec__sub">{summary}</p>
         </div>
-        {soon ? <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 999, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Coming soon</span>
+        {soon ? <StatusPill tone="neutral" className="uks-sec__pill">Coming soon</StatusPill>
           : onToggle && !readOnly ? (
             <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 2 }}>
-              <span aria-hidden="true" style={{ minWidth: 24, textAlign: 'right', fontSize: 12.5, fontWeight: 600, color: on ? '#0f6e56' : '#64748b' }}>{on ? 'On' : 'Off'}</span>
+              <span aria-hidden="true" className="uks-sec__state" data-on={on ? '' : undefined}>{on ? 'On' : 'Off'}</span>
               <SettingsSwitch on={!!on} onToggle={onToggle} label={`Turn ${title} ${on ? 'off' : 'on'}`} disabled={locked} title={locked ? 'Always on' : undefined} />
             </div>
           ) : onToggle && readOnly ? (
-            <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 999, border: `1px solid ${on ? '#a7f3d0' : '#e2e8f0'}`, background: on ? '#ecfdf5' : '#f1f5f9', color: on ? '#0a5240' : '#475569', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{on ? 'On' : 'Off'}</span>
+            <StatusPill tone={on ? 'brand' : 'neutral'} className="uks-sec__pill">{on ? 'On' : 'Off'}</StatusPill>
           ) : null}
       </div>
-      {children && active && <div style={{ display: 'grid', gap: 18, padding: 20, borderTop: '1px solid #f1f5f9' }}>{children}</div>}
+      {children && active && <div className="uks-card__body" style={{ display: 'grid', gap: 18 }}>{children}</div>}
     </section>
   )
 }
@@ -297,20 +291,32 @@ export function SettingsGrid({ children, min = 180 }: { children: ReactNode; min
   return <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill,minmax(min(100%,${min}px),1fr))`, gap: 16, alignItems: 'start' }}>{children}</div>
 }
 
-/** A labelled text input, or a read-only label/value when the viewer can't edit. */
+/** A labelled text input (the design's 40px field), or a read-only label/value when the viewer can't edit. */
 export function SettingsInput({ label, value, onChange, readOnly, error, hint, suffix, prefix, placeholder, inputMode, mono, disabled, maxLength }: {
   label: string; value: string; onChange: (v: string) => void; readOnly?: boolean; error?: string; hint?: string; suffix?: string; prefix?: string
   placeholder?: string; inputMode?: 'text' | 'numeric' | 'decimal'; mono?: boolean; disabled?: boolean; maxLength?: number
 }) {
+  const id = useId()
   if (readOnly) return <SettingsValue label={label} value={value ? `${prefix || ''}${value}${suffix ? ' ' + suffix : ''}` : '—'} />
-  const affix = (t: string) => createElement('span', { style: { fontSize: 13, fontWeight: 600, color: '#64748b' } }, t)
+  const hintId = hint ? `${id}-hint` : undefined
+  const errorId = error ? `${id}-error` : undefined
+  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
+  const input = createElement('input', {
+    id, value, onChange: (e: any) => onChange(e.target.value), inputMode: inputMode || 'text', autoComplete: 'off', spellCheck: false, disabled, placeholder, maxLength,
+    'aria-invalid': error ? true : undefined, 'aria-describedby': describedBy, className: mono ? 'uks-input is-mono' : 'uks-input',
+  })
   return (
-    <div style={{ minWidth: 0 }}>
-      <Field label={label} hint={hint} error={error}>
-        <Input value={value} onChange={(e: any) => onChange(e.target.value)} inputMode={inputMode || 'text'} autoComplete="off" spellCheck={false} disabled={disabled} placeholder={placeholder} maxLength={maxLength}
-          aria-invalid={error ? true : undefined} leftElement={prefix ? affix(prefix) : undefined} rightElement={suffix ? affix(suffix) : undefined}
-          style={mono ? { fontFamily: "'JetBrains Mono',ui-monospace,SFMono-Regular,monospace", letterSpacing: '.02em' } : undefined} />
-      </Field>
+    <div className="uks-field">
+      <label className="uks-label" htmlFor={id}>{label}</label>
+      {prefix || suffix ? (
+        <span className="uks-group" data-invalid={error ? '' : undefined} data-disabled={disabled ? '' : undefined}>
+          {prefix ? <span className="uks-affix">{prefix}</span> : null}
+          {input}
+          {suffix ? <span className="uks-affix">{suffix}</span> : null}
+        </span>
+      ) : input}
+      {hint && !error && <p id={hintId} className="uks-hint">{hint}</p>}
+      {error && <p id={errorId} role="alert" className="uks-error">{error}</p>}
     </div>
   )
 }
@@ -318,9 +324,9 @@ export function SettingsInput({ label, value, onChange, readOnly, error, hint, s
 /** Label over value (the design's view-only rows). */
 export function SettingsValue({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ minWidth: 0, display: 'grid', gap: 4 }}>
-      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#64748b' }}>{label}</span>
-      <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{value}</span>
+    <div className="uks-value">
+      <span className="uk-kv__k">{label}</span>
+      <span className="uk-kv__v">{value}</span>
     </div>
   )
 }
@@ -328,12 +334,12 @@ export function SettingsValue({ label, value }: { label: string; value: string }
 /** The design's inline switch row ("Apply ceiling" / "Sandwich rule"). */
 export function SettingsToggleRow({ label, detail, on, onToggle, readOnly, disabled }: { label: string; detail: string; on: boolean; onToggle: () => void; readOnly?: boolean; disabled?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #eef2f6' }}>
+    <div className="uks-toggle">
       <div style={{ flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a' }}>{label}</span>
-        <span style={{ fontSize: 12.5, lineHeight: 1.45, color: '#64748b' }}>{detail}</span>
+        <span className="uks-toggle__label">{label}</span>
+        <span className="uks-toggle__detail">{detail}</span>
       </div>
-      {readOnly ? <span style={{ fontSize: 12.5, fontWeight: 700, color: on ? '#0a5240' : '#475569' }}>{on ? 'On' : 'Off'}</span>
+      {readOnly ? <span className="uks-toggle__state" data-on={on ? '' : undefined}>{on ? 'On' : 'Off'}</span>
         : <SettingsSwitch on={on} onToggle={onToggle} label={label} disabled={disabled} />}
     </div>
   )
@@ -341,7 +347,7 @@ export function SettingsToggleRow({ label, detail, on, onToggle, readOnly, disab
 
 /** A quiet note inside a section (what a setting does, or what isn't built yet). */
 export function SettingsNote({ children, tone }: { children: ReactNode; tone?: 'amber' }) {
-  return <p style={{ margin: 0, padding: '10px 12px', borderRadius: 10, background: tone === 'amber' ? '#fffbeb' : '#f8fafc', border: `1px solid ${tone === 'amber' ? '#fde68a' : '#eef2f6'}`, fontSize: 12.5, lineHeight: 1.5, color: tone === 'amber' ? '#92400e' : '#475569' }}>{children}</p>
+  return <p className={`umk-note uk-tone--${tone === 'amber' ? 'warning' : 'neutral'}`}>{children}</p>
 }
 
 /** The leave-without-saving dialog. */

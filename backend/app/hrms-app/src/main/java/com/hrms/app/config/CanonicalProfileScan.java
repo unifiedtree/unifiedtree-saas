@@ -160,6 +160,12 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.pli",
         "com.hrms.api.integration",
         "com.hrms.api.notiftemplate",
+        // HRMS redesign (P-TEAM): approval Undo + its journal recorder
+        // (/v1/approvals, the …/decision/undo endpoints), and My team's read
+        // models, probation and messages (/v1/team). New packages must be
+        // listed here or their controllers never load (see com.hrms.api.wfh).
+        "com.hrms.api.approvals",
+        "com.hrms.api.team",
         // MSG91 phone-auth OTP endpoints (OtpController, OtpProviderController).
         // Response shape is identical to /v1/auth/firebase-verify so the mobile
         // JWT-consumer + auth store need zero changes.

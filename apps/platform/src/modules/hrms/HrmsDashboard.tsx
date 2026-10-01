@@ -146,7 +146,11 @@ function useLiveClock() {
   return time
 }
 
-const RoleDashboard: React.FC = () => {
+/**
+ * The old staff dashboard. Not routed since the redesign (DECISIONS 12): people without the admin
+ * dashboard get the self-service Home at /me instead. Kept, unused, until the user decides to remove it.
+ */
+export const RoleDashboard: React.FC = () => {
   const navigate = useNavigate()
   const { data: companies = [] } = useCompanies()
   const activeCompany = companies[0]
@@ -917,8 +921,8 @@ const RoleDashboard: React.FC = () => {
   )
 }
 
-// Company-admin recovery leaves the existing staff dashboard behavior intact.
-export const HrmsDashboard: React.FC = () => {
-  const { isEmployee } = useRoles()
-  return !isEmployee ? <AdminDashboardContainer /> : <RoleDashboard />
-}
+/**
+ * /dashboard: the admin dashboard. The route (App.tsx DashboardRoute) shows it only to people whose Home
+ * it is, by permission (DECISIONS 12); everyone else is sent to their own Home.
+ */
+export const HrmsDashboard: React.FC = () => <AdminDashboardContainer />

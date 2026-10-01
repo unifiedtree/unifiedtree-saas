@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 // details (named on the Bank page, download and confirm blocked), fixing them
 // and rebuilding, paying, and a payslip that fails to load. The run, its bank
 // file and the bank profile made here are deleted from the local database at the end.
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const ui = process.env.RECOVERY_UI_URL || 'http://demo.localhost:3002'

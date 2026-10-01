@@ -133,10 +133,10 @@ await p.addInitScript(() => sessionStorage.setItem('__ut_access_token__', 'stub'
 // These are transport-fixture UI checks, not real-backend verification.
 await p.goto(BASE + '/dashboard');
 await p.waitForTimeout(6000);
-await p.getByRole('heading', { name: 'Live overview', exact: true }).waitFor();
+await p.getByRole('heading', { name: /^Good (morning|afternoon|evening), / }).waitFor();
 await p.screenshot({ path: OUT + '/company-admin-desktop.png', fullPage: true });
 assert(await p.getByRole('navigation', { name: 'Main navigation' }).isVisible());
-assert(await p.getByRole('button', { name: /Attendance corrections/ }).isVisible());
+assert(await p.getByRole('button', { name: /Correction requests/ }).isVisible());
 await p.getByRole('button', { name: /Late arrivals/ }).click();
 await p.waitForURL(/status=LATE/);
 await p.getByText('Di Late', { exact: true }).first().waitFor();
@@ -148,7 +148,7 @@ await p.getByRole('navigation', { name: 'Module navigation' }).waitFor();
 assert(await p.getByRole('link', { name: 'Daily Tracking', exact: true }).isVisible());
 await p.setViewportSize({ width: 390, height: 844 });
 await p.goto(BASE + '/dashboard');
-await p.getByRole('heading', { name: 'Live overview', exact: true }).waitFor();
+await p.getByRole('heading', { name: /^Good (morning|afternoon|evening), / }).waitFor();
 assert(await p.getByRole('button', { name: 'Open menu', exact: true }).isVisible());
 assert(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 await p.screenshot({ path: OUT + '/company-admin-mobile.png', fullPage: true });

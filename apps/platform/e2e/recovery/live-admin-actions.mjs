@@ -11,7 +11,7 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL(url => !url.pathname.includes('login'))
   await page.goto(base + '/dashboard')
-  await page.getByRole('heading', { name: /^Live overview$/i }).waitFor()
+  await page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / }).waitFor() // the redesigned dashboard's greeting
   await page.keyboard.press('Control+k')
   await page.getByRole('combobox', { name: 'Search people, pages and actions' }).fill('Reader')
   await page.getByRole('option').filter({ hasText: 'Reader User' }).click()

@@ -169,6 +169,20 @@ public class FnfService {
         return toPage(settlementRepository.findAllByOrderByCreatedAtDesc(pageable));
     }
 
+    /**
+     * The ledger, optionally narrowed to some statuses and/or one person
+     * (BW-64). With neither filter it is exactly {@link #getSettlements(Pageable)}.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<FnfSettlementResponse> getSettlements(java.util.Collection<FnfStatus> statuses, UUID employeeId,
+                                                             Pageable pageable) {
+        boolean byStatus = statuses != null && !statuses.isEmpty();
+        if (!byStatus && employeeId == null) return getSettlements(pageable);
+        if (!byStatus) return toPage(settlementRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));
+        if (employeeId == null) return toPage(settlementRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable));
+        return toPage(settlementRepository.findByEmployeeIdAndStatusInOrderByCreatedAtDesc(employeeId, statuses, pageable));
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<FnfSettlementResponse> getByStatus(FnfStatus status, Pageable pageable) {
         return toPage(settlementRepository.findByStatusOrderByCreatedAtDesc(status, pageable));

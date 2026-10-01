@@ -11,6 +11,8 @@ import java.util.UUID;
  * {@code approvedAt}, {@code payrollRunId} (the payroll run that pays it, set
  * when a run including it is processed), {@code payrollPeriod} (that run's
  * month, e.g. "Sep 2026", filled by the API layer) and {@code paidAt}.
+ * The redesign (BW-63) added the awardee's {@code departmentId} and
+ * {@code departmentName}, filled by the API layer on the admin list.
  */
 public record PliAwardResponse(
         UUID id,
@@ -28,5 +30,16 @@ public record PliAwardResponse(
         Instant approvedAt,
         UUID payrollRunId,
         String payrollPeriod,
-        Instant paidAt
-) {}
+        Instant paidAt,
+        UUID departmentId,
+        String departmentName
+) {
+    /** Without the awardee's department (the service layer's view). */
+    public PliAwardResponse(UUID id, UUID employeeId, String employeeName, String employeeCode, UUID companyId,
+                            String planName, String period, BigDecimal amount, BigDecimal ratingBasis,
+                            PliStatus status, String notes, Instant createdAt, Instant approvedAt,
+                            UUID payrollRunId, String payrollPeriod, Instant paidAt) {
+        this(id, employeeId, employeeName, employeeCode, companyId, planName, period, amount, ratingBasis,
+                status, notes, createdAt, approvedAt, payrollRunId, payrollPeriod, paidAt, null, null);
+    }
+}

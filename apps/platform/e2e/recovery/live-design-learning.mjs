@@ -56,7 +56,8 @@ try {
 
   const r = await session('reader@unifiedtree.demo')
   await r.page.goto(base + '/hrms/performance'); await settle(r.page)
-  check('employee: "Learning & Skills" is in the navigation', (await r.page.getByText('Learning & Skills', { exact: true }).count()) > 0)
+  // The redesign groups self-service Learning under the rail's "My growth" (DECISIONS 11); the old nav named it "Learning & Skills".
+  check('employee: "Learning & Skills" is in the navigation', (await r.page.getByText('Learning & Skills', { exact: true }).count()) > 0 || (await r.page.getByRole('link', { name: 'My growth' }).count()) > 0)
   await r.page.goto(base + '/hrms/learning?view=skills'); await settle(r.page)
   const rv = await viewNames(r.page)
   check('employee: Programs and My training only', JSON.stringify(rv) === JSON.stringify(['Programs', 'My training']), rv.join(' | '))

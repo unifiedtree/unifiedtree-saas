@@ -218,7 +218,7 @@ try {
   // ── 7. Project task due date (dashboard → Manage projects) ──
   await screen('Project task due date', async () => {
     await page.goto(base + '/dashboard')
-    await page.getByRole('button', { name: 'Manage projects →' }).click()
+    await page.getByRole('button', { name: /Manage projects/ }).click()
     const drawer = page.getByRole('dialog', { name: 'Projects & Productivity' })
     await drawer.waitFor({ timeout: 10000 })
     const select = drawer.getByRole('combobox', { name: 'Project', exact: true })
@@ -226,12 +226,13 @@ try {
     const firstProject = await select.locator('option:not([value=""])').first().getAttribute('value').catch(() => null)
     if (!firstProject) { check('project task: a project exists to test with', false, 'no project in this database'); return }
     await select.selectOption(firstProject)
-    const due = drawer.locator('label', { hasText: 'Due date' }).getByRole('combobox')
+    // The kit field names the picker with a for= label (it no longer sits inside the <label>).
+    const due = drawer.getByRole('combobox', { name: 'Due date' })
     await due.waitFor({ timeout: 10000 })
     await due.click()
     await dateDialog().getByRole('button', { name: 'Tomorrow' }).click()
     check('project task: due date pick lands', (await text(due)).includes(short(tomorrow)), await text(due))
-    await drawer.locator('label', { hasText: 'Due date' }).getByRole('button', { name: 'Clear' }).click()
+    await drawer.locator('.utc-field', { has: page.getByRole('combobox', { name: 'Due date' }) }).getByRole('button', { name: 'Clear' }).click()
     check('project task: due date can be cleared', (await text(due)).includes('Select date'), await text(due))
   })
 

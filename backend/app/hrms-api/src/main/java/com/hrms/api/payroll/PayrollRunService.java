@@ -81,6 +81,10 @@ public class PayrollRunService {
      * pay period that are not the company's weekly off or a holiday; null until
      * the run is processed or created after V143.11) and the names of the people
      * who created, processed, locked and paid it, for the run's activity list.
+     * The redesign (BW-53) added {@code employerContributions} (the run's
+     * employer PF, ESI and LWF lines added up; zero before processing) and
+     * {@code paidAt} (when the bank payment was confirmed; null until PAID),
+     * so the paid date no longer needs the disbursement permission.
      */
     public record RunDto(
         UUID id, UUID companyId, String companyName, int periodMonth, int periodYear,
@@ -88,7 +92,8 @@ public class PayrollRunService {
         BigDecimal totalGross, BigDecimal totalDeductions, BigDecimal totalNet,
         String processedAt, String lockedAt, String createdAt, int skippedEmployeeCount,
         String payDate, Integer workingDays,
-        String createdByName, String processedByName, String lockedByName, String paidByName) {}
+        String createdByName, String processedByName, String lockedByName, String paidByName,
+        BigDecimal employerContributions, String paidAt) {}
 
     /** One salary component's total across every payslip in a run. */
     public record ComponentTotalDto(String code, String name, String category, BigDecimal amount, int employees) {}
@@ -108,9 +113,24 @@ public class PayrollRunService {
     public record EligibleEmployeeDto(UUID employeeId, String employeeCode, String employeeName,
                                       BigDecimal ctcMonthly) {}
 
+    /**
+     * One person's pay in a run. The redesign (BW-50) added, after the
+     * original fields: department, branch, designation and joining date;
+     * the same company's previous period's gross and net and the net pay's
+     * change in percent (null when the person wasn't in that run);
+     * {@code newJoiner} (joined inside this pay period); {@code hasBankAccount}
+     * (a primary account with a valid IFSC, the bank file's own test);
+     * {@code fnfInProgress} (a full and final settlement not yet paid or
+     * cancelled); and {@code reviewReasons}, the "Needs review" checks this
+     * person is in (VARIANCE, MISSING_BANK, FNF_IN_PROGRESS; see BW-51).
+     */
     public record RunEmployeeDto(UUID employeeId, String employeeCode, String employeeName,
                                  BigDecimal paidDays, BigDecimal lopDays,
-                                 BigDecimal gross, BigDecimal deductions, BigDecimal netPay) {}
+                                 BigDecimal gross, BigDecimal deductions, BigDecimal netPay,
+                                 String department, String branch, String designation, String dateOfJoining,
+                                 BigDecimal previousGross, BigDecimal previousNet, BigDecimal changePercent,
+                                 boolean newJoiner, boolean hasBankAccount, boolean fnfInProgress,
+                                 List<String> reviewReasons) {}
 
     public record PayslipLineDto(String code, String name, BigDecimal amount) {}
 
@@ -119,7 +139,10 @@ public class PayrollRunService {
      * added up into one "Other earnings" / "Other deductions" line, so the lines
      * still add up to the totals. {@code totalDays} is the number of days in the
      * pay period ("paid days X of Y"); {@code department} and {@code runStatus}
-     * were added in V143.11 for the employee's own payslip drawer.
+     * were added in V143.11 for the employee's own payslip drawer. The
+     * redesign (BW-55) added {@code bankName} and {@code bankLast4} of the
+     * person's primary bank account ("Paid to HDFC •••• 1234"); null when
+     * there is none on file.
      */
     public record PayslipDto(
         UUID runId, UUID employeeId, String employeeName, String employeeCode,
@@ -128,7 +151,8 @@ public class PayrollRunService {
         List<PayslipLineDto> earnings, List<PayslipLineDto> deductions,
         List<PayslipLineDto> employerContributions,
         BigDecimal gross, BigDecimal totalDeductions, BigDecimal netPay,
-        String department, Integer totalDays, String runStatus) {}
+        String department, Integer totalDays, String runStatus,
+        String bankName, String bankLast4) {}
 
     /**
      * ESS payslip row for the "My Payslips" list. Extended in Wave 1
@@ -137,11 +161,27 @@ public class PayrollRunService {
      * without a per-row second fetch. paidDays / lopDays come from
      * payroll.run_lop_days; when the row is absent (no LOP tracking) both are
      * null and the frontend renders a dash.
+     *
+     * <p>The mobile app reads this row: fields are only ever added at the end.
+     * The redesign (BW-55) added {@code payDate} (the run's planned pay date),
+     * {@code paidAt} (when the bank payment was confirmed; null until paid),
+     * {@code totalDays} (days in the pay period, "paid days X of Y") and
+     * {@code notes}: what was special about the month (a PLI incentive, an
+     * advance recovery, leave encashment, the first month on a new salary).
      */
     public record MyPayslipDto(UUID runId, String period, int periodMonth, int periodYear,
                                BigDecimal paidDays, BigDecimal lopDays,
                                BigDecimal gross, BigDecimal totalDeductions,
-                               BigDecimal netPay, String status, String lockedAt) {}
+                               BigDecimal netPay, String status, String lockedAt,
+                               String payDate, String paidAt, Integer totalDays,
+                               List<PayslipNoteDto> notes) {}
+
+    /**
+     * A note on one month's payslip. {@code kind}: PLI, ADVANCE_RECOVERY,
+     * LEAVE_ENCASHMENT (with the line's name and amount) or NEW_SALARY (with
+     * the day the new salary structure started).
+     */
+    public record PayslipNoteDto(String kind, String label, BigDecimal amount, String date) {}
 
     // ── Reads ─────────────────────────────────────────────────────────────────
 
@@ -176,10 +216,15 @@ public class PayrollRunService {
             + actorName("r.processed_by") + " AS processed_by_name, "
             + actorName("r.locked_by") + " AS locked_by_name, "
             // disbursement_batches.updated_by is text (the actor's id as a string).
-            + actorName("u.id::text = pb.updated_by", "x.id::text = pb.updated_by") + " AS paid_by_name "
+            + actorName("u.id::text = pb.updated_by", "x.id::text = pb.updated_by") + " AS paid_by_name, "
+            // BW-53: the employer's share (PF, ESI, LWF) and when the payment was confirmed.
+            + "(SELECT coalesce(sum(el.amount), 0) FROM payroll.payslip_lines el "
+            + "WHERE el.run_id = r.id AND el.tenant_id = r.tenant_id AND el.category = 'EMPLOYER_CONTRIBUTION') "
+            + "AS employer_contributions, "
+            + "coalesce(r.paid_at, pb.paid_at) AS confirmed_paid_at "
             + "FROM payroll.runs r "
             + "LEFT JOIN org.companies c ON c.id = r.company_id "
-            + "LEFT JOIN LATERAL (SELECT b.updated_by FROM payroll.disbursement_batches b "
+            + "LEFT JOIN LATERAL (SELECT b.updated_by, b.paid_at FROM payroll.disbursement_batches b "
             + "WHERE b.run_id = r.id AND b.status = 'PAID' ORDER BY b.paid_at DESC NULLS LAST LIMIT 1) pb ON TRUE ";
 
     @Transactional
@@ -239,6 +284,13 @@ public class PayrollRunService {
     @Transactional
     public List<RunEmployeeDto> listRunEmployees(UUID tenantId, UUID runId) {
         bindTenant(tenantId);
+        List<RunEmployeeDto> pay = runPay(runId);
+        if (pay.isEmpty()) return pay;
+        return withFacts(tenantId, runId, pay);
+    }
+
+    /** Each person's pay in a run, from its payslip lines (the fields RunEmployeeDto always had). */
+    private List<RunEmployeeDto> runPay(UUID runId) {
         return jdbc.query("""
             SELECT l.employee_id,
                    e.employee_code,
@@ -258,8 +310,109 @@ public class PayrollRunService {
                 return new RunEmployeeDto(
                     rs.getObject("employee_id", UUID.class), rs.getString("employee_code"),
                     rs.getString("name").trim(), rs.getBigDecimal("paid_days"), rs.getBigDecimal("lop_days"),
-                    gross, ded, gross.subtract(ded));
+                    gross, ded, gross.subtract(ded),
+                    null, null, null, null, null, null, null, false, false, false, List.of());
             }, runId);
+    }
+
+    /** One person's facts for a run's employee list (BW-50), read from existing tables only. */
+    private record EmployeeFacts(String department, String branch, String designation, LocalDate dateOfJoining,
+                                 boolean hasPrimaryAccount, String ifsc, boolean fnfInProgress) {}
+
+    /**
+     * Adds BW-50's fields to each person's pay: who they are (department,
+     * branch, designation, joining date), the same company's previous period
+     * (gross, net, change), and the flags behind "Needs review".
+     */
+    private List<RunEmployeeDto> withFacts(UUID tenantId, UUID runId, List<RunEmployeeDto> pay) {
+        RunRow run = findRun(runId);
+        if (run == null) return pay;
+        Map<UUID, EmployeeFacts> facts = employeeFacts(tenantId, runId);
+        Map<UUID, BigDecimal[]> previous = previousPeriodPay(tenantId, run);
+        List<RunEmployeeDto> out = new ArrayList<>(pay.size());
+        for (RunEmployeeDto p : pay) {
+            EmployeeFacts f = facts.get(p.employeeId());
+            BigDecimal[] prev = previous.get(p.employeeId());
+            BigDecimal prevGross = prev == null ? null : prev[0];
+            BigDecimal prevNet = prev == null ? null : prev[1];
+            BigDecimal change = PayrollInsights.changePercent(p.netPay(), prevNet);
+            LocalDate joined = f == null ? null : f.dateOfJoining();
+            boolean bank = f != null && PayrollInsights.bankUsable(f.hasPrimaryAccount(), f.ifsc());
+            boolean fnf = f != null && f.fnfInProgress();
+            out.add(new RunEmployeeDto(p.employeeId(), p.employeeCode(), p.employeeName(), p.paidDays(), p.lopDays(),
+                    p.gross(), p.deductions(), p.netPay(),
+                    f == null ? null : f.department(), f == null ? null : f.branch(), f == null ? null : f.designation(),
+                    joined == null ? null : joined.toString(),
+                    prevGross, prevNet, change,
+                    PayrollInsights.newJoiner(joined, run.periodStart(), run.periodEnd()), bank, fnf,
+                    PayrollInsights.reviewReasons(change, bank, fnf)));
+        }
+        return out;
+    }
+
+    private Map<UUID, EmployeeFacts> employeeFacts(UUID tenantId, UUID runId) {
+        Map<UUID, EmployeeFacts> out = new HashMap<>();
+        jdbc.query("""
+            SELECT e.id, dp.name AS department, br.name AS branch, dg.title AS designation, e.date_of_joining,
+                   ba.id IS NOT NULL AS has_account, ba.ifsc_code,
+                   EXISTS (SELECT 1 FROM fnf_mgmt.fnf_settlements f
+                            WHERE f.tenant_id = e.tenant_id AND f.employee_id = e.id
+                              AND f.status IN ('INITIATED','PROCESSED','APPROVED')) AS fnf
+              FROM hrms.employees e
+              LEFT JOIN hrms.departments dp ON dp.id = e.department_id
+              LEFT JOIN org.branches br ON br.id = e.branch_id
+              LEFT JOIN hrms.designations dg ON dg.id = e.designation_id
+              LEFT JOIN LATERAL (SELECT a.id, a.ifsc_code FROM hrms.employee_bank_accounts a
+                                  WHERE a.tenant_id = e.tenant_id AND a.employee_id = e.id AND a.is_primary = TRUE
+                                  ORDER BY a.updated_at DESC LIMIT 1) ba ON TRUE
+             WHERE e.tenant_id = ?
+               AND e.id IN (SELECT l.employee_id FROM payroll.payslip_lines l WHERE l.tenant_id = ? AND l.run_id = ?)
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getObject("id", UUID.class),
+                new EmployeeFacts(rs.getString("department"), rs.getString("branch"), rs.getString("designation"),
+                        toLocalDate(rs.getObject("date_of_joining")), rs.getBoolean("has_account"),
+                        rs.getString("ifsc_code"), rs.getBoolean("fnf"))),
+            tenantId, tenantId, runId);
+        return out;
+    }
+
+    /**
+     * Gross and net per person in the same company's previous period's run
+     * ("previous" means the month before, as BW-50 defines it); empty when that
+     * month has no processed run.
+     */
+    private Map<UUID, BigDecimal[]> previousPeriodPay(UUID tenantId, RunRow run) {
+        YearMonth prev = YearMonth.of(run.periodYear(), run.periodMonth()).minusMonths(1);
+        Map<UUID, BigDecimal[]> out = new HashMap<>();
+        jdbc.query("""
+            SELECT l.employee_id,
+                   coalesce(sum(l.amount) FILTER (WHERE l.category IN ('EARNING','REIMBURSEMENT')),0) AS gross,
+                   coalesce(sum(l.amount) FILTER (WHERE l.category = 'DEDUCTION'),0)                  AS deductions
+              FROM payroll.runs p
+              JOIN payroll.payslip_lines l ON l.run_id = p.id AND l.tenant_id = p.tenant_id
+             WHERE p.tenant_id = ? AND p.company_id = ? AND p.period_year = ? AND p.period_month = ?
+               AND p.status IN ('PROCESSING','LOCKED','PAID')
+             GROUP BY l.employee_id
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                BigDecimal g = rs.getBigDecimal("gross");
+                out.put(rs.getObject("employee_id", UUID.class), new BigDecimal[]{g, g.subtract(rs.getBigDecimal("deductions"))});
+            }, tenantId, run.companyId(), prev.getYear(), prev.getMonthValue());
+        return out;
+    }
+
+    /**
+     * The run, or null when there is none (unlike {@link #loadRun}, which
+     * refuses). The caller has bound the tenant in its own transaction.
+     */
+    @Transactional
+    public RunRow findRun(UUID runId) {
+        List<RunRow> rows = jdbc.query("""
+            SELECT id, company_id, period_month, period_year, period_start, period_end, status
+              FROM payroll.runs WHERE id = ?
+            """, (rs, i) -> new RunRow(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
+                rs.getInt("period_month"), rs.getInt("period_year"),
+                toLocalDate(rs.getObject("period_start")), toLocalDate(rs.getObject("period_end")),
+                rs.getString("status")), runId);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -662,6 +815,20 @@ public class PayrollRunService {
     @Transactional
     public List<MyPayslipDto> listMyPayslips(UUID tenantId, UUID employeeId) {
         bindTenant(tenantId);
+        return withExtras(tenantId, employeeId, payslipRows(employeeId));
+    }
+
+    /**
+     * One employee's payslips, as they see them on My payslips (LOCKED and PAID
+     * runs only), for HR and finance on the person's profile (BW-58).
+     */
+    @Transactional
+    public List<MyPayslipDto> listEmployeePayslips(UUID tenantId, UUID employeeId) {
+        return listMyPayslips(tenantId, employeeId);
+    }
+
+    /** The payslip rows exactly as before the redesign (the mobile app reads them). */
+    private List<MyPayslipDto> payslipRows(UUID employeeId) {
         // Only LOCKED / PAID runs — an employee never sees draft/processing numbers,
         // but MUST keep access to their payslip once the run flips from LOCKED → PAID
         // via disbursement (otherwise history disappears the moment payroll is paid).
@@ -694,8 +861,69 @@ public class PayrollRunService {
                 rs.getBigDecimal("paid_days"), rs.getBigDecimal("lop_days"),
                 rs.getBigDecimal("gross"),     rs.getBigDecimal("total_deductions"),
                 rs.getBigDecimal("net_pay"),
-                rs.getString("status"), ts(rs.getTimestamp("locked_at"))),
+                rs.getString("status"), ts(rs.getTimestamp("locked_at")),
+                null, null, null, List.of()),
             employeeId, employeeId);
+    }
+
+    /** BW-55's additions to one payslip row, read separately so the original row never changes. */
+    private record PayslipExtras(String payDate, String paidAt, Integer totalDays, List<PayslipNoteDto> notes) {}
+
+    private List<MyPayslipDto> withExtras(UUID tenantId, UUID employeeId, List<MyPayslipDto> rows) {
+        if (rows.isEmpty()) return rows;
+        Map<UUID, PayslipExtras> extras = payslipExtras(tenantId, employeeId);
+        List<MyPayslipDto> out = new ArrayList<>(rows.size());
+        for (MyPayslipDto r : rows) {
+            PayslipExtras x = extras.get(r.runId());
+            out.add(x == null ? r : new MyPayslipDto(r.runId(), r.period(), r.periodMonth(), r.periodYear(),
+                    r.paidDays(), r.lopDays(), r.gross(), r.totalDeductions(), r.netPay(), r.status(), r.lockedAt(),
+                    x.payDate(), x.paidAt(), x.totalDays(), x.notes()));
+        }
+        return out;
+    }
+
+    /**
+     * Per run of this employee (LOCKED or PAID, own lines only): the pay date,
+     * when payment was confirmed, the days in the period, and the month's notes.
+     * "First month on the new salary": a salary structure that started inside
+     * the pay period and replaced an earlier one.
+     */
+    private Map<UUID, PayslipExtras> payslipExtras(UUID tenantId, UUID employeeId) {
+        Map<UUID, PayslipExtras> out = new HashMap<>();
+        jdbc.query("""
+            SELECT r.id, r.pay_date, coalesce(r.paid_at, pb.paid_at) AS paid_at, ld.total_calendar,
+                   coalesce(sum(l.amount) FILTER (WHERE l.component_code = 'PLI_INCENTIVE'), 0)    AS pli,
+                   max(l.component_name)  FILTER (WHERE l.component_code = 'PLI_INCENTIVE')        AS pli_name,
+                   coalesce(sum(l.amount) FILTER (WHERE l.component_code = 'ADVANCE_RECOVERY'), 0) AS advance,
+                   max(l.component_name)  FILTER (WHERE l.component_code = 'ADVANCE_RECOVERY')     AS advance_name,
+                   coalesce(sum(l.amount) FILTER (WHERE l.component_code = 'LEAVE_ENCASHMENT'), 0) AS encashment,
+                   max(l.component_name)  FILTER (WHERE l.component_code = 'LEAVE_ENCASHMENT')     AS encashment_name,
+                   (SELECT max(s.effective_from) FROM payroll.employee_salary_structures s
+                     WHERE s.tenant_id = r.tenant_id AND s.employee_id = ?
+                       AND s.effective_from BETWEEN r.period_start AND r.period_end
+                       AND EXISTS (SELECT 1 FROM payroll.employee_salary_structures o
+                                    WHERE o.tenant_id = s.tenant_id AND o.employee_id = s.employee_id
+                                      AND o.effective_from < s.effective_from)) AS new_salary_from
+              FROM payroll.runs r
+              JOIN payroll.payslip_lines l ON l.run_id = r.id AND l.tenant_id = r.tenant_id AND l.employee_id = ?
+              LEFT JOIN payroll.run_lop_days ld ON ld.run_id = r.id AND ld.employee_id = ?
+              LEFT JOIN LATERAL (SELECT b.paid_at FROM payroll.disbursement_batches b
+                                  WHERE b.run_id = r.id AND b.status = 'PAID'
+                                  ORDER BY b.paid_at DESC NULLS LAST LIMIT 1) pb ON TRUE
+             WHERE r.tenant_id = ? AND r.status IN ('LOCKED','PAID')
+             GROUP BY r.id, ld.total_calendar, pb.paid_at
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getObject("id", UUID.class),
+                new PayslipExtras(
+                    rs.getObject("pay_date") == null ? null : String.valueOf(rs.getObject("pay_date")),
+                    ts(rs.getTimestamp("paid_at")),
+                    (Integer) rs.getObject("total_calendar"),
+                    PayrollInsights.notes(rs.getBigDecimal("pli"), rs.getString("pli_name"),
+                            rs.getBigDecimal("advance"), rs.getString("advance_name"),
+                            rs.getBigDecimal("encashment"), rs.getString("encashment_name"),
+                            toLocalDate(rs.getObject("new_salary_from"))).stream()
+                        .map(n -> new PayslipNoteDto(n.kind(), n.label(), n.amount(), n.date())).toList())),
+            employeeId, employeeId, employeeId, tenantId);
+        return out;
     }
 
     @Transactional
@@ -1380,8 +1608,8 @@ public class PayrollRunService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private record RunRow(UUID id, UUID companyId, int periodMonth, int periodYear,
-                          LocalDate periodStart, LocalDate periodEnd, String status) {}
+    record RunRow(UUID id, UUID companyId, int periodMonth, int periodYear,
+                  LocalDate periodStart, LocalDate periodEnd, String status) {}
 
     private record CompMeta(UUID id, String code, String name, String category, int displayOrder,
                             boolean statutory, String computationType, BigDecimal amount,
@@ -1540,6 +1768,20 @@ public class PayrollRunService {
                         "total", rs.getInt("total_calendar"));
             }, runId, employeeId);
 
+        // BW-55: "Paid to <bank> •••• 1234", from the primary bank account.
+        UUID tenant = TenantContext.getTenantId();
+        Map<String, Object> bank = tenant == null ? Map.of() : jdbc.query("""
+            SELECT bank_name, account_number_last4 FROM hrms.employee_bank_accounts
+             WHERE tenant_id = ? AND employee_id = ? AND is_primary = TRUE
+             ORDER BY updated_at DESC LIMIT 1
+            """, rs -> {
+                if (!rs.next()) return Map.<String, Object>of();
+                Map<String, Object> m = new HashMap<>();
+                m.put("name", rs.getString("bank_name"));
+                m.put("last4", rs.getString("account_number_last4"));
+                return m;
+            }, tenant, employeeId);
+
         return new PayslipDto(runId, employeeId, ((String) emp.get("name")).trim(),
             (String) emp.get("employee_code"), (String) emp.get("designation"),
             periodLabel(((Number) run.get("period_month")).intValue(), ((Number) run.get("period_year")).intValue()),
@@ -1548,7 +1790,8 @@ public class PayrollRunService {
             lopRow.isEmpty() ? null : (BigDecimal) lopRow.get("lop"),
             earnings, deductions, employer, gross, totalDed, gross.subtract(totalDed),
             (String) emp.get("department"), lopRow.isEmpty() ? null : (Integer) lopRow.get("total"),
-            (String) run.get("status"));
+            (String) run.get("status"),
+            bank == null ? null : (String) bank.get("name"), bank == null ? null : (String) bank.get("last4"));
     }
 
     private String computationLogJson(LopResult lop, PayrollResult result, PayrollCalc.Period period,
@@ -1586,7 +1829,8 @@ public class PayrollRunService {
             rs.getObject("pay_date") == null ? null : String.valueOf(rs.getObject("pay_date")),
             (Integer) rs.getObject("working_days"),
             rs.getString("created_by_name"), rs.getString("processed_by_name"),
-            rs.getString("locked_by_name"), rs.getString("paid_by_name"));
+            rs.getString("locked_by_name"), rs.getString("paid_by_name"),
+            rs.getBigDecimal("employer_contributions"), ts(rs.getTimestamp("confirmed_paid_at")));
     }
 
     private static String renderPayslipHtml(PayslipDto s) {

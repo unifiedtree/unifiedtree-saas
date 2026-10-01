@@ -169,7 +169,11 @@ public final class WorkforceDtos {
             Integer employeeCount,
             boolean active,
             /** Branches this department works in (hrms.department_branches); empty = not limited. */
-            List<UUID> branchIds
+            List<UUID> branchIds,
+            /** Redesign BW-95: the cost centre (hrms.department_cost_centres, V143_52); null when none is set or the table isn't there yet. */
+            String costCentre,
+            /** Redesign BW-95: the head's name, so people without the directory can see who leads it; null without a head. */
+            String headName
     ) { }
 
     public record CreateDepartmentRequest(
@@ -181,8 +185,17 @@ public final class WorkforceDtos {
             String description,
             @Size(max = 9)  String colorHex,
             @Size(max = 40) String iconKey,
-            List<UUID> branchIds
-    ) { }
+            List<UUID> branchIds,
+            /** Redesign BW-95: optional cost centre (null or blank = none). */
+            @Size(max = 50) String costCentre
+    ) {
+        /** The request without a cost centre. */
+        public CreateDepartmentRequest(UUID companyId, String name, String code, UUID parentDepartmentId,
+                                       UUID departmentHeadEmployeeId, String description, String colorHex,
+                                       String iconKey, List<UUID> branchIds) {
+            this(companyId, name, code, parentDepartmentId, departmentHeadEmployeeId, description, colorHex, iconKey, branchIds, null);
+        }
+    }
 
     // -- Designation ---------------------------------------------------------
     public record DesignationResponse(
@@ -490,12 +503,22 @@ public final class WorkforceDtos {
             /** The milestone window: days for birthdays and anniversaries, months for retirements (null = the dashboard's default). */
             Integer milestoneWithin,
             /** A chosen date range for the milestone instead of the window (null = use the window). */
-            com.hrms.employee.workforce.service.MilestoneWindow.Range milestoneRange
+            com.hrms.employee.workforce.service.MilestoneWindow.Range milestoneRange,
+            /** Only this person's direct reports (null = no such filter). Redesign BW-96. */
+            UUID reportingManagerId
     ) {
         public WorkforceFilter {
             if (pageSize <= 0)   pageSize = 50;
             if (pageSize > 200)  pageSize = 200;
             if (page < 0)        page = 0;
+        }
+
+        /** The filter without the direct-reports option. */
+        public WorkforceFilter(UUID companyId, UUID departmentId, UUID branchId,
+                               WorkforceEmployee.EmploymentStatus status, String search, int page, int pageSize,
+                               boolean noDepartment, com.hrms.employee.workforce.service.MilestoneWindow.Kind milestone,
+                               Integer milestoneWithin, com.hrms.employee.workforce.service.MilestoneWindow.Range milestoneRange) {
+            this(companyId, departmentId, branchId, status, search, page, pageSize, noDepartment, milestone, milestoneWithin, milestoneRange, null);
         }
 
         /** The filter with a milestone window and no chosen date range. */

@@ -8,6 +8,7 @@ import com.hrms.advance.service.AdvanceService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,15 +42,27 @@ public class AdvanceController {
     private final EmployeeRepository employeeRepository;
     private final AdvanceRecoveryService advanceRecoveryService;
     private final com.hrms.api.leave.ApproverFallbackResolver approverFallback;
+    private final AdvanceReadService reads;
+    private final WorkforceDepartmentRepository departmentRepository;
+    private final com.hrms.api.payroll.PayrollService payrollService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public AdvanceController(AdvanceService advanceService,
                             EmployeeRepository employeeRepository,
                             AdvanceRecoveryService advanceRecoveryService,
-                            com.hrms.api.leave.ApproverFallbackResolver approverFallback) {
+                            com.hrms.api.leave.ApproverFallbackResolver approverFallback,
+                            AdvanceReadService reads,
+                            WorkforceDepartmentRepository departmentRepository,
+                            com.hrms.api.payroll.PayrollService payrollService,
+                            org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.advanceService = advanceService;
         this.employeeRepository = employeeRepository;
         this.advanceRecoveryService = advanceRecoveryService;
         this.approverFallback = approverFallback;
+        this.reads = reads;
+        this.departmentRepository = departmentRepository;
+        this.payrollService = payrollService;
+        this.jdbc = jdbc;
     }
 
     // ─── Employee self-service ───────────────────────────────────────────────
@@ -126,22 +139,197 @@ public class AdvanceController {
      * never let an employee self-approve.
      */
     private UUID resolveApprover(Employee employee) {
+        ApproverChoice choice = chooseApprover(employee);
+        if (choice == null) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "No eligible approver found for this workspace. "
+                    + "Ask your admin to configure a reporting manager or HR before raising an advance.",
+                    "ADVANCE_NO_APPROVER");
+        }
+        return choice.approverId();
+    }
+
+    /**
+     * Who an advance for this employee goes to, and why. The one chain both the
+     * request and its preview use (BW-62), so what the preview names is who
+     * gets the request. {@code source}: MANAGER (the reporting manager),
+     * TERMINAL (no usable manager: the workspace's HR manager, else an admin),
+     * DELEGATE (the approver's active delegate; {@code delegateFor} is who they
+     * stand in for). Null when nobody but the employee could approve.
+     */
+    record ApproverChoice(UUID approverId, String source, UUID delegateFor) {}
+
+    private ApproverChoice chooseApprover(Employee employee) {
         UUID employeeId = employee.getId();
         UUID approverId = employee.getManagerId();
+        String source = "MANAGER";
         if (approverId == null || approverId.equals(employeeId)) {
             UUID fallback = approverFallback.resolveTerminalApprover(
                     com.hrms.core.tenant.TenantContext.getTenantId()).orElse(null);
-            if (fallback == null || fallback.equals(employeeId)) {
-                throw new com.hrms.core.exception.BusinessRuleException(
-                        "No eligible approver found for this workspace. "
-                        + "Ask your admin to configure a reporting manager or HR before raising an advance.",
-                        "ADVANCE_NO_APPROVER");
-            }
+            if (fallback == null || fallback.equals(employeeId)) return null;
             approverId = fallback;
+            source = "TERMINAL";
         }
         // Redirect through any active delegation the approver has set up.
-        return approverFallback.redirectIfDelegated(
+        UUID finalId = approverFallback.redirectIfDelegated(
                 approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+        if (finalId != null && !finalId.equals(approverId)) return new ApproverChoice(finalId, "DELEGATE", approverId);
+        return new ApproverChoice(finalId, source, null);
+    }
+
+    // ─── Redesign reads (BW-62) ──────────────────────────────────────────────
+
+    /** Who approves the caller's advance request: HR = the HR manager fallback, ADMIN = the admin fallback. */
+    public record AdvanceApprover(UUID employeeId, String name, String source, String delegateForName) {}
+
+    /** {@code approver} is null when nobody can approve (a request would be refused with ADVANCE_NO_APPROVER). */
+    public record ApproverPreview(AdvanceApprover approver) {}
+
+    /**
+     * What a request for {@code amount} over {@code months} would look like,
+     * under today's rules: the monthly deduction rounded to paise as the
+     * request stores it (the last installment takes the remainder), recovery
+     * starting the month after payout (assumed this month; finance may choose
+     * a later first month when recording the payment), and who approves it.
+     * {@code netMonthly} / {@code takeHomeAfterDeduction} come from the
+     * caller's current salary structure, only with payroll.structure.read.self
+     * and a structure on file (null otherwise). There is no advance limit.
+     */
+    public record AdvancePreview(java.math.BigDecimal amount, int months, java.math.BigDecimal monthlyDeduction,
+                                 java.math.BigDecimal lastInstallment, String assumedPayoutMonth,
+                                 String firstDeductionMonth, String lastDeductionMonth, AdvanceApprover approver,
+                                 java.math.BigDecimal netMonthly, java.math.BigDecimal takeHomeAfterDeduction) {}
+
+    /** The finance side of Record payment: both optional (BW-62). */
+    public record DisburseRequest(
+            @jakarta.validation.constraints.Size(max = 100, message = "Keep the payment reference under 100 characters")
+            String paymentReference,
+            /** "2026-11": the first salary month to recover from; the month after payout when left out. */
+            String firstDeductionMonth) {}
+
+    /** How far ahead finance may start the recovery: up to eleven months after the default first month. */
+    static final int FIRST_DEDUCTION_MAX_MONTHS_AHEAD = 11;
+
+    @Operation(summary = "Totals of the advances in my scope: requested, approved not paid, being recovered, repaid")
+    @GetMapping("/summary")
+    @PreAuthorize("hasAuthority('hrms.advance.read')")
+    public ResponseEntity<AdvanceReadService.AdvancesSummary> summary(@AuthenticationPrincipal Jwt jwt) {
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        UUID caller = extractEmployeeId(jwt);
+        PayFinancialYear year = PayFinancialYear.of(jdbc, tenantId, caller,
+                java.time.LocalDate.now(PayFinancialYear.IST));
+        // Same scope as the list: everything with disburse, else what is routed to you.
+        return ResponseEntity.ok(reads.summary(tenantId, seesAllAdvances(jwt) ? null : scopeOf(caller), year));
+    }
+
+    @Operation(summary = "Totals of my own advances")
+    @GetMapping("/my/summary")
+    @PreAuthorize("hasAuthority('hrms.advance.request.self')")
+    public ResponseEntity<AdvanceReadService.MyAdvancesSummary> mySummary(@AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(reads.mySummary(com.hrms.core.tenant.TenantContext.getTenantId(), extractEmployeeId(jwt)));
+    }
+
+    @Operation(summary = "Who would approve my advance request")
+    @GetMapping("/my/approver")
+    @PreAuthorize("hasAuthority('hrms.advance.request.self')")
+    public ResponseEntity<ApproverPreview> myApprover(@AuthenticationPrincipal Jwt jwt) {
+        UUID me = extractEmployeeId(jwt);
+        Employee employee = employeeRepository.findById(me)
+                .orElseThrow(() -> new com.hrms.core.exception.ResourceNotFoundException("Employee", me));
+        return ResponseEntity.ok(new ApproverPreview(describe(chooseApprover(employee))));
+    }
+
+    @Operation(summary = "Preview an advance request: monthly deduction, recovery months and approver")
+    @GetMapping("/my/preview")
+    @PreAuthorize("hasAuthority('hrms.advance.request.self')")
+    public ResponseEntity<AdvancePreview> myPreview(@RequestParam java.math.BigDecimal amount,
+                                                    @RequestParam int months,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        // The same rules as the request itself (AdvanceRequestCreateRequest + AdvanceService).
+        if (amount.compareTo(new java.math.BigDecimal("0.01")) < 0) {
+            throw new com.hrms.core.exception.BusinessRuleException("Advance amount must be greater than zero", "ADVANCE_INVALID_AMOUNT");
+        }
+        if (months < 1 || months > 60) {
+            throw new com.hrms.core.exception.BusinessRuleException("Repay over 1 to 60 whole months.", "ADVANCE_INVALID_TERM");
+        }
+        UUID me = extractEmployeeId(jwt);
+        Employee employee = employeeRepository.findById(me)
+                .orElseThrow(() -> new com.hrms.core.exception.ResourceNotFoundException("Employee", me));
+        java.math.BigDecimal[] plan = plan(amount, months);
+        java.time.YearMonth payout = java.time.YearMonth.now(PayFinancialYear.IST);
+        java.time.YearMonth first = payout.plusMonths(1);
+        java.math.BigDecimal net = callerHasPermission(jwt, "payroll.structure.read.self") ? netMonthly(me) : null;
+        return ResponseEntity.ok(new AdvancePreview(amount, months, plan[0], plan[1], payout.toString(), first.toString(),
+                first.plusMonths(months - 1L).toString(), describe(chooseApprover(employee)),
+                net, net == null ? null : net.subtract(plan[0])));
+    }
+
+    /**
+     * [monthly deduction, last installment] exactly as the request and its
+     * recovery schedule compute them (AdvanceService, AdvanceRecoveryService.initSchedule).
+     */
+    static java.math.BigDecimal[] plan(java.math.BigDecimal amount, int months) {
+        java.math.BigDecimal monthly = amount.divide(java.math.BigDecimal.valueOf(months), 2, java.math.RoundingMode.HALF_UP);
+        java.math.BigDecimal remaining = amount;
+        java.math.BigDecimal last = java.math.BigDecimal.ZERO;
+        for (int i = 1; i <= months; i++) {
+            last = AdvanceRecoveryService.installmentAmount(remaining, monthly, i == months);
+            remaining = remaining.subtract(last);
+        }
+        return new java.math.BigDecimal[]{monthly, last};
+    }
+
+    /** The caller's full-month take-home from their current structure; null when there is none or it can't be read. */
+    private java.math.BigDecimal netMonthly(UUID employeeId) {
+        try {
+            var structure = payrollService.getCurrentStructure(com.hrms.core.tenant.TenantContext.getTenantId(), employeeId);
+            return structure == null ? null : structure.netMonthly();
+        } catch (RuntimeException e) {
+            // An optional figure: leave it out rather than fail the preview.
+            org.slf4j.LoggerFactory.getLogger(AdvanceController.class)
+                    .warn("Advance preview: take-home not available for {}: {}", employeeId, e.getMessage());
+            return null;
+        }
+    }
+
+    private AdvanceApprover describe(ApproverChoice choice) {
+        if (choice == null || choice.approverId() == null) return null;
+        Employee approver = employeeRepository.findById(choice.approverId()).orElse(null);
+        String source = choice.source();
+        if ("TERMINAL".equals(source)) {
+            source = reads.isHrManager(com.hrms.core.tenant.TenantContext.getTenantId(), choice.approverId()) ? "HR" : "ADMIN";
+        }
+        Employee delegateFor = choice.delegateFor() == null ? null
+                : employeeRepository.findById(choice.delegateFor()).orElse(null);
+        return new AdvanceApprover(choice.approverId(), fullName(approver), source, fullName(delegateFor));
+    }
+
+    /**
+     * The first month to recover from: the month after payout unless finance
+     * chose a later one ("2026-11"), at most {@value #FIRST_DEDUCTION_MAX_MONTHS_AHEAD}
+     * months after that. Never earlier, so a recovery can't fall into a
+     * payroll month that may already have run.
+     */
+    static java.time.YearMonth firstDeductionMonth(String requested, java.time.YearMonth payoutMonth) {
+        java.time.YearMonth earliest = payoutMonth.plusMonths(1);
+        if (requested == null || requested.isBlank()) return earliest;
+        java.time.YearMonth chosen;
+        try {
+            chosen = java.time.YearMonth.parse(requested.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "Choose the first deduction month as a month, like " + earliest + ".", "ADVANCE_INVALID_FIRST_MONTH");
+        }
+        java.time.YearMonth latest = earliest.plusMonths(FIRST_DEDUCTION_MAX_MONTHS_AHEAD);
+        if (chosen.isBefore(earliest) || chosen.isAfter(latest)) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "The first deduction can be from " + earliest + " to " + latest + ".", "ADVANCE_INVALID_FIRST_MONTH");
+        }
+        return chosen;
+    }
+
+    private static UUID scopeOf(UUID caller) {
+        return caller == null ? NO_APPROVER : caller;
     }
 
     @Operation(summary = "Get my salary advance requests")
@@ -181,8 +369,22 @@ public class AdvanceController {
     @PreAuthorize("hasAuthority('hrms.advance.read')")
     public ResponseEntity<PageResponse<AdvanceResponse>> listRequests(
             @RequestParam(required = false) AdvanceStatus status,
+            @RequestParam(required = false) AdvanceReadService.Phase phase,
+            @RequestParam(required = false) UUID departmentId,
             @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal Jwt jwt) {
+        if (phase != null || departmentId != null) {
+            // BW-62: Recovering / Repaid and a department, in the same scope as below.
+            AdvanceReadService.IdPage ids = reads.filteredIds(com.hrms.core.tenant.TenantContext.getTenantId(),
+                    seesAllAdvances(jwt) ? null : scopeOf(extractEmployeeId(jwt)),
+                    status == null ? null : List.of(status.name()), phase, departmentId,
+                    pageable.getPageNumber(), pageable.getPageSize());
+            int size = Math.max(1, pageable.getPageSize());
+            int totalPages = (int) ((ids.total() + size - 1) / size);
+            return ResponseEntity.ok(enrichPage(new PageResponse<>(advanceService.getByIdsInOrder(ids.ids()),
+                    pageable.getPageNumber(), pageable.getPageSize(), ids.total(), totalPages,
+                    pageable.getPageNumber() + 1 >= totalPages)));
+        }
         var statuses = status == null ? List.of(AdvanceStatus.values()) : List.of(status);
         return ResponseEntity.ok(enrichPage(seesAllAdvances(jwt)
                 ? advanceService.getByStatuses(statuses, pageable)
@@ -281,7 +483,14 @@ public class AdvanceController {
     @PreAuthorize("@perm.check('hrms.advance.disburse')")
     @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<AdvanceResponse> disburse(@PathVariable UUID id,
+                                                    @Valid @RequestBody(required = false) DisburseRequest body,
                                                     @AuthenticationPrincipal Jwt jwt) {
+        // BW-62: an optional bank reference and first deduction month, checked
+        // before anything changes. With no body it is today's payout exactly.
+        java.time.YearMonth startMonth = firstDeductionMonth(body == null ? null : body.firstDeductionMonth(),
+                java.time.YearMonth.now(java.time.ZoneId.of("Asia/Kolkata")));
+        String paymentReference = body == null || body.paymentReference() == null || body.paymentReference().isBlank()
+                ? null : body.paymentReference().trim();
         // B3 FIX (audit 2026-08-15): disburser must not equal the requester.
         AdvanceResponse existing = advanceService.getRequest(id);
         UUID caller = jwt == null ? null : extractEmployeeId(jwt);
@@ -295,10 +504,9 @@ public class AdvanceController {
         // forever — payroll never had a PENDING installment to consume. Seed
         // it here starting the month AFTER disbursement (first payroll cycle
         // that runs post-disbursement will pick up installment #1).
-        java.time.LocalDate startMonth = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusMonths(1);
         advanceRecoveryService.initSchedule(
                 com.hrms.core.tenant.TenantContext.getTenantId(),
-                id, startMonth.getMonthValue(), startMonth.getYear());
+                id, startMonth.getMonthValue(), startMonth.getYear(), paymentReference);
         return ResponseEntity.ok(enrichOne(result));
     }
 
@@ -317,9 +525,11 @@ public class AdvanceController {
                 ? Map.of()
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+        Map<UUID, String> departments = departmentNames(page.content().stream()
+                .map(r -> employeeMap.get(r.employeeId())).filter(Objects::nonNull).toList());
         List<AdvanceResponse> enriched = page.content().stream()
                 .map(r -> enrich(r, employeeMap.get(r.employeeId()),
-                        r.raisedById() == null ? null : employeeMap.get(r.raisedById())))
+                        r.raisedById() == null ? null : employeeMap.get(r.raisedById()), departments))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
@@ -332,7 +542,15 @@ public class AdvanceController {
         Employee raisedBy = r.raisedById() == null
                 ? null
                 : employeeRepository.findById(r.raisedById()).orElse(null);
-        return enrich(r, employee, raisedBy);
+        return enrich(r, employee, raisedBy, employee == null ? Map.of() : departmentNames(List.of(employee)));
+    }
+
+    private Map<UUID, String> departmentNames(java.util.Collection<Employee> employees) {
+        List<UUID> ids = employees.stream().map(Employee::getDepartmentId).filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, String> names = new java.util.HashMap<>();
+        departmentRepository.findAllById(ids).forEach(d -> names.put(d.getId(), d.getName()));
+        return names;
     }
 
     private static String fullName(Employee e) {
@@ -340,14 +558,16 @@ public class AdvanceController {
                 : (e.getFirstName() + " " + (e.getLastName() == null ? "" : e.getLastName())).trim();
     }
 
-    private AdvanceResponse enrich(AdvanceResponse r, Employee employee, Employee raisedBy) {
+    private AdvanceResponse enrich(AdvanceResponse r, Employee employee, Employee raisedBy, Map<UUID, String> departments) {
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
+        UUID departmentId = employee != null ? employee.getDepartmentId() : null;
         return new AdvanceResponse(
                 r.id(), r.employeeId(), fullName(employee), employeeCode, r.companyId(),
                 r.amount(), r.reason(), r.repaymentMonths(), r.monthlyDeduction(),
                 r.status(), r.approverId(), r.approvedAt(), r.approverComment(),
                 r.disbursedAt(), r.outstandingAmount(), r.createdAt(),
-                r.raisedById(), fullName(raisedBy));
+                r.raisedById(), fullName(raisedBy),
+                departmentId, departmentId == null ? null : departments.get(departmentId));
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

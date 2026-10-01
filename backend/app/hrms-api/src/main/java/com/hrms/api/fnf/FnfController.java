@@ -5,7 +5,10 @@ import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.fnf.dto.FnfSettlementRequest;
 import com.hrms.fnf.dto.FnfSettlementResponse;
+import com.hrms.fnf.enums.FnfStatus;
 import com.hrms.fnf.service.FnfService;
+import com.hrms.api.advance.PayFinancialYear;
+import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,10 +41,18 @@ public class FnfController {
 
     private final FnfService fnfService;
     private final EmployeeRepository employeeRepository;
+    private final FnfReadService reads;
+    private final WorkforceDepartmentRepository departmentRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public FnfController(FnfService fnfService, EmployeeRepository employeeRepository) {
+    public FnfController(FnfService fnfService, EmployeeRepository employeeRepository, FnfReadService reads,
+                         WorkforceDepartmentRepository departmentRepository,
+                         org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.fnfService = fnfService;
         this.employeeRepository = employeeRepository;
+        this.reads = reads;
+        this.departmentRepository = departmentRepository;
+        this.jdbc = jdbc;
     }
 
     // ─── Processing ──────────────────────────────────────────────────────────
@@ -66,12 +77,41 @@ public class FnfController {
 
     // ─── Read ────────────────────────────────────────────────────────────────
 
-    @Operation(summary = "List full & final settlements")
+    @Operation(summary = "List full & final settlements, optionally by status (comma-separated) and/or one employee")
     @GetMapping("/settlements")
     @PreAuthorize("hasAuthority('hrms.fnf.read')")
     public ResponseEntity<PageResponse<FnfSettlementResponse>> list(
+            @RequestParam(required = false) List<FnfStatus> status,
+            @RequestParam(required = false) UUID employeeId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(fnfService.getSettlements(pageable)));
+        // No filter = today's call exactly (BW-64 adds the two optional filters).
+        return ResponseEntity.ok(enrichPage(fnfService.getSettlements(status, employeeId, pageable)));
+    }
+
+    /**
+     * Each person's most recent settlement (any status, CANCELLED included),
+     * one row per id in the order asked, nulls when none was started (BW-64,
+     * shared hook useFnfStatus). Mapped explicitly so this literal path wins
+     * over {@code /settlements/{id}}, which used to answer it with a 400.
+     */
+    @Operation(summary = "Full & final status of each of these employees (their most recent settlement)")
+    @GetMapping("/settlements/status")
+    @PreAuthorize("hasAuthority('hrms.fnf.read')")
+    public ResponseEntity<List<FnfReadService.FnfStatusRow>> statusFor(
+            @RequestParam(required = false) String employeeIds) {
+        return ResponseEntity.ok(reads.statusFor(com.hrms.core.tenant.TenantContext.getTenantId(),
+                FnfReadService.parseIds(employeeIds)));
+    }
+
+    @Operation(summary = "Totals of the settlements ledger: waiting for approval, to be paid, settled, paid this financial year")
+    @GetMapping("/summary")
+    @PreAuthorize("hasAuthority('hrms.fnf.read')")
+    public ResponseEntity<FnfReadService.FnfSummary> summary(@AuthenticationPrincipal Jwt jwt) {
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        UUID caller = jwt == null ? null : extractEmployeeId(jwt);
+        PayFinancialYear year = PayFinancialYear.of(jdbc, tenantId, caller,
+                java.time.LocalDate.now(PayFinancialYear.IST));
+        return ResponseEntity.ok(reads.summary(tenantId, year));
     }
 
     @Operation(summary = "Get a single full & final settlement with its components")
@@ -138,8 +178,9 @@ public class FnfController {
                 ? Map.of()
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+        Map<UUID, String> departments = departmentNames(employeeMap.values());
         List<FnfSettlementResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap.get(r.employeeId())))
+                .map(r -> enrich(r, employeeMap.get(r.employeeId()), departments))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
@@ -149,10 +190,10 @@ public class FnfController {
         Employee employee = r.employeeId() == null
                 ? null
                 : employeeRepository.findById(r.employeeId()).orElse(null);
-        return enrich(r, employee);
+        return enrich(r, employee, employee == null ? Map.of() : departmentNames(List.of(employee)));
     }
 
-    private FnfSettlementResponse enrich(FnfSettlementResponse r, Employee employee) {
+    private FnfSettlementResponse enrich(FnfSettlementResponse r, Employee employee, Map<UUID, String> departments) {
         String employeeName = employee != null
                 ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim()
                 : null;
@@ -161,7 +202,18 @@ public class FnfController {
                 r.id(), r.employeeId(), employeeName, employeeCode, r.companyId(),
                 r.lastWorkingDay(), r.status(), r.grossPayable(), r.totalDeductions(),
                 r.netSettlement(), r.notes(), r.processedAt(), r.approvedAt(),
-                r.paidAt(), r.approverId(), r.createdAt(), r.components());
+                r.paidAt(), r.approverId(), r.createdAt(), r.components(),
+                employee != null ? employee.getDepartmentId() : null,
+                employee != null && employee.getDepartmentId() != null ? departments.get(employee.getDepartmentId()) : null,
+                employee != null && employee.getEmploymentStatus() != null ? employee.getEmploymentStatus().name() : null);
+    }
+
+    private Map<UUID, String> departmentNames(java.util.Collection<Employee> employees) {
+        List<UUID> ids = employees.stream().map(Employee::getDepartmentId).filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, String> names = new java.util.HashMap<>();
+        departmentRepository.findAllById(ids).forEach(d -> names.put(d.getId(), d.getName()));
+        return names;
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

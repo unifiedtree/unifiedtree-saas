@@ -95,6 +95,17 @@ public class AttendanceController {
     /** The admin dashboard's history view: people who have since left, on the days they still worked. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.hrms.api.workforce.DashboardHistory dashboardHistory;
+    /** Web check-in switch and "Anywhere (no geofence)" per person (V143.53). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PunchRulesService punchRules;
+    /** The roster's leave facts and branch names (BW-13), read with JDBC. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    /** Who a fix request went to, and who decided it (BW-23). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ApproverPath approverPath;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.audit.AuditService auditService;
 
     /** Longest window the trend endpoint will serve; longer requests are clamped. */
     private static final int MAX_TREND_DAYS = 31;
@@ -129,6 +140,18 @@ public class AttendanceController {
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
+        // Web check-in (V143.53, BW-24): only while the company switched it on and
+        // the records accept WEB, and only with the browser's location. The zone
+        // rule below applies as to any punch; there is no face check on the web,
+        // and no offline queue, so the server clock stamps it.
+        boolean web = PunchRulesService.isWeb(request.checkInMethod());
+        if (web) {
+            if (punchRules == null) {
+                throw new BusinessRuleException("Web check-in isn't switched on for your company. Check in and out from the mobile app.",
+                        PunchRulesService.WEB_PUNCH_NOT_ALLOWED);
+            }
+            punchRules.assertWebPunch(ctx.companyId(), request.latitude(), request.longitude());
+        }
         GeoValidateResponse geoValidation = geoValidationService.validate(
                 new GeoValidateRequest(employeeId, request.latitude(), request.longitude()),
                 ctx.branchId(),
@@ -146,13 +169,16 @@ public class AttendanceController {
         // server now) so a punch captured before midnight and flushed after it
         // is still matched against the WFH approval for the day it was made.
         LocalDate punchDate = attendanceService
-                .effectivePunchInstant(request.capturedAt(), request.offlineCaptured())
+                .effectivePunchInstant(web ? null : request.capturedAt(), !web && request.offlineCaptured())
                 .atZone(ZoneId.of("Asia/Kolkata")).toLocalDate();
         boolean wfhDay = attendanceService.isApprovedWfhDay(employeeId, punchDate);
+        // "Anywhere (no geofence)" for this person (V143.53, BW-28): like an
+        // approved WFH day, the zone doesn't apply. Off without a rule or table.
+        boolean anywhere = punchRules != null && punchRules.allowAnywhere(employeeId);
 
         // Blocked only when the server-wide switch AND the company's "Require
         // geofencing on mobile" rule (HR Configuration -> Attendance rules) are on.
-        if (!geoValidation.withinFence() && geofenceEnforce && companyRequiresGeofence(ctx.companyId()) && !wfhDay) {
+        if (!geoValidation.withinFence() && geofenceEnforce && companyRequiresGeofence(ctx.companyId()) && !wfhDay && !anywhere) {
             throw new BusinessRuleException(
                     (geoValidation.message() != null ? geoValidation.message() : "You are outside the attendance zone.")
                             + " Check in from inside your office zone, or ask HR for a work-from-home day.",
@@ -166,7 +192,7 @@ public class AttendanceController {
                 ctx.departmentId(),
                 request.latitude(),
                 request.longitude(),
-                request.faceImageBase64(),
+                web ? null : request.faceImageBase64(),
                 request.checkInMethod(),
                 com.hrms.core.tenant.TenantContext.getTenantId(),
                 request.locationName() != null ? request.locationName() : ctx.branchName(),
@@ -178,11 +204,11 @@ public class AttendanceController {
                 // online punch is happening now, so the server clock wins.
                 // Both are null/false for pre-capturedAt app builds, which keeps
                 // the server-clock behaviour byte-for-byte.
-                request.offlineCaptured(),
-                request.capturedAt());
+                !web && request.offlineCaptured(),
+                web ? null : request.capturedAt());
         // Accepted from outside the zone (the company doesn't require it): mark
         // the day so it shows in the attendance review list.
-        if (!geoValidation.withinFence() && !wfhDay && reviewService != null && dto != null && dto.id() != null) {
+        if (!geoValidation.withinFence() && !wfhDay && !anywhere && reviewService != null && dto != null && dto.id() != null) {
             try {
                 reviewService.flagOutsideGeofence(dto.id(), LocalDate.parse(dto.attendanceDate()), geoValidation.distanceMeters());
             } catch (RuntimeException e) {
@@ -191,8 +217,9 @@ public class AttendanceController {
             }
         }
         // Put the phone / kiosk on the face check that cleared this punch, so
-        // the Face tab can say where it happened (V143.25). Best effort.
-        if (facePunchDevices != null) {
+        // the Face tab can say where it happened (V143.25). Best effort. A web
+        // punch has no face check.
+        if (facePunchDevices != null && !web) {
             try {
                 facePunchDevices.link(jwt.getSubject(), request.deviceId(), request.checkInMethod());
             } catch (RuntimeException ignored) {
@@ -226,6 +253,16 @@ public class AttendanceController {
         // add a NEW endpoint POST /v1/attendance/team/force-checkout guarded
         // by @PreAuthorize("hasAuthority('attendance.regularization.approve')").
         UUID employeeId = extractEmployeeId(jwt);
+        // Web check-out (V143.53, BW-24): the same switch and the browser's
+        // location as a web check-in; no offline queue on the web.
+        boolean web = request != null && PunchRulesService.isWeb(request.checkOutMethod());
+        if (web) {
+            if (punchRules == null) {
+                throw new BusinessRuleException("Web check-in isn't switched on for your company. Check in and out from the mobile app.",
+                        PunchRulesService.WEB_PUNCH_NOT_ALLOWED);
+            }
+            punchRules.assertWebPunch(contextResolver.resolve(employeeId).companyId(), request.latitude(), request.longitude());
+        }
         AttendanceDto out = attendanceService.checkOut(
                 employeeId,
                 request != null ? request.latitude() : null,
@@ -234,8 +271,8 @@ public class AttendanceController {
                 request != null ? request.locationName() : null,
                 request != null ? request.zoneName() : null,
                 request != null ? request.deviceId() : null,
-                request != null && request.offlineCaptured(),
-                request != null ? request.capturedAt() : null);
+                request != null && !web && request.offlineCaptured(),
+                request != null && !web ? request.capturedAt() : null);
         // Why they stayed late, when the app sends it (V143.25). Best effort.
         if (overtimeReasons != null && request != null && out != null) {
             try {
@@ -343,6 +380,15 @@ public class AttendanceController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean includeLeavers,
             @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(teamDay(jwt, date, departmentId, includeLeavers));
+    }
+
+    /**
+     * The team's day: the dashboard's roster rows and tiles, in the caller's
+     * team scope. The day register export (AttendanceRegisterController, BW-19)
+     * writes exactly these rows.
+     */
+    public TeamDashboardResponse teamDay(Jwt jwt, LocalDate date, UUID departmentId, Boolean includeLeavers) {
         LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         // includeLeavers (the admin dashboard's history view): the team as it was
         // on the date, so people who have left since still count on the days
@@ -415,20 +461,30 @@ public class AttendanceController {
         // (grace, half-day rules, late allowance) and any reviewer's change.
         Map<UUID, com.hrms.attendance.policy.EffectiveDay> effective = effectiveOn(employeeIds, selectedDate);
 
+        // Roster facts (V143.53 redesign, BW-13): the branch, how the check-in
+        // was made, the approved leave covering the day and whether a leave
+        // request is still waiting. One lookup each; each only enriches the rows,
+        // so a failure leaves those fields empty and never the dashboard.
+        Map<UUID, String> branchNames = branchNames(employees);
+        Map<UUID, LeaveFacts> leaveFacts = leaveFactsOn(employeeIds, selectedDate);
+
         List<StaffStatusResponse> staff = employees.stream()
-                .map(employee -> toStaffStatus(
+                .map(employee -> withRosterFacts(toStaffStatus(
                         employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee,
                         onLeaveIds.contains(employee.getId()), shiftByEmployee.get(employee.getId()),
-                        effective.get(employee.getId())))
+                        effective.get(employee.getId())),
+                        employee.getBranchId() != null ? branchNames.get(employee.getBranchId()) : null,
+                        byEmployee.get(employee.getId()),
+                        leaveFacts.get(employee.getId())))
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
 
-        return ResponseEntity.ok(new TeamDashboardResponse(
+        return new TeamDashboardResponse(
                 selectedDate,
                 effective.isEmpty()
                         ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
                         : countSummaryFromRows(staff, onLeaveIds),
-                staff));
+                staff);
     }
 
     /**
@@ -467,6 +523,105 @@ public class AttendanceController {
             if (d != null) out.put(id, d);
         });
         return out;
+    }
+
+    // ── Roster facts (V143.53 redesign, BW-13) ───────────────────────────────
+
+    /** The leave that covers one day for one person: the approved one (type, first and last day) and whether one is waiting. */
+    record LeaveFacts(String typeName, LocalDate from, LocalDate to, boolean pending) {}
+
+    /** One leave request covering the day, newest first (as the query returns them). */
+    record LeaveRow(UUID employeeId, String status, LocalDate from, LocalDate to, String typeName) {}
+
+    /**
+     * Folds the day's leave requests into one fact per person: the newest
+     * APPROVED request gives the type and dates; any PENDING or PENDING_L2 one
+     * sets {@code pending}. Package-visible for tests.
+     */
+    static Map<UUID, LeaveFacts> leaveFacts(List<LeaveRow> rows) {
+        Map<UUID, LeaveFacts> out = new HashMap<>();
+        for (LeaveRow r : rows) {
+            if (r == null || r.employeeId() == null || r.status() == null) continue;
+            LeaveFacts f = out.getOrDefault(r.employeeId(), new LeaveFacts(null, null, null, false));
+            if ("APPROVED".equals(r.status()) && f.from() == null) {
+                f = new LeaveFacts(r.typeName(), r.from(), r.to(), f.pending());
+            } else if ("PENDING".equals(r.status()) || "PENDING_L2".equals(r.status())) {
+                f = new LeaveFacts(f.typeName(), f.from(), f.to(), true);
+            }
+            out.put(r.employeeId(), f);
+        }
+        return out;
+    }
+
+    /**
+     * The roster row with its BW-13 facts. The leave type and dates are kept only
+     * when the row is on approved leave, so they always agree with {@code onLeave}.
+     */
+    static StaffStatusResponse withRosterFacts(StaffStatusResponse s, String branchName, AttendanceRecord record, LeaveFacts leave) {
+        boolean approved = s.onLeave() && leave != null && leave.from() != null;
+        return new StaffStatusResponse(s.employeeId(), s.employeeCode(), s.fullName(), s.jobTitle(), s.departmentId(),
+                s.departmentName(), s.profilePhotoUrl(), s.status(), s.checkInAt(), s.checkOutAt(), s.locationName(),
+                s.latitude(), s.longitude(), s.earlyCheckout(), s.attendanceType(), s.onLeave(), s.shiftName(),
+                s.expectedCheckInAt(), s.graceMinutes(), s.lateByMinutes(), s.effectiveStatus(), s.statusNote(),
+                s.statusManual(), s.lossOfPay(), s.withinAllowance(), s.outsideGeofence(), s.punchRejected(),
+                s.earlyByMinutes(), s.workedMinutes(),
+                branchName,
+                record != null && record.getCheckInAt() != null && record.getCheckInMethod() != null ? record.getCheckInMethod().name() : null,
+                approved ? leave.typeName() : null,
+                approved ? leave.from() : null,
+                approved ? leave.to() : null,
+                leave != null && leave.pending());
+    }
+
+    /** Leave requests (approved or waiting) that cover {@code date}, per person; empty on any failure. */
+    private Map<UUID, LeaveFacts> leaveFactsOn(List<UUID> employeeIds, LocalDate date) {
+        if (jdbc == null || employeeIds.isEmpty()) return Map.of();
+        try {
+            List<Object> args = new java.util.ArrayList<>();
+            args.add(com.unifiedtree.security.tenant.TenantContext.requireTenantId());
+            args.addAll(employeeIds);
+            args.add(date);
+            args.add(date);
+            List<LeaveRow> rows = jdbc.query("""
+                    SELECT lr.employee_id, lr.status::text AS status, lr.start_date, lr.end_date, lt.name AS type_name
+                      FROM leave_mgmt.leave_requests lr
+                      LEFT JOIN leave_mgmt.leave_types lt ON lt.id = lr.leave_type_id AND lt.tenant_id = lr.tenant_id
+                     WHERE lr.tenant_id = ? AND lr.employee_id IN (%s)
+                       AND lr.start_date <= ? AND lr.end_date >= ?
+                       AND lr.status::text IN ('APPROVED', 'PENDING', 'PENDING_L2')
+                     ORDER BY lr.created_at DESC
+                    """.formatted(String.join(",", java.util.Collections.nCopies(employeeIds.size(), "?"))),
+                    (rs, i) -> new LeaveRow((UUID) rs.getObject("employee_id"), rs.getString("status"),
+                            rs.getDate("start_date").toLocalDate(), rs.getDate("end_date").toLocalDate(),
+                            rs.getString("type_name")),
+                    args.toArray());
+            return leaveFacts(rows);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
+                    .warn("Team dashboard: leave facts failed for {} on {}: {}", employeeIds.size(), date, e.getMessage());
+            return Map.of();
+        }
+    }
+
+    /** Branch names for the employees' branches; empty on any failure. */
+    private Map<UUID, String> branchNames(List<Employee> employees) {
+        List<UUID> ids = employees.stream().map(Employee::getBranchId).filter(Objects::nonNull).distinct().toList();
+        if (jdbc == null || ids.isEmpty()) return Map.of();
+        try {
+            List<Object> args = new java.util.ArrayList<>();
+            args.add(com.unifiedtree.security.tenant.TenantContext.requireTenantId());
+            args.addAll(ids);
+            Map<UUID, String> out = new HashMap<>();
+            jdbc.query("SELECT id, name FROM org.branches WHERE tenant_id = ? AND id IN ("
+                            + String.join(",", java.util.Collections.nCopies(ids.size(), "?")) + ")",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put((UUID) rs.getObject("id"), rs.getString("name")),
+                    args.toArray());
+            return out;
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
+                    .warn("Team dashboard: branch names failed: {}", e.getMessage());
+            return Map.of();
+        }
     }
 
     /**
@@ -855,7 +1010,41 @@ public class AttendanceController {
                 target.companyId(),
                 target.departmentId(),
                 target.branchId());
+        // Every manual entry is also in the audit log (V143.53, BW-18), as the
+        // Manual entry page says. Best effort: the entry is already saved.
+        auditManualEntry(request.employeeId(), dto, request.reason());
         return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * One audit event per manual entry: whose day, the times and the reason.
+     * Public: the bulk controller calls it through this bean's security proxy.
+     */
+    public void auditManualEntry(UUID employeeId, AttendanceDto dto, String reason) {
+        if (auditService == null || dto == null) return;
+        try {
+            String who = employeeRepository.findById(employeeId).map(this::fullName).orElse("An employee");
+            auditService.record("attendance", "MANUAL_ENTRY", "employee", employeeId,
+                    manualEntrySummary(who, dto, reason));
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
+                    .warn("Audit write failed for a manual entry for {}: {}", employeeId, e.getMessage());
+        }
+    }
+
+    /** "Manual entry for Asha Rao on 25 Sep 2026: in 09:30, out 18:30. Reason: Forgot to punch." */
+    static String manualEntrySummary(String who, AttendanceDto dto, String reason) {
+        java.time.format.DateTimeFormatter day = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH);
+        java.time.format.DateTimeFormatter clock = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("Asia/Kolkata"));
+        StringBuilder sb = new StringBuilder("Manual entry for ").append(who);
+        try { sb.append(" on ").append(day.format(LocalDate.parse(dto.attendanceDate()))); } catch (RuntimeException ignored) { /* no date */ }
+        List<String> times = new java.util.ArrayList<>();
+        if (dto.checkInTime() != null) times.add("in " + clock.format(java.time.Instant.parse(dto.checkInTime())));
+        if (dto.checkOutTime() != null) times.add("out " + clock.format(java.time.Instant.parse(dto.checkOutTime())));
+        if (!times.isEmpty()) sb.append(": ").append(String.join(", ", times));
+        sb.append('.');
+        if (reason != null && !reason.isBlank()) sb.append(" Reason: ").append(reason.trim());
+        return sb.toString();
     }
 
     @Operation(summary = "Employee attendance correction request")
@@ -870,8 +1059,9 @@ public class AttendanceController {
                 request.attachmentUrl(), CorrectionProofController.ownPrefix(employeeId));
         if (proofProblem != null) throw new BusinessRuleException(proofProblem, "CORRECTION_PROOF_INVALID");
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
-        return ResponseEntity.ok(attendanceService.createCorrectionRequest(
-                employeeId, ctx.companyId(), ctx.departmentId(), request));
+        CorrectionRequestResponse created = attendanceService.createCorrectionRequest(
+                employeeId, ctx.companyId(), ctx.departmentId(), request);
+        return ResponseEntity.ok(withApproverNames(List.of(created)).get(0));
     }
 
     @Operation(summary = "My attendance correction requests")
@@ -880,7 +1070,42 @@ public class AttendanceController {
     public ResponseEntity<PageResponse<CorrectionRequestResponse>> myCorrections(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(attendanceService.getMyCorrectionRequests(extractEmployeeId(jwt), pageable));
+        PageResponse<CorrectionRequestResponse> page = attendanceService.getMyCorrectionRequests(extractEmployeeId(jwt), pageable);
+        return ResponseEntity.ok(new PageResponse<>(withApproverNames(page.content()),
+                page.page(), page.size(), page.totalElements(), page.totalPages(), page.last()));
+    }
+
+    /**
+     * Adds who each fix request went to (while it waits) and who decided it
+     * (V143.53, BW-23). The names come from the same path the notification
+     * took. Best effort: on any failure the rows go out without names.
+     */
+    List<CorrectionRequestResponse> withApproverNames(List<CorrectionRequestResponse> rows) {
+        if (approverPath == null || rows == null || rows.isEmpty()) return rows;
+        try {
+            List<UUID> waiting = rows.stream().filter(c -> c.status() == ApprovalStatus.PENDING)
+                    .map(CorrectionRequestResponse::employeeId).distinct().toList();
+            Map<UUID, UUID> goesTo = approverPath.approversOf(waiting);
+            Set<UUID> people = new HashSet<>(goesTo.values());
+            rows.stream().filter(c -> c.status() != ApprovalStatus.PENDING && c.approverId() != null)
+                    .forEach(c -> people.add(c.approverId()));
+            Map<UUID, String> names = approverPath.namesOf(people);
+            return rows.stream().map(c -> withNames(c,
+                    c.status() == ApprovalStatus.PENDING ? names.get(goesTo.get(c.employeeId())) : null,
+                    c.status() != ApprovalStatus.PENDING && c.approverId() != null ? names.get(c.approverId()) : null))
+                    .toList();
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
+                    .warn("Could not add approver names to {} fix requests: {}", rows.size(), e.getMessage());
+            return rows;
+        }
+    }
+
+    static CorrectionRequestResponse withNames(CorrectionRequestResponse c, String approverName, String decidedByName) {
+        return new CorrectionRequestResponse(c.id(), c.employeeId(), c.employeeName(), c.employeeCode(), c.departmentName(),
+                c.attendanceRecordId(), c.requestedDate(), c.requestedCheckInAt(), c.requestedCheckOutAt(), c.reason(),
+                c.attachmentUrl(), c.status(), c.approverId(), c.approverComment(), c.decidedAt(), c.createdAt(),
+                approverName, decidedByName);
     }
 
     @Operation(summary = "Manager/Admin attendance correction approvals")
@@ -909,9 +1134,9 @@ public class AttendanceController {
         Map<UUID, Employee> employeeMap = employees.stream()
                 .collect(Collectors.toMap(Employee::getId, Function.identity(), (a, b) -> a));
         Map<UUID, String> departmentNames = departmentNames(employees);
-        List<CorrectionRequestResponse> enriched = page.content().stream()
+        List<CorrectionRequestResponse> enriched = withApproverNames(page.content().stream()
                 .map(c -> enrichCorrection(c, employeeMap.get(c.employeeId()), departmentNames))
-                .toList();
+                .toList());
         return ResponseEntity.ok(new PageResponse<>(
                 enriched, page.page(), page.size(), page.totalElements(), page.totalPages(), page.last()));
     }
@@ -931,7 +1156,7 @@ public class AttendanceController {
         Map<UUID, String> departmentNames = employee != null
                 ? departmentNames(List.of(employee))
                 : Map.of();
-        return ResponseEntity.ok(enrichCorrection(decided, employee, departmentNames));
+        return ResponseEntity.ok(withApproverNames(List.of(enrichCorrection(decided, employee, departmentNames))).get(0));
     }
 
     @Operation(summary = "Get my attendance records (paginated)")
@@ -985,6 +1210,38 @@ public class AttendanceController {
         // B7 FIX (audit 2026-08-15): same IDOR guard as records above.
         assertCanReadEmployeeAttendance(jwt, employeeId);
         return ResponseEntity.ok(attendanceService.getWeeklySummary(employeeId, weekStart));
+    }
+
+    // V143.53 redesign (BW-16): one employee's month, day by day, the way their
+    // own My Attendance shows it (weekly offs, holidays and leave included), for
+    // their profile. Same guard as the records above.
+
+    @Operation(summary = "A specific employee's month, day by day (manager/admin)")
+    @GetMapping("/employee/{employeeId}/history")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<List<DayRecordResponse>> employeeHistory(
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) @Min(2000) @Max(2100) Integer year,
+            @RequestParam(required = false) @Min(1) @Max(12) Integer month,
+            @AuthenticationPrincipal Jwt jwt) {
+        assertCanReadEmployeeAttendance(jwt, employeeId);
+        LocalDate now = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        return ResponseEntity.ok(attendanceService.getMonthHistory(employeeId,
+                year != null ? year : now.getYear(), month != null ? month : now.getMonthValue()));
+    }
+
+    @Operation(summary = "A specific employee's month in numbers (manager/admin)")
+    @GetMapping("/employee/{employeeId}/monthly-stats")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<MonthlyStatsResponse> employeeMonthlyStats(
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) @Min(2000) @Max(2100) Integer year,
+            @RequestParam(required = false) @Min(1) @Max(12) Integer month,
+            @AuthenticationPrincipal Jwt jwt) {
+        assertCanReadEmployeeAttendance(jwt, employeeId);
+        LocalDate now = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        return ResponseEntity.ok(attendanceService.getMonthlyStats(employeeId,
+                year != null ? year : now.getYear(), month != null ? month : now.getMonthValue()));
     }
 
     /**

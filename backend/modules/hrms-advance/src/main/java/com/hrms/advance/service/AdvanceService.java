@@ -129,6 +129,18 @@ public class AdvanceService {
         return toPage(advanceRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable));
     }
 
+    /**
+     * These advances, in the order given (a filtered page whose ids and order
+     * were chosen by a JDBC query, BW-62). Ids that no longer exist are skipped.
+     */
+    @Transactional(readOnly = true)
+    public List<AdvanceResponse> getByIdsInOrder(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        java.util.Map<UUID, AdvanceRequest> byId = new java.util.HashMap<>();
+        advanceRepository.findAllById(ids).forEach(a -> byId.put(a.getId(), a));
+        return ids.stream().map(byId::get).filter(java.util.Objects::nonNull).map(this::toResponse).toList();
+    }
+
     @Transactional(readOnly = true)
     public AdvanceResponse getRequest(UUID requestId) {
         AdvanceRequest advance = advanceRepository.findById(requestId)

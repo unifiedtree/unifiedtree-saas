@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft, Loader2, Minus, Plus, ShieldCheck, Sparkles, Users,
-  AlertCircle, Lock,
+  Loader2, Minus, Plus, ShieldCheck, Sparkles, Users,
+  AlertCircle,
 } from 'lucide-react'
+import { Button, Callout, PageFrame, PageHeader } from '@/design/kit/display'
+import { dashIcon } from '@/design/dc/icons'
+import '@/design/shell/shell.css'
 import { clsx } from 'clsx'
 import { toast } from 'sonner'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
@@ -720,39 +723,32 @@ export const Plan: React.FC = () => {
   // -- guards ---------------------------------------------------------------
   if (!isAdmin) {
     return (
-      <div className="min-h-full bg-[var(--bg-base)]">
-        <div className="mx-auto max-w-2xl px-6 py-16">
-          <div className="ut-card ut-card-lg p-8 text-center">
-            <Lock size={32} className="mx-auto text-[var(--text-tertiary)]" />
-            <h1 className="mt-4 text-xl font-semibold text-[var(--text-primary)]">Only workspace admins can manage the plan</h1>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">Ask your admin to open Manage Plan and add modules for you.</p>
-            <button onClick={() => navigate('/modules')} className="mt-6 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]">
-              <ArrowLeft size={14} /> Back to apps
-            </button>
-          </div>
-        </div>
-      </div>
+      <PageFrame width="narrow">
+        <section className="ut-noaccess__card ut-plan__guard" aria-labelledby="ut-plan-guard">
+          <span className="ut-noaccess__icon" aria-hidden="true">{dashIcon('lock', 26)}</span>
+          <h1 id="ut-plan-guard" className="ut-noaccess__title">Only workspace admins can manage the plan</h1>
+          <p className="ut-noaccess__text">Ask your admin to open Manage Plan and add modules for you.</p>
+          <Button variant="secondary" size={38} icon="chevronLeft" onClick={() => navigate('/modules')}>Back to apps</Button>
+        </section>
+      </PageFrame>
     )
   }
 
   // -- render ---------------------------------------------------------------
   return (
-    <div className="min-h-full bg-[var(--bg-base)]">
-      <div className="mx-auto max-w-6xl px-6 py-10 sm:px-8 sm:py-14">
-        {/* Header */}
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
-            <button onClick={() => navigate('/modules')} className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              <ArrowLeft size={12} /> Back to apps
-            </button>
-            <h1 className="text-3xl font-semibold tracking-tight text-[var(--text-primary)]">Manage your plan</h1>
-            <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
-              {freeTrialUsed
-                ? <>Pick modules for {tenantName} and set the seat count for each. Billing starts on your first day.</>
-                : <>Pick modules for {tenantName} and set the seat count for each. First 7 days are free — autopay kicks in after.</>}
-            </p>
-          </div>
-        </div>
+    <>
+    <PageFrame>
+      <div>
+        <button type="button" onClick={() => navigate('/modules')} className="ut-plan__back">
+          {dashIcon('chevronLeft', 14)} Back to apps
+        </button>
+        <PageHeader
+          title="Manage your plan"
+          sub={freeTrialUsed
+            ? <>Pick modules for {tenantName} and set the seat count for each. Billing starts on your first day.</>
+            : <>Pick modules for {tenantName} and set the seat count for each. First 7 days are free — autopay kicks in after.</>}
+        />
+      </div>
 
         {/* GRANDFATHERED SEAT-OVERAGE WARNING (Anil punchlist 2026-08-22).
             Renders only when the workspace has more active employees than paid
@@ -772,13 +768,12 @@ export const Plan: React.FC = () => {
             Styling matches the "unbilled modules" amber banner further down
             in this same file so the two feel like one visual system. */}
         {seatOverage && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-700" />
+          <Callout tone="warning" icon="alertTriangle" className="ut-plan__note">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-900">
+              <p className="ut-plan__notetitle">
                 You've exceeded your seat cap
               </p>
-              <p className="mt-0.5 text-xs text-amber-800">
+              <p className="ut-plan__notetext">
                 You have <b className="tabular-nums">{seatOverage.current}</b> active
                 employees but only <b className="tabular-nums">{seatOverage.purchased}</b> paid
                 seats. Your existing team can keep working, but{' '}
@@ -789,7 +784,7 @@ export const Plan: React.FC = () => {
                 cycle.
               </p>
             </div>
-          </div>
+          </Callout>
         )}
 
         {/* Could not read the current plan. Say so plainly and block purchase:
@@ -797,19 +792,20 @@ export const Plan: React.FC = () => {
             new module from a duplicate, and buying a duplicate means a second
             Razorpay mandate charging for something they already pay for. */}
         {subsLoadFailed && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-red-900">We couldn't load your current plan</p>
-              <p className="mt-0.5 text-xs text-red-800">
-                To avoid charging you twice for a module you may already have, purchasing is
-                paused until we can confirm what your workspace is subscribed to.
-              </p>
+          <Callout tone="danger" icon="alertTriangle" className="ut-plan__note">
+            <div className="ut-plan__noterow">
+              <div className="min-w-0">
+                <p className="ut-plan__notetitle">We couldn't load your current plan</p>
+                <p className="ut-plan__notetext">
+                  To avoid charging you twice for a module you may already have, purchasing is
+                  paused until we can confirm what your workspace is subscribed to.
+                </p>
+              </div>
+              <Button variant="danger" size={32} onClick={() => { setActiveSubsLoading(true); fetchCurrent() }}>
+                Retry
+              </Button>
             </div>
-            <button onClick={() => { setActiveSubsLoading(true); fetchCurrent() }}
-                    className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700">
-              Retry
-            </button>
-          </div>
+          </Callout>
         )}
 
         {/* Outstanding-payment recovery. Shown when we know a purchase was
@@ -819,34 +815,33 @@ export const Plan: React.FC = () => {
             worst state a payment system can put someone in: money gone,
             nothing unlocked, no way to act. */}
         {pendingId && !awaitingMandate && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-900">You have a payment we haven't confirmed yet</p>
-              <p className="mt-0.5 text-xs text-amber-800">
-                If money has already left your account, nothing is lost — we'll check with
-                Razorpay and unlock your module. You will not be charged again.
-              </p>
+          <Callout tone="warning" icon="alertTriangle" className="ut-plan__note">
+            <div className="ut-plan__noterow">
+              <div className="min-w-0">
+                <p className="ut-plan__notetitle">You have a payment we haven't confirmed yet</p>
+                <p className="ut-plan__notetext">
+                  If money has already left your account, nothing is lost — we'll check with
+                  Razorpay and unlock your module. You will not be charged again.
+                </p>
+              </div>
+              <div className="ut-plan__noteactions">
+                <Button variant="primary" size={32} onClick={recoverPayment} disabled={recovering}>
+                  {recovering && <Loader2 size={12} className="animate-spin" />}
+                  {recovering ? 'Checking…' : "I paid but it's still locked"}
+                </Button>
+                <Button variant="plain" size={32} onClick={() => cancelPendingSetup(pendingId)}>
+                  Dismiss
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={recoverPayment} disabled={recovering}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60">
-                {recovering && <Loader2 size={12} className="animate-spin" />}
-                {recovering ? 'Checking…' : "I paid but it's still locked"}
-              </button>
-              <button onClick={() => cancelPendingSetup(pendingId)}
-                      className="rounded-lg px-2 py-2 text-xs font-medium text-amber-800 hover:text-amber-900">
-                Dismiss
-              </button>
-            </div>
-          </div>
+          </Callout>
         )}
 
         {/* Success banner for a completed change-seats operation */}
         {changeMessage && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl bg-[var(--accent-bg)]/60 p-3 text-sm text-[var(--accent-fg-strong)]">
-            <Sparkles size={14} className="mt-0.5 shrink-0" />
+          <Callout tone="success" icon="checkCircle" live className="ut-plan__note">
             <span>{changeMessage}</span>
-          </div>
+          </Callout>
         )}
 
         {/* YOUR CURRENT PLAN — one card per active subscription. Same UPI
@@ -1142,9 +1137,9 @@ export const Plan: React.FC = () => {
           {/* Plan summary */}
           <aside id="plan-summary" className="lg:sticky lg:top-6 lg:self-start">
             <div className="ut-card overflow-hidden outline outline-2 outline-[color:var(--accent-border)]">
-              <div className="bg-[var(--accent-solid)] px-5 py-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">Your plan</p>
-                <h2 className="text-lg font-bold text-white">
+              <div className="ut-plan__sumhead">
+                <p className="ut-plan__sumeyebrow">Your plan</p>
+                <h2 className="ut-plan__sumtitle">
                   {selectedPlans.length === 0
                     ? 'No modules selected'
                     : selectedPlans.map(x => x.plan.displayName).join(' · ')}
@@ -1246,16 +1241,17 @@ export const Plan: React.FC = () => {
             </div>
           </aside>
         </div>
-      </div>
+    </PageFrame>
 
-      {/* Waiting-for-mandate overlay */}
+      {/* Waiting-for-mandate overlay (the blurred backdrop is a sibling of the card) */}
       {awaitingMandate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
-          <div className="ut-card ut-card-lg max-w-md w-full p-8 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          <div className="ut-backdrop" aria-hidden="true" />
+          <div role="dialog" aria-modal="true" aria-labelledby="ut-plan-waiting" className="ut-card ut-card-lg relative max-w-md w-full p-8 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-bg)]">
               <Loader2 size={24} className="animate-spin text-[var(--accent-fg-strong)]" />
             </div>
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Waiting for mandate approval…</h2>
+            <h2 id="ut-plan-waiting" className="text-lg font-bold text-[var(--text-primary)]">Waiting for mandate approval…</h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               {checkoutTab
                 ? 'We opened Razorpay in a new tab. Complete the autopay authorisation there and your modules will unlock automatically.'
@@ -1299,6 +1295,6 @@ export const Plan: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

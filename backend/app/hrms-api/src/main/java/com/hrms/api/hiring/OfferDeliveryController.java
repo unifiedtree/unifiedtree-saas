@@ -19,16 +19,17 @@ public class OfferDeliveryController {
     private final OfferDeliveryService service;
     public OfferDeliveryController(OfferDeliveryService service) { this.service = service; }
 
-    public record SendRequest(@NotBlank @Email @Size(max = 254) String recipient) {}
+    /** {@code recipient} may be left out (V143.59): the offer's candidate email is used then. */
+    public record SendRequest(@Email @Size(max = 254) String recipient) {}
 
     /** DELIVERED = the operator confirmed the message arrived; NOT_SENT = confirmed it did not (allows a new send). */
     public record ResolveRequest(@NotNull Boolean delivered, @NotBlank @Size(max = 500) String note) {}
 
     @PostMapping("/{id}/email")
     @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.write','hrms.hiring.write')")
-    public HiringOfferResponse send(@PathVariable UUID id, @Valid @RequestBody SendRequest request,
+    public HiringOfferResponse send(@PathVariable UUID id, @Valid @RequestBody(required = false) SendRequest request,
                                     @AuthenticationPrincipal Jwt jwt) {
-        return service.send(id, request.recipient(), actor(jwt));
+        return service.send(id, request == null ? null : request.recipient(), actor(jwt));
     }
 
     /** Every send of this offer with its outcome — the trail behind "was it emailed?". */

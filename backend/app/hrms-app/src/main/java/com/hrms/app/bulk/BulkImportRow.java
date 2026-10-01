@@ -18,15 +18,43 @@ public class BulkImportRow {
     private String gender;
     private String dateOfBirth;
     private String managerId;
+    // Redesign BW-93: the Add-employee columns imports now accept.
+    private String employeeCode;
+    private String branch;
+    private String reportingManager;
+    private String pan;
+    private String uan;
+    private String esi;
+    private String bankName;
+    private String bankAccount;
+    private String ifsc;
 
     private final List<String> errors = new ArrayList<>();
+    private final List<BulkImportProblem> problems = new ArrayList<>();
+    private final List<BulkImportProblem> warnings = new ArrayList<>();
 
     public BulkImportRow(int rowNumber) {
         this.rowNumber = rowNumber;
     }
 
+    /** A problem that isn't tied to one column. */
     public void addError(String error) {
-        errors.add("Row " + rowNumber + ": " + error);
+        addProblem(null, error);
+    }
+
+    /**
+     * A problem that stops the import. It is kept twice: as today's flat
+     * "Row N: message" string (older callers parse it) and as a structured
+     * {row, column, message} for the redesigned import page.
+     */
+    public void addProblem(String column, String message) {
+        errors.add("Row " + rowNumber + ": " + message);
+        problems.add(new BulkImportProblem(rowNumber, column, message));
+    }
+
+    /** Worth a look, but the row still imports. */
+    public void addWarning(String column, String message) {
+        warnings.add(new BulkImportProblem(rowNumber, column, message));
     }
 
     public boolean hasErrors() {
@@ -35,6 +63,8 @@ public class BulkImportRow {
 
     public int getRowNumber()            { return rowNumber; }
     public List<String> getErrors()      { return errors; }
+    public List<BulkImportProblem> getProblems() { return problems; }
+    public List<BulkImportProblem> getWarnings() { return warnings; }
     public String getFirstName()         { return firstName; }
     public void setFirstName(String v)   { this.firstName = v; }
     public String getLastName()          { return lastName; }
@@ -59,4 +89,22 @@ public class BulkImportRow {
     public void setDateOfBirth(String v) { this.dateOfBirth = v; }
     public String getManagerId()         { return managerId; }
     public void setManagerId(String v)   { this.managerId = v; }
+    public String getEmployeeCode()      { return employeeCode; }
+    public void setEmployeeCode(String v) { this.employeeCode = v; }
+    public String getBranch()            { return branch; }
+    public void setBranch(String v)      { this.branch = v; }
+    public String getReportingManager()  { return reportingManager; }
+    public void setReportingManager(String v) { this.reportingManager = v; }
+    public String getPan()               { return pan; }
+    public void setPan(String v)         { this.pan = v; }
+    public String getUan()               { return uan; }
+    public void setUan(String v)         { this.uan = v; }
+    public String getEsi()               { return esi; }
+    public void setEsi(String v)         { this.esi = v; }
+    public String getBankName()          { return bankName; }
+    public void setBankName(String v)    { this.bankName = v; }
+    public String getBankAccount()       { return bankAccount; }
+    public void setBankAccount(String v) { this.bankAccount = v; }
+    public String getIfsc()              { return ifsc; }
+    public void setIfsc(String v)        { this.ifsc = v; }
 }

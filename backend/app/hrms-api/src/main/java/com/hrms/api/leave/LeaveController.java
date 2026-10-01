@@ -49,6 +49,20 @@ public class LeaveController {
     @org.springframework.beans.factory.annotation.Autowired
     private com.hrms.api.attendance.ApproverScopeGuard approverScopeGuard;
 
+    // HRMS redesign (27 Sep 2026). Field-injected so the constructor, which tests
+    // and other packages build by hand, stays as it was; each is optional there.
+    /** Row details (BW-38): approver and decider names, type code, balance, conflicts. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private LeaveRequestDetails details;
+    /** "Approve all" (BW-42), one decision per request through the service proxy. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private LeaveBulkDecisions bulkDecisions;
+    /** Tells the employee when someone applied for leave in their name (BW-43). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private LeaveOnBehalfNotifier onBehalfNotifier;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.audit.AuditService auditService;
+
     public LeaveController(LeaveService leaveService,
                            LeaveTypeService leaveTypeService,
                            EmployeeRepository employeeRepository,
@@ -73,6 +87,21 @@ public class LeaveController {
         UUID employeeId = extractEmployeeId(jwt);
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
+        UUID approverId = resolveApprover(employee);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(leaveService.applyLeave(
+                        employeeId,
+                        companyId != null ? companyId : employee.getCompanyId(),
+                        request,
+                        approverId));
+    }
+
+    /**
+     * The approver a leave request of {@code employee} goes to. The one chain
+     * behind applying for yourself, applying on someone's behalf and the leave
+     * preview, so all three always agree.
+     */
+    private UUID resolveApprover(Employee employee) {
         // Approver resolution chain (audit P0-1). The approval queue filters by
         // approver_id, so a null approver makes the request invisible to everyone —
         // the worst customer-facing bug on a fresh tenant. Resolve in order and
@@ -127,12 +156,120 @@ public class LeaveController {
         // request submitted today for next month.
         approverId = approverFallbackResolver.redirectIfDelegated(
                 approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(leaveService.applyLeave(
-                        employeeId,
-                        companyId != null ? companyId : employee.getCompanyId(),
-                        request,
-                        approverId));
+        return approverId;
+    }
+
+    // ─── Apply on someone's behalf (HRMS redesign, BW-43) ───────────────────
+
+    /** People who have left: nobody applies for leave for them. The same list as advance on behalf. */
+    private static final java.util.Set<String> SEPARATED = java.util.Set.of("EXITED", "TERMINATED", "RESIGNED", "RETIRED");
+
+    /**
+     * HR, finance or an admin applies for leave in an employee's name. It is the
+     * request the employee could make themselves: the same body, checks and
+     * balance as {@link #apply}, filed under the employee's own company and sent
+     * to the employee's usual approver (their chain, {@link #resolveApprover}).
+     * Leave beyond the balance is refused as for anyone. Who applied is kept
+     * (the request's {@code created_by}, shown as {@code raisedByName}) and
+     * audited, and the employee is told ({@code leave.applied_on_behalf}).
+     * Never for yourself: that is your own request.
+     */
+    @Operation(summary = "Apply for leave in an employee's name (HR / admin)")
+    @PostMapping("/apply/for/{employeeId}")
+    @PreAuthorize("@perm.check('hrms.leave.apply.others')")
+    public ResponseEntity<LeaveRequestResponse> applyFor(
+            @PathVariable UUID employeeId,
+            @Valid @RequestBody LeaveRequestRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID caller = extractEmployeeId(jwt);
+        if (employeeId.equals(caller)) {
+            throw new BusinessRuleException(
+                    "To apply for your own leave, use Apply.", "LEAVE_ON_BEHALF_SELF");
+        }
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        Employee employee = employeeRepository.findById(employeeId)
+                .filter(e -> tenantId == null || tenantId.equals(e.getTenantId()))
+                .orElseThrow(() -> new com.hrms.core.exception.ResourceNotFoundException("Employee", employeeId));
+        if (employee.getEmploymentStatus() != null && SEPARATED.contains(employee.getEmploymentStatus().name())) {
+            throw new BusinessRuleException(
+                    "This employee has left the company, so leave can't be applied for them.", "LEAVE_EMPLOYEE_SEPARATED");
+        }
+        UUID typeCompany = leaveService.companyOfLeaveType(request.leaveTypeId());
+        if (typeCompany != null && employee.getCompanyId() != null && !typeCompany.equals(employee.getCompanyId())) {
+            throw new BusinessRuleException(
+                    "That leave type belongs to another company. Choose one of this employee's leave types.",
+                    "LEAVE_TYPE_OTHER_COMPANY");
+        }
+        UUID approverId = resolveApprover(employee);
+        LeaveRequestResponse created = leaveService.applyLeave(employee.getId(), employee.getCompanyId(), request, approverId);
+
+        // Saved and committed: record who did it and tell the employee. Neither can fail the request.
+        String raisedBy = employeeRepository.findById(caller).map(LeaveController::fullName).orElse(null);
+        String employeeName = fullName(employee);
+        if (auditService != null) {
+            try {
+                auditService.record("leave", "LEAVE_APPLIED_ON_BEHALF", "LEAVE_REQUEST", created.id(),
+                        "Applied for %s for %s, %s to %s (%s day%s)".formatted(
+                                created.leaveTypeName() != null ? created.leaveTypeName() : "leave",
+                                employeeName != null ? employeeName : employee.getId(),
+                                created.startDate(), created.endDate(), days(created.totalDays()),
+                                created.totalDays() == 1 ? "" : "s"));
+            } catch (Exception e) {
+                // Audit is best effort (AuditService also swallows its own write errors).
+            }
+        }
+        if (onBehalfNotifier != null) {
+            onBehalfNotifier.tellEmployee(employee.getTenantId(), employee.getId(), created.id(), raisedBy,
+                    created.leaveTypeName(), created.startDate(), created.endDate());
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(enrichOne(created));
+    }
+
+    private static String days(double d) {
+        return d == Math.rint(d) ? String.valueOf((long) d) : String.valueOf(d);
+    }
+
+    // ─── Leave preview (HRMS redesign, BW-48) ───────────────────────────────
+
+    /**
+     * What applying for this leave would do, without applying: the working days
+     * (counted as applying counts them), the balance before and after, who it
+     * would go to, and every reason it would be refused, the first being the one
+     * applying would answer with. Same company rule as {@link #apply}.
+     */
+    @Operation(summary = "Preview a leave request: working days, balance after, approver and anything that blocks it")
+    @GetMapping("/preview")
+    @PreAuthorize("hasAuthority('leave.request.self')")
+    public ResponseEntity<com.hrms.leave.dto.LeavePreviewResponse> preview(
+            @RequestParam UUID leaveTypeId,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @RequestParam(required = false) com.hrms.leave.enums.LeaveDuration duration,
+            @RequestParam(required = false) UUID companyId,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID employeeId = extractEmployeeId(jwt);
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
+        LeaveRequestRequest request = new LeaveRequestRequest(leaveTypeId, startDate, endDate,
+                duration != null ? duration : com.hrms.leave.enums.LeaveDuration.FULL_DAY, null);
+        String approverName = null;
+        com.hrms.leave.dto.LeavePreviewResponse.Refusal approverRefusal = null;
+        try {
+            UUID approverId = resolveApprover(employee);
+            approverName = employeeRepository.findById(approverId).map(LeaveController::fullName).orElse(null);
+        } catch (BusinessRuleException e) {
+            approverRefusal = new com.hrms.leave.dto.LeavePreviewResponse.Refusal(e.getErrorCode(), e.getMessage());
+        }
+        return ResponseEntity.ok(leaveService.previewLeave(
+                        employeeId, companyId != null ? companyId : employee.getCompanyId(), request)
+                .withApprover(approverName, approverRefusal));
+    }
+
+    /** "First Last", never "First null"; null when there is no name. */
+    static String fullName(Employee e) {
+        if (e == null) return null;
+        String n = (nz(e.getFirstName()) + " " + nz(e.getLastName())).trim();
+        return n.isBlank() ? null : n;
     }
 
     @Operation(summary = "Mobile leave overview - balances, recent requests, and approval count")
@@ -158,7 +295,7 @@ public class LeaveController {
                 ? leaveService.getAllPending(Pageable.ofSize(1))
                 : leaveService.getPendingApprovalsForManager(employeeId, Pageable.ofSize(1)))
                 .totalElements();
-        return ResponseEntity.ok(new LeaveOverviewResponse(balances, recent.content(), pendingApprovals));
+        return ResponseEntity.ok(new LeaveOverviewResponse(balances, withDetails(recent.content(), false), pendingApprovals));
     }
 
     @Operation(summary = "Get my leave requests")
@@ -167,7 +304,10 @@ public class LeaveController {
     public ResponseEntity<PageResponse<LeaveRequestResponse>> myLeaves(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(leaveService.getMyLeaves(extractEmployeeId(jwt), pageable));
+        PageResponse<LeaveRequestResponse> page = leaveService.getMyLeaves(extractEmployeeId(jwt), pageable);
+        // Who it went to, who decided and when, and who applied when HR did (BW-38, E9).
+        return ResponseEntity.ok(new PageResponse<>(withDetails(page.content(), false), page.page(), page.size(),
+                page.totalElements(), page.totalPages(), page.last()));
     }
 
     @Operation(summary = "Get my leave balances for a given year")
@@ -232,26 +372,59 @@ public class LeaveController {
         PageResponse<LeaveRequestResponse> page = adminOrHr
                 ? leaveService.getAllPending(pageable)
                 : leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
-        return ResponseEntity.ok(enrichPage(page));
+        return ResponseEntity.ok(enrichPage(page, true));
+    }
+
+    /**
+     * The Decided list with the redesign's segment counts (BW-40): the page as
+     * before, plus {@code counts} per status over the same rows (so they always
+     * add up to what the list can show), and an optional {@code status} filter.
+     * Without {@code status} the page is exactly today's.
+     */
+    public record DecidedPage(List<LeaveRequestResponse> content, int page, int size, long totalElements,
+                              int totalPages, boolean last, Map<String, Long> counts) {}
+
+    /** Statuses the Decided list can be narrowed to: everything but PENDING. */
+    static com.hrms.core.enums.ApprovalStatus decidedStatus(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            com.hrms.core.enums.ApprovalStatus s = com.hrms.core.enums.ApprovalStatus.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+            if (s != com.hrms.core.enums.ApprovalStatus.PENDING) return s;
+        } catch (IllegalArgumentException ignore) {
+            // refused below
+        }
+        throw new com.hrms.core.exception.HrmsException(
+                "Status must be APPROVED, REJECTED, CANCELLED or PENDING_L2.", HttpStatus.BAD_REQUEST, "INVALID_LEAVE_STATUS");
     }
 
     @Operation(summary = "Past leave decisions (approved/rejected/cancelled) — tenant-wide for HR/admin, personal scope for a manager")
     @GetMapping("/approvals/history")
     @PreAuthorize("@perm.check('hrms.leave.approve.l1')")
-    public ResponseEntity<PageResponse<LeaveRequestResponse>> approvalsHistory(
+    public ResponseEntity<DecidedPage> approvalsHistory(
             @AuthenticationPrincipal Jwt jwt,
             org.springframework.security.core.Authentication auth,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String status) {
+        com.hrms.core.enums.ApprovalStatus only = decidedStatus(status);
         // Same admin/HR broadening as pendingApprovals above, and for the same
         // reason: this was personal-scope only, so an admin who is nobody's
         // reporting manager got an empty history and every decided leave in the
         // tenant became invisible the moment it left the pending queue.
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
-        PageResponse<LeaveRequestResponse> page = adminOrHr
-                ? leaveService.getAllDecided(pageable)
-                : leaveService.getDecidedApprovalsForManager(extractEmployeeId(jwt), pageable);
-        return ResponseEntity.ok(enrichPage(page));
+        UUID me = extractEmployeeId(jwt);
+        PageResponse<LeaveRequestResponse> page = only == null
+                ? (adminOrHr ? leaveService.getAllDecided(pageable) : leaveService.getDecidedApprovalsForManager(me, pageable))
+                : (adminOrHr ? leaveService.getAllDecided(only, pageable) : leaveService.getDecidedApprovalsForManager(me, only, pageable));
+        PageResponse<LeaveRequestResponse> enriched = enrichPage(page, false);
+        Map<String, Long> counts;
+        try {
+            counts = leaveService.decidedCounts(adminOrHr ? null : me);
+        } catch (org.springframework.dao.DataAccessException e) {
+            counts = null; // the list still works without its counts
+        }
+        return ResponseEntity.ok(new DecidedPage(enriched.content(), enriched.page(), enriched.size(),
+                enriched.totalElements(), enriched.totalPages(), enriched.last(), counts));
     }
 
     @Operation(summary = "L1 manager approval — approve escalates to HR, reject closes")
@@ -273,7 +446,7 @@ public class LeaveController {
     @PreAuthorize("@perm.check('hrms.leave.approve.l2')")
     public ResponseEntity<PageResponse<LeaveRequestResponse>> pendingL2Approvals(
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(leaveService.getPendingL2Approvals(pageable)));
+        return ResponseEntity.ok(enrichPage(leaveService.getPendingL2Approvals(pageable), true));
     }
 
     @Operation(summary = "L2 HR final approval or rejection")
@@ -298,6 +471,33 @@ public class LeaveController {
             org.springframework.security.core.Authentication auth) {
         approverScopeGuard.assertCanDecideFor(leaveService.requesterOf(requestId), jwt, auth);
         return ResponseEntity.ok(enrichOne(leaveService.approveLeave(requestId, extractEmployeeId(jwt), approval)));
+    }
+
+    /** What "Approve all" sends: the requests, one decision for all of them, and an optional note. */
+    public record BulkDecisionRequest(
+            @jakarta.validation.constraints.NotEmpty(message = "Choose at least one leave request") List<UUID> ids,
+            @jakarta.validation.constraints.NotNull(message = "Status is required") com.hrms.core.enums.ApprovalStatus status,
+            @jakarta.validation.constraints.Size(max = 1000, message = "Keep the note under 1000 characters") String comment) {}
+
+    /**
+     * Decide several leave requests at once (HRMS redesign, BW-42): exactly
+     * {@link #decide} for each one (team scope, then the single-step decision
+     * with its own checks), each in its own transaction, with a result per
+     * request. One refused request doesn't stop or undo the others.
+     */
+    @Operation(summary = "Approve or reject several leave requests at once; a result per request")
+    @PostMapping("/approvals/bulk-decision")
+    @PreAuthorize("@perm.check('hrms.leave.approve.l1')")
+    public ResponseEntity<LeaveBulkDecisions.Outcome> bulkDecide(
+            @Valid @RequestBody BulkDecisionRequest body,
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        if (bulkDecisions == null) {
+            throw new com.hrms.core.exception.HrmsException("Deciding several requests at once isn't available.",
+                    HttpStatus.SERVICE_UNAVAILABLE, "FEATURE_NOT_READY");
+        }
+        return ResponseEntity.ok(bulkDecisions.decide(body.ids(), body.status(), body.comment(),
+                extractEmployeeId(jwt), jwt, auth));
     }
 
     // ─── Leave type admin ────────────────────────────────────────────────────
@@ -341,7 +541,12 @@ public class LeaveController {
     // name / code / department are resolved here (the API layer) and folded into
     // the response DTO so manager/admin approval cards can show WHOSE request it is.
 
-    private PageResponse<LeaveRequestResponse> enrichPage(PageResponse<LeaveRequestResponse> page) {
+    /** Row details (BW-38); rows unchanged when the lookup isn't available. */
+    private List<LeaveRequestResponse> withDetails(List<LeaveRequestResponse> rows, boolean withConflicts) {
+        return details == null ? rows : details.apply(rows, withConflicts);
+    }
+
+    private PageResponse<LeaveRequestResponse> enrichPage(PageResponse<LeaveRequestResponse> page, boolean withConflicts) {
         List<UUID> employeeIds = page.content().stream()
                 .map(LeaveRequestResponse::employeeId)
                 .filter(Objects::nonNull)
@@ -352,9 +557,9 @@ public class LeaveController {
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
         Map<UUID, String> departmentNames = departmentNames(employeeMap.values());
-        List<LeaveRequestResponse> enriched = page.content().stream()
+        List<LeaveRequestResponse> enriched = withDetails(page.content().stream()
                 .map(r -> enrich(r, employeeMap.get(r.employeeId()), departmentNames))
-                .toList();
+                .toList(), withConflicts);
         return new PageResponse<>(
                 enriched, page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
     }
@@ -366,7 +571,8 @@ public class LeaveController {
         Map<UUID, String> departmentNames = employee != null
                 ? departmentNames(List.of(employee))
                 : Map.of();
-        return enrich(r, employee, departmentNames);
+        LeaveRequestResponse named = enrich(r, employee, departmentNames);
+        return details == null ? named : details.applyOne(named, false);
     }
 
     private LeaveRequestResponse enrich(LeaveRequestResponse r,
@@ -382,22 +588,7 @@ public class LeaveController {
         String departmentName = employee != null && employee.getDepartmentId() != null
                 ? departmentNames.get(employee.getDepartmentId())
                 : null;
-        return new LeaveRequestResponse(
-                r.id(),
-                r.employeeId(),
-                employeeName,
-                employeeCode,
-                departmentName,
-                r.leaveTypeId(),
-                r.leaveTypeName(),
-                r.startDate(),
-                r.endDate(),
-                r.totalDays(),
-                r.reason(),
-                r.status(),
-                r.approverComment(),
-                r.approvedAt(),
-                r.createdAt());
+        return r.withRequester(employeeName, employeeCode, departmentName);
     }
 
     /** Null/blank-safe string: turns a null into "" so name joins never emit the text "null". */

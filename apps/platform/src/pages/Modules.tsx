@@ -1,13 +1,11 @@
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
-import { clsx } from 'clsx'
-import {
-  ArrowRight, Lock, Search, Sparkles, Users,
-  type LucideIcon,
-} from 'lucide-react'
+import { Lock, Users, type LucideIcon } from 'lucide-react'
+import { Button, EmptyState, ErrorState, PageFrame, PageHeader } from '@/design/kit/display'
+import { Input } from '@/design/kit/overlays'
+import '@/design/shell/shell.css'
 import { APPS } from '@/layouts/appConfig'
 import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
@@ -80,8 +78,8 @@ const ADMIN_ROLES = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN']
    gradient plus a glow shadow in its own hue, so tiles read at a glance and
    the grid feels like Odoo's confetti of app identities. */
 const TILE_COLORS: Record<string, { from: string; to: string; glow: string }> = {
-  'hr-employees':        { from: '#34D399', to: '#059669', glow: 'rgba(5,150,105,0.45)' },
-  hrms:                  { from: '#34D399', to: '#059669', glow: 'rgba(5,150,105,0.45)' },
+  'hr-employees':        { from: 'var(--u-success-2, #1F9D6E)', to: 'var(--u-br, #0F6E56)', glow: 'rgba(15,110,86,0.45)' },
+  hrms:                  { from: 'var(--u-success-2, #1F9D6E)', to: 'var(--u-br, #0F6E56)', glow: 'rgba(15,110,86,0.45)' },
   crm:                   { from: '#818CF8', to: '#4F46E5', glow: 'rgba(79,70,229,0.45)' },
   'crm-sales-pos':       { from: '#818CF8', to: '#4F46E5', glow: 'rgba(79,70,229,0.45)' },
   scm:                   { from: '#22D3EE', to: '#0E7490', glow: 'rgba(14,116,144,0.45)' },
@@ -170,150 +168,93 @@ export const Modules: React.FC = () => {
     navigate(tile.home)
   }
 
+  const hasEnabled = activeModules.some(key => APPS.some(app => app.key === key && app.built))
+
+  // The app launcher (All apps, More → My space): every app this workspace has, as tiles on the page
+  // canvas. Admins also see the coming-soon and locked apps, which open the plan page.
   return (
-    /* The Odoo launcher stance: apps floating on a rich field — ours is the
-       client's "Green Apple" blend: vivid #16A34A/#059669 up top (behind the
-       transparent shell header) sliding through teal #0D9488 into deep
-       #065F46. Stops are px-anchored so tile labels always sit on ground
-       darker than #047857 (≥ 5:1 with white) on any viewport height; the
-       heading zone stays brighter (large-text AA). Pure colour fields only. */
-    <div
-      className="relative min-h-full overflow-hidden"
-      style={{
-        backgroundColor: '#065F46',
-        backgroundImage: [
-          'radial-gradient(46% 320px at 10% -40px, rgba(74,222,128,0.32), transparent 70%)',
-          'radial-gradient(40% 300px at 92% 20px, rgba(45,212,191,0.26), transparent 70%)',
-          'radial-gradient(90% 55% at 50% 108%, rgba(2,41,30,0.5), transparent 72%)',
-          'linear-gradient(172deg, #16A34A 0px, #059669 150px, #0D9488 290px, #047857 430px, #065F46 760px)',
-        ].join(', '),
-      }}
-    >
-      {/* pt clears the shell's transparent 64px launcher header overlay */}
-      <div className="relative mx-auto max-w-5xl px-6 pb-10 pt-20 sm:px-8 sm:pb-14 sm:pt-24">
-        {/* Header */}
-        <div className="animate-fade-up mb-10 flex flex-col items-center gap-5 text-center">
-          <div>
-            {/* pill ground keeps the mint greeting ≥ 4.5:1 on the vivid top band */}
-            <p className="inline-flex items-center rounded-full bg-[#04503A]/60 px-3 py-1 text-sm font-medium text-[#A7F3D0] backdrop-blur-sm">{greeting}, {firstName}</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Choose an app</h1>
+    <PageFrame width="narrow" label="All apps">
+      <PageHeader
+        eyebrow={`${greeting}, ${firstName}`}
+        title="Choose an app"
+        actions={
+          <div className="ut-apps__actions">
+            <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search apps…" aria-label="Search apps" leading="search" size="md" fieldClassName="ut-apps__search" />
+            {isAdmin && <Button variant="secondary" size={40} trailingIcon="arrowRight" onClick={() => openPlan()}>Manage plan</Button>}
           </div>
-          <div className="flex w-full max-w-md items-center gap-2">
-            <div className="relative flex-1">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/50" />
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search apps…"
-                className="h-10 w-full rounded-lg border border-white/20 bg-[#04503A]/50 pl-9 pr-3 text-sm text-white placeholder:text-white/55 shadow-xs outline-none backdrop-blur-sm transition-[border-color,box-shadow] focus:border-[#A7F3D0]/60 focus:ring-4 focus:ring-[#A7F3D0]/15"
-              />
+        }
+      />
+
+      {plansError && (
+        <ErrorState
+          title="We couldn't load the app catalog."
+          message={hasEnabled ? 'Your enabled apps remain available below. Try again to load all apps.' : 'Try again to retrieve the available apps for your workspace.'}
+          onRetry={() => { void reloadPlans() }}
+          retrying={plansFetching}
+          className="ut-apps__error"
+        />
+      )}
+
+      {plansLoading && tiles.length === 0 && activeModules.length === 0 ? (
+        <div role="status" aria-label="Loading apps" className="ut-apps__grid">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="ut-app ut-app--skel" aria-hidden="true">
+              <span className="ut-app__icon ut-app__icon--skel" />
+              <span className="ut-app__skeltext" />
             </div>
-            {isAdmin && (
-              <button
-                onClick={() => openPlan()}
-                className="hidden h-10 shrink-0 items-center gap-1.5 rounded-lg border border-white/20 bg-[#04503A]/50 px-3.5 text-sm font-medium text-white shadow-xs backdrop-blur-sm transition-colors hover:bg-[#04503A]/70 sm:inline-flex"
-              >
-                Manage plan <ArrowRight size={14} />
-              </button>
-            )}
-          </div>
+          ))}
         </div>
-
-        {plansError && <div role="alert" className="mx-auto mb-8 max-w-xl rounded-xl border border-white/25 bg-black/15 p-4 text-center text-sm text-white">
-          <p>We couldn't load the app catalog.</p>
-          <p className="mt-1 text-white/75">{activeModules.some(key => APPS.some(app => app.key === key && app.built)) ? 'Your enabled apps remain available below. Try again to load all apps.' : 'Try again to retrieve the available apps for your workspace.'}</p>
-          <button type="button" onClick={() => reloadPlans()} disabled={plansFetching} className="mt-3 rounded-lg border border-white/40 px-4 py-2 font-medium hover:bg-white/10 disabled:opacity-50">{plansFetching ? 'Retrying...' : 'Try again'}</button>
-        </div>}
-
-        {/* App grid — Odoo-style icon tiles: coloured squircle, label beneath */}
-        {plansLoading && tiles.length === 0 && activeModules.length === 0 ? (
-          <div role="status" aria-label="Loading apps" className="mx-auto grid max-w-3xl grid-cols-3 gap-x-6 gap-y-10 sm:grid-cols-4 md:grid-cols-5">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="flex flex-col items-center gap-3">
-                <div className="h-20 w-20 animate-pulse rounded-2xl bg-white/10" />
-                <div className="h-3 w-16 animate-pulse rounded bg-white/10" />
-              </div>
-            ))}
-          </div>
-        ) : tiles.length === 0 ? (
-          <div role="status" className="mx-auto max-w-xl text-center text-sm text-white/80">
-            <p>{query.trim() ? 'No apps match your search.' : plansError ? 'The app catalog is currently unavailable.' : 'No apps are available for this workspace.'}</p>
-            {query.trim() && <button type="button" className="mt-3 rounded-lg border border-white/30 px-4 py-2 text-white hover:bg-white/10" onClick={() => setQuery('')}>Clear search</button>}
-          </div>
-        ) : (
-          <div className="mx-auto grid max-w-3xl grid-cols-3 gap-x-6 gap-y-10 sm:grid-cols-4 md:grid-cols-5">
-            {tiles.map((tile, i) => {
-              const { status } = tile
-              const locked = status === 'locked'
-              const soon = status === 'coming-soon'
-              const Icon = tile.icon
-              const color = tileColor(tile.key, i)
-              return (
-                <motion.button
-                  key={tile.key}
-                  onClick={() => enter(tile)}
-                  disabled={soon || (locked && !isAdmin)}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: Math.min(i, 12) * 0.035, ease: [0.16, 1, 0.3, 1] }}
-                  whileHover={locked && !isAdmin ? undefined : { y: -4 }}
-                  whileTap={locked && !isAdmin ? undefined : { scale: 0.96 }}
-                  className={clsx(
-                    'group flex flex-col items-center gap-3 focus-visible:outline-none',
-                    locked && !isAdmin && 'cursor-default',
-                  )}
-                  title={tile.description}
+      ) : tiles.length === 0 ? (
+        <div role="status">
+          <EmptyState
+            icon="search"
+            title={query.trim() ? 'No apps match your search.' : plansError ? 'The app catalog is currently unavailable.' : 'No apps are available for this workspace.'}
+            action={query.trim() ? <Button variant="secondary" size={36} onClick={() => setQuery('')}>Clear search</Button> : undefined}
+          />
+        </div>
+      ) : (
+        <div className="ut-apps__grid">
+          {tiles.map((tile, i) => {
+            const { status } = tile
+            const locked = status === 'locked'
+            const soon = status === 'coming-soon'
+            const Icon = tile.icon
+            const color = tileColor(tile.key, i)
+            const inert = soon || (locked && !isAdmin)
+            return (
+              <button
+                key={tile.key}
+                type="button"
+                onClick={() => enter(tile)}
+                disabled={inert}
+                className="ut-app"
+                data-locked={locked ? '' : undefined}
+                title={tile.description}
+              >
+                <span
+                  className="ut-app__icon"
+                  style={locked ? undefined : { background: `linear-gradient(160deg, ${color.from} 0%, ${color.to} 100%)`, boxShadow: `0 12px 26px -12px ${color.glow}` }}
                 >
-                  <span className="relative">
-                    <span
-                      className={clsx(
-                        'flex h-20 w-20 items-center justify-center rounded-[22px] text-white transition-all duration-200',
-                        // "Soon" keeps its full colour — the badge carries the message.
-                        // Only LOCKED goes grey, and even then stays legible.
-                        !locked && 'group-hover:brightness-110',
-                      )}
-                      style={
-                        locked
-                          ? {
-                              background: 'linear-gradient(160deg, #9CA3AF 0%, #6B7280 100%)',
-                              boxShadow: '0 10px 26px -10px rgba(1,22,16,0.5)',
-                            }
-                          : {
-                              background: `linear-gradient(160deg, ${color.from} 0%, ${color.to} 100%)`,
-                              boxShadow: `0 12px 28px -10px ${color.glow}, 0 3px 8px rgba(1,22,16,0.28)`,
-                            }
-                      }
-                    >
-                      <Icon size={36} strokeWidth={2} />
-                    </span>
-                    {/* status badge */}
-                    {soon && (
-                      <span className="absolute -right-2 -top-2 inline-flex items-center gap-0.5 rounded-full bg-[#A7F3D0] px-1.5 py-0.5 text-[9.5px] font-bold text-[#04503A] shadow" title="Coming soon">
-                        <Sparkles size={9} /> Soon
-                      </span>
-                    )}
-                    {locked && (
-                      <span className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[var(--text-tertiary)] shadow" title={isAdmin ? 'Add to plan' : 'Not in your plan'}>
-                        <Lock size={11} />
-                      </span>
-                    )}
+                  <Icon size={30} strokeWidth={2} aria-hidden="true" />
+                </span>
+                <span className="ut-app__label">{tile.label}</span>
+                {/* "Soon" keeps the tile's full colour: the chip carries the message. */}
+                {soon && <span className="ut-app__chip" title="Coming soon">Soon</span>}
+                {locked && (
+                  <span className="ut-app__lock" title={isAdmin ? 'Add to plan' : 'Not in your plan'}>
+                    <Lock size={12} aria-hidden="true" />
                   </span>
-                  <span className="max-w-[104px] text-center text-[13px] font-medium leading-tight text-white">
-                    {tile.label}
-                  </span>
-                </motion.button>
-              )
-            })}
-          </div>
-        )}
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
-        {/* Locked hint for admins — quiet, under the grid */}
-        {isAdmin && tiles.some(t => t.status === 'locked') && (
-          <p className="mt-12 text-center text-[12.5px] text-white/55">
-            Locked apps open the plan configurator — add them any time.
-          </p>
-        )}
-      </div>
-    </div>
+      {/* Locked hint for admins, quiet, under the grid */}
+      {isAdmin && tiles.some(t => t.status === 'locked') && (
+        <p className="ut-apps__hint">Locked apps open the plan configurator — add them any time.</p>
+      )}
+    </PageFrame>
   )
 }

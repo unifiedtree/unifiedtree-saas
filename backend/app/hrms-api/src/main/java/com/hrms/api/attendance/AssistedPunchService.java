@@ -152,6 +152,9 @@ public class AssistedPunchService {
     private AttendanceReviewService reviewService;
     @Autowired(required = false)
     private AuditService audit;
+    /** "Anywhere (no geofence)" per person (V143.53, BW-28): the self punch's rule. */
+    @Autowired(required = false)
+    private PunchRulesService punchRules;
 
     /** The self punch's server-wide switch (AttendanceController, hrms.attendance.geofence-enforce). */
     @Value("${hrms.attendance.geofence-enforce:false}")
@@ -438,7 +441,9 @@ public class AssistedPunchService {
         GeoValidateResponse geo = geoValidationService.validate(new GeoValidateRequest(target.getId(), lat, lon),
                 ctx.branchId(), ctx.branchLat(), ctx.branchLon(), ctx.geoFenceRadius());
         boolean wfhDay = attendanceService.isApprovedWfhDay(target.getId(), LocalDate.now(IST));
-        if (zoneBlocks(geo.withinFence(), geofenceEnforce, companyRequiresGeofence(ctx.companyId()), wfhDay)) {
+        // "Anywhere (no geofence)" for the employee (V143.53, BW-28) lifts the zone, as an approved WFH day does.
+        boolean anywhere = punchRules != null && punchRules.allowAnywhere(target.getId());
+        if (zoneBlocks(geo.withinFence(), geofenceEnforce, companyRequiresGeofence(ctx.companyId()), wfhDay || anywhere)) {
             String place = ctx.branchName() != null ? ctx.branchName() : "their office";
             String away = geo.distanceMeters() != null ? ", about " + Math.round(geo.distanceMeters()) + " m away" : "";
             throw new BusinessRuleException("You're outside " + firstName(name) + "'s work area (" + place + away
@@ -475,7 +480,7 @@ public class AssistedPunchService {
         }
 
         // Same follow-up as a self check-in accepted outside the zone: it goes on the review list.
-        if (type == PunchType.CHECK_IN && !geo.withinFence() && !wfhDay && reviewService != null && dto.id() != null) {
+        if (type == PunchType.CHECK_IN && !geo.withinFence() && !wfhDay && !anywhere && reviewService != null && dto.id() != null) {
             try {
                 reviewService.flagOutsideGeofence(dto.id(), LocalDate.parse(dto.attendanceDate()), geo.distanceMeters());
             } catch (RuntimeException e) {

@@ -48,18 +48,27 @@ public class ExpenseController {
     private final EmployeeRepository employeeRepository;
     private final ExpenseReceipts receipts;
     private final com.hrms.api.employee.EmployeeRecordAccess recordAccess;
+    private final ExpenseClaimDetails details;
+    private final com.unifiedtree.audit.AuditService audit;
 
     public ExpenseController(ExpenseService expenseService,
                              ExpensePolicyService policyService,
                              EmployeeRepository employeeRepository,
                              ExpenseReceipts receipts,
-                             com.hrms.api.employee.EmployeeRecordAccess recordAccess) {
+                             com.hrms.api.employee.EmployeeRecordAccess recordAccess,
+                             ExpenseClaimDetails details,
+                             com.unifiedtree.audit.AuditService audit) {
         this.expenseService = expenseService;
         this.policyService = policyService;
         this.employeeRepository = employeeRepository;
         this.receipts = receipts;
         this.recordAccess = recordAccess;
+        this.details = details;
+        this.audit = audit;
     }
+
+    /** V143_57 (redesign BW-61): raise claims in another employee's name. */
+    static final String CLAIM_OTHERS = "hrms.expense.claim.others";
 
     /** V143.13: sees anyone's claims on the employee record (HR / admin / finance). */
     static final String EMPLOYEE_READ = "hrms.expense.employee.read";
@@ -89,15 +98,167 @@ public class ExpenseController {
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
         UUID companyId = request.companyId() != null ? request.companyId() : employee.getCompanyId();
-        UUID approverId = employee.getManagerId();
-        // Redirect through any active delegation the approver has set up.
-        if (approverId != null && delegationResolver != null) {
-            approverId = delegationResolver.redirectIfDelegated(
-                    approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
-        }
+        UUID approverId = approverFor(employee).approverId();
         ExpenseClaimRequest checked = withOwnReceiptsOnly(request, employeeId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(enrichOne(expenseService.submitClaim(employeeId, companyId, checked, approverId)));
+    }
+
+    /** Who an employee's claims go to, and how that person was chosen. */
+    public record ClaimApprover(UUID approverId, String approverName, String via) {
+        /** The reporting manager. */
+        public static final String MANAGER = "MANAGER";
+        /** Someone the manager delegated their approvals to for today. */
+        public static final String DELEGATE = "DELEGATE";
+        /** No manager: the claim waits in the finance / admin queue (holders of hrms.expense.reimbursement). */
+        public static final String FINANCE = "FINANCE";
+    }
+
+    /**
+     * The approver a new claim of {@code employee} is routed to: their reporting
+     * manager, redirected through any active delegation (today, India time);
+     * none when they have no manager. The one rule for a claim you submit, a
+     * claim raised for you, and the "Send to" preview.
+     */
+    ClaimApprover approverFor(Employee employee) {
+        UUID manager = employee.getManagerId();
+        if (manager == null) return new ClaimApprover(null, null, ClaimApprover.FINANCE);
+        UUID approverId = manager;
+        // Redirect through any active delegation the approver has set up.
+        if (delegationResolver != null) {
+            approverId = delegationResolver.redirectIfDelegated(
+                    manager, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+        }
+        if (approverId == null) approverId = manager;
+        return new ClaimApprover(approverId, null,
+                approverId.equals(manager) ? ClaimApprover.MANAGER : ClaimApprover.DELEGATE);
+    }
+
+    // ─── Raise a claim for someone else (redesign BW-61, V143_57) ────────────
+
+    /**
+     * HR, finance or an admin raises an expense claim in an employee's name,
+     * with the body of POST /claims. It is the claim the employee could submit
+     * themselves: the same category caps, routed to the employee's usual
+     * approver (so it follows the normal approval, Undo and reimbursement
+     * flow), filed under the employee's own company. The employee is told
+     * (expense.raised_for_you) and the raise is audited.
+     *
+     * <p>Holders of {@code hrms.expense.claim.others} may raise for any active
+     * employee of the workspace (row-level security keeps it to this tenant),
+     * never for themselves (that is their own claim). Receipts must have been
+     * uploaded for this employee through POST /receipts/for/{employeeId}.
+     */
+    @Operation(summary = "Raise an expense claim in an employee's name (HR / finance / admin)")
+    @PostMapping("/claims/for/{employeeId}")
+    @PreAuthorize("@perm.check('" + CLAIM_OTHERS + "')")
+    public ResponseEntity<ExpenseClaimResponse> submitOnBehalf(
+            @PathVariable UUID employeeId,
+            @Valid @RequestBody ExpenseClaimRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID raisedBy = extractEmployeeId(jwt);
+        Employee employee = onBehalfTarget(employeeId, raisedBy);
+        UUID companyId = employee.getCompanyId();
+        if (request.companyId() != null && !request.companyId().equals(companyId)) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "A claim raised for someone is filed under their own company.", "EXPENSE_ON_BEHALF_COMPANY");
+        }
+        ExpenseClaimRequest checked = withOwnReceiptsOnly(request, employee.getId());
+        ExpenseClaimResponse claim = expenseService.submitClaimOnBehalf(
+                employee.getId(), companyId, checked, approverFor(employee).approverId(), raisedBy);
+        try {
+            audit.record("expense", "EXPENSE_CLAIM_RAISED_ON_BEHALF", "expense_claim", claim.id(),
+                    "Expense claim \"" + claim.title() + "\" (" + com.hrms.api.approvals.Money.format(claim.currency(), claim.totalAmount())
+                            + ") raised for " + fullName(employee));
+        } catch (RuntimeException auditFailed) {
+            // The claim stands; AuditService already logs its own failures.
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(enrichOne(claim));
+    }
+
+    @Operation(summary = "Upload a receipt for a claim you are raising in an employee's name (PDF, PNG or JPEG, up to 10 MB)")
+    @PostMapping(value = "/receipts/for/{employeeId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@perm.check('" + CLAIM_OTHERS + "')")
+    public ResponseEntity<ExpenseReceipts.Stored> uploadReceiptOnBehalf(
+            @PathVariable UUID employeeId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file,
+            @AuthenticationPrincipal Jwt jwt) throws java.io.IOException {
+        Employee employee = onBehalfTarget(employeeId, extractEmployeeId(jwt));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(receipts.store(com.hrms.core.tenant.TenantContext.getTenantId(), employee.getId(), file));
+    }
+
+    private static final java.util.Set<String> SEPARATED = java.util.Set.of("EXITED", "TERMINATED", "RESIGNED", "RETIRED");
+
+    /** The employee a claim is raised for: someone else, in this workspace, who hasn't left. */
+    Employee onBehalfTarget(UUID employeeId, UUID raisedBy) {
+        if (employeeId.equals(raisedBy)) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "To claim your own expenses, use your own claim.", "EXPENSE_ON_BEHALF_SELF");
+        }
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new com.hrms.core.exception.ResourceNotFoundException("Employee", employeeId));
+        UUID tenant = com.hrms.core.tenant.TenantContext.getTenantId();
+        if (tenant != null && employee.getTenantId() != null && !tenant.equals(employee.getTenantId())) {
+            throw new com.hrms.core.exception.ResourceNotFoundException("Employee", employeeId);
+        }
+        if (employee.getEmploymentStatus() != null && SEPARATED.contains(employee.getEmploymentStatus().name())) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "This employee has left the company, so a claim can't be raised for them.", "EXPENSE_EMPLOYEE_SEPARATED");
+        }
+        return employee;
+    }
+
+    private static String fullName(Employee e) {
+        return ((e.getFirstName() == null ? "" : e.getFirstName()) + " " + (e.getLastName() == null ? "" : e.getLastName())).trim();
+    }
+
+    // ─── My totals, my approver, category caps (redesign BW-60) ──────────────
+
+    @Operation(summary = "My expense totals across all my claims: waiting, approved and not paid yet, reimbursed this year")
+    @GetMapping("/my/summary")
+    @PreAuthorize("hasAuthority('hrms.expense.claim.self')")
+    public ResponseEntity<ExpenseClaimDetails.MySummary> mySummary(@AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(details.mySummary(requireEmployeeId(jwt),
+                java.time.LocalDate.now(ExpenseClaimDetails.IST)));
+    }
+
+    @Operation(summary = "Who a new claim of mine goes to")
+    @GetMapping("/my/approver")
+    @PreAuthorize("hasAuthority('hrms.expense.claim.self')")
+    public ResponseEntity<ClaimApprover> myApprover(@AuthenticationPrincipal Jwt jwt) {
+        UUID me = requireEmployeeId(jwt);
+        Employee employee = employeeRepository.findById(me)
+                .orElseThrow(() -> new com.hrms.core.exception.ResourceNotFoundException("Employee", me));
+        ClaimApprover a = approverFor(employee);
+        String name = a.approverId() == null ? null
+                : employeeRepository.findById(a.approverId()).map(ExpenseController::fullName).filter(n -> !n.isBlank()).orElse(null);
+        return ResponseEntity.ok(new ClaimApprover(a.approverId(), name, a.via()));
+    }
+
+    /**
+     * What the company's active policies allow per category: the tightest cap
+     * per claim, the policy that sets it, and whether a receipt is expected.
+     * The same caps POST /claims refuses a claim over. Claimants don't hold
+     * hrms.expense.policy.read, so this is readable with claim.self (and by
+     * those who raise claims for others). The company defaults to the
+     * caller's own.
+     */
+    @Operation(summary = "Expense limits per category for a company (the caps a claim is checked against)")
+    @GetMapping("/policies/caps")
+    @PreAuthorize("hasAnyAuthority('hrms.expense.claim.self','" + CLAIM_OTHERS + "','hrms.expense.policy.read')")
+    public ResponseEntity<List<com.hrms.expense.dto.ExpenseCategoryCap>> categoryCaps(
+            @RequestParam(required = false) UUID companyId,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID company = companyId;
+        if (company == null) {
+            UUID me = requireEmployeeId(jwt);
+            company = employeeRepository.findById(me).map(Employee::getCompanyId).orElse(null);
+            if (company == null) {
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a company.");
+            }
+        }
+        return ResponseEntity.ok(expenseService.categoryCaps(company));
     }
 
     /**
@@ -181,7 +342,9 @@ public class ExpenseController {
     public ResponseEntity<PageResponse<ExpenseClaimResponse>> myClaims(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(expenseService.getMyClaims(extractEmployeeId(jwt), pageable));
+        // Enriched (redesign BW-60) so each row carries its approver's name,
+        // categories, reimbursement batch and policy check.
+        return ResponseEntity.ok(enrichPage(expenseService.getMyClaims(extractEmployeeId(jwt), pageable)));
     }
 
     @Operation(summary = "Get a single expense claim with its line items")
@@ -238,18 +401,40 @@ public class ExpenseController {
     //     APPROVED; the UI shows Approve/Reject or Mark-Reimbursed per row.
     //  3. AUTH. Reimbursement-only roles could not load the tab at all.
     @PreAuthorize("hasAnyAuthority('hrms.expense.claim.approve','hrms.expense.reimbursement')")
+    //  4. FILTER (redesign BW-60). Optional ?status=SUBMITTED (waiting for a
+    //     decision) or ?status=APPROVED (approved, to be paid), or both. Without
+    //     it the list is SUBMITTED + APPROVED, as before. The scope is unchanged.
     public ResponseEntity<PageResponse<ExpenseClaimResponse>> pendingApprovals(
             @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(name = "status", required = false) List<com.hrms.expense.enums.ExpenseStatus> status,
             @PageableDefault(size = 20) Pageable pageable) {
         java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
         boolean financeOrAdmin = perms != null && perms.contains("hrms.expense.reimbursement");
-        java.util.List<com.hrms.expense.enums.ExpenseStatus> open = java.util.List.of(
-                com.hrms.expense.enums.ExpenseStatus.SUBMITTED,
-                com.hrms.expense.enums.ExpenseStatus.APPROVED);
+        java.util.List<com.hrms.expense.enums.ExpenseStatus> open = approvalStatuses(status);
         PageResponse<ExpenseClaimResponse> page = financeOrAdmin
                 ? expenseService.getByStatuses(open, pageable)
                 : expenseService.getPendingForApprover(extractEmployeeId(jwt), open, pageable);
         return ResponseEntity.ok(enrichPage(page));
+    }
+
+    /** The statuses the approvals list may be filtered to: its own two, SUBMITTED and APPROVED. */
+    static final List<com.hrms.expense.enums.ExpenseStatus> APPROVAL_STATUSES = List.of(
+            com.hrms.expense.enums.ExpenseStatus.SUBMITTED,
+            com.hrms.expense.enums.ExpenseStatus.APPROVED);
+
+    /** The ?status filter, or both statuses when it is absent (the list as before). */
+    static List<com.hrms.expense.enums.ExpenseStatus> approvalStatuses(List<com.hrms.expense.enums.ExpenseStatus> requested) {
+        List<com.hrms.expense.enums.ExpenseStatus> wanted = requested == null ? List.of()
+                : requested.stream().filter(Objects::nonNull).distinct().toList();
+        if (wanted.isEmpty()) return APPROVAL_STATUSES;
+        for (com.hrms.expense.enums.ExpenseStatus s : wanted) {
+            if (!APPROVAL_STATUSES.contains(s)) {
+                throw new com.hrms.core.exception.HrmsException(
+                        "The approvals list can be filtered to SUBMITTED or APPROVED only.",
+                        HttpStatus.BAD_REQUEST, "EXPENSE_STATUS_FILTER");
+            }
+        }
+        return APPROVAL_STATUSES.stream().filter(wanted::contains).toList();
     }
 
     @Operation(summary = "Approve or reject an expense claim")
@@ -344,9 +529,9 @@ public class ExpenseController {
                 ? Map.of()
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
-        List<ExpenseClaimResponse> enriched = page.content().stream()
+        List<ExpenseClaimResponse> enriched = details.add(page.content().stream()
                 .map(r -> enrich(r, employeeMap.get(r.employeeId())))
-                .toList();
+                .toList());
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
     }
@@ -355,7 +540,17 @@ public class ExpenseController {
         Employee employee = r.employeeId() == null
                 ? null
                 : employeeRepository.findById(r.employeeId()).orElse(null);
-        return enrich(r, employee);
+        ExpenseClaimResponse one = enrich(r, employee);
+        // This also answers submit, decide and reimburse, after their change is
+        // committed: the redesign's extra fields must never turn a done change
+        // into an error, so a failure here only leaves them out.
+        try {
+            return details.add(List.of(one)).get(0);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ExpenseController.class)
+                    .warn("Expense claim {}: details left out: {}", one.id(), e.toString());
+            return one;
+        }
     }
 
     private ExpenseClaimResponse enrich(ExpenseClaimResponse r, Employee employee) {
