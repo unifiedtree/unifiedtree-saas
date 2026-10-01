@@ -4,7 +4,7 @@
 // you and Today's team. Each block reads real API data and hides when its source isn't there.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { P, useAnyPermission, usePermission, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson } from '@/core/api/client'
@@ -31,9 +31,10 @@ import type { ApprovalsInbox, InboxTab } from '../../api/shared/contracts'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../../attendance/attendanceBuckets'
 import { clockIst, workingWindow } from '../../dashboard/dashboardModel'
 import { WebPunchDialog } from '../../attendance/webpunch/WebPunchDialog'
+import { AssistedPunchDialog } from '../../attendance/webpunch/AssistedPunchDialog'
 import { AttendanceHistory } from '../AttendanceHistory'
 import { TimeEntries } from '../TimeEntries'
-import { useAroundMe, useBreak, useMeEmployee, useMyDay, useMyRequests, useNeedsYou, useUndoCheckOut } from './homeApi'
+import { HOME_KEYS, useAroundMe, useBreak, useMeEmployee, useMyDay, useMyRequests, useNeedsYou, useUndoCheckOut } from './homeApi'
 import {
   CalendarCard, LeaveCard, MyRequestsCard, NeedsYouCard, PayCard, ShortcutsCard, UpcomingEventsCard, YourDay, type Shortcut,
 } from './HomeBlocks'
@@ -62,6 +63,7 @@ const daysWord = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`
 
 export function HomePage() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const toast = useToast()
   const go = (path: string) => navigate(path)
   const user = useSdkStore((s) => s.user)
@@ -177,6 +179,7 @@ export function HomePage() {
   const counts = teamDash.data ? dayBuckets(teamDash.data, today) : null
   const teamLabel = summary.data?.departmentNames.length ? summary.data.departmentNames.join(', ') : null
   const [assistOpen, setAssistOpen] = useState(false)
+  const [assistFor, setAssistFor] = useState<string | null>(null)
   const [messageOpen, setMessageOpen] = useState(false)
 
   // ── greeting ──
@@ -342,7 +345,11 @@ export function HomePage() {
       {!attendanceReady && <TimeEntries />}
 
       <WebPunchDialog open={punch !== null} mode={punch ?? 'in'} onClose={() => setPunch(null)} />
-      {canAssist && <AssistedPunchPanel open={assistOpen} onClose={() => setAssistOpen(false)} />}
+      {canAssist && <AssistedPunchPanel open={assistOpen} onClose={() => setAssistOpen(false)} onPick={(id) => { setAssistOpen(false); setAssistFor(id) }} />}
+      {canAssist && (
+        <AssistedPunchDialog open={assistFor !== null} employeeId={assistFor ?? undefined} onClose={() => setAssistFor(null)}
+          onDone={() => { void teamDash.refetch(); void qc.invalidateQueries({ queryKey: HOME_KEYS.eligible }) }} />
+      )}
       {canMessage && <MessageTeamDialog open={messageOpen} onClose={() => setMessageOpen(false)} teamLabel={teamLabel} />}
     </PageFrame>
   )
