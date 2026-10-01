@@ -44,6 +44,11 @@ const STEP = 1.25
 const { cardW: CW, cardH: CH } = METRICS
 
 const clampK = (k: number) => Math.min(MAX_K, Math.max(MIN_K, k))
+/** No empty board beside a chart wider than the board: its edges stay at the board's edges (a narrower chart may sit anywhere). */
+const edgeClampX = (x: number, k: number, chartW: number, boardW: number) => {
+  const w = chartW * k
+  return w + 2 * PAD <= boardW ? x : Math.min(PAD, Math.max(boardW - PAD - w, x))
+}
 
 export function OrgCanvas({
   tree, expanded, found, pathEdges, companyName, embedded, initialView, request, anchorRef, onViewChange, onInteract, onOpen, onToggle,
@@ -104,7 +109,7 @@ export function OrgCanvas({
     const need = b.y + CH + 32
     let k = keepZoom ? Math.max(t.current.k, 0.75) : Math.min(1, (h - 2 * PAD) / need)
     k = clampK(Math.max(Math.min(k, 1.25), 0.6))
-    const x = w / 2 - (b.x + CW / 2) * k
+    const x = edgeClampX(w / 2 - (b.x + CW / 2) * k, k, lay.width, w)
     // The top in view if the whole line fits; otherwise the person a little above the middle.
     const y = need * k <= h - 2 * PAD ? PAD : h * 0.42 - (b.y + CH / 2) * k
     t.current = { x, y, k }
@@ -117,7 +122,7 @@ export function OrgCanvas({
     if (!b) return
     const { w } = size()
     const k = clampK(Math.max(t.current.k, 0.6))
-    t.current = { k, x: w / 2 - (b.x + CW / 2) * k, y: PAD }
+    t.current = { k, x: edgeClampX(w / 2 - (b.x + CW / 2) * k, k, lay.width, w), y: PAD }
     apply(glide)
   }, [apply, tree.rootId])
 
