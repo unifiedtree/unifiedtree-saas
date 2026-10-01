@@ -1,6 +1,6 @@
 // Daily tracking (/hrms/attendance), rebuilt on the redesign kit (PgAttendance "Today", PgTime a-daily,
 // EmpTime e-att). The module's pages (Analytics, Daily tracking, Shifts…) are the header's top tabs
-// (the shell); this page's own views are the inline pills under its title (DECISIONS 21):
+// (the shell); this page's own views are the inline pills at the top of the page, under them (DECISIONS 21):
 //
 //   HR and managers   Daily Logs · Face Punch · Regularization · Review · My Attendance · Timesheet
 //   everyone else     My Attendance · Regularization · Timesheet
@@ -29,7 +29,7 @@ export type DailyTab = 'team' | 'face' | 'corrections' | 'review' | 'my' | 'time
 
 export interface DailyPerms {
   team: boolean; face: boolean; review: boolean; override: boolean; approve: boolean; self: boolean
-  admin: boolean; report: boolean; assist: boolean; timesheetApprove: boolean; isAdminRole: boolean
+  admin: boolean; report: boolean; assist: boolean; timesheetApprove: boolean; isAdminRole: boolean; leaveOthers: boolean
 }
 
 export function useDailyPerms(): DailyPerms {
@@ -45,6 +45,7 @@ export function useDailyPerms(): DailyPerms {
     report: usePermission(P.HRMS_REPORT_ATTENDANCE),
     assist: useAnyPermission([P.ATTENDANCE_ASSISTED_PUNCH_TEAM, P.ATTENDANCE_ASSISTED_PUNCH_ANY]),
     timesheetApprove: usePermission(P.HRMS_TIMESHEET_APPROVE),
+    leaveOthers: usePermission(P.HRMS_LEAVE_APPLY_OTHERS),
     isAdminRole: isAdmin,
   }
 }

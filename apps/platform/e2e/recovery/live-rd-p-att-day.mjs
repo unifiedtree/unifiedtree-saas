@@ -1,3 +1,4 @@
+/* global process, console, fetch, Buffer, document, window, localStorage */
 // Live check of P-ATT-DAY's pages (HRMS redesign, UI half): Daily tracking, My Attendance, Timesheet,
 // Face Punch, Regularization, Review, Muster roll, Manual entry and the web punch dialog, per role,
 // against the real API, in light and dark, at 1440 and 390 wide.
@@ -34,7 +35,6 @@ const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 const READER = '22222222-2222-2222-2222-222222222222'
 const FIN = '55555555-5555-5555-5555-555555555555'
-const HRM = '33333333-3333-3333-3333-333333333333'
 const psql = 'C:/Program Files/PostgreSQL/18/bin/psql.exe'
 const sql = (q) => execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atc', q],
   { env: { ...process.env, PGPASSWORD: process.env.PGPASSWORD || 'postgres' } }).toString().replace(/\r/g, '').trim()
@@ -75,7 +75,7 @@ async function apiLogin(email) {
   const d = await r.json()
   return async (method, path, body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
 }
@@ -345,7 +345,7 @@ try {
     await panel.waitFor({ timeout: 8000 })
     const dayBtn = panel.getByRole('combobox', { name: 'Which day' })
     await dayBtn.click()
-    const cal = r.page.getByRole('dialog').filter({ has: r.page.getByRole('grid') }).last()
+    const cal = r.page.getByRole('dialog', { name: 'Choose date' })
     const label = new Date(fixDay + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     const cell = cal.locator(`[role=gridcell][aria-label^="${label}"]`)
     if (!(await cell.count())) await cal.getByRole('button', { name: /Previous month/ }).click().catch(() => {})

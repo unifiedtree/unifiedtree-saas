@@ -1,3 +1,4 @@
+/* global process, console, localStorage, URL */
 // Live check of the redesigned Muster roll and Manual entry pages:
 //  - Muster roll: today says "Not marked yet" (not "Absent"), a past day says
 //    "Absent"; ?date= opens that day; the CSV export downloads and is recorded

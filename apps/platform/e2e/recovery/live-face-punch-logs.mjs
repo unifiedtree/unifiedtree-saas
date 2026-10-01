@@ -1,3 +1,4 @@
+/* global process, console, fetch, URL */
 // Attendance → Face Punch Logs tab (/hrms/attendance?tab=face) — browser
 // acceptance against the local recovery runtime. The tab used to render two
 // hard-coded rows; it now reads GET /v1/attendance/face/admin/events.

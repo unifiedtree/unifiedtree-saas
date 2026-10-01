@@ -29,6 +29,7 @@ import { useReminders, useSendReminders } from '../../api/shared/useReminders'
 import { StatusChangeDrawer, type StatusTarget } from '../StatusChangeDrawer'
 import { AssistedPunchDialog } from '../webpunch/AssistedPunchDialog'
 import { BulkMarkPanel } from './BulkMarkPanel'
+import { MarkLeavePanel } from './MarkLeavePanel'
 import type { DailyPerms } from './DailyTracking'
 import {
   TILE_KEYS, byBranch, hhmmIst, hm, inStatus, leaveLine, mainShift, methodLabel, rowStatus, statusMeta, statusOnDay, tileKeyOf,
@@ -74,6 +75,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [assist, setAssist] = useState<{ employeeId?: string } | null>(null)
   const [target, setTarget] = useState<StatusTarget | null>(null)
+  const [leaveFor, setLeaveFor] = useState<{ id: string; name: string } | null>(null)
   const [exporting, setExporting] = useState(false)
 
   // ── data ──
@@ -271,6 +273,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
             ...(perms.override ? [{ key: 'status', label: 'Change status', icon: 'pencil', onSelect: () => openStatus(r) }] : []),
             ...(perms.approve ? [{ key: 'fix', label: 'Fix this day', icon: 'clock', onSelect: () => fixDay(r) }] : []),
             ...(perms.assist && isToday && !r.outAt && r.status !== 'ON_LEAVE' ? [{ key: 'punch', label: r.inAt ? 'Punch out with face' : 'Punch in with face', icon: 'scanFace', onSelect: () => setAssist({ employeeId: r.id }) }] : []),
+            ...(perms.leaveOthers && !r.inAt && r.status !== 'ON_LEAVE' ? [{ key: 'leave', label: 'Mark leave', icon: 'calendarDays', onSelect: () => setLeaveFor({ id: r.id, name: r.name }) }] : []),
             ...(isToday && r.status === 'NOT_MARKED' ? [{ key: 'remind', label: sentIds.has(r.id) ? 'Reminded today' : 'Remind to check in', icon: 'bell', disabled: sentIds.has(r.id), onSelect: () => sendReminders([r.id]) }] : []),
             { key: 'history', label: 'View history', icon: 'calendarDays', onSelect: () => navigate(`/hrms/employees/${r.id}?tab=attendance`) },
           ]} />
@@ -402,6 +405,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
       )}
       <AssistedPunchDialog open={!!assist} employeeId={assist?.employeeId} onClose={() => setAssist(null)} onDone={() => void team.refetch()} />
       {target && <StatusChangeDrawer target={target} onClose={() => setTarget(null)} onSubmit={saveStatus} />}
+      <MarkLeavePanel person={leaveFor} date={date} companyId={companyId} onClose={() => setLeaveFor(null)} />
     </>
   )
 }

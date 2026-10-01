@@ -1,3 +1,4 @@
+/* global process, console, fetch, Buffer */
 // Live API check for P-ATT-DAY's backend half (HRMS redesign; V143_53, V143_65).
 // API only (the pages come in the UI half). Against a running backend and its
 // database, with every migration applied:
@@ -54,7 +55,7 @@ async function login(email) {
   const d = await r.json()
   const call = async (method, path, body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (json && json.errorCode === 'FEATURE_NOT_READY' && !renaming) unexpectedNotReady.push(`${method} ${path}`)
     return { status: res.status, json, text, headers: res.headers }
   }
@@ -129,7 +130,7 @@ const lastMonday = sql(`select (date_trunc('week', '${today}'::date) - interval 
 const lastTuesday = sql(`select ('${lastMonday}'::date + 1)::text`)
 const lastWednesday = sql(`select ('${lastMonday}'::date + 2)::text`)
 let projectId = null
-let wfhRecord = null
+let wfhRecord
 let correctionId = null
 const entryIds = []
 

@@ -1,3 +1,4 @@
+/* global process, console */
 // Live check of the redesigned Attendance & Time module against the local API.
 //
 //   node e2e/recovery/live-design-attendance.mjs
