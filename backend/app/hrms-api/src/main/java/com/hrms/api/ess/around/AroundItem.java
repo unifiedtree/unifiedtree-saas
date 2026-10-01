@@ -9,7 +9,7 @@ import java.util.UUID;
  * work anniversary, a holiday, a company notice, payday, or (for team
  * approvers) the end of someone's probation.
  *
- * @param kind           BIRTHDAY, WORK_ANNIVERSARY, HOLIDAY, NOTICE, PAYDAY or PROBATION_END
+ * @param kind           BIRTHDAY, WORK_ANNIVERSARY, RETIREMENT, HOLIDAY, NOTICE, PAYDAY or PROBATION_END
  * @param date           the day it happens; for a notice without an event date, the day it was posted
  * @param dateKind       ON (the day it happens) or POSTED (a notice without an event date)
  * @param title          plain words: "Kavya Menon’s birthday", "Gandhi Jayanti", a notice's title, "Payday"
@@ -18,7 +18,7 @@ import java.util.UUID;
  * @param refId          the holiday, notice or payroll run; for people, the person
  * @param employeeId     birthdays, anniversaries and probation ends: who
  * @param departmentName for people: their department
- * @param years          work anniversaries: which one
+ * @param years          work anniversaries: which one; retirements: the retirement age
  * @param link           a page that shows it, when there is one
  */
 public record AroundItem(

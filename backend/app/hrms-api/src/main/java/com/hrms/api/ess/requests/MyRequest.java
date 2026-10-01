@@ -11,7 +11,7 @@ import java.util.UUID;
  * its kind. Everything is read from the request itself; nothing is made up:
  * a person is named only where the request records them.
  *
- * @param kind           LEAVE, WFH, CORRECTION, SHIFT_CHANGE, EXPENSE or ADVANCE
+ * @param kind           LEAVE, WFH, CORRECTION, SHIFT_CHANGE, EXPENSE, ADVANCE or TIMESHEET
  * @param id             the request's id on its own page
  * @param title          the request in a few words: the leave type, "Work from home",
  *                       "Attendance fix", "Shift change to Morning", a claim's title, "Salary advance"
