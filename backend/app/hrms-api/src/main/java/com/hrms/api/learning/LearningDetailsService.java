@@ -156,7 +156,7 @@ public class LearningDetailsService {
      * Everyone's certifications on file (active employees), soonest expiry first.
      * {@code status}: all (default), valid (no expiry or more than
      * {@value #EXPIRING_DAYS} days left), expiring (within {@value #EXPIRING_DAYS}
-     * days), expired.
+     * days), expired. {@code search} matches the person's name or code, the certification or the skill.
      */
     @Transactional(readOnly = true)
     public PageDto<Certification> certifications(UUID tenantId, String status, String search, int page, int size) {
@@ -179,9 +179,9 @@ public class LearningDetailsService {
         }
         if (search != null && !search.isBlank()) {
             where.append(" AND (LOWER(e.first_name || ' ' || COALESCE(e.last_name,'')) LIKE ? OR LOWER(COALESCE(e.employee_code,'')) LIKE ?"
-                    + " OR LOWER(COALESCE(s.certification_name, s.skill_name)) LIKE ?)");
+                    + " OR LOWER(COALESCE(s.certification_name, '')) LIKE ? OR LOWER(s.skill_name) LIKE ?)");
             String needle = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
-            args.add(needle); args.add(needle); args.add(needle);
+            args.add(needle); args.add(needle); args.add(needle); args.add(needle);
         }
         String from = """
                   FROM learning_mgmt.employee_skills s

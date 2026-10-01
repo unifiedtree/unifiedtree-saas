@@ -232,7 +232,7 @@ try {
   await o.getByRole('button', { name: /Reader User/ }).click(); await settle(o)
   await o.getByRole('button', { name: 'Add a skill' }).click()
   const skp = o.getByRole('dialog', { name: 'Add a skill' })
-  await skp.getByLabel('Certified', { exact: true }).check()
+  await skp.getByText('Certified', { exact: true }).click()
   const on = o.locator('#sk-on')
   await on.click()
   const tomorrow = addDays(today, 1)
