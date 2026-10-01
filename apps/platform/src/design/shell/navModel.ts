@@ -62,6 +62,9 @@ export const NAV_MODULES: readonly NavModule[] = [
   // ── My work (the old Employee Self Service item, split as the design does) ──
   { key: 'mytime', label: 'Time', myLabel: 'My time', icon: 'clock', group: 'mine', pages: [
     { label: 'Attendance', path: '/hrms/attendance' },
+    // People without the team view: the "Shifts & Overtime" section the Attendance page's own bar
+    // gave them (their My Shift), now that the bar is gone (menu rule mytime:/hrms/shifts).
+    { label: 'My shift', path: '/hrms/shifts' },
     { label: 'Work from home', path: '/me/wfh' },
     { label: 'Shift change', path: '/me/shift-change' },
   ] },
@@ -153,16 +156,6 @@ export const NAV_MODULES: readonly NavModule[] = [
   { key: 'inventory', label: 'Inventory', icon: 'package', group: 'apps', app: 'inventory', pages: [{ label: 'Inventory', path: '/inventory' }] },
   { key: 'procurement', label: 'Purchase', icon: 'cart', group: 'apps', app: 'purchase', pages: [{ label: 'Procurement', path: '/procurement', also: ['/purchase'] }] },
 ]
-
-/**
- * Modules whose pages still draw the module's pages themselves, inside the page: the Attendance page's
- * "Attendance sections" bar (Analytics, Daily Tracking, Shifts & Overtime), until that page is rebuilt.
- * The top bar then shows the page's name as one pill rather than the same pages again as tabs. When the
- * rebuilt page drops its own bar, remove its key here so the top bar shows the module's pages.
- * (Payroll's and Workforce's own bars are hidden instead, by the shell's CSS, while the top bar shows them.)
- */
-export const OWN_PAGES_BAR: ReadonlySet<string> = new Set(['attendance'])
-export const drawsOwnPages = (moduleKey: string) => OWN_PAGES_BAR.has(moduleKey)
 
 // ── Settings: not a rail module (More → Settings → Preferences opens it; More lights on it) ──
 

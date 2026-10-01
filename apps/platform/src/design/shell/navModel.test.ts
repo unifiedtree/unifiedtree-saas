@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccessContext } from '@/shared/navigation/access'
 import {
-  activePage, drawsOwnPages, fitRail, isMorePath, litPage, isSettingsPath, moduleTarget, NAV_MODULES, owningModules, preferencesTarget, railGroups,
+  activePage, fitRail, isMorePath, litPage, isSettingsPath, moduleTarget, NAV_MODULES, owningModules, preferencesTarget, railGroups,
   readLastPages, readPinned, saveLastPage, savePinned, settingsActive, settingsPages, SETTINGS_PAGES, type VisibleGroup,
 } from './navModel'
 import { pageTitleLabel } from './pageTitle'
@@ -220,9 +220,17 @@ describe('the top bar’s page tabs (Release 1.1)', () => {
     expect(litPage('master', seen, '/hrms/master/shift-rules')).toBeUndefined()
     expect(litPage('master', seen, '/hrms/master')?.label).toBe('Overview')
   })
-  it('the Attendance page still draws its own pages bar, so its module shows no tabs; others do', () => {
-    expect(drawsOwnPages('attendance')).toBe(true)
-    expect(drawsOwnPages('master')).toBe(false)
-    expect(drawsOwnPages('mytime')).toBe(false)
+  it('Attendance & time: its pages are the old in-page "Attendance sections" bar, as the top tabs, per person', () => {
+    const pagesOf = (perms: AccessContext, key: string) => railGroups(perms, { selfFirst: true }).flatMap((g) => g.modules).find((m) => m.key === key)?.pages.map((p) => `${p.label} ${p.path}`)
+    // The team view (attendance.team.read): Analytics, Daily Tracking, Shifts & Overtime, in that order.
+    const team = ['Attendance Analytics /hrms/att-analytics', 'Daily Tracking /hrms/attendance', 'Shifts & Overtime /hrms/shifts']
+    expect(pagesOf(ctx(DEPT_MANAGER), 'attendance')).toEqual(team)
+    expect(pagesOf(ctx(HR_MANAGER), 'attendance')).toEqual(team)
+    expect(pagesOf(OWNER, 'attendance')).toEqual(team)
+    // Without it the bar gave Daily Tracking and Shifts & Overtime (their My Shift): My time has both.
+    expect(pagesOf(ctx(EMPLOYEE), 'attendance')).toBeUndefined()
+    expect(pagesOf(ctx(EMPLOYEE), 'mytime')).toEqual(['Attendance /hrms/attendance', 'My shift /hrms/shifts', 'Work from home /me/wfh', 'Shift change /me/shift-change'])
+    // People with the team view keep My time as it was (their shifts are under Attendance & time).
+    expect(pagesOf(ctx(DEPT_MANAGER), 'mytime')).not.toContain('My shift /hrms/shifts')
   })
 })
