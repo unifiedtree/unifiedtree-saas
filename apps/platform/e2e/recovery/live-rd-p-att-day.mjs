@@ -153,7 +153,8 @@ async function session(email, { width = 1440, theme = 'light' } = {}) {
   const errors = [], failed = []
   page.on('pageerror', (e) => errors.push(String(e.message || e)))
   page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400 && !r.url().includes('/canonical-auth/refresh')) failed.push(`${r.status()} ${r.request().method()} ${r.url().split('/api')[1]}`) })
-  await page.goto(base + '/login')
+  // The first page of a fresh slot compiles the app; give it time.
+  await page.goto(base + '/login', { timeout: 120_000 })
   await page.locator('input[type=email]').fill(email)
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
