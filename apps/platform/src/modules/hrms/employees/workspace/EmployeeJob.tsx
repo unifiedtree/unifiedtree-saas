@@ -173,7 +173,10 @@ export function EmployeeJob({ emp }: {
   const title = (desigId?: string | null) => designations.find((d) => d.id === desigId)?.title
   const nameOf = (e: { firstName?: string | null; lastName?: string | null; employeeCode: string }) => [e.firstName, e.lastName].filter(Boolean).join(' ') || e.employeeCode
   const managedByViewer = !!emp.reportingManagerId && emp.reportingManagerId === me?.employeeId
-  const direct = reports.data?.content ?? []
+  // Only people whose manager really is this person (an older server ignores the filter).
+  const direct = (reports.data?.content ?? []).filter((r) => r.reportingManagerId === emp.id)
+  const [allReports, setAllReports] = useState(false)
+  const shown = allReports ? direct : direct.slice(0, 8)
 
   return (
     <div className="upf-flow">
@@ -200,7 +203,7 @@ export function EmployeeJob({ emp }: {
             ) : (
               <ListRow variant="divided" title="A reporting manager is set" sub={canRead ? 'Their record couldn’t be loaded.' : 'Their name shows to people who can read the directory.'} />
             )}
-            {direct.map((r) => (
+            {shown.map((r) => (
               <ListRow key={r.id} variant="divided" onClick={() => navigate(`/hrms/employees/${r.id}`)} chevron
                 leading={<Avatar name={nameOf(r)} size={34} tone="pale" />} title={nameOf(r)}
                 sub={`Direct report · ${title(r.designationId) || r.employeeCode}`}
@@ -208,6 +211,7 @@ export function EmployeeJob({ emp }: {
             ))}
           </ListRows>
           {reports.error && <p className="upf-note" style={{ marginTop: 8 }}>Couldn’t load the direct reports.</p>}
+          {direct.length > shown.length && <div style={{ marginTop: 8 }}><KitButton size={30} variant="ghost" onClick={() => setAllReports(true)}>{`Show all ${direct.length} direct reports`}</KitButton></div>}
         </SubSection>
       </div>
 

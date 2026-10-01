@@ -106,16 +106,15 @@ try {
   assert.equal(saved.exitReason, corrected)
   assert.equal(saved.employmentStatus, 'NOTICE_PERIOD')
 
-  // The redesigned workspace keeps lifecycle actions in its Actions menu (docs/Designs, Employee Workspace).
-  await page.getByRole('button', { name: /^Actions/ }).click()
-  await page.getByRole('menuitem', { name: 'Mark exited', exact: true }).click()
-  const exitModal = page.getByRole('dialog').filter({ has: page.getByText('Mark Employee as Exited', { exact: true }) })
+  // The redesigned profile shows the status's two lifecycle actions in its left card (on notice: Cancel notice, Mark exited).
+  await page.getByRole('complementary', { name: 'Profile' }).getByRole('button', { name: 'Mark exited', exact: true }).click()
+  const exitModal = page.getByRole('dialog').filter({ has: page.getByText('Mark employee as exited', { exact: true }) })
   await expect(exitModal.locator('.utc-native')).toHaveValue(today)
   await expect(exitModal.getByPlaceholder('Optional', { exact: true })).toHaveValue(corrected)
   response = page.waitForResponse(res => res.url().includes(path + '/exit?') && res.request().method() === 'POST')
   await exitModal.getByRole('button', { name: 'Mark exited', exact: true }).click()
   assert.equal((await response).status(), 200)
-  await expect(page.getByText('Mark Employee as Exited', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Mark employee as exited', { exact: true })).toHaveCount(0)
   saved = await read()
   assert.equal(saved.employmentStatus, 'EXITED')
   assert.equal(saved.noticeStartDate, day(-20))
