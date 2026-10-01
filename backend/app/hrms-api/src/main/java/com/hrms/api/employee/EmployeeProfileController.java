@@ -12,11 +12,13 @@ import com.hrms.employee.entity.EmployeeExperience;
 import com.hrms.employee.entity.EmployeeIdentity;
 import com.hrms.employee.repository.EmergencyContactRepository;
 import com.hrms.employee.service.EmployeeProfileService;
+import com.unifiedtree.rbac.security.PermissionChecker;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,6 +28,13 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Profile sections of one employee. Reads need hrms.employee.profile.read (identity:
+ * hrms.employee.identity.read), except that since redesign BW-99 a person may read
+ * their OWN addresses, education, experience, dependents and emergency contacts, and
+ * their own identity with every number masked (My profile → Personal). Writes are
+ * unchanged: they still need the write permissions.
+ */
 @RestController
 @RequestMapping("/v1/employees/{employeeId}/profile")
 @Tag(name = "Employee Profile", description = "Employee profile sections: address, identity, bank, education, experience, dependents, emergency contacts")
@@ -34,18 +43,21 @@ public class EmployeeProfileController {
 
     private final EmployeeProfileService profileService;
     private final EmergencyContactRepository emergencyContactRepo;
+    private final PermissionChecker permissionChecker;
 
     public EmployeeProfileController(EmployeeProfileService profileService,
-                                     EmergencyContactRepository emergencyContactRepo) {
+                                     EmergencyContactRepository emergencyContactRepo,
+                                     @Autowired(required = false) PermissionChecker permissionChecker) {
         this.profileService = profileService;
         this.emergencyContactRepo = emergencyContactRepo;
+        this.permissionChecker = permissionChecker;
     }
 
     // ── Address ───────────────────────────────────────────────────────────
 
     @GetMapping("/addresses")
     @Operation(summary = "List addresses for an employee")
-    @PreAuthorize("@perm.check('hrms.employee.profile.read')")
+    @PreAuthorize("@perm.check('hrms.employee.profile.read') or #employeeId == @securityHelper.currentEmployeeId()")
     public List<EmployeeAddress> getAddresses(@PathVariable UUID employeeId) {
         return profileService.getAddresses(employeeId);
     }
@@ -70,10 +82,23 @@ public class EmployeeProfileController {
 
     @GetMapping("/identity")
     @Operation(summary = "Get employee identity record with decrypted PII")
-    @PreAuthorize("@perm.check('hrms.employee.identity.read')")
+    @PreAuthorize("@perm.check('hrms.employee.identity.read') or #employeeId == @securityHelper.currentEmployeeId()")
     public IdentityResponse getIdentity(@PathVariable UUID employeeId) {
         EmployeeIdentity identity = profileService.getIdentity(employeeId);
+        // Redesign BW-99: a person reading their OWN record without the identity
+        // permission gets every number masked (last four characters only).
+        if (!holdsIdentityRead()) return IdentityMask.mask(toIdentityResponse(identity));
         return toIdentityResponse(identity);
+    }
+
+    /** hrms.employee.identity.read, read like the guard reads it (@perm, from the database). */
+    private boolean holdsIdentityRead() {
+        if (permissionChecker == null) return false;
+        try {
+            return permissionChecker.check("hrms.employee.identity.read");
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     @PutMapping("/identity")
@@ -117,7 +142,7 @@ public class EmployeeProfileController {
 
     @GetMapping("/education")
     @Operation(summary = "List education records for an employee")
-    @PreAuthorize("@perm.check('hrms.employee.profile.read')")
+    @PreAuthorize("@perm.check('hrms.employee.profile.read') or #employeeId == @securityHelper.currentEmployeeId()")
     public List<EmployeeEducation> getEducation(@PathVariable UUID employeeId) {
         return profileService.getEducation(employeeId);
     }
@@ -142,7 +167,7 @@ public class EmployeeProfileController {
 
     @GetMapping("/experience")
     @Operation(summary = "List work experience records for an employee")
-    @PreAuthorize("@perm.check('hrms.employee.profile.read')")
+    @PreAuthorize("@perm.check('hrms.employee.profile.read') or #employeeId == @securityHelper.currentEmployeeId()")
     public List<EmployeeExperience> getExperience(@PathVariable UUID employeeId) {
         return profileService.getExperience(employeeId);
     }
@@ -167,7 +192,7 @@ public class EmployeeProfileController {
 
     @GetMapping("/dependents")
     @Operation(summary = "List dependents for an employee")
-    @PreAuthorize("@perm.check('hrms.employee.profile.read')")
+    @PreAuthorize("@perm.check('hrms.employee.profile.read') or #employeeId == @securityHelper.currentEmployeeId()")
     public List<EmployeeDependent> getDependents(@PathVariable UUID employeeId) {
         return profileService.getDependents(employeeId);
     }
@@ -177,6 +202,8 @@ public class EmployeeProfileController {
     @PreAuthorize("@perm.check('hrms.employee.profile.write')")
     public ResponseEntity<EmployeeDependent> addDependent(@PathVariable UUID employeeId,
                                                            @Valid @RequestBody EmployeeDependent dependent) {
+        // Redesign BW-101: nominee shares may add up to 100 % at most.
+        NomineeShares.check(profileService.getDependents(employeeId), dependent);
         return ResponseEntity.status(HttpStatus.CREATED).body(profileService.addDependent(employeeId, dependent));
     }
 
@@ -192,7 +219,7 @@ public class EmployeeProfileController {
 
     @GetMapping("/emergency-contacts")
     @Operation(summary = "List emergency contacts for an employee")
-    @PreAuthorize("@perm.check('hrms.employee.profile.read')")
+    @PreAuthorize("@perm.check('hrms.employee.profile.read') or #employeeId == @securityHelper.currentEmployeeId()")
     public List<EmergencyContactResponse> getEmergencyContacts(@PathVariable UUID employeeId) {
         return emergencyContactRepo.findByEmployeeId(employeeId).stream()
                 .map(this::toContactResponse)

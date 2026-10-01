@@ -426,7 +426,7 @@ public class EmployeeController {
         if (jdbcTemplate == null) {
             // Best-effort: in tests without JdbcTemplate, treat as inactive so
             // the UI defaults to "Resend invitation" (the safe, useful action).
-            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", ""));
+            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", "", "lastLoginDevice", ""));
         }
         try {
             Map<String, Object> row = jdbcTemplate.queryForMap(
@@ -441,11 +441,34 @@ public class EmployeeController {
             return ResponseEntity.ok(Map.of(
                     "activated", activated,
                     "invitedAt", invitedAt instanceof Instant i ? i.toString() : (invitedAt == null ? "" : invitedAt.toString()),
-                    "lastLoginAt", lastLoginAt instanceof Instant i ? i.toString() : (lastLoginAt == null ? "" : lastLoginAt.toString())
+                    "lastLoginAt", lastLoginAt instanceof Instant i ? i.toString() : (lastLoginAt == null ? "" : lastLoginAt.toString()),
+                    "lastLoginDevice", lastLoginDevice(employeeId)
             ));
         } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
             // No credential row yet -> never invited / never activated.
-            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", ""));
+            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", "", "lastLoginDevice", ""));
+        }
+    }
+
+    /**
+     * Redesign BW-100: the device of the person's newest sign-in session, in words
+     * ("Android", "Chrome on Windows"), from the user agent on their newest refresh
+     * token. Additive and best effort: "" when there is no session or the lookup
+     * fails, so the invitation status itself never fails because of it.
+     */
+    private String lastLoginDevice(UUID employeeId) {
+        if (jdbcTemplate == null || employeeId == null) return "";
+        try {
+            List<String> rows = jdbcTemplate.queryForList(
+                    "SELECT rt.user_agent FROM auth.refresh_tokens rt "
+                            + "JOIN auth.user_credentials uc ON uc.id = rt.user_id "
+                            + "WHERE uc.employee_id = ? AND rt.tenant_id = ? "
+                            + "ORDER BY COALESCE(rt.last_used_at, rt.issued_at) DESC LIMIT 1",
+                    String.class, employeeId, TenantContext.getTenantId());
+            return rows.isEmpty() ? "" : LoginDevice.describe(rows.get(0));
+        } catch (RuntimeException e) {
+            log.warn("Last sign-in device lookup failed for employee {}: {}", employeeId, e.getMessage());
+            return "";
         }
     }
 
