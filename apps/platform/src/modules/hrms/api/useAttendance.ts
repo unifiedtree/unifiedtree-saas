@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import { SHARED_KEYS } from './shared/contracts'
 import type { PageResponse } from './useWorkforce'
-import { SHARED_KEYS } from './shared/contracts'
 
 export interface AttendanceDto {
   id: string
