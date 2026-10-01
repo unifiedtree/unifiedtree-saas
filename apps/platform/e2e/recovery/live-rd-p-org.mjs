@@ -164,9 +164,9 @@ try {
       check(`${tag}: the count pill hides and shows reports`, after < before && (await pill.getAttribute('aria-expanded')) === 'false', `${before} → ${after}`)
       await pill.click(); await page.waitForTimeout(300)
       // The list view.
-      await page.getByRole('button', { name: 'List' }).click(); await page.waitForTimeout(400)
+      await page.getByRole('button', { name: 'List', exact: true }).click(); await page.waitForTimeout(400)
       check(`${tag}: list view lists the people`, await page.locator('.uoc-list [data-row]').count() > 1)
-      await page.getByRole('button', { name: 'Chart' }).click(); await page.waitForTimeout(300)
+      await page.getByRole('button', { name: 'Chart', exact: true }).click(); await page.waitForTimeout(300)
       // Organization Setup sub-tab.
       await page.goto(base + '/hrms/master/org-chart'); await settle(page, 2000)
       const tabs = (await page.locator('.hero-tabs').allTextContents()).join(' ')
