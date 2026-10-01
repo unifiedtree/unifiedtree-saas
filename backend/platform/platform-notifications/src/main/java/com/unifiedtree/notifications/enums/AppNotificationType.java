@@ -40,6 +40,8 @@ public enum AppNotificationType {
     SALARY_REVISED,
     OVERTIME_APPROVED,
     OVERTIME_REJECTED,
+    /** An employee asked for overtime on a day they chose (DECISIONS 22); sent to their approver. */
+    OVERTIME_REQUESTED,
     /** A reviewer changed the employee's attendance status for a day (V143.10). */
     ATTENDANCE_STATUS_CHANGED,
     DOCUMENT_UPLOADED,
