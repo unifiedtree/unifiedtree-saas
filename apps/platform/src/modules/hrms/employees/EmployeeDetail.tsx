@@ -210,19 +210,19 @@ export function EmployeeDetail() {
 
     // ── Overview: Needs attention (today's rules, plus a missed punch-out this week) ──
     const attention: Attention[] = []
+    // While on probation there is always a row with Confirm / Extend (today's probation banner);
+    // it turns amber within 30 days of the end date or once it has passed.
     if (onProbation) {
       const d = emp.probationEndDate ? daysUntil(emp.probationEndDate, today) : null
-      if (d == null || d <= 30) {
-        attention.push({
-          tone: 'amber',
-          title: d == null ? 'Probation end date not set' : d < 0 ? `Probation ended ${plural(-d, 'day')} ago and isn’t confirmed yet` : `Probation ends in ${plural(d, 'day')}`,
-          sub: d == null ? 'Set a date so the confirmation reminder runs on time' : d < 0 ? `It ended on ${fmtDate(emp.probationEndDate)}: confirm, extend or begin exit` : `${fmtDate(emp.probationEndDate)} · confirm or extend before the end date`,
-          actions: canWrite ? <>
-            <Button size={30} variant="soft" onClick={() => setLife('confirm')}>Confirm as permanent</Button>
-            <Button size={30} variant="secondary" onClick={() => setLife('extend')}>Extend</Button>
-          </> : undefined,
-        })
-      }
+      attention.push({
+        tone: d == null || d <= 30 ? 'amber' : 'ok',
+        title: d == null ? 'Probation end date not set' : d < 0 ? `Probation ended ${plural(-d, 'day')} ago and isn’t confirmed yet` : `Probation ends in ${plural(d, 'day')}`,
+        sub: d == null ? 'Set a date so the confirmation reminder runs on time' : d < 0 ? `It ended on ${fmtDate(emp.probationEndDate)}: confirm, extend or begin exit` : `${fmtDate(emp.probationEndDate)} · confirm or extend before the end date`,
+        actions: canWrite ? <>
+          <Button size={30} variant="soft" onClick={() => setLife('confirm')}>Confirm as permanent</Button>
+          <Button size={30} variant="secondary" onClick={() => setLife('extend')}>Extend</Button>
+        </> : undefined,
+      })
     }
     if (emp.employmentStatus === 'NOTICE_PERIOD') {
       const d = emp.lastWorkingDay ? daysUntil(emp.lastWorkingDay, today) : null
