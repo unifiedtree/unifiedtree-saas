@@ -96,6 +96,9 @@ try {
     const apiReader = await call('/v1/search/global?q=reader')
     const apiTypes = (apiReader.json?.groups || []).map((g) => g.type)
     const apiPeople = (apiReader.json?.groups || []).find((g) => g.type === 'employee')?.items || []
+    // Whether this person's own team view (GET /v1/attendance/dashboard) includes the employee: only then may search show their status.
+    const teamDash = await call('/v1/attendance/dashboard')
+    const teamHasReader = teamDash.status === 200 && (teamDash.json?.staffStatuses || []).some((s) => s.employeeId === READER)
 
     for (const theme of role.dark ? ['light', 'dark'] : ['light']) {
       const tag = `${role.who}${theme === 'dark' ? ' (dark)' : ''}`
@@ -138,6 +141,16 @@ try {
         await page.locator(`#top-search-results [data-result-group="employee"] [role=option]`).filter({ hasText: 'Reader User' }).first().hover()
         const preview = dialog(page).getByRole('complementary', { name: 'Preview' })
         check(`${tag}: the person's preview shows their code`, await visible(preview.getByText('EMP002').first(), 5_000))
+        // Step 2 (needs this branch's backend): the facts (BW-02) and, for people with the team view,
+        // today's status from the team's own dashboard row.
+        if (process.env.F3B_STEP2 === '1') {
+          check(`${tag}: the preview shows who they report to and when they joined`, await visible(preview.getByText('Reports to'), 8_000) && await visible(preview.getByText('Joined'), 3_000))
+          const st = preview.locator('.uk-pill').filter({ hasText: /today|Not marked yet|Working from home|Exited/ })
+          const shown = await visible(st.first(), teamHasReader ? 8_000 : 3_000)
+          check(`${tag}: today's status shows exactly when their team includes the person (${teamHasReader ? 'yes' : 'no'})`, shown === teamHasReader, shown ? await st.first().innerText() : 'none')
+          check(`${tag}: the preview offers the org chart`, await visible(preview.getByRole('button', { name: 'View in org chart' }), 3_000))
+          await page.screenshot({ path: `${SHOTS}/rd-f3b-${role.who}-search-person-${theme}-1440.png` })
+        }
         await preview.getByRole('button', { name: /Open profile/ }).click()
         await page.waitForURL((u) => u.pathname === `/hrms/employees/${READER}`, { timeout: 20_000 }).catch(() => {})
         check(`${tag}: "Open profile" opens the person's profile`, new URL(page.url()).pathname === `/hrms/employees/${READER}`, page.url())
