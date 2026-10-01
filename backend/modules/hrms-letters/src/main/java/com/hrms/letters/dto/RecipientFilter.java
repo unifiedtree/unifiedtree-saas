@@ -13,6 +13,7 @@ import java.util.UUID;
  *   <li>BY_DEPARTMENT        — values = department IDs</li>
  *   <li>BY_DESIGNATION       — values = designation IDs</li>
  *   <li>BY_EMPLOYMENT_TYPE   — values = employment-type names (FULL_TIME, ...)</li>
+ *   <li>BY_BRANCH            — values = branch IDs (redesign BW-72)</li>
  *   <li>CUSTOM_LIST          — employeeIds = explicit employee IDs</li>
  * </ul>
  *
@@ -29,5 +30,6 @@ public record RecipientFilter(
     public static final String BY_DEPARTMENT      = "BY_DEPARTMENT";
     public static final String BY_DESIGNATION     = "BY_DESIGNATION";
     public static final String BY_EMPLOYMENT_TYPE = "BY_EMPLOYMENT_TYPE";
+    public static final String BY_BRANCH          = "BY_BRANCH";
     public static final String CUSTOM_LIST        = "CUSTOM_LIST";
 }
