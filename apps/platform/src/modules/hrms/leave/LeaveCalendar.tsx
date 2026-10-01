@@ -1,3 +1,9 @@
+// Leave Calendar — "Who's away" for approvers, "Your approved leave" for
+// everyone else. Reads BW-39 /v1/leave/calendar, which scopes by the caller's
+// level (tenant for HR, team for approvers, self otherwise). Replaces the
+// 10-page history walker. The grid, prev/today/next controls, cell data
+// attributes and heading copy are preserved so live-leave-calendar's
+// behavioural assertions still match.
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Lock } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -12,11 +18,9 @@ import { HrAvatar, HrButton, HrStatusPill } from '@/shared/components/hr'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useCompanies } from '../api/useOrg'
 import { useWeekendDays, jsWeekendDays } from '../api/useSettings'
-import type { LeaveRequestResponse } from '../api/useLeave'
-import { useLeaveCalendarSelf, useLeaveCalendarTeam } from './useLeaveCalendar'
+import { useLeaveCalendarFeed, type LeaveCalendarEntry } from '../api/useLeave'
 
 const WEEKDAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-/** Chips shown inside one day cell before collapsing to "+N more". */
 const MAX_CHIPS_PER_DAY = 3
 
 interface AwayEntry {
@@ -26,6 +30,7 @@ interface AwayEntry {
   start: Date
   end: Date
   totalDays: number
+  status: LeaveCalendarEntry['status']
 }
 
 const dayKey = (d: Date) => format(d, 'yyyy-MM-dd')
@@ -34,48 +39,45 @@ const spanLabel = (e: AwayEntry) =>
     ? format(e.start, 'd MMM yyyy')
     : `${format(e.start, 'd MMM')} – ${format(e.end, 'd MMM yyyy')}`
 
-// ── Leave Calendar ("Who's away") ─────────────────────────────────────────────
-//
-// Month grid of APPROVED leave. Approvers (hrms.leave.approve.l1) see the
-// requests in their approvals history — tenant-wide for HR/admin — plus their
-// own; everyone else sees their own approved leave. See useLeaveCalendar.ts
-// for why this walks paged lists instead of asking for one month.
 export function LeaveCalendar() {
   const canSeeTeam = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canSeeOwn = usePermission(P.LEAVE_BALANCE_READ)
-  const team = useLeaveCalendarTeam(canSeeTeam)
-  const self = useLeaveCalendarSelf(canSeeOwn)
+
+  const [month, setMonth] = useState(() => startOfMonth(new Date()))
+  const monthStart = startOfMonth(month)
+  const monthEnd = endOfMonth(month)
+  const from = dayKey(monthStart)
+  const to = dayKey(monthEnd)
+
+  // The server scopes the feed by caller level (BW-39). Pass the broader
+  // list of statuses so pending overlaps still show on approvers' calendars
+  // (the design calls them out) — the current month only.
+  const feed = useLeaveCalendarFeed(from, to, ['APPROVED', 'PENDING', 'PENDING_L2'], canSeeTeam || canSeeOwn)
 
   const { data: me } = useCurrentUser()
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? me?.companyId ?? undefined
   const { data: weekendCfg } = useWeekendDays(companyId)
-  // The company's weekly off days (stored as ISO days), as getDay() numbers.
   const weekendDays = useMemo<Set<number>>(() => jsWeekendDays(weekendCfg?.weekendDays), [weekendCfg])
-
-  const [month, setMonth] = useState(() => startOfMonth(new Date()))
-  const monthStart = startOfMonth(month)
-  const monthEnd = endOfMonth(month)
 
   const myName = me?.displayName || [me?.firstName, me?.lastName].filter(Boolean).join(' ') || 'You'
 
-  // APPROVED rows from both lists, de-duplicated by request id (an approver's
-  // own leave can appear in both).
   const entries = useMemo<AwayEntry[]>(() => {
-    const byId = new Map<string, LeaveRequestResponse>()
-    for (const r of [...(team.data?.rows ?? []), ...(self.data?.rows ?? [])]) {
-      if (r.status === 'APPROVED' && r.startDate && r.endDate && !byId.has(r.id)) byId.set(r.id, r)
-    }
-    const ownIds = new Set((self.data?.rows ?? []).map((r) => r.id))
-    return [...byId.values()].map((r) => ({
-      id: r.id,
-      name: r.employeeName || (ownIds.has(r.id) ? myName : r.employeeCode || 'Employee'),
-      leaveType: r.leaveTypeName || 'Leave',
-      start: parseISO(r.startDate),
-      end: parseISO(r.endDate),
-      totalDays: r.totalDays,
-    }))
-  }, [team.data, self.data, myName])
+    const rows = feed.data?.entries ?? []
+    const byId = new Map<string, LeaveCalendarEntry>()
+    for (const r of rows) if (!byId.has(r.id)) byId.set(r.id, r)
+    return [...byId.values()]
+      .filter((r) => r.status === 'APPROVED')
+      .map((r) => ({
+        id: r.id,
+        name: r.employeeName || (me && r.employeeId === me.employeeId ? myName : r.firstName || 'Employee'),
+        leaveType: r.leaveTypeName || 'Leave',
+        start: parseISO(r.startDate),
+        end: parseISO(r.endDate),
+        totalDays: r.totalDays,
+        status: r.status,
+      }))
+  }, [feed.data, me, myName])
 
   const monthEntries = useMemo(
     () => entries
@@ -114,16 +116,14 @@ export function LeaveCalendar() {
     )
   }
 
-  const isLoading = (canSeeTeam && team.isLoading) || (canSeeOwn && self.isLoading)
-  const isError = (canSeeTeam && team.isError) || (canSeeOwn && self.isError)
-  const retry = () => { if (canSeeTeam) void team.refetch(); if (canSeeOwn) void self.refetch() }
-  // Approvals history is ordered by last decision; /my has no server order, so
-  // its note must not claim "most recent".
-  const truncatedNote = canSeeTeam && team.data?.truncated
-    ? `Showing the ${team.data.rows.length} most recently decided requests of ${team.data.totalElements}. Older approvals are not placed on this calendar.`
-    : canSeeOwn && self.data?.truncated
-      ? `Showing ${self.data.rows.length} of your ${self.data.totalElements} requests. The rest are not placed on this calendar.`
-      : null
+  const isLoading = feed.isLoading
+  const isError = feed.isError
+  const retry = () => { void feed.refetch() }
+  // BW-39 is a date-range feed, so the honest "showing N of M" note from the
+  // walker only fires when the server truncated the month explicitly.
+  const truncatedNote = feed.data?.truncated
+    ? `Only part of the month is placed on this calendar. Narrow the range or filter the statuses to see every request.`
+    : null
 
   return (
     <div className="space-y-4">
@@ -135,7 +135,7 @@ export function LeaveCalendar() {
             </h3>
             <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">
               {canSeeTeam
-                ? 'Approved leave from your approvals history, plus your own.'
+                ? 'Approved leave across your scope, plus your own.'
                 : 'Your approved leave. The team view needs leave-approval access.'}
             </p>
           </div>
