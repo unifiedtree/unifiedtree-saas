@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div style="width:100%">
+<sc-if value="{{ isMoney }}"><dc-import name="EmpClaims" page="{{ page }}" tab="{{ tab }}" on-tab="{{ onTab }}" on-toast="{{ onToast }}" hint-size="100%,900px"></dc-import></sc-if>
+<sc-if value="{{ isPayPage }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Pay" style="box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">{{ title }}</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">{{ sub }}</p></div><button type="button" onClick="{{ togglePriv }}" style="height:38px;display:inline-flex;align-items:center;gap:8px;padding:0 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:999px;background:var(--u-sf,#fff);color:var(--u-ink2,#4A5A54);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="border-color:#0F6E56;color:#0F6E56"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path></svg>{{ privLabel }}</button></header>
+<sc-if value="{{ isSlips }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<nav aria-label="Months" style="flex:1 1 240px;min-width:0;max-width:340px;padding:8px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ slips }}" as="m" hint-placeholder-count="6"><button type="button" onClick="{{ m.pick }}" style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:0;border-radius:12px;background:transparent;font-family:inherit;color:inherit;text-align:left;cursor:pointer" style-hover="background:var(--u-hv,#F0F4F2)"><sc-if value="{{ m.on }}"><span style="position:absolute;inset:0;border-radius:12px;background:#E8F3EE"></span></sc-if><span style="position:relative;min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ m.m }}</span><span style="display:block;font-size:12px;color:var(--u-ink3,#6A7A73)">{{ m.d }}</span></span><span style="position:relative;font-size:14px;font-weight:500">{{ m.net }}</span></button></sc-for>
+</nav>
+<article data-rise="" aria-label="Payslip" style="flex:3 1 520px;min-width:0;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));overflow:hidden">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 22px;background:color-mix(in oklab,#12805F 6%,var(--u-sf,#fff));box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF);color:var(--u-ink,#0E1B16)">
+<div><div style="font-size:13px;color:var(--u-ink3,#6A7A73)">{{ slipTitle }}</div><div style="margin-top:4px;font-size:38px;line-height:1.05;font-weight:500;letter-spacing:-.03em">{{ slipNet }}</div><div style="margin-top:6px;font-size:13px;color:var(--u-ink2,#4A5A54)">{{ slipCredit }}</div></div>
+<button type="button" onClick="{{ dl }}" style="height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 16px;border:0;border-radius:12px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#0B5A46"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>Download PDF</button>
+</div>
+<sc-if value="{{ hasBreak }}" hint-placeholder-val="{{ true }}">
+<div style="padding:20px 22px 6px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13.5px;font-weight:500">Where your {{ gross }} went</div>
+<svg width="100%" height="14" style="display:block"><rect width="100%" height="14" rx="7" fill="#E6ECE9"></rect><rect width="{{ wNet }}" height="14" fill="#0F6E56"></rect><rect x="{{ wNet }}" width="{{ wTax }}" height="14" fill="#C8912E"></rect><rect x="{{ xPf }}" width="{{ wPf }}" height="14" fill="#5FB39C"></rect></svg>
+<div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--u-ink2,#4A5A54)"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#0F6E56"></span>Take-home {{ pNet }}</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#C8912E"></span>Income tax {{ pTax }}</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#5FB39C"></span>PF and professional tax {{ pPf }}</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:0 28px;padding:10px 22px 4px">
+<div><div style="padding:10px 0;font-size:12.5px;font-weight:500;color:var(--u-ink3,#6A7A73);box-shadow:inset 0 -1px 0 var(--u-ln,#E3E9E6)">Earnings</div><sc-for list="{{ earn }}" as="e" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:13.5px;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="color:var(--u-ink2,#4A5A54)">{{ e.k }}</span><span style="font-weight:500">{{ e.v }}</span></div></sc-for><div style="display:flex;justify-content:space-between;padding:12px 0;font-size:14px;font-weight:500"><span>Gross</span><span>{{ gross }}</span></div></div>
+<div><div style="padding:10px 0;font-size:12.5px;font-weight:500;color:var(--u-ink3,#6A7A73);box-shadow:inset 0 -1px 0 var(--u-ln,#E3E9E6)">Deductions</div><sc-for list="{{ ded }}" as="e" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:13.5px;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="color:var(--u-ink2,#4A5A54)">{{ e.k }}</span><span style="font-weight:500">{{ e.v }}</span></div></sc-for><div style="display:flex;justify-content:space-between;padding:12px 0;font-size:14px;font-weight:500"><span>Total deductions</span><span>{{ dedTotal }}</span></div></div>
+</div>
+</sc-if>
+<sc-if value="{{ noBreak }}"><p style="margin:0;padding:22px;font-size:14px;line-height:1.5;color:var(--u-ink2,#4A5A54)">This was before your April revision. The full breakdown is in the PDF.</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:14px 22px;background:var(--u-sf2,#F7F9F8);box-shadow:inset 0 1px 0 var(--u-ln2,#EDF1EF);font-size:13px;color:var(--u-ink2,#4A5A54)"><span>{{ daysLine }}</span><button type="button" onClick="{{ ask }}" style="height:32px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:#0F6E56;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#E8F3EE">Something looks wrong? Ask payroll</button></div>
+</article>
+</div>
+<section data-rise="" aria-label="This financial year" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px"><sc-for list="{{ ytd }}" as="y" hint-placeholder-count="4"><div style="padding:14px 16px;border-radius:14px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6)"><div style="font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ y.k }} · Apr–Aug</div><div style="margin-top:4px;font-size:20px;font-weight:500">{{ y.v }}</div></div></sc-for></section>
+</sc-if>
+<sc-if value="{{ isSalary }}">
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<section data-rise="" aria-label="Salary structure" style="flex:3 1 520px;min-width:0;padding:20px 22px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px"><div><div style="font-size:13px;color:var(--u-ink3,#6A7A73)">Cost to company</div><div style="margin-top:2px;font-size:34px;line-height:1.1;font-weight:500;letter-spacing:-.02em">{{ ctcBig }}</div><div style="margin-top:4px;font-size:13px;color:var(--u-ink3,#6A7A73)">{{ ctcSmall }}</div></div>
+<div role="group" aria-label="Show amounts" style="display:flex;padding:3px;border-radius:999px;background:var(--u-hv,#F0F4F2)"><sc-if value="{{ isMonthly }}" hint-placeholder-val="{{ true }}"><span style="height:30px;padding:0 14px;border-radius:999px;background:var(--u-sf,#fff);box-shadow:0 1px 2px rgba(14,27,22,.1);font-size:13px;font-weight:500;display:inline-flex;align-items:center">Monthly</span><button type="button" onClick="{{ toYear }}" style="height:30px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:var(--u-ink2,#4A5A54);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Yearly</button></sc-if><sc-if value="{{ isYearly }}"><button type="button" onClick="{{ toMonth }}" style="height:30px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:var(--u-ink2,#4A5A54);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Monthly</button><span style="height:30px;padding:0 14px;border-radius:999px;background:var(--u-sf,#fff);box-shadow:0 1px 2px rgba(14,27,22,.1);font-size:13px;font-weight:500;display:inline-flex;align-items:center">Yearly</span></sc-if></div></div>
+<svg width="100%" height="16" style="display:block"><sc-for list="{{ split }}" as="c" hint-placeholder-count="7"><rect x="{{ c.x }}" width="{{ c.w }}" height="16" fill="{{ c.fill }}"></rect></sc-for></svg>
+<div style="display:flex;flex-direction:column"><sc-for list="{{ split }}" as="c" hint-placeholder-count="7"><div style="display:grid;grid-template-columns:12px minmax(0,1fr) auto 52px;align-items:center;gap:12px;padding:10px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF);font-size:13.5px"><svg width="12" height="12"><rect width="12" height="12" rx="3" fill="{{ c.fill }}"></rect></svg><span>{{ c.k }}</span><span style="font-weight:500">{{ c.v }}</span><span style="text-align:right;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ c.pct }}</span></div></sc-for></div>
+</section>
+<div style="flex:2 1 340px;min-width:0;display:flex;flex-direction:column;gap:16px">
+<section data-rise="" aria-label="From CTC to take-home" style="padding:20px 22px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));color:var(--u-ink,#0E1B16);display:flex;flex-direction:column;gap:12px">
+<h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">From CTC to take-home</h2>
+<sc-for list="{{ flow }}" as="f" hint-placeholder-count="5"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;gap:12px;font-size:13.5px"><span style="color:var(--u-ink2,#4A5A54)">{{ f.k }}</span><span style="font-weight:500">{{ f.v }}</span></div><svg width="100%" height="6" style="display:block"><rect width="100%" height="6" rx="3" fill="#E6ECE9"></rect><rect width="{{ f.w }}" height="6" rx="3" fill="{{ f.fill }}"></rect></svg></div></sc-for>
+</section>
+<section data-rise="" aria-label="Salary history" style="padding:18px 22px 10px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<h2 style="color:inherit;margin:0 0 6px;font-size:16px;font-weight:500">Salary history</h2>
+<sc-for list="{{ revs }}" as="r" hint-placeholder-count="4"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ r.v }}</span><span style="display:block;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ r.d }} · {{ r.why }}</span></span><sc-if value="{{ r.up }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">{{ r.ch }}</span></sc-if></div></sc-for>
+</section>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;e-slips&quot;,&quot;e-salary&quot;,&quot;e-claims&quot;,&quot;e-adv&quot;],&quot;default&quot;:&quot;e-slips&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;onTab&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(i: number) =&gt; void&quot;},&quot;onGo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Function&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const EP_N = v => Number(String(v).replace(/[^0-9.]/g, ''));
+const EP_INR = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const EP_FILL = { brand: '#0F6E56', mint: '#5FB39C', pale: '#A9D6C6', gold: '#C8912E', gray: '#C9D2CE' };
+class Component extends DCLogic {
+  state = { sel: 0, priv: false, yearly: false };
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  renderVals() {
+    const p = this.props, s = this.state, E = window.UTEmp, page = p.page || 'e-slips';
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    const money = page === 'e-claims' || page === 'e-adv';
+    const base = { isMoney: money, isPayPage: !money, page, tab: p.tab, onTab: p.onTab, onToast: p.onToast, isSlips: page === 'e-slips', isSalary: page === 'e-salary',
+      title: page === 'e-salary' ? 'Salary' : 'Payslips', sub: page === 'e-salary' ? 'What you earn, how it’s split, and how it turns into take-home pay.' : 'Every month’s pay, what was added and what was taken out.' };
+    if (!E || money) return base;
+    const P = E.pay, hide = v => (s.priv ? '₹ • • • • •' : v);
+    const sl = P.slips[s.sel], aug = s.sel === 0, old = s.sel === P.slips.length - 1;
+    const earn = aug ? P.earn : P.earn.slice(0, 4), gross = aug ? 149972 : 148972, net = EP_N(sl[1]);
+    const tax = 22122, pf = 2000, g = gross;
+    const pct = v => (v / g * 100).toFixed(2) + '%';
+    const ctcM = 154750, mult = s.yearly ? 12 : 1;
+    let x = 0;
+    const split = P.ctcSplit.map(([k, v, pc, tone]) => { const n = EP_N(v), w = n / ctcM * 100, o = { k, v: hide(EP_INR(n * mult)), pct: (n / ctcM * 100).toFixed(1) + '%', x: x.toFixed(2) + '%', w: w.toFixed(2) + '%', fill: EP_FILL[tone] }; x += w; return o; });
+    const flow = [['Cost to company', ctcM, '#12805F'], ['Employer PF, gratuity and health cover', 5778, '#9AA8A2'], ['Gross pay', 148972, '#A9D6C6'], ['Tax, PF and professional tax', 24122, '#C8912E'], ['Take-home', 124850, '#0F6E56']].map(([k, v, fill], i) => ({ k, v: hide((i === 1 || i === 3 ? '− ' : '') + EP_INR(v * mult)), w: (v / ctcM * 100).toFixed(1) + '%', fill }));
+    return Object.assign(base, {
+      privLabel: s.priv ? 'Show amounts' : 'Hide amounts', togglePriv: () => this.setState({ priv: !s.priv }),
+      slips: P.slips.map(([m, n, d], i) => ({ m, net: hide(n), d, on: i === s.sel, pick: () => this.setState({ sel: i }) })),
+      slipTitle: sl[0] + ' · take-home', slipNet: hide(sl[1]), slipCredit: sl[2] + ' to ' + P.bank + (sl[3] ? ' · ' + sl[3] : ''),
+      dl: () => toast('Downloading the ' + sl[0] + ' payslip (PDF)'), ask: () => toast('Opens a question to payroll about ' + sl[0]),
+      hasBreak: !old, noBreak: old,
+      gross: hide(EP_INR(gross)), pNet: hide(EP_INR(net)), pTax: hide(EP_INR(tax)), pPf: hide(EP_INR(pf)),
+      wNet: pct(net), wTax: pct(tax), xPf: pct(net + tax), wPf: pct(pf),
+      earn: earn.map(([k, v]) => ({ k, v: hide(v) })), ded: P.ded.map(([k, v]) => ({ k, v: hide(v) })), dedTotal: hide(P.dedTotal),
+      daysLine: 'Paid for ' + (sl[0].startsWith('Jun') || sl[0].startsWith('Apr') ? '30 of 30' : '31 of 31') + ' days · no loss of pay',
+      ytd: P.ytd.map(([k, v]) => ({ k, v: k === 'Tax regime' ? v : hide(v) })),
+      ctcBig: hide(s.yearly ? P.ctc : P.ctcMonth), ctcSmall: s.yearly ? 'a year · ' + hide(P.ctcMonth) + ' a month' : 'a month · ' + hide(P.ctc) + ' a year',
+      isMonthly: !s.yearly, isYearly: s.yearly, toYear: () => this.setState({ yearly: true }), toMonth: () => this.setState({ yearly: false }),
+      split, flow,
+      revs: P.revisions.map(([d, v, ch, why]) => ({ d, v: hide(v) + ' a year', ch, why, up: !!ch }))
+    });
+  }
+}
+</script>
+</body>
+</html>

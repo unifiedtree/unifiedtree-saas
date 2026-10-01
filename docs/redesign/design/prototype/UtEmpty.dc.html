@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./hrms-core.js"></script><script src="./hrms-dash.js"></script></helmet>
+<div style="height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:28px 20px;text-align:center;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16)">
+<span style="position:relative;width:56px;height:56px;margin-bottom:10px;border-radius:17px;background:var(--u-sf,#fff);color:var(--u-brt,#0F6E56);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px var(--u-ln,#E3E9E6),0 12px 24px -14px rgba(15,110,86,.45),0 0 0 9px color-mix(in oklab,var(--u-brs,#E8F3EE) 70%,transparent)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{ d }}"></path></svg></span>
+<div style="font-size:15px;line-height:21px;font-weight:500;text-wrap:balance">{{ title }}</div>
+<sc-if value="{{ hasHint }}"><div style="max-width:300px;font-size:13px;line-height:19px;color:var(--u-ink3,#6A7A73);text-wrap:pretty">{{ hint }}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:320,&quot;height&quot;:240},&quot;icon&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;star&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;No completed ratings yet.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;hint&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Ratings show up here once managers submit reviews.&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() { if (!window.UTCore || !window.UTDash) this.t = setInterval(() => { if (window.UTCore && window.UTDash) { clearInterval(this.t); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.t); }
+  renderVals() {
+    const p = this.props, C = window.UTCore, X = window.UTDash;
+    const d = (X && X.I[p.icon]) || (C && (C.I[p.icon] || C.I.inbox)) || '';
+    return { d, title: p.title || '', hint: p.hint || '', hasHint: !!p.hint };
+  }
+}
+</script>
+</body>
+</html>

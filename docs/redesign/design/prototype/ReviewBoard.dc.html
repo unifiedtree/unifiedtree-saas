@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap"><script src="./ds-base.js"></script><script src="./hrms-core.js"></script></helmet>
+<div data-screen-label="Review board" style="min-height:100vh;box-sizing:border-box;background:var(--u-bg,#F3F6F4);font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);padding:40px clamp(16px,4vw,56px) 72px">
+<div style="max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:36px">
+<header style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 32px">
+<div style="min-width:0;max-width:680px"><p style="margin:0 0 6px;font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:#0F6E56">HRMS redesign · review</p><h1 style="margin:0;color:inherit;font-size:32px;line-height:1.15;font-weight:600;letter-spacing:-.02em">Every screen, for every role</h1><p style="margin:8px 0 0;font-size:15px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">{{ total }} screens. Each role sees its own menu, home and actions. Open a screen to review it live; a tab opens that tab directly. Quote the screen number in your notes.</p></div>
+<a href="./HrmsPlatform.dc.html" style="display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:12px;background:#0F6E56;color:#fff;font-size:14px;font-weight:500;text-decoration:none" style-hover="background:#0B5A46">Open the full app →</a>
+</div>
+<sc-if value="{{ tracking }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:16px 18px;border-radius:16px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6)"><div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;gap:12px;font-size:14px"><span style="font-weight:500">{{ doneLine }}</span><span style="color:var(--u-ink3,#6A7A73)">{{ donePct }}</span></div><svg width="100%" height="8" style="display:block"><rect width="100%" height="8" rx="4" fill="#E6ECE9"></rect><rect width="{{ donePct }}" height="8" rx="4" fill="#0F6E56"></rect></svg></div><button type="button" onClick="{{ reset }}" style="height:34px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:9px;background:transparent;color:var(--u-ink2,#4A5A54);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:#B23A2F;color:#B23A2F">Start over</button></div></sc-if>
+<sc-if value="{{ oneRole }}"><nav aria-label="Roles" style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{ roleTabs }}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{ t.go }}" style="position:relative;height:44px;display:inline-flex;align-items:center;gap:10px;padding:0 16px 0 6px;border:1px solid var(--u-ln,#E3E9E6);border-radius:999px;background:var(--u-sf,#fff);font-family:inherit;color:inherit;cursor:pointer" style-hover="border-color:#0F6E56"><sc-if value="{{ t.on }}"><span style="position:absolute;inset:-1px;border-radius:999px;background:#0D3A2F"></span><span style="position:relative;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.14);color:#F2F7F4;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ t.ini }}</span><span style="position:relative;font-size:14px;font-weight:500;color:#F2F7F4">{{ t.label }}</span></sc-if><sc-if value="{{ t.off }}" hint-placeholder-val="{{ true }}"><span style="width:32px;height:32px;border-radius:50%;background:#E8F3EE;color:#0F6E56;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ t.ini }}</span><span style="font-size:14px;font-weight:500">{{ t.label }}</span></sc-if></button></sc-for></nav></sc-if>
+</header>
+<sc-for list="{{ roles }}" as="r" hint-placeholder-count="3">
+<section aria-label="{{ r.label }}" style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:18px 20px;border-radius:18px;background:#0D3A2F;color:#F2F7F4"><span style="width:44px;height:44px;flex-shrink:0;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">{{ r.ini }}</span><div style="flex:1 1 260px;min-width:0"><h2 style="color:#F2F7F4;margin:0;font-size:20px;font-weight:500">{{ r.label }} · {{ r.count }}</h2><p style="margin:3px 0 0;font-size:13.5px;line-height:1.45;color:#CFE3DA">{{ r.sub }}</p></div><sc-if value="{{ r.tracking }}"><span style="font-size:13px;font-weight:500;color:#7FD9B5;white-space:nowrap">{{ r.doneLine }}</span></sc-if><a href="{{ r.href }}" style="height:38px;display:inline-flex;align-items:center;padding:0 14px;border-radius:10px;background:#F2F7F4;color:#0D3A2F;font-size:13.5px;font-weight:500;text-decoration:none" style-hover="background:#fff">Open as {{ r.short }}</a></div>
+<sc-for list="{{ r.groups }}" as="g" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px"><h3 style="color:inherit;margin:0;font-size:17px;font-weight:500">{{ g.label }}</h3><span style="font-size:13px;color:var(--u-ink3,#6A7A73)">{{ g.count }}</span></div>
+<sc-if value="{{ g.isCards }}" hint-placeholder-val="{{ true }}"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
+<sc-for list="{{ g.pages }}" as="p" hint-placeholder-count="3"><article style="position:relative;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6)">
+<sc-if value="{{ p.chkDone }}"><span style="position:absolute;inset:-1px;border-radius:16px;box-shadow:inset 0 0 0 2px #1F9D6E;pointer-events:none"></span></sc-if>
+<div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;background:#E6F2ED;color:#0F6E56;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">{{ p.num }}</span><div style="flex:1;min-width:0"><h4 style="color:inherit;margin:0;font-size:15px;font-weight:500;line-height:1.3">{{ p.label }}</h4><p style="margin:2px 0 0;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ p.meta }}</p></div>
+<sc-if value="{{ p.chkTodo }}"><button type="button" onClick="{{ p.toggle }}" aria-label="Mark as reviewed" title="Mark as reviewed" style="width:28px;height:28px;flex-shrink:0;border:2px solid #C9D2CE;border-radius:50%;background:transparent;cursor:pointer" style-hover="border-color:#0F6E56"></button></sc-if><sc-if value="{{ p.chkDone }}"><button type="button" onClick="{{ p.toggle }}" aria-label="Reviewed. Tap to undo" title="Reviewed. Tap to undo" style="width:28px;height:28px;flex-shrink:0;border:0;border-radius:50%;background:#1F9D6E;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></sc-if></div>
+<sc-if value="{{ p.hasTabs }}"><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ p.tabs }}" as="t" hint-placeholder-count="0"><a href="{{ t.href }}" style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--u-ln,#E3E9E6);font-size:12.5px;color:var(--u-ink2,#4A5A54);text-decoration:none" style-hover="border-color:#0F6E56;color:#0F6E56">{{ t.t }}</a></sc-for></div></sc-if>
+<a href="{{ p.href }}" style="margin-top:auto;align-self:flex-start;display:inline-flex;align-items:center;min-height:32px;font-size:13.5px;font-weight:500;color:#0F6E56;text-decoration:none" style-hover="text-decoration:underline">Open screen →</a>
+</article></sc-for>
+</div></sc-if>
+<sc-if value="{{ g.isRows }}"><div style="border-radius:16px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);overflow:hidden">
+<sc-for list="{{ g.pages }}" as="p" hint-placeholder-count="3"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 16px;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)">
+<sc-if value="{{ p.chkTodo }}"><button type="button" onClick="{{ p.toggle }}" aria-label="Mark as reviewed" style="width:22px;height:22px;flex-shrink:0;border:2px solid #C9D2CE;border-radius:6px;background:transparent;cursor:pointer" style-hover="border-color:#0F6E56"></button></sc-if><sc-if value="{{ p.chkDone }}"><button type="button" onClick="{{ p.toggle }}" aria-label="Reviewed. Tap to undo" style="width:22px;height:22px;flex-shrink:0;border:0;border-radius:6px;background:#1F9D6E;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></sc-if>
+<span style="width:28px;flex-shrink:0;font-size:13px;font-weight:600;color:#0F6E56;font-variant-numeric:tabular-nums">{{ p.num }}</span>
+<a href="{{ p.href }}" style="flex:1 1 200px;min-width:0;font-size:14px;font-weight:500;color:inherit;text-decoration:none" style-hover="color:#0F6E56">{{ p.label }}</a>
+<span style="flex:2 1 280px;min-width:0;display:flex;flex-wrap:wrap;gap:4px 12px"><sc-for list="{{ p.tabs }}" as="t" hint-placeholder-count="0"><a href="{{ t.href }}" style="font-size:12.5px;color:var(--u-ink2,#4A5A54);text-decoration:none;white-space:nowrap" style-hover="color:#0F6E56;text-decoration:underline">{{ t.t }}</a></sc-for><sc-if value="{{ p.noTabs }}"><span style="font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ p.meta }}</span></sc-if></span>
+</div></sc-for>
+</div></sc-if>
+<sc-if value="{{ g.isWall }}"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+<sc-for list="{{ g.pages }}" as="p" hint-placeholder-count="3"><article style="position:relative;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;padding:16px;border-radius:14px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6)">
+<sc-if value="{{ p.chkDone }}"><span style="position:absolute;inset:0;border-radius:13px;background:#E3F2EA;pointer-events:none"></span></sc-if>
+<div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:8px"><span style="font-size:44px;line-height:.9;font-weight:600;letter-spacing:-.04em;color:#0F6E56;font-variant-numeric:tabular-nums">{{ p.num }}</span><sc-if value="{{ p.chkTodo }}"><button type="button" onClick="{{ p.toggle }}" aria-label="Mark as reviewed" style="width:26px;height:26px;border:2px solid #C9D2CE;border-radius:50%;background:var(--u-sf,#fff);cursor:pointer" style-hover="border-color:#0F6E56"></button></sc-if><sc-if value="{{ p.chkDone }}"><button type="button" onClick="{{ p.toggle }}" aria-label="Reviewed. Tap to undo" style="width:26px;height:26px;border:0;border-radius:50%;background:#1F9D6E;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></sc-if></div>
+<a href="{{ p.href }}" style="position:relative;font-size:15px;font-weight:500;line-height:1.3;color:inherit;text-decoration:none" style-hover="color:#0F6E56">{{ p.label }} →</a>
+</article></sc-for>
+</div></sc-if>
+</div></sc-for>
+</section></sc-for>
+<section aria-label="Not in this review" style="padding:16px 18px;border-radius:16px;border:1px dashed #C9D2CE"><h2 style="color:inherit;margin:0 0 4px;font-size:15px;font-weight:500">Placeholders</h2><p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--u-ink2,#4A5A54)">{{ soon }} open a “coming soon” page. They sit outside HRMS.</p></section>
+</div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Cards&quot;,&quot;Rows&quot;,&quot;Wall&quot;],&quot;default&quot;:&quot;Cards&quot;,&quot;tsType&quot;:&quot;'Cards' | 'Rows' | 'Wall'&quot;,&quot;section&quot;:&quot;Board&quot;},&quot;focus&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;All roles&quot;,&quot;One role at a time&quot;],&quot;default&quot;:&quot;All roles&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Board&quot;},&quot;tracking&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Review&quot;}}">
+const RB_META = {
+  admin: ['HR admin', 'Owners, company admins, HR managers and finance leads. The full HRMS: every module, setting and report.', 'HR admin'],
+  manager: ['Manager', 'Department managers. Their own home, a My team area for today, the schedule and approvals, plus every employee screen below.', 'manager'],
+  employee: ['Employee', 'Everyone else. Self-service for their day, time, leave, pay, documents and growth. No HR menus.', 'employee']
+};
+const RB_KEY = 'ut-review-board-done';
+class Component extends DCLogic {
+  state = { done: {}, focus: 0 };
+  componentDidMount() {
+    try { const v = JSON.parse(localStorage.getItem(RB_KEY) || '{}'); if (v && typeof v === 'object') this.setState({ done: v }); } catch (e) {}
+    if (!window.UTCore || !window.UTCore.RGROUPS) this._t = setInterval(() => { if (window.UTCore && window.UTCore.RGROUPS) { clearInterval(this._t); this.forceUpdate(); } }, 100);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  save(done) { this.setState({ done }); try { localStorage.setItem(RB_KEY, JSON.stringify(done)); } catch (e) {} }
+  renderVals() {
+    const C = window.UTCore, p = this.props, s = this.state;
+    const lay = p.layout || 'Cards', tracking = !!p.tracking, oneRole = p.focus === 'One role at a time';
+    if (!C || !C.RGROUPS) return { roles: [], total: '', soon: '', tracking: false, oneRole: false };
+    let n = 0, nDone = 0; const soon = [];
+    const url = (r, k, pk, i, extra) => './HrmsPlatform.dc.html#' + r + '/' + k + '/' + pk + '/' + (i || 0) + (extra ? '/' + extra : '');
+    const all = ['admin', 'manager', 'employee'].map(r => {
+      const R = C.ROLES[r], groups = [];
+      let src = C.RGROUPS[r];
+      if (r === 'manager') src = src.filter(g => g[0] !== 'mine');
+      if (r === 'admin') src = src.concat([['settings', 'Settings', ['settings']]]);
+      src.forEach(([gk, glabel, mods]) => {
+        const pages = [];
+        mods.forEach(k => { const m = C.M[k]; if (!m) return; if (m.soon) { if (soon.indexOf(m.label) < 0) soon.push(m.label); return; }
+          m.pages.forEach(([pk, label, tabs]) => {
+            pages.push({ label: mods.length > 1 && m.pages.length > 1 ? m.label + ' · ' + label : label, href: url(r, k, pk, 0), hasTabs: !!tabs, noTabs: !tabs, meta: tabs ? tabs.length + ' tabs' : 'Single view', tabs: (tabs || []).map((t, i) => ({ t, href: url(r, k, pk, i) })) });
+            if (k === 'workforce' && pk === 'm-dir') pages.push({ label: 'Employee profile', href: url(r, 'workforce', 'm-dir', 0, 'EMP-0101'), hasTabs: false, noTabs: true, meta: 'Opened from the directory', tabs: [] });
+          }); });
+        if (pages.length) groups.push({ label: glabel, pages, isCards: lay === 'Cards', isRows: lay === 'Rows', isWall: lay === 'Wall' });
+      });
+      let cnt = 0, rd = 0;
+      groups.forEach(g => { g.count = g.pages.length === 1 ? '1 screen' : g.pages.length + ' screens'; g.pages.forEach(pg => {
+        const num = String(++n).padStart(2, '0'), d = !!s.done[num]; cnt++; if (d) { rd++; nDone++; }
+        Object.assign(pg, { num, chkDone: tracking && d, chkTodo: tracking && !d, toggle: () => { const next = Object.assign({}, this.state.done); if (next[num]) delete next[num]; else next[num] = true; this.save(next); } }); }); });
+      return { label: RB_META[r][0], sub: RB_META[r][1], short: RB_META[r][2], ini: R.ini, count: cnt + ' screens', href: url(r, R.land[0], R.land[1], 0), groups, tracking, doneLine: rd + ' of ' + cnt + ' reviewed' };
+    });
+    const last = soon.pop(), fi = Math.min(2, s.focus);
+    return {
+      roles: oneRole ? [all[fi]] : all, total: n, soon: soon.join(', ') + ' and ' + last,
+      tracking, doneLine: nDone + ' of ' + n + ' screens reviewed', donePct: (n ? Math.round(nDone / n * 100) : 0) + '%', reset: () => this.save({}),
+      oneRole, roleTabs: all.map((r, i) => ({ label: r.label, ini: r.ini, on: i === fi, off: i !== fi, go: () => this.setState({ focus: i }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

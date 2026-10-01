@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./hrms-fx.js"></script></helmet>
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16)">
+<sc-for list="{{ secs }}" as="c" hint-placeholder-count="2"><sc-if value="{{ c.full }}" hint-placeholder-val="{{ true }}"><div style="flex:1 1 100%;min-width:0;display:flex"><dc-import name="UtSection" sec="{{ c }}" style="display:block;width:100%" hint-size="100%,220px"></dc-import></div></sc-if><sc-if value="{{ c.half }}"><div style="flex:1 1 440px;min-width:0;display:flex"><dc-import name="UtSection" sec="{{ c }}" style="display:block;width:100%" hint-size="100%,220px"></dc-import></div></sc-if></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;secs&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Array&lt;object&gt;&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const list = Array.isArray(this.props.secs) ? this.props.secs : [];
+    return { secs: list.map(c => Object.assign({}, c, { full: c.w !== 'half', half: c.w === 'half' })) };
+  }
+}
+</script>
+</body>
+</html>

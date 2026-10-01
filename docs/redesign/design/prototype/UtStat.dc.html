@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./hrms-core.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-fx="tilt" data-rise="" role="button" tabindex="0" onClick="{{ go }}" style="position:relative;height:100%;min-height:132px;box-sizing:border-box;padding:18px 18px 16px;border-radius:16px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;gap:14px;overflow:hidden;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums;outline:none;transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(calc(var(--fx,0) * -3px));transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .35s,border-color .35s" style-hover="box-shadow:var(--u-shh,0 20px 40px -22px rgba(15,110,86,.5));border-color:var(--u-brl,#BFDFD1)" style-focus="box-shadow:0 0 0 3px rgba(15,110,86,.25)">
+<span aria-hidden="true" style="position:absolute;inset:0;pointer-events:none;opacity:var(--fx,0);transition:opacity .35s;background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),rgba(15,110,86,.10),transparent 45%)"></span>
+<span aria-hidden="true" style="position:absolute;inset:0;border-radius:inherit;padding:1.5px;pointer-events:none;opacity:var(--fxr,0);transition:opacity .35s;background:conic-gradient(from var(--ang,0deg),transparent 0deg 200deg,rgba(15,110,86,.35) 250deg,#0F6E56 305deg,#8FD9BE 335deg,transparent 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude"></span>
+<sc-if value="{{ active }}"><span aria-hidden="true" style="position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 0 1.5px var(--u-br,#0F6E56)"></span></sc-if>
+<div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+<sc-if value="{{ tBrand }}" hint-placeholder-val="{{ true }}"><span style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:50%;background:var(--u-brs,#E8F3EE);color:var(--u-brt,#0F6E56);display:flex;align-items:center;justify-content:center"><span aria-hidden="true" style="position:absolute;inset:0;border-radius:50%;border:1.5px solid currentColor;opacity:calc(var(--fx,0) * .3);transform:scale(calc(1 + var(--fx,0) * .3));transition:transform .55s cubic-bezier(.34,1.56,.64,1),opacity .4s"></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="position:relative;transform:rotate(calc(var(--fx,0) * -12deg)) scale(calc(1 + var(--fx,0) * .12));transition:transform .55s cubic-bezier(.34,1.56,.64,1)"><path d="{{ d }}"></path></svg></span></sc-if>
+<sc-if value="{{ tGold }}"><span style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:50%;background:var(--u-gds,#FAF1E1);color:var(--u-gdt,#8A5A10);display:flex;align-items:center;justify-content:center"><span aria-hidden="true" style="position:absolute;inset:0;border-radius:50%;border:1.5px solid currentColor;opacity:calc(var(--fx,0) * .3);transform:scale(calc(1 + var(--fx,0) * .3));transition:transform .55s cubic-bezier(.34,1.56,.64,1),opacity .4s"></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="position:relative;transform:rotate(calc(var(--fx,0) * -12deg)) scale(calc(1 + var(--fx,0) * .12));transition:transform .55s cubic-bezier(.34,1.56,.64,1)"><path d="{{ d }}"></path></svg></span></sc-if>
+<sc-if value="{{ tRed }}"><span style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:50%;background:var(--u-rds,#FCEDEB);color:var(--u-rdt,#B42318);display:flex;align-items:center;justify-content:center"><span aria-hidden="true" style="position:absolute;inset:0;border-radius:50%;border:1.5px solid currentColor;opacity:calc(var(--fx,0) * .3);transform:scale(calc(1 + var(--fx,0) * .3));transition:transform .55s cubic-bezier(.34,1.56,.64,1),opacity .4s"></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="position:relative;transform:rotate(calc(var(--fx,0) * -12deg)) scale(calc(1 + var(--fx,0) * .12));transition:transform .55s cubic-bezier(.34,1.56,.64,1)"><path d="{{ d }}"></path></svg></span></sc-if>
+<sc-if value="{{ tGray }}"><span style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:50%;background:var(--u-hv,#F0F4F2);color:var(--u-ink2,#4A5A54);display:flex;align-items:center;justify-content:center"><span aria-hidden="true" style="position:absolute;inset:0;border-radius:50%;border:1.5px solid currentColor;opacity:calc(var(--fx,0) * .25);transform:scale(calc(1 + var(--fx,0) * .3));transition:transform .55s cubic-bezier(.34,1.56,.64,1),opacity .4s"></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="position:relative;transform:rotate(calc(var(--fx,0) * -12deg)) scale(calc(1 + var(--fx,0) * .12));transition:transform .55s cubic-bezier(.34,1.56,.64,1)"><path d="{{ d }}"></path></svg></span></sc-if>
+<sc-if value="{{ sparkOk }}"><svg width="88" height="34" viewBox="0 0 88 34" fill="none" aria-hidden="true" style="flex-shrink:1;min-width:0;overflow:visible;color:var(--u-brt,#0F6E56)"><path d="{{ area }}" fill="currentColor" fill-opacity=".08"></path><path data-draw="" d="{{ line }}" pathLength="1" stroke-dasharray="1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="{{ lx }}" cy="{{ ly }}" r="3" stroke="currentColor" stroke-width="1.8" style="fill:var(--u-sf,#fff);transform-box:fill-box;transform-origin:center;transform:scale(calc(1 + var(--fx,0) * .45));transition:transform .4s cubic-bezier(.34,1.56,.64,1)"></circle></svg></sc-if>
+<sc-if value="{{ sparkBad }}"><svg width="88" height="34" viewBox="0 0 88 34" fill="none" aria-hidden="true" style="flex-shrink:1;min-width:0;overflow:visible;color:var(--u-rd,#C4453A)"><path d="{{ area }}" fill="currentColor" fill-opacity=".08"></path><path data-draw="" d="{{ line }}" pathLength="1" stroke-dasharray="1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="{{ lx }}" cy="{{ ly }}" r="3" stroke="currentColor" stroke-width="1.8" style="fill:var(--u-sf,#fff);transform-box:fill-box;transform-origin:center;transform:scale(calc(1 + var(--fx,0) * .45));transition:transform .4s cubic-bezier(.34,1.56,.64,1)"></circle></svg></sc-if>
+</div>
+<div style="position:relative;display:flex;flex-direction:column;gap:4px;min-width:0">
+<div style="font-size:13px;line-height:18px;font-weight:500;color:var(--u-ink2,#4A5A54);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ label }}</div>
+<div data-count="" style="font-size:28px;line-height:32px;font-weight:500;letter-spacing:-.025em;white-space:nowrap">{{ value }}</div>
+<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12.5px;line-height:16px;min-width:0">
+<sc-if value="{{ dGood }}"><span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;font-weight:500;color:var(--u-brt,#0F6E56)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{ arrow }}"></path></svg>{{ delta }}</span></sc-if>
+<sc-if value="{{ dBad }}"><span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;font-weight:500;color:var(--u-rdt,#B42318)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{ arrow }}"></path></svg>{{ delta }}</span></sc-if>
+<sc-if value="{{ dWarn }}"><span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;font-weight:500;color:var(--u-gdt,#8A5A10)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{ arrow }}"></path></svg>{{ delta }}</span></sc-if>
+<sc-if value="{{ dFlat }}"><span style="flex-shrink:0;font-weight:500;color:var(--u-ink2,#4A5A54)">{{ delta }}</span></sc-if>
+<span style="color:var(--u-ink3,#6A7A73);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ note }}</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:260,&quot;height&quot;:160},&quot;label&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Present today&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;value&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;142&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;delta&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;3.1%&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;trend&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;up&quot;,&quot;down&quot;,&quot;flat&quot;],&quot;default&quot;:&quot;up&quot;,&quot;tsType&quot;:&quot;'up' | 'down' | 'flat'&quot;},&quot;mood&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;good&quot;,&quot;bad&quot;,&quot;warn&quot;,&quot;flat&quot;],&quot;default&quot;:&quot;good&quot;,&quot;tsType&quot;:&quot;'good' | 'bad' | 'warn' | 'flat'&quot;},&quot;note&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;vs last Friday&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;icon&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;userCheck&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tone&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;brand&quot;,&quot;gold&quot;,&quot;red&quot;,&quot;gray&quot;],&quot;default&quot;:&quot;brand&quot;,&quot;tsType&quot;:&quot;'brand' | 'gold' | 'red' | 'gray'&quot;},&quot;spark&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;128,134,131,138,136,140,142&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;active&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;go&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+const ST_UP = 'M7 17 17 7M8 7h9v9', ST_DOWN = 'M7 7l10 10M17 8v9H8';
+const stSmooth = xy => xy.reduce((s, p, i, a) => {
+  const f = n => n.toFixed(1);
+  if (!i) return 'M' + f(p[0]) + ' ' + f(p[1]);
+  const p0 = a[i - 1], pm = a[i - 2] || p0, pn = a[i + 1] || p;
+  return s + ' C' + f(p0[0] + (p[0] - pm[0]) / 6) + ' ' + f(p0[1] + (p[1] - pm[1]) / 6) + ' ' + f(p[0] - (pn[0] - p0[0]) / 6) + ' ' + f(p[1] - (pn[1] - p0[1]) / 6) + ' ' + f(p[0]) + ' ' + f(p[1]);
+}, '');
+class Component extends DCLogic {
+  componentDidMount() { if (!window.UTCore) this.t = setInterval(() => { if (window.UTCore) { clearInterval(this.t); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.t); }
+  renderVals() {
+    const p = this.props, C = window.UTCore, tone = p.tone || 'brand', mood = p.mood || 'flat';
+    const pts = String(p.spark || '').split(',').map(Number).filter(n => !isNaN(n));
+    let line = '', area = '', lx = 0, ly = 0;
+    if (pts.length > 1) {
+      const W = 88, H = 34, pad = 4, mn = Math.min(...pts), mx = Math.max(...pts), rg = mx - mn || 1;
+      const xy = pts.map((v, i) => [i * W / (pts.length - 1), H - pad - (v - mn) / rg * (H - pad * 2)]);
+      line = stSmooth(xy); area = line + ' L' + W + ' ' + H + ' L0 ' + H + ' Z'; lx = xy[xy.length - 1][0]; ly = xy[xy.length - 1][1];
+    }
+    const has = pts.length > 1, hd = !!p.delta;
+    return {
+      d: (C && (C.I[p.icon] || C.I.users)) || '', label: p.label || '', value: p.value == null ? '' : String(p.value), note: p.note || '', delta: p.delta || '',
+      tBrand: tone === 'brand', tGold: tone === 'gold', tRed: tone === 'red', tGray: tone === 'gray',
+      sparkOk: has && mood !== 'bad', sparkBad: has && mood === 'bad', line, area, lx, ly,
+      dGood: hd && mood === 'good', dBad: hd && mood === 'bad', dWarn: hd && mood === 'warn', dFlat: hd && (mood === 'flat' || !mood),
+      arrow: p.trend === 'down' ? ST_DOWN : ST_UP, active: !!p.active,
+      go: () => { if (p.go) p.go(); }
+    };
+  }
+}
+</script>
+</body>
+</html>

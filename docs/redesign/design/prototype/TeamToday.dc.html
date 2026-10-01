@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-screen-label="Team today" style="box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">Team today</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">Friday, 25 September · Engineering · 8 people report to you</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onClick="{{ toSched }}" style="height:40px;padding:0 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="border-color:#0F6E56;color:#0F6E56">Team schedule</button><button type="button" onClick="{{ toAppr }}" style="height:40px;padding:0 16px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#0B5A46">Approvals · {{ apprN }}</button></div></header>
+<section aria-label="Filter by status" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+<sc-for list="{{ tiles }}" as="t" hint-placeholder-count="5"><dc-import name="UtStat" label="{{ t.k }}" value="{{ t.v }}" note="{{ t.n }}" icon="{{ t.icon }}" tone="{{ t.tone }}" active="{{ t.on }}" go="{{ t.pick }}" style="display:block" hint-size="100%,132px"></dc-import></sc-for>
+</section>
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<section data-rise="" aria-label="Who's in" style="flex:3 1 520px;min-width:0;padding:8px 0;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px 8px"><h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">{{ rosterTitle }}</h2><sc-if value="{{ filtered }}"><button type="button" onClick="{{ clearF }}" style="height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#0F6E56;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#E8F3EE">Show everyone</button></sc-if></div>
+<sc-for list="{{ people }}" as="m" hint-placeholder-count="8"><div style="display:flex;align-items:center;gap:14px;padding:12px 20px;box-shadow:inset 0 1px 0 var(--u-ln2,#EDF1EF)">
+<span style="position:relative;width:40px;height:40px;flex-shrink:0;border-radius:50%;background:#E8F3EE;color:#0F6E56;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ m.ini }}</span>
+<span style="flex:1 1 160px;min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ m.name }}</span><span style="display:block;font-size:12.5px;color:var(--u-ink3,#6A7A73);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.role }}</span></span>
+<span style="flex:1 1 150px;min-width:0;font-size:13px;color:var(--u-ink2,#4A5A54)">{{ m.when }}</span>
+<sc-if value="{{ m.in }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">In</span></sc-if><sc-if value="{{ m.late }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:#8A5A12;background:#FBF1DE;border-radius:999px;padding:0 9px;line-height:22px">Late</span></sc-if><sc-if value="{{ m.wfh }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:#2F6F8A;background:#E4F0F5;border-radius:999px;padding:0 9px;line-height:22px">Home</span></sc-if><sc-if value="{{ m.leave }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:var(--u-ink2,#4A5A54);background:var(--u-hv,#F0F4F2);border-radius:999px;padding:0 9px;line-height:22px">On leave</span></sc-if><sc-if value="{{ m.none }}"><button type="button" onClick="{{ m.nudge }}" style="flex-shrink:0;height:30px;padding:0 12px;border:1px solid #F2D3CF;border-radius:999px;background:#FDF6F5;color:#B23A2F;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="border-color:#B23A2F">{{ m.nudgeL }}</button></sc-if>
+</div></sc-for>
+</section>
+<div style="flex:2 1 320px;min-width:0;display:flex;flex-direction:column;gap:16px">
+<section data-rise="" aria-label="Waiting for you" style="padding:18px 20px 12px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px"><h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">Waiting for you</h2><button type="button" onClick="{{ toAppr }}" style="height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#0F6E56;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#E8F3EE">See all {{ apprN }}</button></div>
+<sc-for list="{{ quick }}" as="a" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:8px;padding:12px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ a.who }}</span><span style="display:block;margin-top:2px;font-size:12.5px;color:var(--u-ink2,#4A5A54)">{{ a.what }}</span></span><span style="flex-shrink:0;font-size:12px;color:var(--u-ink3,#6A7A73)">{{ a.when }}</span></div>
+<sc-if value="{{ a.open }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px"><button type="button" onClick="{{ a.no }}" style="height:32px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:9px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="border-color:#B23A2F;color:#B23A2F">Reject</button><button type="button" onClick="{{ a.yes }}" style="height:32px;padding:0 14px;border:0;border-radius:9px;background:#0F6E56;color:#fff;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:#0B5A46">Approve</button></div></sc-if>
+<sc-if value="{{ a.decided }}"><span style="font-size:12.5px;font-weight:500;color:#0B5A46">{{ a.result }}</span></sc-if></div></sc-for>
+</section>
+<section data-rise="" aria-label="Probation" style="padding:18px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));color:var(--u-ink,#0E1B16);display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12.5px;color:var(--u-ink3,#6A7A73)">Probation ends {{ probWhen }}</div>
+<div style="font-size:17px;font-weight:500">{{ probWho }}</div>
+<sc-if value="{{ probOpen }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--u-ink2,#4A5A54)">Decide before then, or it extends by a month on its own.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onClick="{{ confirmP }}" style="height:36px;padding:0 14px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#0B5A46">Confirm</button><button type="button" onClick="{{ extendP }}" style="height:36px;padding:0 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:#0F6E56;color:#0F6E56">Extend by a month</button></div></sc-if>
+<sc-if value="{{ probDone }}"><p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--u-ink2,#4A5A54)">{{ probResult }}</p></sc-if>
+</section>
+<section data-rise="" aria-label="Q3 reviews" style="padding:18px 20px 12px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))"><h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">Q3 reviews · due 9 Oct</h2><p style="margin:4px 0 6px;font-size:13px;color:var(--u-ink3,#6A7A73)">2 of 8 self-reviews are in. Start with those.</p><sc-for list="{{ reviews }}" as="r" hint-placeholder-count="4"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF);font-size:13.5px"><span style="font-weight:500">{{ r.who }}</span><sc-if value="{{ r.ok }}"><span style="font-size:12px;font-weight:500;color:#0B5A46">{{ r.s }} · write yours</span></sc-if><sc-if value="{{ r.wait }}"><span style="font-size:12px;color:var(--u-ink3,#6A7A73)">{{ r.s }}</span></sc-if></div></sc-for></section>
+<section data-rise="" aria-label="Out soon" style="padding:18px 20px 12px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))"><h2 style="color:inherit;margin:0 0 4px;font-size:16px;font-weight:500">Out soon</h2><sc-for list="{{ out }}" as="o" hint-placeholder-count="4"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:500">{{ o.who }}</span><span style="display:block;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ o.when }}</span></span><span style="flex-shrink:0;font-size:12px;color:var(--u-ink2,#4A5A54)">{{ o.s }}</span></div></sc-for></section>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;onGo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Function&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const TT_IC = { cg: ['userCheck', 'brand', 'Face or mobile punch'], cy: ['alarm', 'gold', 'After the 15 min grace'], cm: ['home', 'brand', 'Approved work from home'], cx: ['calendar', 'gray', 'Approved leave today'], cr: ['xCircle', 'red', 'Tap to see who'] };
+const TT_ST = [['in', 'In the office', 'cg'], ['late', 'Late', 'cy'], ['wfh', 'At home', 'cm'], ['leave', 'On leave', 'cx'], ['none', 'Not in yet', 'cr']];
+class Component extends DCLogic {
+  state = { f: null, nudged: {}, dec: {}, prob: null };
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  renderVals() {
+    const p = this.props, s = this.state, E = window.UTEmp;
+    const go = (mk, pk, tb) => () => { if (p.onGo) p.onGo(mk, pk, tb || 0); };
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    const base = { toSched: go('team', 't-sched'), toAppr: go('team', 't-appr') };
+    if (!E) return base;
+    const T = E.team, M = E.teamMore, cnt = k => T.filter(x => x[2] === k).length;
+    const left = E.approvals.filter(a => !s.dec[a.id]).length;
+    const people = T.filter(x => !s.f || x[2] === s.f).map(([name, role, st, at, src]) => ({ name, role, ini: name.split(' ').map(w => w[0]).join(''),
+      when: st === 'leave' || st === 'none' ? src : 'In at ' + at + ' · ' + src, in: st === 'in', late: st === 'late', wfh: st === 'wfh', leave: st === 'leave', none: st === 'none',
+      nudgeL: s.nudged[name] ? 'Reminder sent' : 'Send a reminder', nudge: () => { this.setState({ nudged: Object.assign({}, s.nudged, { [name]: true }) }); toast('Reminder sent to ' + name.split(' ')[0]); } }));
+    const quick = E.approvals.slice(0, 3).map(a => { const d = s.dec[a.id]; return { who: a.who, what: a.what + ' · ' + a.n, when: a.when, open: !d, decided: !!d, result: d === 'ok' ? 'Approved · ' + a.who.split(' ')[0] + ' has been told' : 'Rejected · ' + a.who.split(' ')[0] + ' has been told',
+      yes: () => { this.setState({ dec: Object.assign({}, s.dec, { [a.id]: 'ok' }) }); toast('Approved ' + a.who.split(' ')[0] + '’s ' + a.kind.toLowerCase()); }, no: () => { this.setState({ dec: Object.assign({}, s.dec, { [a.id]: 'no' }) }); toast('Rejected ' + a.who.split(' ')[0] + '’s ' + a.kind.toLowerCase()); } }; });
+    const fl = TT_ST.find(x => x[0] === s.f);
+    return Object.assign(base, {
+      apprN: String(left),
+      tiles: TT_ST.map(([k, label, c]) => { const o = { k: label, v: String(cnt(k)), icon: TT_IC[c][0], tone: TT_IC[c][1], n: TT_IC[c][2], on: s.f === k, pick: () => this.setState({ f: s.f === k ? null : k }) }; ['cg', 'cy', 'cm', 'cx', 'cr'].forEach(x => o[x] = x === c); return o; }),
+      rosterTitle: fl ? fl[1] + ' · ' + people.length : 'Who’s in · ' + T.length + ' people', filtered: !!s.f, clearF: () => this.setState({ f: null }),
+      people, quick,
+      probWho: M.probation[0] + ' · ' + M.probation[1], probWhen: M.probation[2] + ' · ' + M.probation[3].toLowerCase(), probOpen: !s.prob, probDone: !!s.prob,
+      probResult: s.prob === 'ok' ? 'Confirmed. HR will send Aditya his confirmation letter.' : 'Extended to 5 November. Aditya and HR have been told.',
+      confirmP: () => { this.setState({ prob: 'ok' }); toast('Aditya Rao confirmed'); }, extendP: () => { this.setState({ prob: 'ext' }); toast('Probation extended to 5 November'); },
+      reviews: M.reviews.map(([who, st, k]) => ({ who, s: st, ok: k === 'ok', wait: k !== 'ok' })),
+      out: M.out.map(([who, when, st]) => ({ who, when, s: st }))
+    });
+  }
+}
+</script>
+</body>
+</html>

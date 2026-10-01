@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-screen-label="Documents" style="box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">{{ title }}</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">{{ sub }}</p></div></header>
+<sc-if value="{{ hasTodo }}"><div data-rise="" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px;background:#FBF1DE;color:#6B4510"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01"></path></svg><span style="font-size:13.5px;font-weight:500;line-height:1.45">{{ todo }}</span></div></sc-if>
+<section aria-label="{{ title }}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px">
+<sc-for list="{{ items }}" as="d" hint-placeholder-count="5"><article data-rise="" style="position:relative;display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<sc-if value="{{ d.act }}"><span style="position:absolute;inset:-1px;border-radius:18px;box-shadow:inset 0 0 0 2px #E9C98A;pointer-events:none"></span></sc-if>
+<div style="display:flex;align-items:flex-start;gap:12px"><span style="width:42px;height:42px;flex-shrink:0;border-radius:12px;background:var(--u-hv,#F0F4F2);color:var(--u-ink2,#4A5A54);display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{ d.icon }}"></path></svg></span><div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:500;line-height:1.3">{{ d.t }}</div><div style="margin-top:3px;font-size:12.5px;line-height:1.4;color:var(--u-ink3,#6A7A73)">{{ d.s }}</div></div></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto">
+<sc-if value="{{ d.ok }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:#0B5A46"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>{{ d.state }}</span></sc-if>
+<sc-if value="{{ d.act }}"><span style="font-size:12px;font-weight:500;color:#8A5A12;background:#FBF1DE;border-radius:999px;padding:0 9px;line-height:22px">{{ d.state }}</span></sc-if>
+<sc-if value="{{ d.hasMain }}"><button type="button" onClick="{{ d.main }}" style="height:34px;padding:0 14px;border:0;border-radius:9px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#0B5A46">{{ d.mainL }}</button></sc-if>
+<sc-if value="{{ d.hasSec }}"><button type="button" onClick="{{ d.sec }}" style="height:34px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:9px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="border-color:#0F6E56;color:#0F6E56">{{ d.secL }}</button></sc-if>
+</div>
+</article></sc-for>
+</section>
+<sc-if value="{{ isFiles }}"><button type="button" onClick="{{ upload }}" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:22px;border:1.5px dashed #BFD3CA;border-radius:16px;background:#F7FAF8;font-family:inherit;font-size:14px;font-weight:500;color:var(--u-ink2,#4A5A54);cursor:pointer" style-hover="border-color:#0F6E56;color:#0F6E56"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path></svg>Add another document</button></sc-if>
+<sc-if value="{{ isAssets }}"><p style="margin:0;font-size:13px;line-height:1.5;color:var(--u-ink3,#6A7A73)">Lost or broken something? Report it the same day. You won’t be charged for normal wear.</p></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;e-letters&quot;,&quot;e-files&quot;,&quot;e-assets&quot;,&quot;e-pol&quot;],&quot;default&quot;:&quot;e-letters&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;onGo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Function&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const ED_IC = {
+  letter: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6',
+  file: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6',
+  laptop: 'M4 5h16a1 1 0 0 1 1 1v10H3V6a1 1 0 0 1 1-1zM2 19h20',
+  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'
+};
+const ED_META = {
+  'e-letters': ['Letters', 'Letters HR has sent you. Sign the ones that need your signature.'],
+  'e-files': ['My documents', 'The documents HR keeps on file for you. Payroll uses the verified ones.'],
+  'e-assets': ['My assets', 'Company equipment you have. Confirm new items when you get them.'],
+  'e-pol': ['Policies', 'Company policies to read and accept. Accepted ones stay here for reference.']
+};
+class Component extends DCLogic {
+  state = { done: {} };
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  renderVals() {
+    const p = this.props, s = this.state, E = window.UTEmp, page = ED_META[p.page] ? p.page : 'e-letters';
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    const base = { title: ED_META[page][0], sub: ED_META[page][1], isFiles: page === 'e-files', isAssets: page === 'e-assets', upload: () => toast('Opens your files to upload a document') };
+    if (!E) return base;
+    const D = E.docs, mark = (k, msg) => () => { this.setState({ done: Object.assign({}, s.done, { [k]: true }) }); toast(msg); };
+    const mk = (k, icon, t, sub, act, state, main, sec) => ({ t, s: sub, icon, act, ok: !act, state, hasMain: !!main, mainL: main ? main[0] : '', main: main ? main[1] : null, hasSec: !!sec, secL: sec ? sec[0] : '', sec: sec ? sec[1] : null });
+    let items = [], todo = '';
+    if (page === 'e-letters') {
+      items = D.letters.map(([t, sub, st], i) => { const act = st === 'sign' && !s.done['l' + i];
+        return mk('l' + i, ED_IC.letter, t, s.done['l' + i] ? 'Signed just now' : sub, act, act ? 'Needs your signature' : 'Signed', act ? ['Review and sign', mark('l' + i, 'Signed: ' + t)] : null, ['Download', () => toast('Downloading ' + t + ' (PDF)')]); });
+      if (!s.done.l0) todo = 'Your appraisal letter 2026 needs your e-signature. It takes about a minute.';
+    } else if (page === 'e-files') {
+      items = D.files.map(([t, sub, st], i) => { const act = st === 'redo' && !s.done['f' + i];
+        return mk('f' + i, ED_IC.file, t, s.done['f' + i] ? 'Uploaded just now · HR will check it' : sub, act, act ? 'Upload again' : s.done['f' + i] ? 'Waiting for HR' : 'Verified', act ? ['Upload new photo', mark('f' + i, 'Uploaded a new ' + t.toLowerCase())] : null, ['View', () => toast('Opens ' + t)]); });
+      if (!s.done.f2) todo = 'HR couldn’t read your address proof. Upload a clearer photo or a PDF.';
+    } else if (page === 'e-assets') {
+      items = D.assets.map(([t, sub, st], i) => { const act = st === 'confirm' && !s.done['a' + i];
+        return mk('a' + i, ED_IC.laptop, t, sub, act, act ? 'Confirm you got it' : 'With you', act ? ['Yes, I have it', mark('a' + i, 'Confirmed: ' + t)] : null, ['Report a problem', () => toast('Opens a note to IT about ' + t)]); });
+      if (!s.done.a1) todo = 'Did you get the Dell 27″ monitor? Confirm it so it’s recorded against you.';
+    } else {
+      items = D.policies.map(([t, sub, st, len], i) => { const act = st === 'todo' && !s.done['p' + i];
+        return mk('p' + i, ED_IC.shield, t, s.done['p' + i] ? 'Accepted just now' : sub + (len ? ' · ' + len : ''), act, act ? 'Read and accept' : 'Accepted', act ? ['Read and accept', mark('p' + i, 'Accepted: ' + t)] : null, ['Open', () => toast('Opens ' + t)]); });
+      if (!s.done.p0) todo = 'The Code of conduct 2026 needs your OK by Wednesday, 30 September.';
+    }
+    return Object.assign(base, { items, todo, hasTodo: !!todo });
+  }
+}
+</script>
+</body>
+</html>

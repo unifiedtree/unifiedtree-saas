@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-screen-label="Team schedule" style="box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">Team schedule</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">{{ week }} · shifts, leave and work from home in one view</p></div><div style="display:flex;gap:6px"><button type="button" onClick="{{ prev }}" style="height:38px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:#0F6E56">← Previous</button><button type="button" onClick="{{ now }}" style="height:38px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:#0F6E56">This week</button><button type="button" onClick="{{ next }}" style="height:38px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:#0F6E56">Next →</button></div></header>
+<section data-rise="" aria-label="Schedule" style="border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));overflow:hidden">
+<div style="overflow-x:auto"><div style="min-width:900px">
+<div style="display:grid;grid-template-columns:200px repeat(7,minmax(96px,1fr));padding:12px 16px;background:var(--u-sf2,#F7F9F8);box-shadow:inset 0 -1px 0 var(--u-ln,#E3E9E6)"><span style="font-size:12px;font-weight:500;color:var(--u-ink3,#6A7A73)">In the office</span><sc-for list="{{ cover }}" as="c" hint-placeholder-count="7"><span style="display:flex;flex-direction:column;gap:5px;padding-right:10px"><span style="font-size:12.5px;font-weight:500">{{ c.d }}</span><sc-if value="{{ c.work }}" hint-placeholder-val="{{ true }}"><svg width="100%" height="4" style="display:block"><rect width="100%" height="4" rx="2" fill="#E6ECE9"></rect><rect width="{{ c.pct }}" height="4" rx="2" fill="#0F6E56"></rect></svg><span style="font-size:11.5px;color:var(--u-ink3,#6A7A73)">{{ c.n }}</span></sc-if><sc-if value="{{ c.rest }}"><span style="font-size:11.5px;color:var(--u-ink3,#6A7A73)">{{ c.n }}</span></sc-if></span></sc-for></div>
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:200px repeat(7,minmax(96px,1fr));align-items:stretch;padding:8px 16px;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)">
+<span style="display:flex;align-items:center;gap:10px;min-width:0"><span style="width:32px;height:32px;flex-shrink:0;border-radius:50%;background:#E8F3EE;color:#0F6E56;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600">{{ r.ini }}</span><span style="font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span></span>
+<sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><span style="display:block;padding:3px 6px 3px 0;min-width:0">
+<sc-if value="{{ c.g }}"><span style="display:flex;flex-direction:column;justify-content:center;height:44px;padding:0 10px;border-radius:10px;background:#E8F3EE;color:#0B5A46"><span style="font-size:12.5px;font-weight:500">{{ c.t }}</span><span style="font-size:11px;opacity:.8">{{ c.s }}</span></span></sc-if>
+<sc-if value="{{ c.alt }}"><span style="display:flex;flex-direction:column;justify-content:center;height:44px;padding:0 10px;border-radius:10px;background:#EEF0FA;color:#3D4A8A"><span style="font-size:12.5px;font-weight:500">{{ c.t }}</span><span style="font-size:11px;opacity:.8">{{ c.s }}</span></span></sc-if>
+<sc-if value="{{ c.w }}"><span style="display:flex;flex-direction:column;justify-content:center;height:44px;padding:0 10px;box-sizing:border-box;border-radius:10px;border:1.5px solid #5FB39C;color:#2F8A70"><span style="font-size:12.5px;font-weight:500">{{ c.t }}</span><span style="font-size:11px">{{ c.s }}</span></span></sc-if>
+<sc-if value="{{ c.l }}"><span style="display:flex;flex-direction:column;justify-content:center;height:44px;padding:0 10px;border-radius:10px;background:#F3EEE4;color:#6B4510"><span style="font-size:12.5px;font-weight:500">{{ c.t }}</span><span style="font-size:11px">{{ c.s }}</span></span></sc-if>
+<sc-if value="{{ c.pend }}"><button type="button" onClick="{{ c.go }}" style="width:100%;display:flex;flex-direction:column;justify-content:center;height:44px;padding:0 10px;box-sizing:border-box;border-radius:10px;border:1.5px dashed #C8912E;background:#FFFBF3;color:#6B4510;font-family:inherit;text-align:left;cursor:pointer"><span style="font-size:12.5px;font-weight:500">{{ c.t }}</span><span style="font-size:11px">{{ c.s }}</span></button></sc-if>
+<sc-if value="{{ c.h }}"><span style="display:flex;align-items:center;height:44px;padding:0 10px;border-radius:10px;background:repeating-linear-gradient(135deg,#F6E7C8 0 5px,#FBF3E2 5px 10px);color:#6B4510;font-size:12px;font-weight:500">{{ c.t }}</span></sc-if>
+<sc-if value="{{ c.o }}"><span style="display:flex;align-items:center;height:44px;padding:0 10px;border-radius:10px;color:#A5B2AD;font-size:12px">{{ c.t }}</span></sc-if>
+</span></sc-for>
+</div></sc-for>
+</div></div>
+</section>
+<div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--u-ink2,#4A5A54)"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:4px;background:#E8F3EE"></span>General shift</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:4px;background:#EEF0FA"></span>Other shifts</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:4px;box-sizing:border-box;border:1.5px solid #5FB39C"></span>Home</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:4px;background:#F3EEE4"></span>Leave</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:4px;box-sizing:border-box;border:1.5px dashed #C8912E"></span>Waiting for you · tap to decide</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;onGo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Function&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const TS_C = { G: ['g', 'General', '09:30 – 18:30'], E: ['alt', 'Early', '07:00 – 16:00'], V: ['alt', 'Evening', '14:00 – 23:00'], L: ['l', 'Leave', 'Approved'], LP: ['pend', 'Leave?', 'Waiting for you'], W: ['w', 'Home', 'Approved'], WP: ['pend', 'Home?', 'Waiting for you'], H: ['h', 'Gandhi Jayanti', ''], O: ['o', 'Off', ''] };
+class Component extends DCLogic {
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  renderVals() {
+    const p = this.props, E = window.UTEmp;
+    const go = (mk, pk, tb) => () => { if (p.onGo) p.onGo(mk, pk, tb || 0); };
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    const base = { prev: () => toast('Shows the week of 21 Sep'), now: () => toast('You’re on this week’s roster'), next: () => toast('Shows the week of 5 Oct') };
+    if (!E) return base;
+    const W = E.week, n = W.rows.length;
+    const rows = W.rows.map(([name, codes]) => ({ name, ini: name.split(' ').map(w => w[0]).join(''), cells: codes.map(c => { const [k, t, sub] = TS_C[c]; const o = { t, s: sub, go: go('team', 't-appr', c === 'LP' ? 1 : 3) }; ['g', 'alt', 'w', 'l', 'pend', 'h', 'o'].forEach(x => o[x] = x === k); return o; }) }));
+    const cover = W.days.map((d, i) => { const codes = W.rows.map(r => r[1][i]); const rest = codes.every(c => c === 'H' || c === 'O'); const inOffice = codes.filter(c => c === 'G' || c === 'E' || c === 'V').length;
+      return { d, work: !rest, rest, n: rest ? (codes[0] === 'H' ? 'Holiday' : 'Weekend') : inOffice + ' of ' + n + (inOffice < 6 ? ' · thin' : ''), pct: (inOffice / n * 100).toFixed(0) + '%' }; });
+    return Object.assign(base, { week: W.label, rows, cover });
+  }
+}
+</script>
+</body>
+</html>

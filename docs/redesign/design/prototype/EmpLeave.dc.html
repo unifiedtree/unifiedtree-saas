@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-screen-label="Leave" style="box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">{{ title }}</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">{{ sub }}</p></div><sc-if value="{{ notApply }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ toApply }}" style="height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 16px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#0B5A46"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>Apply leave</button></sc-if></header>
+<sc-if value="{{ isOver }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Balances" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px">
+<sc-for list="{{ bal }}" as="b" hint-placeholder-count="4"><div data-rise="" style="display:flex;align-items:center;gap:16px;padding:18px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))"><svg width="64" height="64" viewBox="0 0 40 40" style="flex-shrink:0;transform:rotate(-90deg)"><circle cx="20" cy="20" r="16" fill="none" stroke="#E6ECE9" stroke-width="5"></circle><circle cx="20" cy="20" r="16" fill="none" stroke="#0F6E56" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="{{ b.dash }}"></circle></svg><div style="min-width:0"><div style="font-size:13px;font-weight:500;color:var(--u-ink2,#4A5A54)">{{ b.t }}</div><div style="margin-top:2px;display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;line-height:1.1;font-weight:500">{{ b.left }}</span><span style="font-size:13px;color:var(--u-ink3,#6A7A73)">of {{ b.of }} left</span></div><div style="margin-top:4px;font-size:12px;color:var(--u-ink3,#6A7A73)">{{ b.note }}</div></div></div></sc-for>
+</section>
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<section data-rise="" aria-label="Coming up" style="flex:3 1 480px;min-width:0;padding:18px 20px 10px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<h2 style="color:inherit;margin:0 0 6px;font-size:16px;font-weight:500">Coming up</h2>
+<sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:14px;padding:12px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="width:48px;height:48px;flex-shrink:0;border-radius:12px;background:var(--u-hv,#F0F4F2);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1"><span style="font-size:11px;font-weight:500;color:var(--u-ink3,#6A7A73)">{{ u.dow }}</span><span style="margin-top:2px;font-size:15px;font-weight:600">{{ u.d }}</span></span><span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ u.t }}</span><span style="display:block;margin-top:2px;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ u.s }}</span></span><sc-if value="{{ u.wait }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:#8A5A12;background:#FBF1DE;border-radius:999px;padding:0 9px;line-height:22px">Waiting</span></sc-if><sc-if value="{{ u.hol }}"><span style="flex-shrink:0;font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">{{ u.when }}</span></sc-if></div></sc-for>
+</section>
+<section data-rise="" aria-label="Long weekends" style="flex:2 1 320px;min-width:0;padding:18px 20px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));color:var(--u-ink,#0E1B16);display:flex;flex-direction:column;gap:12px">
+<h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">Make the most of it</h2>
+<p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--u-ink2,#4A5A54)">Days where a little leave buys a long break.</p>
+<sc-for list="{{ tips }}" as="t" hint-placeholder-count="2"><button type="button" onClick="{{ t.go }}" style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:14px;background:var(--u-sf2,#F7F9F8);font-family:inherit;color:inherit;text-align:left;cursor:pointer" style-hover="border-color:#0F6E56"><span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ t.t }}</span><span style="display:block;margin-top:2px;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ t.s }}</span></span><span style="flex-shrink:0;font-size:13px;font-weight:500;color:#0F6E56;white-space:nowrap">Plan it →</span></button></sc-for>
+</section>
+</div>
+</sc-if>
+<sc-if value="{{ isApply }}">
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<div style="flex:3 1 520px;min-width:0;display:flex;flex-direction:column;gap:16px">
+<section data-rise="" aria-label="Leave type" style="padding:18px 20px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:12px">
+<h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">1 · What kind of leave?</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px"><sc-for list="{{ types }}" as="t" hint-placeholder-count="4"><button type="button" onClick="{{ t.pick }}" style="position:relative;display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:12px;background:var(--u-sf,#fff);font-family:inherit;color:inherit;text-align:left;cursor:pointer" style-hover="border-color:#0F6E56"><span style="font-size:14px;font-weight:500">{{ t.t }}</span><span style="font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ t.left }} days left</span><sc-if value="{{ t.on }}"><span style="position:absolute;inset:-1px;border-radius:12px;box-shadow:0 0 0 2px #0F6E56;pointer-events:none"></span></sc-if></button></sc-for></div>
+</section>
+<section data-rise="" aria-label="Dates" style="padding:18px 20px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">2 · Which days? <span style="font-weight:500;color:var(--u-ink3,#6A7A73)">October 2026</span></h2><span style="font-size:12.5px;color:var(--u-ink3,#6A7A73)">Tap a start day, then an end day</span></div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;font-size:12px;font-weight:500;color:var(--u-ink3,#6A7A73);text-align:center"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px">
+<sc-for list="{{ oct }}" as="c" hint-placeholder-count="34"><div style="display:contents"><sc-if value="{{ c.blank }}"><span></span></sc-if><sc-if value="{{ c.real }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ c.pick }}" title="{{ c.tip }}" style="position:relative;height:52px;min-width:0;border:0;border-radius:10px;background:transparent;font-family:inherit;color:inherit;cursor:pointer" style-hover="background:var(--u-hv,#F0F4F2)">
+<sc-if value="{{ c.inR }}"><span style="position:absolute;inset:0;border-radius:10px;background:#DDEFE6"></span></sc-if><sc-if value="{{ c.edge }}"><span style="position:absolute;inset:0;border-radius:10px;background:#0F6E56"></span></sc-if><sc-if value="{{ c.hol }}"><span style="position:absolute;inset:3px;border-radius:8px;background:repeating-linear-gradient(135deg,#F6E7C8 0 4px,#FBF3E2 4px 8px)"></span></sc-if>
+<sc-if value="{{ c.tx }}"><span style="position:relative;font-size:14px;font-weight:500">{{ c.n }}</span></sc-if><sc-if value="{{ c.tw }}"><span style="position:relative;font-size:14px;font-weight:600;color:#fff">{{ c.n }}</span></sc-if><sc-if value="{{ c.tm }}"><span style="position:relative;font-size:14px;color:#A5B2AD">{{ c.n }}</span></sc-if>
+<sc-if value="{{ c.team }}"><span style="position:absolute;left:50%;bottom:6px;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:#C8912E"></span></sc-if>
+</button></sc-if></div></sc-for>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--u-ink2,#4A5A54)"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#0F6E56"></span>Your leave</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:repeating-linear-gradient(135deg,#F6E7C8 0 3px,#FBF3E2 3px 6px)"></span>Holiday</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#C8912E"></span>Someone in your team is off</span></div>
+</section>
+<section data-rise="" aria-label="Reason" style="padding:18px 20px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:10px">
+<h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">3 · Anything Siddharth should know?</h2>
+<textarea rows="3" placeholder="Optional. For example: family function in Pune" style="box-sizing:border-box;padding:10px 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:13.5px;color:var(--u-ink,#0E1B16);resize:vertical;outline:none" style-focus="border-color:#0F6E56"></textarea>
+</section>
+</div>
+<aside data-rise="" aria-label="Summary" style="flex:2 1 300px;min-width:0;position:sticky;top:16px;padding:20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:14px">
+<div style="font-size:12.5px;font-weight:500;color:var(--u-ink3,#6A7A73)">Your request</div>
+<div style="font-size:20px;font-weight:500;letter-spacing:-.01em;line-height:1.25">{{ sumRange }}</div>
+<div style="display:flex;flex-direction:column;gap:0">
+<sc-for list="{{ sumRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF);font-size:13.5px"><span style="color:var(--u-ink2,#4A5A54)">{{ r.k }}</span><span style="font-weight:500;text-align:right">{{ r.v }}</span></div></sc-for>
+</div>
+<sc-if value="{{ hasWarn }}"><div style="display:flex;gap:10px;padding:12px;border-radius:12px;background:#FBF1DE;color:#6B4510;font-size:13px;line-height:1.45"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"></path></svg><span>{{ warn }}</span></div></sc-if>
+<sc-if value="{{ canSend }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ send }}" style="height:44px;border:0;border-radius:12px;background:#0F6E56;color:#fff;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer" style-hover="background:#0B5A46">Send to Siddharth Rao</button></sc-if>
+<sc-if value="{{ cantSend }}"><span style="height:44px;border-radius:12px;background:var(--u-hv,#F0F4F2);color:var(--u-ink3,#6A7A73);font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center">{{ cantWhy }}</span></sc-if>
+<span style="font-size:12px;line-height:1.45;color:var(--u-ink3,#6A7A73)">Weekends and holidays aren’t counted. You can cancel until it starts.</span>
+</aside>
+</div>
+</sc-if>
+<sc-if value="{{ isReq }}">
+<section aria-label="Requests" style="display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ reqs }}" as="r" hint-placeholder-count="4"><article data-rise="" style="display:flex;flex-wrap:wrap;align-items:center;gap:16px 24px;padding:18px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<div style="flex:1 1 260px;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:500">{{ r.type }} · {{ r.days }}</span><sc-if value="{{ r.wait }}"><span style="font-size:12px;font-weight:500;color:#8A5A12;background:#FBF1DE;border-radius:999px;padding:0 9px;line-height:22px">{{ r.status }}</span></sc-if><sc-if value="{{ r.ok }}"><span style="font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">{{ r.status }}</span></sc-if><sc-if value="{{ r.gray }}"><span style="font-size:12px;font-weight:500;color:var(--u-ink2,#4A5A54);background:var(--u-hv,#F0F4F2);border-radius:999px;padding:0 9px;line-height:22px">{{ r.status }}</span></sc-if></div><div style="margin-top:4px;font-size:13.5px;color:var(--u-ink2,#4A5A54)">{{ r.dates }} · “{{ r.reason }}”</div></div>
+<ol style="flex:2 1 340px;min-width:0;margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><sc-for list="{{ r.steps }}" as="st" hint-placeholder-count="3"><li style="display:flex;flex-direction:column;gap:6px;min-width:0"><sc-if value="{{ st.done }}"><span style="height:4px;border-radius:2px;background:#1F9D6E"></span></sc-if><sc-if value="{{ st.now }}"><span style="height:4px;border-radius:2px;background:#C8912E"></span></sc-if><sc-if value="{{ st.todo }}"><span style="height:4px;border-radius:2px;background:#E6ECE9"></span></sc-if><span style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ st.t }}</span><span style="font-size:12px;color:var(--u-ink3,#6A7A73);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ st.s }}</span></li></sc-for></ol>
+<sc-if value="{{ r.canCancel }}"><button type="button" onClick="{{ r.cancel }}" style="height:36px;padding:0 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:#B23A2F;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:#B23A2F">Cancel request</button></sc-if>
+</article></sc-for>
+</section>
+</sc-if>
+<sc-if value="{{ isHol }}">
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<section data-rise="" aria-label="Public holidays" style="flex:3 1 480px;min-width:0;padding:18px 20px 8px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<h2 style="color:inherit;margin:0 0 6px;font-size:16px;font-weight:500">Public holidays · Bengaluru</h2>
+<sc-for list="{{ hols }}" as="h" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:14px;padding:12px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="width:52px;height:52px;flex-shrink:0;border-radius:12px;background:#FBF1DE;color:#6B4510;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1"><span style="font-size:11px;font-weight:500">{{ h.dow }}</span><span style="margin-top:3px;font-size:14px;font-weight:600">{{ h.d }}</span></span><span style="flex:1;min-width:0"><span style="display:block;font-size:14.5px;font-weight:500">{{ h.t }}</span><span style="display:block;margin-top:2px;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ h.s }}</span></span><span style="flex-shrink:0;font-size:12.5px;font-weight:500;color:var(--u-ink2,#4A5A54);white-space:nowrap">{{ h.when }}</span></div></sc-for>
+</section>
+<section data-rise="" aria-label="Optional holidays" style="flex:2 1 320px;min-width:0;padding:18px 20px 10px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<h2 style="color:inherit;margin:0;font-size:16px;font-weight:500">Optional holidays</h2><p style="margin:4px 0 8px;font-size:13px;color:var(--u-ink3,#6A7A73)">{{ optLine }}</p>
+<sc-for list="{{ opt }}" as="o" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;padding:10px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF)"><span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ o.t }}</span><span style="display:block;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ o.d }}</span></span><sc-if value="{{ o.can }}"><button type="button" onClick="{{ o.pick }}" style="height:32px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:9px;background:var(--u-sf,#fff);color:#0F6E56;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="border-color:#0F6E56">Take it</button></sc-if><sc-if value="{{ o.taken }}"><span style="font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">{{ o.state }}</span></sc-if><sc-if value="{{ o.none }}"><span style="font-size:12px;color:var(--u-ink3,#6A7A73)">None left</span></sc-if></div></sc-for>
+</section>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tab&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:3,&quot;tsType&quot;:&quot;number&quot;},&quot;onTab&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(i: number) =&gt; void&quot;},&quot;onGo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Function&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const EL_TIP = { title: ['Leave', 'Apply for leave', 'Your requests', 'Holidays'], sub: ['Your balances, what’s coming up and the best days to take a break.', 'Pick a type and your dates. Siddharth Rao gets it right away.', 'Everything you’ve asked for, and where each one is.', 'Public holidays for Bengaluru HQ, and the optional ones you can choose.'] };
+class Component extends DCLogic {
+  state = { type: 0, from: 1, to: 1, sent: false, cancelled: {}, optTaken: {} };
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  plan(from, to) { this.setState({ from, to, sent: false }); if (this.props.onTab) this.props.onTab(1); }
+  renderVals() {
+    const p = this.props, s = this.state, E = window.UTEmp, tab = Math.min(3, Number(p.tab) || 0);
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    const base = { title: EL_TIP.title[tab], sub: EL_TIP.sub[tab], isOver: tab === 0, isApply: tab === 1, isReq: tab === 2, isHol: tab === 3, notApply: tab !== 1, toApply: () => { if (p.onTab) p.onTab(1); } };
+    if (!E) return base;
+    const L = E.leave, O = L.oct;
+    const reqs0 = L.reqs.slice();
+    if (s.sent) reqs0.unshift({ id: 'new', type: L.bal[s.type][0], dates: s.sentRange, days: s.sentDays, reason: 'Sent just now', status: 'Waiting', tone: 'warn', when: 'Just now', step: 1, by: 'Siddharth Rao' });
+    const bal = L.bal.map(([t, left, of, note], i) => { const used = i === s.type && s.sent ? s.sentN : 0, l = left - used; return { t, left: String(l), of: String(of), note, dash: (l / of * 100).toFixed(1) + ' 100' }; });
+    const isOff = d => O.off.indexOf(d) >= 0, isHol = d => O.hol.indexOf(d) >= 0;
+    const a = Math.min(s.from, s.to), b = Math.max(s.from, s.to);
+    let n = 0; for (let d = a; d <= b; d++) if (!isOff(d) && !isHol(d)) n++;
+    const oct = [];
+    for (let i = 0; i < O.lead; i++) oct.push({ blank: true, real: false });
+    for (let d = 1; d <= O.len; d++) {
+      const inR = d >= a && d <= b, edge = d === a || d === b, off = isOff(d), hol = isHol(d), team = O.team[d];
+      oct.push({ real: true, blank: false, n: String(d), inR: inR && !edge, edge, hol: hol && !edge, team: !!team, tip: d + ' Oct' + (hol ? ' · holiday' : off ? ' · weekend' : '') + (team ? ' · ' + team + ' off' : ''),
+        tx: !edge && !off, tw: edge, tm: !edge && off,
+        pick: () => { if (s.pickEnd) this.setState({ to: d, pickEnd: false, sent: false }); else this.setState({ from: d, to: d, pickEnd: true, sent: false }); } });
+    }
+    const T = L.bal[s.type], after = T[1] - n;
+    const dname = d => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(O.lead + d - 1) % 7] + ' ' + d + ' Oct';
+    const sumRange = a === b ? dname(a) : dname(a) + ' – ' + dname(b);
+    const clash = []; for (let d = a; d <= b; d++) if (O.team[d]) O.team[d].split(', ').forEach(nm => { if (clash.indexOf(nm) < 0) clash.push(nm); });
+    const warn = after < 0 ? 'That’s more than you have. ' + Math.abs(after) + (Math.abs(after) === 1 ? ' day' : ' days') + ' would be unpaid.' : clash.length ? clash.join(' and ') + ' will also be off. Siddharth may ask you to move a day.' : '';
+    const types = L.bal.map(([t, left], i) => ({ t, left: String(left), on: i === s.type, pick: () => this.setState({ type: i, sent: false }) }));
+    const upcoming = [];
+    reqs0.filter(r => r.status === 'Waiting').forEach(r => upcoming.push({ dow: r.dates.slice(0, 3), d: r.dates.split(' ')[1], t: r.type + ' · ' + r.days, s: r.dates + ' · waiting for Siddharth Rao', wait: true, hol: false }));
+    L.holidays.slice(0, 3).forEach(([dw, dt, t, when, tip]) => upcoming.push({ dow: dw, d: dt.split(' ')[0], t, s: dt + (tip ? ' · ' + tip : ''), when, wait: false, hol: true }));
+    const optUsed = L.optional[0] + Object.keys(s.optTaken).length, optLeft = L.optional[1] - optUsed;
+    return Object.assign(base, {
+      bal, upcoming,
+      tips: [['Thu 1 Oct → 4 days off', 'Thu to Sun with Gandhi Jayanti · 1 casual day', 1, 1], ['Mon 19 Oct → 4 days off', 'Sat to Tue with Vijayadashami · 1 casual day', 19, 19]].map(([t, sub, f, to]) => ({ t, s: sub, go: () => this.plan(f, to) })),
+      types, oct, sumRange,
+      sumRows: [{ k: 'Type', v: T[0] }, { k: 'Working days', v: n + (n === 1 ? ' day' : ' days') }, { k: T[0] + ' after this', v: (after < 0 ? 0 : after) + ' days' }, { k: 'Approver', v: 'Siddharth Rao' }],
+      hasWarn: !!warn && !s.sent, warn, canSend: n > 0 && !s.sent, cantSend: n === 0 || s.sent, cantWhy: s.sent ? 'Sent · waiting for Siddharth' : 'Pick a working day',
+      send: () => { this.setState({ sent: true, sentRange: sumRange, sentDays: n + (n === 1 ? ' day' : ' days'), sentN: n }); toast('Leave request sent to Siddharth Rao · ' + sumRange); },
+      reqs: reqs0.map(r => { const cx = !!s.cancelled[r.id], st = cx ? 'Cancelled' : r.status, step = cx ? 0 : r.step;
+        const steps = [['Sent', r.when], [r.by.split(' · ')[0], step >= 3 ? 'Approved' : step === 1 ? 'Reviewing now' : cx || step === 0 ? 'Stopped' : ''], ['Balance updated', step >= 3 ? 'Done' : 'After approval']].map(([t, sub], i) => ({ t, s: sub, done: step > 0 && (i === 0 || (i === 1 && step >= 3) || (i === 2 && step >= 3)), now: step === 1 && i === 1, todo: !(step > 0 && (i === 0 || step >= 3)) && !(step === 1 && i === 1) }));
+        return { type: r.type, days: r.days, dates: r.dates, reason: r.reason, status: st, wait: st === 'Waiting', ok: st === 'Approved', gray: st === 'Cancelled', steps, canCancel: st === 'Waiting', cancel: () => { this.setState({ cancelled: Object.assign({}, s.cancelled, { [r.id]: true }) }); toast('Leave request cancelled'); } }; }),
+      hols: L.holidays.map(([dw, dt, t, when, tip]) => ({ dow: dw, d: dt, t, s: tip || 'Office closed', when })),
+      optLine: 'Pick up to ' + L.optional[1] + ' a year · ' + optLeft + ' left',
+      opt: L.optList.map(([dw, dt, t, st], i) => { const taken = st === 'Taken' || !!s.optTaken[i]; return { t, d: dw + ', ' + dt, taken, state: st === 'Taken' ? 'Taken' : 'Booked', can: !taken && optLeft > 0, none: !taken && optLeft <= 0, pick: () => { this.setState({ optTaken: Object.assign({}, s.optTaken, { [i]: true }) }); toast('Booked ' + t + ' as your optional holiday'); } }; })
+    });
+  }
+}
+</script>
+</body>
+</html>

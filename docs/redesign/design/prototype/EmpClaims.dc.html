@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-screen-label="Claims and advances" style="box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<sc-if value="{{ isClaims }}" hint-placeholder-val="{{ true }}">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">Expense claims</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">Get back what you spent for work. Approved claims are paid with your next salary.</p></div><sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ toNew }}" style="height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 16px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#0B5A46"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>New claim</button></sc-if></header>
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Totals" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"><dc-import name="UtStat" label="Waiting" value="{{ sumWait }}" note="{{ sumWaitN }}" icon="hourglass" tone="gold" style="display:block" hint-size="100%,132px"></dc-import><dc-import name="UtStat" label="Approved, not paid yet" value="₹2,150" note="Paid with your September salary" icon="checkCircle" tone="brand" style="display:block" hint-size="100%,132px"></dc-import><dc-import name="UtStat" label="Paid back this year" value="₹14,300" note="11 claims since January" icon="wallet" tone="brand" style="display:block" hint-size="100%,132px"></dc-import></section>
+<section aria-label="Your claims" style="display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ claims }}" as="c" hint-placeholder-count="3"><article data-rise="" style="display:flex;flex-wrap:wrap;align-items:center;gap:16px 28px;padding:18px 20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05))">
+<div style="flex:1 1 240px;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:500">{{ c.title }}</span><sc-if value="{{ c.wait }}"><span style="font-size:12px;font-weight:500;color:#8A5A12;background:#FBF1DE;border-radius:999px;padding:0 9px;line-height:22px">{{ c.status }}</span></sc-if><sc-if value="{{ c.info }}"><span style="font-size:12px;font-weight:500;color:#2F6F8A;background:#E4F0F5;border-radius:999px;padding:0 9px;line-height:22px">{{ c.status }}</span></sc-if><sc-if value="{{ c.ok }}"><span style="font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">{{ c.status }}</span></sc-if></div><div style="margin-top:4px;font-size:13px;color:var(--u-ink3,#6A7A73)">{{ c.meta }}</div></div>
+<div style="font-size:20px;font-weight:500;min-width:90px">{{ c.amount }}</div>
+<ol style="flex:2 1 360px;min-width:0;margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px"><sc-for list="{{ c.steps }}" as="st" hint-placeholder-count="4"><li style="display:flex;flex-direction:column;gap:6px;min-width:0"><sc-if value="{{ st.done }}"><span style="height:4px;border-radius:2px;background:#1F9D6E"></span></sc-if><sc-if value="{{ st.now }}"><span style="height:4px;border-radius:2px;background:#C8912E"></span></sc-if><sc-if value="{{ st.todo }}"><span style="height:4px;border-radius:2px;background:#E6ECE9"></span></sc-if><span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ st.t }}</span></li></sc-for></ol>
+</article></sc-for>
+</section>
+</sc-if>
+<sc-if value="{{ isNew }}">
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<section data-rise="" aria-label="New claim" style="flex:3 1 500px;min-width:0;padding:20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:13.5px;font-weight:500">What was it for?</div><div style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{ cats }}" as="k" hint-placeholder-count="5"><button type="button" onClick="{{ k.pick }}" style="position:relative;height:36px;padding:0 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:999px;background:var(--u-sf,#fff);font-family:inherit;font-size:13px;font-weight:500;color:inherit;cursor:pointer;white-space:nowrap" style-hover="border-color:#0F6E56"><sc-if value="{{ k.on }}"><span style="position:absolute;inset:-1px;border-radius:999px;background:#0F6E56"></span><span style="position:relative;color:#fff;font-weight:500">{{ k.t }}</span></sc-if><sc-if value="{{ k.off }}" hint-placeholder-val="{{ true }}"><span>{{ k.t }}</span></sc-if></button></sc-for></div><span style="font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ catHint }}</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;color:var(--u-ink2,#4A5A54)">Amount (₹)<input type="number" value="{{ amt }}" onChange="{{ setAmt }}" style="height:40px;box-sizing:border-box;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:14px;color:var(--u-ink,#0E1B16);outline:none" style-focus="border-color:#0F6E56"></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;color:var(--u-ink2,#4A5A54)">Date<input type="date" defaultValue="2026-09-24" style="height:40px;box-sizing:border-box;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:14px;color:var(--u-ink,#0E1B16)"></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;color:var(--u-ink2,#4A5A54)">Where<input type="text" placeholder="Shop, cab or restaurant" style="height:40px;box-sizing:border-box;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:14px;color:var(--u-ink,#0E1B16);outline:none" style-focus="border-color:#0F6E56"></label>
+</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;color:var(--u-ink2,#4A5A54)">What was it?<textarea rows="2" placeholder="For example: lunch with the Acme team after the demo" style="box-sizing:border-box;padding:10px 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:13.5px;color:var(--u-ink,#0E1B16);resize:vertical;outline:none" style-focus="border-color:#0F6E56"></textarea></label>
+<sc-if value="{{ noReceipt }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ attach }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:22px;border:1.5px dashed #BFD3CA;border-radius:14px;background:#F7FAF8;font-family:inherit;color:var(--u-ink2,#4A5A54);cursor:pointer" style-hover="border-color:#0F6E56;color:#0F6E56"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path></svg><span style="font-size:13.5px;font-weight:500">Add a receipt</span><span style="font-size:12px;color:var(--u-ink3,#6A7A73)">Photo or PDF, up to 5 MB</span></button></sc-if>
+<sc-if value="{{ hasReceipt }}"><div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#F4F8F6;box-shadow:inset 0 0 0 1px #DCE8E2"><span style="width:36px;height:44px;flex-shrink:0;border-radius:6px;background:#fff;box-shadow:inset 0 0 0 1px #DCE8E2;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#0F6E56">JPG</span><span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:500">receipt-24-sep.jpg</span><span style="display:block;font-size:12px;color:var(--u-ink3,#6A7A73)">1.2 MB · amount and date read from the photo</span></span><button type="button" onClick="{{ detach }}" style="height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#B23A2F;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer">Remove</button></div></sc-if>
+</section>
+<aside data-rise="" aria-label="Check" style="flex:2 1 300px;min-width:0;padding:20px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:14px">
+<div style="font-size:12.5px;font-weight:500;color:var(--u-ink3,#6A7A73)">Before you send</div>
+<div style="font-size:26px;font-weight:500;letter-spacing:-.02em">{{ amtLabel }}</div>
+<sc-for list="{{ checks }}" as="k" hint-placeholder-count="3"><div style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;line-height:1.45"><sc-if value="{{ k.ok }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F9D6E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M20 6 9 17l-5-5"></path></svg></sc-if><sc-if value="{{ k.bad }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8912E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg></sc-if><span>{{ k.t }}</span></div></sc-for>
+<button type="button" onClick="{{ sendClaim }}" style="height:44px;border:0;border-radius:12px;background:#0F6E56;color:#fff;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer" style-hover="background:#0B5A46">Send to Siddharth Rao</button>
+<span style="font-size:12px;line-height:1.45;color:var(--u-ink3,#6A7A73)">Then Finance checks it. Approved claims are paid with your salary.</span>
+</aside>
+</div>
+</sc-if>
+</sc-if>
+<sc-if value="{{ isAdv }}">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:720px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">Salary advance</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">Borrow against your salary when you need to. No interest. It comes back in small parts from the next few salaries.</p></div></header>
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<section data-rise="" aria-label="Ask for an advance" style="flex:3 1 500px;min-width:0;padding:22px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));display:flex;flex-direction:column;gap:18px">
+<div><div style="font-size:13px;color:var(--u-ink3,#6A7A73)">How much?</div><div style="margin-top:2px;font-size:38px;line-height:1.1;font-weight:500;letter-spacing:-.03em">{{ advAmt }}</div><div style="margin-top:4px;font-size:12.5px;color:var(--u-ink3,#6A7A73)">Up to {{ advLimit }}, one month’s take-home</div></div>
+<input type="range" min="5000" max="120000" step="5000" value="{{ adv }}" onChange="{{ setAdv }}" aria-label="Advance amount" style="width:100%;accent-color:#0F6E56">
+<div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:13.5px;font-weight:500">Pay it back over</div><div style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{ months }}" as="m" hint-placeholder-count="6"><button type="button" onClick="{{ m.pick }}" style="position:relative;min-width:64px;height:40px;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:13.5px;font-weight:500;color:inherit;cursor:pointer" style-hover="border-color:#0F6E56"><sc-if value="{{ m.on }}"><span style="position:absolute;inset:-1px;border-radius:10px;background:#0F6E56"></span><span style="position:relative;color:#fff;font-weight:500">{{ m.t }}</span></sc-if><sc-if value="{{ m.off }}" hint-placeholder-val="{{ true }}"><span>{{ m.t }}</span></sc-if></button></sc-for></div></div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;color:var(--u-ink2,#4A5A54)">What is it for?<select style="height:40px;box-sizing:border-box;padding:0 10px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:14px;color:var(--u-ink,#0E1B16)"><option>Medical</option><option>Family event</option><option>Education</option><option>Moving house</option><option>Something else</option></select></label>
+</section>
+<aside data-rise="" aria-label="Plan" style="flex:2 1 300px;min-width:0;padding:22px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));color:var(--u-ink,#0E1B16);display:flex;flex-direction:column;gap:14px">
+<div style="font-size:13px;color:var(--u-ink3,#6A7A73)">Your plan</div>
+<div style="font-size:30px;line-height:1.1;font-weight:500;letter-spacing:-.02em">{{ perMonth }} <span style="font-size:14px;font-weight:500;color:var(--u-ink3,#6A7A73)">a month</span></div>
+<sc-for list="{{ plan }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;box-shadow:inset 0 -1px 0 var(--u-ln2,#EDF1EF);font-size:13.5px"><span style="color:var(--u-ink2,#4A5A54)">{{ r.k }}</span><span style="font-weight:500;text-align:right">{{ r.v }}</span></div></sc-for>
+<button type="button" onClick="{{ sendAdv }}" style="height:44px;border:0;border-radius:12px;background:#0F6E56;color:#fff;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer" style-hover="background:#0B5A46">Ask for {{ advAmt }}</button>
+<span style="font-size:12px;line-height:1.45;color:var(--u-ink3,#6A7A73)">Siddharth approves it, then Finance pays it within 2 working days.</span>
+</aside>
+</div>
+<section data-rise="" aria-label="Past advances" style="padding:18px 20px 10px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6)"><h2 style="color:inherit;margin:0 0 6px;font-size:16px;font-weight:500">Past advances</h2><sc-for list="{{ past }}" as="r" hint-placeholder-count="1"><div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:12px 0"><span style="min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ r.t }} · {{ r.v }}</span><span style="display:block;font-size:12.5px;color:var(--u-ink3,#6A7A73)">{{ r.when }} · {{ r.how }}</span></span><span style="font-size:12px;font-weight:500;color:#0B5A46;background:#E3F2EA;border-radius:999px;padding:0 9px;line-height:22px">{{ r.s }}</span></div></sc-for></section>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;e-claims&quot;,&quot;e-adv&quot;],&quot;default&quot;:&quot;e-claims&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;onTab&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(i: number) =&gt; void&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const EC_INR = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const EC_LIMIT = { Travel: [0, 'Cabs, trains and flights · add the ticket or trip receipt'], Meals: [1500, 'Up to ₹1,500 a day'], Internet: [1000, '₹1,000 a month for working from home'], 'Client entertainment': [10000, 'Up to ₹10,000 · name the client'], Other: [0, 'Explain what it was for'] };
+class Component extends DCLogic {
+  state = { cat: 'Meals', amt: 1240, receipt: false, sent: [], adv: 40000, months: 4 };
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  renderVals() {
+    const p = this.props, s = this.state, E = window.UTEmp, page = p.page || 'e-claims', tab = Number(p.tab) || 0;
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    const base = { isClaims: page === 'e-claims', isAdv: page === 'e-adv', isList: page === 'e-claims' && tab === 0, isNew: page === 'e-claims' && tab === 1, toNew: () => { if (p.onTab) p.onTab(1); } };
+    if (!E) return base;
+    const P = E.pay;
+    const all = s.sent.concat(P.claims);
+    const stepNames = ['Sent', 'Siddharth', 'Finance', 'Paid'];
+    const claims = all.map(c => ({ title: c.title, amount: c.amount, status: c.status, meta: c.date + ' · ' + c.items + ' · ' + c.who, wait: c.tone === 'warn', info: c.tone === 'info', ok: c.tone === 'ok',
+      steps: stepNames.map((t, i) => ({ t, done: i <= c.step && !(c.tone === 'warn' && i === c.step), now: c.tone === 'warn' && i === c.step, todo: i > c.step })) }));
+    const lim = EC_LIMIT[s.cat], amt = Number(s.amt) || 0, over = lim[0] && amt > lim[0];
+    const checks = [
+      { t: amt ? (lim[0] ? (over ? 'That’s ' + EC_INR(amt - lim[0]) + ' over the ' + EC_INR(lim[0]) + ' limit. Say why in the description.' : 'Within the ' + EC_INR(lim[0]) + ' limit for ' + s.cat.toLowerCase()) : 'No fixed limit for ' + s.cat.toLowerCase()) : 'Add the amount', ok: !!amt && !over, bad: !amt || !!over },
+      { t: s.receipt ? 'Receipt attached' : 'Add a receipt. Claims without one take longer.', ok: s.receipt, bad: !s.receipt },
+      { t: 'Paid with your October salary if approved by 25 Oct', ok: true, bad: false }
+    ];
+    const per = Math.ceil(s.adv / s.months / 100) * 100;
+    const firstM = ['October', 'November', 'December', 'January', 'February', 'March'];
+    return Object.assign(base, {
+      sums: [{ k: 'Waiting', v: EC_INR(4860 + s.sent.reduce((a, c) => a + c.n, 0)), n: (1 + s.sent.length) + ' with Siddharth Rao' }, { k: 'Approved, not paid yet', v: '₹2,150', n: 'Paid with your September salary' }, { k: 'Paid back this year', v: '₹14,300', n: '11 claims since January' }],
+      claims, sumWait: EC_INR(4860 + s.sent.reduce((a, c) => a + c.n, 0)), sumWaitN: (1 + s.sent.length) + ' with Siddharth Rao',
+      cats: Object.keys(EC_LIMIT).map(t => ({ t, on: t === s.cat, off: t !== s.cat, pick: () => this.setState({ cat: t }) })), catHint: lim[1],
+      amt: s.amt, setAmt: e => this.setState({ amt: e.target.value }), amtLabel: amt ? EC_INR(amt) : '₹0',
+      noReceipt: !s.receipt, hasReceipt: s.receipt, attach: () => this.setState({ receipt: true }), detach: () => this.setState({ receipt: false }),
+      checks,
+      sendClaim: () => { if (!amt) { toast('Add the amount first'); return; } this.setState({ sent: [{ title: s.cat + ' · ' + EC_INR(amt), date: 'Thu, 24 Sep', amount: EC_INR(amt), n: amt, items: s.receipt ? '1 receipt' : 'No receipt', status: 'Waiting', tone: 'warn', who: 'With Siddharth Rao · sent just now', step: 1 }].concat(s.sent), amt: '', receipt: false }); toast('Claim sent to Siddharth Rao'); if (p.onTab) p.onTab(0); },
+      adv: s.adv, setAdv: e => this.setState({ adv: Number(e.target.value) }), advAmt: EC_INR(s.adv), advLimit: P.adv.limit,
+      months: [1, 2, 3, 4, 5, 6].map(m => ({ t: m + (m === 1 ? ' month' : ' months'), on: m === s.months, off: m !== s.months, pick: () => this.setState({ months: m }) })),
+      perMonth: EC_INR(per), plan: [{ k: 'First deduction', v: 'October salary · 30 Oct' }, { k: 'Last deduction', v: firstM[s.months - 1] + ' salary' }, { k: 'Take-home in those months', v: 'about ' + EC_INR(124850 - per) }],
+      sendAdv: () => toast('Asked for an advance of ' + EC_INR(s.adv) + ' over ' + s.months + (s.months === 1 ? ' month' : ' months')),
+      past: P.adv.past.map(([t, v, when, how, st]) => ({ t, v, when, how, s: st }))
+    });
+  }
+}
+</script>
+</body>
+</html>

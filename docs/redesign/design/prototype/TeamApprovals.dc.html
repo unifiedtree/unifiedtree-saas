@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><script src="./hrms-core.js"></script><script src="./emp-data.js"></script><script src="./hrms-fx.js"></script></helmet>
+<div data-screen-label="Approvals" style="box-sizing:border-box;width:100%;max-width:1100px;margin:0 auto;padding:28px clamp(16px,2.4vw,36px) 56px;display:flex;flex-direction:column;gap:20px;font-family:var(--u-font,'Geist',system-ui,sans-serif);color:var(--u-ink,#0E1B16);font-variant-numeric:tabular-nums">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px"><div style="min-width:0;max-width:640px"><h1 style="margin:0;color:inherit;font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.025em">Approvals</h1><p style="margin:6px 0 0;font-size:14.5px;line-height:1.5;color:var(--u-ink2,#4A5A54);text-wrap:pretty">{{ sub }}</p></div><sc-if value="{{ hasEasy }}"><button type="button" onClick="{{ approveEasy }}" style="height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 16px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:#0B5A46"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>{{ easyLabel }}</button></sc-if></header>
+<sc-if value="{{ isEmpty }}"><div data-rise="" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:56px 24px;border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);text-align:center"><span style="width:52px;height:52px;border-radius:50%;background:#E3F2EA;color:#0F6E56;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span><div style="font-size:17px;font-weight:500">All caught up</div><div style="max-width:380px;font-size:13.5px;line-height:1.5;color:var(--u-ink3,#6A7A73)">Nothing here is waiting for you. New requests from your team show up here and in the bell.</div></div></sc-if>
+<section aria-label="Requests" style="display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ items }}" as="a" hint-placeholder-count="4"><article data-rise="" style="border-radius:18px;background:var(--u-sf,#fff);border:1px solid var(--u-ln,#E3E9E6);box-shadow:var(--u-shc,0 1px 2px rgba(14,27,22,.05));overflow:hidden">
+<sc-if value="{{ a.open }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:14px;padding:18px 20px">
+<div style="display:flex;align-items:flex-start;gap:14px"><span style="width:42px;height:42px;flex-shrink:0;border-radius:50%;background:#E8F3EE;color:#0F6E56;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ a.ini }}</span><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:500">{{ a.who }}</span><span style="font-size:11.5px;font-weight:500;color:var(--u-ink2,#4A5A54);background:var(--u-hv,#F0F4F2);border-radius:999px;padding:0 8px;line-height:20px">{{ a.kind }}</span><span style="font-size:12px;color:var(--u-ink3,#6A7A73)">{{ a.when }}</span></div><div style="margin-top:4px;font-size:14px;font-weight:500">{{ a.what }} · {{ a.n }}</div><div style="margin-top:4px;font-size:13.5px;color:var(--u-ink2,#4A5A54)">“{{ a.reason }}”</div></div></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;padding:12px 14px;border-radius:12px;background:var(--u-sf2,#F7F9F8)"><sc-for list="{{ a.facts }}" as="f" hint-placeholder-count="2"><div style="min-width:0"><div style="font-size:12px;color:var(--u-ink3,#6A7A73)">{{ f.k }}</div><div style="margin-top:2px;font-size:13.5px;font-weight:500">{{ f.v }}</div></div></sc-for></div>
+<sc-if value="{{ a.hasFlag }}"><div style="display:flex;gap:10px;padding:10px 12px;border-radius:12px;background:#FBF1DE;color:#6B4510;font-size:13px;line-height:1.45"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"></path></svg><span>{{ a.flag }}</span></div></sc-if>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><input type="text" placeholder="Add a note (optional)" style="flex:1 1 220px;min-width:0;height:38px;box-sizing:border-box;padding:0 12px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);font-family:inherit;font-size:13.5px;color:var(--u-ink,#0E1B16);outline:none" style-focus="border-color:#0F6E56"><button type="button" onClick="{{ a.no }}" style="height:38px;padding:0 14px;border:1px solid var(--u-ln,#E3E9E6);border-radius:10px;background:var(--u-sf,#fff);color:var(--u-ink,#0E1B16);font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer" style-hover="border-color:#B23A2F;color:#B23A2F">Reject</button><button type="button" onClick="{{ a.yes }}" style="height:38px;padding:0 18px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer" style-hover="background:#0B5A46">Approve</button></div>
+</div></sc-if>
+<sc-if value="{{ a.decided }}"><div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--u-sf2,#F7F9F8)"><sc-if value="{{ a.ok }}"><span style="width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#1F9D6E;color:#fff;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span></sc-if><sc-if value="{{ a.rej }}"><span style="width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#C4453A;color:#fff;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></span></sc-if><span style="flex:1;min-width:0;font-size:13.5px"><b style="font-weight:500">{{ a.result }}</b> · {{ a.who }} · {{ a.what }}</span><button type="button" onClick="{{ a.undo }}" style="height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#0F6E56;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#E8F3EE">Undo</button></div></sc-if>
+</article></sc-for>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tab&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:4,&quot;tsType&quot;:&quot;number&quot;},&quot;onTab&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(i: number) =&gt; void&quot;},&quot;onGo&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Function&quot;},&quot;onToast&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(msg: string) =&gt; void&quot;}}">
+const TA_TABS = [null, 'Leave', 'Attendance', 'Requests', 'Expenses'];
+class Component extends DCLogic {
+  state = { dec: {} };
+  componentDidMount() { if (!window.UTEmp) this.bt = setInterval(() => { if (window.UTEmp) { clearInterval(this.bt); this.forceUpdate(); } }, 60); }
+  componentWillUnmount() { clearInterval(this.bt); }
+  renderVals() {
+    const p = this.props, s = this.state, E = window.UTEmp, kind = TA_TABS[Math.min(4, Number(p.tab) || 0)];
+    const toast = m => { if (p.onToast) p.onToast(m); };
+    if (!E) return { sub: '' };
+    const set = (id, v) => this.setState({ dec: Object.assign({}, this.state.dec, { [id]: v }) });
+    const list = E.approvals.filter(a => !kind || a.kind === kind);
+    const open = list.filter(a => !s.dec[a.id]), easy = open.filter(a => !a.flag);
+    const items = list.map(a => { const d = s.dec[a.id], first = a.who.split(' ')[0];
+      return { who: a.who, ini: a.who.split(' ').map(w => w[0]).join(''), kind: a.kind, what: a.what, n: a.n, reason: a.reason, when: a.when, facts: a.facts.map(([k, v]) => ({ k, v })), flag: a.flag, hasFlag: !!a.flag,
+        open: !d, decided: !!d, ok: d === 'ok', rej: d === 'no', result: d === 'ok' ? 'Approved' : 'Rejected',
+        yes: () => { set(a.id, 'ok'); toast('Approved · ' + first + ' has been told'); }, no: () => { set(a.id, 'no'); toast('Rejected · ' + first + ' has been told'); }, undo: () => { set(a.id, null); toast('Undone'); } }; });
+    const oldest = open.length ? open[open.length - 1].when : '';
+    return {
+      sub: open.length ? open.length + (open.length === 1 ? ' request is' : ' requests are') + ' waiting' + (kind ? ' in ' + kind.toLowerCase() : ' from your team') + '. ' + (easy.length < open.length ? (open.length - easy.length) + ' need a closer look.' : 'None have warnings.') : 'You’re all caught up.',
+      items, isEmpty: !list.length, hasEasy: easy.length > 1, easyLabel: 'Approve ' + easy.length + ' with no warnings',
+      approveEasy: () => { const dec = Object.assign({}, s.dec); easy.forEach(a => { dec[a.id] = 'ok'; }); this.setState({ dec }); toast('Approved ' + easy.length + ' requests'); }
+    };
+  }
+}
+</script>
+</body>
+</html>
