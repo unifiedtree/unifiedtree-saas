@@ -1,6 +1,7 @@
 package com.hrms.api.letters;
 
 import com.hrms.core.dto.PageResponse;
+import com.hrms.core.exception.HrmsException;
 import com.hrms.letters.dto.*;
 import com.hrms.letters.service.LetterGenerationService;
 import com.hrms.letters.service.LetterTemplateService;
@@ -28,11 +29,17 @@ public class LetterController {
 
     private final LetterTemplateService  templateService;
     private final LetterGenerationService generationService;
+    private final LetterIssueService     issueService;
+    private final LetterExtras           extras;
 
     public LetterController(LetterTemplateService templateService,
-                            LetterGenerationService generationService) {
+                            LetterGenerationService generationService,
+                            LetterIssueService issueService,
+                            LetterExtras extras) {
         this.templateService   = templateService;
         this.generationService = generationService;
+        this.issueService      = issueService;
+        this.extras            = extras;
     }
 
     // ── Template CRUD ────────────────────────────────────────────────────────
@@ -93,7 +100,11 @@ public class LetterController {
     @PreAuthorize("hasAuthority('hrms.letters.template.read')")
     public ResponseEntity<String> previewTemplate(
             @PathVariable UUID id,
-            @Valid @RequestBody PreviewTemplateRequest req) {
+            @Valid @RequestBody PreviewTemplateRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        // The preview prints the employee's details (pay included): only for someone
+        // the caller may see, as the redesign's draft preview does.
+        LetterPreviewController.requireMayPreview(req.employeeId(), jwt);
         String html = templateService.previewTemplate(id, req);
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
@@ -102,14 +113,14 @@ public class LetterController {
 
     // ── Generation ───────────────────────────────────────────────────────────
 
-    @Operation(summary = "Generate a letter for an employee")
+    @Operation(summary = "Generate a letter for an employee (optionally dated, and asking for a signature)")
     @PostMapping("/generate")
     @PreAuthorize("hasAuthority('hrms.letters.generate')")
     public ResponseEntity<GeneratedLetterDto> generateLetter(
             @Valid @RequestBody GenerateLetterRequest req,
             @AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(generationService.generate(req, extractUserId(jwt)));
+                .body(extras.one(issueService.generate(req, extractUserId(jwt))));
     }
 
     @Operation(summary = "List generated letters (admin)")
@@ -118,8 +129,8 @@ public class LetterController {
     public ResponseEntity<PageResponse<GeneratedLetterDto>> listGenerated(
             @RequestParam(required = false) UUID employeeId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(employeeId == null ? generationService.listGenerated(pageable)
-                : generationService.getMyLetters(employeeId, pageable));
+        return ResponseEntity.ok(extras.page(employeeId == null ? generationService.listGenerated(pageable)
+                : generationService.getMyLetters(employeeId, pageable)));
     }
 
     @Operation(summary = "Get a generated letter by ID")
@@ -130,7 +141,7 @@ public class LetterController {
             @AuthenticationPrincipal Jwt jwt) {
         GeneratedLetterDto dto = generationService.getGenerated(id);
         enforceOwnerOrAdmin(dto, jwt);
-        return ResponseEntity.ok(dto);
+        return ResponseEntity.ok(extras.one(dto));
     }
 
     @Operation(summary = "Stream PDF for a generated letter")
@@ -142,6 +153,8 @@ public class LetterController {
         GeneratedLetterDto dto = generationService.getGenerated(id);
         enforceOwnerOrAdmin(dto, jwt);
         byte[] pdfBytes = generationService.getPdf(id);
+        // BW-75: the letter's own employee downloading it counts as opening it.
+        if (isOwner(dto, jwt) && generationService.isSentToEmployee(id)) generationService.markViewedByOwner(id);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"letter-" + id + ".pdf\"")
@@ -149,13 +162,15 @@ public class LetterController {
                 .body(pdfBytes);
     }
 
-    @Operation(summary = "Email a generated letter to the employee")
+    @Operation(summary = "Email a generated letter to the employee (optionally asking for a signature)")
     @PostMapping("/generated/{id}/send")
     @PreAuthorize("hasAuthority('hrms.letters.send')")
     public ResponseEntity<GeneratedLetterDto> sendLetter(
             @PathVariable UUID id,
-            @RequestBody(required = false) SendLetterRequest req) {
-        return ResponseEntity.ok(generationService.sendLetter(id, req != null ? req : new SendLetterRequest(null, null)));
+            @RequestBody(required = false) SendLetterRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(extras.one(issueService.send(id, req != null ? req : new SendLetterRequest(null, null),
+                extractUserId(jwt))));
     }
 
     @Operation(summary = "Void a generated letter")
@@ -164,7 +179,7 @@ public class LetterController {
     public ResponseEntity<GeneratedLetterDto> voidLetter(
             @PathVariable UUID id,
             @Valid @RequestBody VoidLetterRequest req) {
-        return ResponseEntity.ok(generationService.voidLetter(id, req));
+        return ResponseEntity.ok(extras.one(generationService.voidLetter(id, req)));
     }
 
     @Operation(summary = "Delete a generated letter")
@@ -177,14 +192,14 @@ public class LetterController {
 
     // ── Employee self-service ────────────────────────────────────────────────
 
-    @Operation(summary = "Employee: list own letters")
+    @Operation(summary = "Employee: list own letters (the ones sent to them; voided ones show as withdrawn)")
     @GetMapping("/my")
     @PreAuthorize("hasAuthority('hrms.letters.read.self')")
     public ResponseEntity<PageResponse<GeneratedLetterDto>> myLetters(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
         UUID employeeId = extractEmployeeId(jwt);
-        return ResponseEntity.ok(generationService.getMyLetters(employeeId, pageable));
+        return ResponseEntity.ok(extras.page(generationService.getSentToEmployee(employeeId, pageable)));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -198,6 +213,11 @@ public class LetterController {
         return UUID.fromString(empId != null ? empId : jwt.getSubject());
     }
 
+    private boolean isOwner(GeneratedLetterDto dto, Jwt jwt) {
+        String empId = jwt.getClaimAsString("employee_id");
+        return empId != null && dto.employeeId() != null && dto.employeeId().toString().equals(empId);
+    }
+
     private void enforceOwnerOrAdmin(GeneratedLetterDto dto, Jwt jwt) {
         boolean hasFullRead = jwt.getClaimAsStringList("permissions") != null
                 && jwt.getClaimAsStringList("permissions").contains("hrms.letters.read");
@@ -206,6 +226,10 @@ public class LetterController {
             if (!dto.employeeId().equals(callerEmployeeId)) {
                 throw new org.springframework.security.access.AccessDeniedException(
                         "Access denied: not your letter");
+            }
+            // BW-75: HR's unsent drafts are not the employee's to open yet.
+            if (!generationService.isSentToEmployee(dto.id())) {
+                throw new HrmsException("Letter not found", HttpStatus.NOT_FOUND, "LETTER_NOT_FOUND");
             }
         }
     }

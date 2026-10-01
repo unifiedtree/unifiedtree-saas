@@ -1,41 +1,36 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bold, Italic, List, ListOrdered, Minus, ChevronDown, Loader2, Eye } from 'lucide-react'
-import { clsx } from 'clsx'
+// A letter template (/hrms/letters/templates/:id, and /new), on the kit (P-DOCS;
+// prototype PgTalent `ltpl`): name, letter type, subject and the body (rich text
+// with merge fields like {{employee.fullName}}), the merge-field list to insert
+// from, and the live preview the client asked for: the letter as it will come
+// out, with the letterhead, the fields filled for someone the viewer may see, on
+// its A4 page, while it is being written and before it is saved.
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
-import { useToast } from '@/shared/hooks/useToast'
+import { P, usePermission } from '@unifiedtree/sdk'
+import { Button, EmptyState, ErrorState, PageFrame, PageHeader, Section, SkeletonBlock } from '@/design/kit/display'
+import { FieldGrid, Input, Select, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
-import { useEmployeeDirectory } from '@/modules/hrms/api/useWorkforce'
-import { CardSkeleton } from '@unifiedtree/ui-kit'
-import { ModulePage, State } from '@/design/module/ModuleKit'
 import {
   useLetterTemplate,
   useCreateTemplate,
   useUpdateTemplate,
   useMergeFieldsCatalogue,
-  usePreviewTemplate,
+  type LetterType,
+  type MergeFieldEntry,
 } from './api/useLetters'
-import type { LetterType } from './api/useLetters'
+import { LETTER_TYPE_LABEL } from './lettersModel'
+import { LetterPreviewPane } from './components/LetterPreviewPane'
+import './components/letters.css'
 
-const LETTER_TYPES: { value: LetterType; label: string }[] = [
-  { value: 'OFFER',           label: 'Offer Letter' },
-  { value: 'APPOINTMENT',     label: 'Appointment Letter' },
-  { value: 'RELIEVING',       label: 'Relieving Letter' },
-  { value: 'EXPERIENCE',      label: 'Experience Letter' },
-  { value: 'SALARY_REVISION', label: 'Salary Revision Letter' },
-  { value: 'CUSTOM',          label: 'Custom' },
-]
+const LETTER_TYPES = (Object.keys(LETTER_TYPE_LABEL) as LetterType[]).map((value) => ({ value, label: LETTER_TYPE_LABEL[value] }))
 
 /**
- * Force this toolbar to re-render on every editor state change. Without it,
- * `editor.isActive('bold')` and `editor.isActive('italic')` snapshot at the
- * INITIAL render (usually both true for an empty doc's implicit marks) and
- * never update — so clicking Bold lights up both B and I at once and neither
- * button ever visibly toggles off (Anil 2026-08-27, item 20). Standard TipTap
- * React pattern: listen for selectionUpdate + transaction and bump a tick.
+ * Re-render the toolbar on every editor change, so Bold / Italic / headings show
+ * their real state (TipTap's isActive() otherwise reads the first render only).
  */
 function useEditorTick(editor: ReturnType<typeof useEditor>) {
   const [, forceRender] = React.useReducer((x: number) => x + 1, 0)
@@ -50,304 +45,92 @@ function useEditorTick(editor: ReturnType<typeof useEditor>) {
   }, [editor])
 }
 
-function ToolbarButton({
-  onClick,
-  active,
-  children,
-  title,
-}: {
-  onClick: () => void
-  active?: boolean
-  children: React.ReactNode
-  title: string
-}) {
+function Tool({ onClick, active, label, children }: { onClick: () => void; active?: boolean; label: string; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={clsx(
-        'flex items-center justify-center w-7 h-7 rounded-lg text-xs font-medium transition-colors',
-        active
-          ? 'bg-[#ECFDF5] text-[#047857]'
-          : 'text-text-tertiary hover:bg-[#ECFDF5] hover:text-text-primary',
-      )}
-    >
-      {children}
-    </button>
+    <button type="button" className="lt-tool" aria-pressed={!!active} aria-label={label} title={label}
+      onMouseDown={(e) => e.preventDefault()} onClick={onClick}>{children}</button>
   )
 }
 
-function MergeFieldDropdown({ onInsert }: { onInsert: (key: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const { data: fields = [] } = useMergeFieldsCatalogue()
-
-  const grouped = fields.reduce<Record<string, typeof fields>>((acc, f) => {
-    const cat = f.category ?? 'General'
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(f)
-    return acc
-  }, {})
-
-  useEffect(() => {
-    if (!open) return
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-text-tertiary hover:bg-[#ECFDF5] hover:text-text-primary border border-border-default transition-colors"
-      >
-        Insert field
-        <ChevronDown size={11} className={clsx('transition-transform', open && 'rotate-180')} />
-      </button>
-
-      {open && (
-        <div className="ut-card absolute left-0 top-full mt-1 z-50 w-64 overflow-hidden">
-          <div className="max-h-72 overflow-y-auto p-1">
-            {Object.entries(grouped).map(([category, entries]) => (
-              <div key={category}>
-                <p className="px-2 py-1.5 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-                  {category}
-                </p>
-                {entries.map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => {
-                      onInsert(f.key)
-                      setOpen(false)
-                    }}
-                    className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-[#ECFDF5] transition-colors group"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-text-secondary group-hover:text-text-primary truncate">
-                        {f.label}
-                      </p>
-                      <p className="text-xs text-[#047857] font-mono truncate">{`{{${f.key}}}`}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ))}
-            {fields.length === 0 && (
-              <p className="px-3 py-4 text-xs text-text-tertiary text-center">No merge fields available</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function EditorToolbar({
-  editor,
-}: {
-  editor: ReturnType<typeof useEditor>
-}) {
-  // MUST be called before any early return — Rules of Hooks. The tick keeps
-  // this toolbar in sync with editor state (bold/italic/heading active).
-  useEditorTick(editor)
+function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
+  useEditorTick(editor) // before any early return (rules of hooks)
   if (!editor) return null
-
-  const insertMergeField = (key: string) => {
-    editor.chain().focus().insertContent(`{{${key}}}`).run()
-  }
-
+  const c = () => editor.chain().focus()
   return (
-    <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b border-border-default">
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        active={editor.isActive('bold')}
-        title="Bold"
-      >
-        <Bold size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        active={editor.isActive('italic')}
-        title="Italic"
-      >
-        <Italic size={13} />
-      </ToolbarButton>
-
-      <div className="w-px h-4 bg-border-default mx-0.5" />
-
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        active={editor.isActive('heading', { level: 1 })}
-        title="Heading 1"
-      >
-        H1
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        active={editor.isActive('heading', { level: 2 })}
-        title="Heading 2"
-      >
-        H2
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        active={editor.isActive('heading', { level: 3 })}
-        title="Heading 3"
-      >
-        H3
-      </ToolbarButton>
-
-      <div className="w-px h-4 bg-border-default mx-0.5" />
-
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        active={editor.isActive('bulletList')}
-        title="Bulleted list"
-      >
-        <List size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        active={editor.isActive('orderedList')}
-        title="Ordered list"
-      >
-        <ListOrdered size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().setHorizontalRule().run()}
-        active={false}
-        title="Horizontal rule"
-      >
-        <Minus size={13} />
-      </ToolbarButton>
-
-      <div className="w-px h-4 bg-border-default mx-0.5" />
-
-      <MergeFieldDropdown onInsert={insertMergeField} />
+    <div className="lt-toolbar" role="toolbar" aria-label="Formatting">
+      <Tool label="Bold" active={editor.isActive('bold')} onClick={() => c().toggleBold().run()}><b>B</b></Tool>
+      <Tool label="Italic" active={editor.isActive('italic')} onClick={() => c().toggleItalic().run()}><i>I</i></Tool>
+      <span className="lt-toolbar__sep" aria-hidden="true" />
+      <Tool label="Heading 1" active={editor.isActive('heading', { level: 1 })} onClick={() => c().toggleHeading({ level: 1 }).run()}>H1</Tool>
+      <Tool label="Heading 2" active={editor.isActive('heading', { level: 2 })} onClick={() => c().toggleHeading({ level: 2 }).run()}>H2</Tool>
+      <Tool label="Heading 3" active={editor.isActive('heading', { level: 3 })} onClick={() => c().toggleHeading({ level: 3 }).run()}>H3</Tool>
+      <span className="lt-toolbar__sep" aria-hidden="true" />
+      <Tool label="Bulleted list" active={editor.isActive('bulletList')} onClick={() => c().toggleBulletList().run()}>•</Tool>
+      <Tool label="Numbered list" active={editor.isActive('orderedList')} onClick={() => c().toggleOrderedList().run()}>1.</Tool>
+      <Tool label="Horizontal rule" onClick={() => c().setHorizontalRule().run()}>—</Tool>
     </div>
   )
 }
 
-function PreviewPane({ templateId }: { templateId: string | undefined }) {
-  const { toast } = useToast()
-  const previewMut = usePreviewTemplate()
-  const [employeeId, setEmployeeId] = useState('')
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
-  const { data: empPage } = useEmployeeDirectory({ pageSize: 200 })
-  const employees = empPage?.content ?? []
-
-  const handlePreview = async () => {
-    if (!templateId || !employeeId.trim()) {
-      toast('Select an employee to preview', 'error')
-      return
-    }
-    try {
-      const html = await previewMut.mutateAsync({
-        templateId,
-        employeeId: employeeId.trim(),
-        overrides: undefined,
-      })
-      setPreviewHtml(html)
-    } catch {
-      toast('Failed to generate preview', 'error')
-    }
-  }
-
+/** The merge fields to insert, grouped as the catalogue groups them; a click puts {{key}} at the cursor. */
+function InsertFields({ onInsert }: { onInsert: (key: string) => void }) {
+  const q = useMergeFieldsCatalogue()
+  const groups = useMemo(() => {
+    const m = new Map<string, MergeFieldEntry[]>()
+    for (const f of q.data ?? []) { const k = f.category || 'General'; m.set(k, [...(m.get(k) ?? []), f]) }
+    return [...m.entries()]
+  }, [q.data])
   return (
-    <div className="flex flex-col gap-4">
-      <div className="ut-card p-4 space-y-3">
-        <h3 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-          Preview as employee
-        </h3>
-        <div className="flex gap-2">
-          <select
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            className="flex-1 bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 transition-colors"
-          >
-            <option value="">{employees.length === 0 ? 'No employees yet' : 'Select an employee…'}</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {[emp.firstName, emp.lastName].filter(Boolean).join(' ')}{emp.employeeCode ? ` (${emp.employeeCode})` : ''}
-              </option>
+    <Section title="Insert field" sub="Click one to put it where the cursor is. Each letter fills it with the person’s details." cardClass={false}
+      loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} empty={!q.isLoading && !groups.length ? { title: 'No merge fields' } : undefined}>
+      <div className="lt-fields">
+        {groups.map(([cat, fields]) => (
+          <div key={cat} className="lt-fields__group">
+            <p className="lt-fields__cat">{cat}</p>
+            {fields.map((f) => (
+              <button type="button" key={f.key} className="lt-fields__row" onMouseDown={(e) => e.preventDefault()} onClick={() => onInsert(f.key)}
+                aria-label={`Insert ${f.label}`}>
+                <code className="lt-fields__key">{`{{${f.key}}}`}</code>
+                <span className="lt-fields__label">{f.label}</span>
+              </button>
             ))}
-          </select>
-          <button
-            type="button"
-            onClick={handlePreview}
-            disabled={previewMut.isPending || !templateId}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#ECFDF5] hover:bg-[#FFE9C7] border border-[#6EE7B7] disabled:opacity-50 text-[#047857] text-sm font-medium rounded-xl transition-colors"
-          >
-            {previewMut.isPending ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Eye size={13} />
-            )}
-            Preview
-          </button>
-        </div>
-        {!templateId && (
-          <p className="text-xs text-text-tertiary">Save the template first to enable preview</p>
-        )}
-      </div>
-
-      {previewMut.isPending ? (
-        <CardSkeleton />
-      ) : previewHtml ? (
-        <div className="ut-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border-default">
-            <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Rendered output</p>
           </div>
-          <iframe
-            srcDoc={previewHtml}
-            className="w-full h-96 border-0 bg-white"
-            title="Letter preview"
-            sandbox="allow-same-origin"
-          />
-        </div>
-      ) : null}
-    </div>
+        ))}
+      </div>
+    </Section>
   )
 }
 
 export const LetterTemplateEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { toast } = useToast()
-
+  const toast = useToast()
   const isNew = id === 'new'
+  const canSave = usePermission(isNew ? P.HRMS_LETTERS_TEMPLATE_CREATE : P.HRMS_LETTERS_TEMPLATE_UPDATE)
 
-  const { data: existing, isLoading, error } = useLetterTemplate(isNew ? '' : (id ?? ''))
+  const { data: existing, isLoading, error, refetch } = useLetterTemplate(isNew ? '' : (id ?? ''))
   const { data: companies = [] } = useCompanies()
   const createMut = useCreateTemplate()
   const updateMut = useUpdateTemplate(isNew ? '' : (id ?? ''))
+  const saving = createMut.isPending || updateMut.isPending
 
   const [name, setName] = useState('')
   const [type, setType] = useState<LetterType>('OFFER')
   const [subject, setSubject] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [savedId, setSavedId] = useState<string | undefined>(isNew ? undefined : id)
+  const [body, setBody] = useState('')
+  const [tried, setTried] = useState(false)
+  const previewRef = useRef<HTMLDivElement>(null)
 
   const editor = useEditor({
     extensions: [
-      // StarterKit ships its own Link; disable it so our configured Link below
-      // isn't a duplicate (TipTap warns on duplicate extension names).
+      // StarterKit ships its own Link; turn it off so the configured one below isn't a duplicate.
       StarterKit.configure({ link: false }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: 'Start writing the letter body…' }),
     ],
     content: '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none min-h-[320px] px-4 py-3 focus:outline-none text-text-primary',
-      },
-    },
+    editorProps: { attributes: { class: 'lt-editor__body', 'aria-label': 'Letter body', role: 'textbox', 'aria-multiline': 'true' } },
+    onUpdate: ({ editor: e }) => setBody(e.isEmpty ? '' : e.getHTML()),
   })
 
   useEffect(() => {
@@ -355,121 +138,89 @@ export const LetterTemplateEditor: React.FC = () => {
     setName(existing.name)
     setType(existing.type)
     setSubject(existing.subject ?? '')
+    setBody(existing.bodyHtml ?? '')
     editor?.commands.setContent(existing.bodyHtml ?? '')
   }, [existing, isNew, editor])
 
+  const companyId = existing?.companyId ?? companies[0]?.id
+  const nameError = tried && !name.trim() ? 'Template name is required' : undefined
+
   const handleSave = async () => {
-    if (!name.trim()) {
-      toast('Template name is required', 'error')
-      return
-    }
-    setSaving(true)
+    setTried(true)
+    if (!name.trim()) { toast.error('Template name is required'); return }
     const bodyHtml = editor?.getHTML() ?? ''
     try {
       if (isNew) {
-        const companyId = companies[0]?.id
-        if (!companyId) {
-          toast('Create a company first (Organization → Companies)', 'error')
-          setSaving(false)
-          return
-        }
-        const created = await createMut.mutateAsync({ companyId, name: name.trim(), type, subject: subject.trim(), bodyHtml, active: true })
-        toast('Template created', 'success')
-        setSavedId(created.id)
-        navigate('/hrms/letters/templates', { replace: true })
+        if (!companyId) { toast.error('Create a company first (Organization → Companies)'); return }
+        await createMut.mutateAsync({ companyId, name: name.trim(), type, subject: subject.trim(), bodyHtml, active: true })
+        toast.success('Template created')
       } else {
         await updateMut.mutateAsync({ name: name.trim(), type, subject: subject.trim(), bodyHtml })
-        toast('Template saved', 'success')
-        navigate('/hrms/letters/templates', { replace: true })
+        toast.success('Template saved')
       }
-    } catch {
-      toast('Failed to save template', 'error')
-    } finally {
-      setSaving(false)
+      navigate('/hrms/letters/templates', { replace: true })
+    } catch (e) {
+      toast.error('Failed to save template', { detail: (e as Error)?.message })
     }
   }
 
-  const backBtn = (
-    <button type="button" onClick={() => navigate('/hrms/letters/templates')}
-      className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border-default bg-white px-4 text-sm font-semibold text-text-primary hover:bg-bg-base">
-      <ArrowLeft size={15} /> Templates
-    </button>
-  )
+  const showPreview = () => {
+    previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    previewRef.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true })
+  }
+
+  const back = <Button variant="secondary" icon="chevronLeft" onClick={() => navigate('/hrms/letters/templates')}>Templates</Button>
   if (!isNew && (isLoading || error)) {
     return (
-      <ModulePage crumb="Letters · Template" title="Letter template" actions={backBtn}>
-        {isLoading ? <State kind="loading" height={260} /> : <State kind="error" title="Couldn’t load the template" description={(error as Error).message} />}
-      </ModulePage>
+      <PageFrame label="Letter template">
+        <PageHeader eyebrow="Letters · Template" title="Letter template" actions={back} />
+        {isLoading ? <SkeletonBlock style={{ height: 320 }} /> : <ErrorState title="Couldn’t load the template" error={error} onRetry={() => refetch()} />}
+      </PageFrame>
+    )
+  }
+  if (!isNew && !existing) {
+    return (
+      <PageFrame label="Letter template">
+        <PageHeader eyebrow="Letters · Template" title="Letter template" actions={back} />
+        <EmptyState icon="fileText" title="Template not found" hint="It may have been deleted." />
+      </PageFrame>
     )
   }
 
   return (
-    <ModulePage crumb="Letters · Template" title={isNew ? 'New letter template' : name || 'Edit template'}
-      subtitle="Write the letter once; merge fields fill in each person's details when a letter is generated."
-      actions={<>{backBtn}
-        <button type="button" onClick={handleSave} disabled={saving}
-          className="inline-flex h-10 items-center gap-1.5 rounded-md bg-[#059669] px-4 text-sm font-semibold text-white hover:bg-[#047857] disabled:opacity-50">
-          {saving && <Loader2 size={13} className="animate-spin" />}
-          {saving ? 'Saving…' : 'Save template'}
-        </button></>}>
+    <PageFrame label="Letter template" className="lt-page">
+      <PageHeader eyebrow="Letters · Template" title={isNew ? 'New letter template' : name || 'Edit template'}
+        sub="Write the letter once; merge fields fill in each person’s details when a letter is generated."
+        actions={<>
+          {back}
+          <Button variant="secondary" icon="eye" onClick={showPreview}>Preview as employee</Button>
+          {canSave && <Button variant="primary" icon="check" loading={saving} onClick={handleSave}>Save template</Button>}
+        </>} />
 
-      <div className="flex flex-col md:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 space-y-4">
-          <div className="ut-card p-4 space-y-4">
-            <div>
-              <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">
-                Template name *
-              </label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Standard Offer Letter"
-                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 transition-colors"
-              />
+      <div className="lt-editor-grid">
+        <div className="lt-editor-grid__main">
+          <Section title="Letter template" cardClass={false}>
+            <FieldGrid columns={2}>
+              <Input label="Template name" required full value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Standard offer letter" error={nameError} />
+              <Select label="Letter type" value={type} onChange={(e) => setType(e.target.value as LetterType)} options={LETTER_TYPES} />
+              <Input label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Offer of employment – {{employee.fullName}}" />
+            </FieldGrid>
+            <div className="lt-editor">
+              <p className="lt-editor__label">Body</p>
+              <Toolbar editor={editor} />
+              <EditorContent editor={editor} />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-              <div>
-                <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">
-                  Letter type
-                </label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as LetterType)}
-                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 transition-colors"
-                >
-                  {LETTER_TYPES.map((lt) => (
-                    <option key={lt.value} value={lt.value}>{lt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">
-                  Subject
-                </label>
-                <input
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Offer of Employment – {{employee.fullName}}"
-                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 transition-colors"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="ut-card overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border-default">
-              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Body</p>
-            </div>
-            <EditorToolbar editor={editor} />
-            <EditorContent editor={editor} />
-          </div>
+          </Section>
+          <InsertFields onInsert={(key) => editor?.chain().focus().insertContent(`{{${key}}}`).run()} />
         </div>
-
-        <div className="w-full md:w-80 flex-shrink-0 space-y-4">
-          <PreviewPane templateId={savedId} />
+        <div className="lt-editor-grid__side" ref={previewRef}>
+          <LetterPreviewPane id="letter-preview" title="Preview"
+            sub="The letter as it will come out: your letterhead, the fields filled, on the page it prints on. It follows what you type; nothing is saved."
+            request={{ companyId, subject, bodyHtml: body }}
+            ready={!!body.trim() || !!subject.trim()}
+            emptyHint="Start writing the body to see the letter here." />
         </div>
       </div>
-    </ModulePage>
+    </PageFrame>
   )
 }

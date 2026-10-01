@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { asAvailable, unmatchedPathParam, useAvailableQuery } from '../../api/shared/available'
 
 export type DistributionStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED'
 export type RecipientSendStatus = 'PENDING' | 'GENERATING' | 'SENT' | 'FAILED' | 'SKIPPED'
 export type RecipientFilterType =
-  | 'ALL_EMPLOYEES' | 'BY_COMPANY' | 'BY_DEPARTMENT' | 'BY_DESIGNATION' | 'BY_EMPLOYMENT_TYPE' | 'CUSTOM_LIST'
+  | 'ALL_EMPLOYEES' | 'BY_COMPANY' | 'BY_DEPARTMENT' | 'BY_DESIGNATION' | 'BY_EMPLOYMENT_TYPE' | 'BY_BRANCH' | 'CUSTOM_LIST'
 
 export interface RecipientFilter {
   type: RecipientFilterType
-  values?: string[]       // department/designation/company IDs, or employment-type names
+  values?: string[]       // department/designation/company/branch IDs, or employment-type names
   employeeIds?: string[]  // CUSTOM_LIST
 }
 
@@ -45,6 +46,8 @@ export interface DistributionJobDto {
   failedCount: number
   completedAt?: string
   recipients?: DistributionRecipientDto[]
+  /** The letter template's name (BW-72); absent on older servers. */
+  templateName?: string | null
 }
 
 export interface PageResponse<T> {
@@ -92,6 +95,62 @@ export function useRetryDistribution() {
   return useMutation({
     mutationFn: (jobId: string) =>
       apiJson<{ retried: number }>(`/v1/letters/distributions/${jobId}/retry`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'distributions'] }),
+  })
+}
+
+// ── "Send on" (BW-73) ─────────────────────────────────────────────────────────
+
+/** A distribution kept for a later date: SCHEDULED, STARTING (being started now) or FAILED (could not start). */
+export interface ScheduledDistribution {
+  id: string
+  templateId: string
+  templateName?: string | null
+  title: string
+  customMessage?: string | null
+  subjectOverride?: string | null
+  recipientFilter?: RecipientFilter | null
+  /** yyyy-MM-dd; it starts at 9:00 India time that day. */
+  sendOn: string
+  status: 'SCHEDULED' | 'STARTING' | 'FAILED'
+  failureReason?: string | null
+  /** How many people the recipients matched when it was scheduled. */
+  recipientsAtSchedule?: number | null
+  createdAt: string
+}
+
+export interface ScheduleDistributionRequest extends CreateDistributionRequest {
+  sendOn: string
+}
+
+/**
+ * Scheduled sends. Until the server has them (404, or 503 FEATURE_NOT_READY)
+ * this is `notAvailable`: the page hides the block and "Send on".
+ */
+export function useScheduledDistributions(opts?: { enabled?: boolean }) {
+  return useAvailableQuery<ScheduledDistribution[]>({
+    queryKey: ['hrms', 'letters', 'distributions', 'scheduled'],
+    // On a server without it, /scheduled falls into /{jobId} and answers 400 INVALID_PARAMETER: not built yet.
+    queryFn: () => asAvailable(() => apiJson<ScheduledDistribution[]>('/v1/letters/distributions/scheduled'), unmatchedPathParam),
+    enabled: opts?.enabled ?? true,
+    staleTime: 10_000,
+    retry: false,
+  })
+}
+
+export function useScheduleDistribution() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (req: ScheduleDistributionRequest) =>
+      apiJson<ScheduledDistribution>('/v1/letters/distributions/scheduled', { method: 'POST', body: JSON.stringify(req) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'distributions'] }),
+  })
+}
+
+export function useCancelScheduledDistribution() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiJson<void>(`/v1/letters/distributions/scheduled/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'distributions'] }),
   })
 }

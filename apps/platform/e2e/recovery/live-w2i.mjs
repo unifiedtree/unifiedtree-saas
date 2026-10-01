@@ -1,7 +1,7 @@
 // Live API check of the w2i batch (no browser):
 //  - Letters hub: each view's endpoint answers for the roles that see the view
 //    and refuses the rest; a letter generated for an employee shows in their
-//    My letters.
+//    My letters once it is sent to them (an unsent draft stays with HR, BW-75).
 //  - Attendance day rules shared with the alternate JDBC service: today with no
 //    punch is NOT_MARKED, and someone without their own weekly offs gets their
 //    company's (HR Configuration), not a fixed Saturday + Sunday.
@@ -19,7 +19,7 @@ const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const READER = '22222222-2222-2222-2222-222222222222'
-const psql = (process.env.LOCALAPPDATA || '') + '/UnifiedTreeRecovery/pgsql/bin/psql.exe'
+const psql = process.env.PSQL || (process.env.LOCALAPPDATA || '') + '/UnifiedTreeRecovery/pgsql/bin/psql.exe'
 const sql = (q) => execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: process.env.PGPASSWORD || 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
@@ -72,6 +72,11 @@ try {
     check('letters: owner generates a letter for the employee', gen.status === 201 && !!gen.json?.id, `status=${gen.status}`)
     if (gen.json?.id) {
       check('letters: the letter is stored for the employee', sql(`select employee_id from letters.generated where id='${gen.json.id}'`) === READER)
+      // BW-75 (P-DOCS): HR's unsent draft is not the employee's yet; once sent, it is.
+      const draft = await reader.call('/v1/letters/my?page=0&size=50')
+      check('letters: an unsent draft is not in My letters yet', draft.status === 200 && !(draft.json?.content || []).some((l) => l.id === gen.json.id), `status=${draft.status}`)
+      // Sending emails the letter through the mail provider, which a local server doesn't have; record the send instead.
+      sql(`update letters.generated set status='SENT', sent_at=now(), sent_to_email='reader@unifiedtree.demo' where id='${gen.json.id}'`)
       const mine = await reader.call('/v1/letters/my?page=0&size=50')
       check('letters: the employee sees it in My letters', mine.status === 200 && (mine.json?.content || []).some((l) => l.id === gen.json.id), `status=${mine.status}`)
       const open = await reader.call(`/v1/letters/generated/${gen.json.id}`)

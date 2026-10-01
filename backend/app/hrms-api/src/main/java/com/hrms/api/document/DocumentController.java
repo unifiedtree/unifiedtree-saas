@@ -177,10 +177,12 @@ public class DocumentController {
                 SELECT d.id, d.employee_id, d.title, d.category, d.document_type_id, d.created_at,
                        d.original_filename, d.file_size_bytes,
                        t.code AS type_code, t.display_name AS type_name,
-                       e.first_name, e.last_name, e.employee_code
+                       e.first_name, e.last_name, e.employee_code,
+                       d.expiry_date, dep.name AS department_name
                   FROM document_mgmt.employee_documents d
                   LEFT JOIN document_mgmt.document_types t ON t.id = d.document_type_id
                   LEFT JOIN hrms.employees e ON e.id = d.employee_id
+                  LEFT JOIN hrms.departments dep ON dep.id = e.department_id AND dep.tenant_id = e.tenant_id
                  WHERE d.verification_status = 'PENDING'
                  ORDER BY d.created_at DESC
                  LIMIT 200
@@ -198,6 +200,9 @@ public class DocumentController {
                     row.put("originalFilename", rs.getString("original_filename"));
                     row.put("fileSizeBytes", rs.getObject("file_size_bytes"));
                     row.put("createdAt", rs.getTimestamp("created_at"));
+                    // Redesign BW-77: the person's department and the document's expiry (additive).
+                    row.put("expiryDate", rs.getObject("expiry_date", java.time.LocalDate.class));
+                    row.put("departmentName", rs.getString("department_name"));
                     return row;
                 });
     }

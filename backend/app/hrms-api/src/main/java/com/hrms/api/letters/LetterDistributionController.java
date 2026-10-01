@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -23,9 +24,37 @@ import java.util.UUID;
 public class LetterDistributionController {
 
     private final LetterDistributionService service;
+    private final DistributionScheduleService schedules;
 
-    public LetterDistributionController(LetterDistributionService service) {
+    public LetterDistributionController(LetterDistributionService service, DistributionScheduleService schedules) {
         this.service = service;
+        this.schedules = schedules;
+    }
+
+    // ── "Send on" (redesign BW-73) ───────────────────────────────────────────
+
+    @Operation(summary = "Scheduled distributions: waiting for their date, or could not start")
+    @GetMapping("/scheduled")
+    @PreAuthorize("hasAuthority('hrms.letters.distribute') or hasAuthority('hrms.letters.read')")
+    public List<DistributionScheduleService.ScheduledDistribution> scheduled() {
+        return schedules.list();
+    }
+
+    @Operation(summary = "Schedule a distribution to send on a later date (9:00 India time)")
+    @PostMapping("/scheduled")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('hrms.letters.distribute')")
+    public DistributionScheduleService.ScheduledDistribution schedule(
+            @Valid @RequestBody DistributionScheduleService.ScheduleRequest req, @AuthenticationPrincipal Jwt jwt) {
+        return schedules.schedule(req, UUID.fromString(jwt.getSubject()));
+    }
+
+    @Operation(summary = "Cancel a scheduled distribution that hasn't started")
+    @DeleteMapping("/scheduled/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('hrms.letters.distribute')")
+    public void cancelScheduled(@PathVariable UUID id) {
+        schedules.cancel(id);
     }
 
     @Operation(summary = "Create a bulk distribution (resolves recipients, queues async send)")

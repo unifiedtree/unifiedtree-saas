@@ -1,174 +1,73 @@
-import React, { useState } from 'react'
+// Letter templates, on the kit (P-DOCS; prototype PgTalent h-letters tab 0):
+// name (and variant), type, last updated, Active / Inactive, Edit and Delete.
+// A row opens the template. Delete asks first. Used by the Letters hub and by
+// Documents → Letter templates.
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, Edit3, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useToast } from '@/shared/hooks/useToast'
-import { Can, P, usePermission } from '@unifiedtree/sdk'
-import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
-import { State, SubHeading, dmy } from '@/design/module/ModuleKit'
-import { useLetterTemplates, useDeleteTemplate } from './api/useLetters'
-import type { LetterTemplateDto, LetterType } from './api/useLetters'
+import { P, usePermission } from '@unifiedtree/sdk'
+import { Button, CellActions, CellStack, Section, StatusPill, Table, type TableColumn } from '@/design/kit/display'
+import { Pager } from '@/design/kit/data'
+import { useToast } from '@/design/kit/overlays'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { useLetterTemplates, useDeleteTemplate, type LetterTemplateDto } from './api/useLetters'
+import { LETTER_TYPE_LABEL, dayText, localDay } from './lettersModel'
 
-const TYPE_TONE: Record<LetterType, PillTone> = {
-  OFFER: 'info', APPOINTMENT: 'ok', RELIEVING: 'orange', EXPERIENCE: 'purple', SALARY_REVISION: 'warn', CUSTOM: 'gray',
-}
-const TYPE_LABEL: Record<LetterType, string> = {
-  OFFER: 'Offer', APPOINTMENT: 'Appointment', RELIEVING: 'Relieving', EXPERIENCE: 'Experience', SALARY_REVISION: 'Salary Revision', CUSTOM: 'Custom',
-}
-
-function DeleteCell({ id, name }: { id: string; name: string }) {
-  const { toast } = useToast()
-  const deleteMut = useDeleteTemplate()
-  const [confirming, setConfirming] = useState(false)
-
-  const handleDelete = async () => {
-    try {
-      await deleteMut.mutateAsync(id)
-      toast(`"${name}" deleted`, 'success')
-    } catch (e) {
-      toast((e as Error)?.message || 'Couldn’t delete the template', 'error')
-    } finally {
-      setConfirming(false)
-    }
-  }
-
-  if (confirming) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={handleDelete}
-          disabled={deleteMut.isPending}
-          className="rounded-lg bg-[#FEE2E2] px-2.5 py-1 text-xs font-medium text-[#B91C1C] transition-colors hover:bg-[#FECACA] disabled:opacity-50"
-        >
-          {deleteMut.isPending ? 'Deleting…' : 'Delete'}
-        </button>
-        <button
-          onClick={() => setConfirming(false)}
-          className="rounded-lg px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-        >
-          Cancel
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); setConfirming(true) }}
-      className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
-      aria-label="Delete template"
-    >
-      <Trash2 size={14} />
-    </button>
-  )
-}
-
-/** The template list with its paging. Used by the Letters hub and by Documents → Letter templates. */
+/** The template list with its paging. */
 export function LetterTemplatesList() {
   const navigate = useNavigate()
+  const toast = useToast()
+  const confirm = useConfirmDialog()
   const [page, setPage] = useState(0)
-
-  const { data, isLoading, error, refetch } = useLetterTemplates(page)
-  const templates: LetterTemplateDto[] = data?.content ?? []
-  const totalPages = data?.totalPages ?? 1
-  const totalElements = data?.totalElements ?? 0
-  const hasPagination = totalElements > 20
-
+  const { data, isLoading, error, refetch, isFetching } = useLetterTemplates(page)
+  const del = useDeleteTemplate()
   const canCreate = usePermission(P.HRMS_LETTERS_TEMPLATE_CREATE)
-  return (
-    <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-      {isLoading ? (
-        <State kind="loading" height={220} />
-      ) : error ? (
-        <State kind="error" title="Couldn’t load templates" description={(error as Error).message} onRetry={() => refetch()} />
-      ) : templates.length === 0 ? (
-        <State kind="empty" icon="fileText" title="No letter templates yet" description={canCreate ? 'Create a template with merge fields, then generate letters from it.' : 'Templates HR creates appear here.'} />
-      ) : (
-        <>
-          <TableCard>
-            <table className="hr-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th className="hidden md:table-cell">Last Updated</th>
-                  <th>Status</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {templates.map((tpl) => (
-                  <tr key={tpl.id} onClick={() => navigate(`/hrms/letters/templates/${tpl.id}`)} className="cursor-pointer">
-                    <td>
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5]">
-                          <FileText size={13} className="text-[#059669]" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-text-primary">{tpl.name}</p>
-                          {tpl.variantName && <p className="truncate text-xs text-text-tertiary">{tpl.variantName}</p>}
-                        </div>
-                      </div>
-                    </td>
-                    <td><HrStatusPill tone={TYPE_TONE[tpl.type] ?? 'gray'}>{TYPE_LABEL[tpl.type] ?? tpl.type}</HrStatusPill></td>
-                    <td className="hidden md:table-cell text-text-secondary">{tpl.updatedAt ? dmy(tpl.updatedAt) : '—'}</td>
-                    <td><HrStatusPill tone={tpl.active ? 'ok' : 'gray'}>{tpl.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
-                    <td>
-                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                        <Can code={P.HRMS_LETTERS_TEMPLATE_UPDATE}>
-                          <button
-                            onClick={() => navigate(`/hrms/letters/templates/${tpl.id}`)}
-                            className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary"
-                            aria-label="Edit template"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                        </Can>
-                        <Can code={P.HRMS_LETTERS_TEMPLATE_DELETE}>
-                          <DeleteCell id={tpl.id} name={tpl.name} />
-                        </Can>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableCard>
+  const canEdit = usePermission(P.HRMS_LETTERS_TEMPLATE_UPDATE)
+  const canDelete = usePermission(P.HRMS_LETTERS_TEMPLATE_DELETE)
+  const templates: LetterTemplateDto[] = data?.content ?? []
+  const total = data?.totalElements ?? 0
 
-          {hasPagination && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-text-secondary">{totalElements} template{totalElements !== 1 ? 's' : ''}</p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                  className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="text-xs text-text-secondary">{page + 1} / {totalPages}</span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={page >= totalPages - 1}
-                  className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+  const remove = async (t: LetterTemplateDto) => {
+    const ok = await confirm({ title: `Delete “${t.name}”?`, body: 'Letters already generated from it stay as they are.', confirmLabel: 'Delete', tone: 'danger' })
+    if (!ok) return
+    try { await del.mutateAsync(t.id); toast.success(`"${t.name}" deleted`) } catch (e) { toast.error('Couldn’t delete the template', { detail: (e as Error)?.message }) }
+  }
+
+  const columns: TableColumn<LetterTemplateDto>[] = [
+    { key: 'name', header: 'Name', primary: true, render: (t) => <CellStack primary={t.name} secondary={t.variantName} /> },
+    { key: 'type', header: 'Type', render: (t) => LETTER_TYPE_LABEL[t.type] ?? t.type },
+    { key: 'updated', header: 'Last updated', render: (t) => dayText(localDay(t.updatedAt)) },
+    { key: 'status', header: 'Status', render: (t) => <StatusPill tone={t.active ? 'success' : 'neutral'}>{t.active ? 'Active' : 'Inactive'}</StatusPill> },
+    ...(canEdit || canDelete ? [{
+      key: 'actions', header: <span className="sr-only">Actions</span>, label: 'Actions', align: 'right' as const,
+      render: (t: LetterTemplateDto) => (
+        <CellActions>
+          {canEdit && <Button size={30} variant="secondary" aria-label={`Edit ${t.name}`} onClick={() => navigate(`/hrms/letters/templates/${t.id}`)}>Edit</Button>}
+          {canDelete && <Button size={30} variant="secondary" aria-label={`Delete ${t.name}`} onClick={() => remove(t)}>Delete</Button>}
+        </CellActions>
+      ),
+    }] : []),
+  ]
+
+  return (
+    <Section title="Letter templates" body="flush" cardClass={false}
+      loading={isLoading} skeleton="table" error={error} onRetry={() => refetch()} retrying={isFetching}
+      empty={!isLoading && !error && templates.length === 0
+        ? { title: 'No letter templates yet', hint: canCreate ? 'Create a template with merge fields, then generate letters from it.' : 'Templates HR creates appear here.' }
+        : undefined}
+      footer={total > 20 ? <Pager page={page} pageSize={20} total={total} onPageChange={setPage} /> : undefined}>
+      <Table label="Letter templates" columns={columns} rows={templates} rowKey={(t) => t.id} mobile="cards"
+        onRowClick={(t) => navigate(`/hrms/letters/templates/${t.id}`)} />
+    </Section>
   )
 }
 
-/** Letter templates inside another page (Documents): a heading with the create button, then the list. */
+/** Letter templates inside another page (Documents): the list with its own create button. */
 export function LetterTemplates() {
   const navigate = useNavigate()
   const canCreate = usePermission(P.HRMS_LETTERS_TEMPLATE_CREATE)
   return (
-    <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-      <SubHeading aside={canCreate ? <HrButton size="sm" onClick={() => navigate('/hrms/letters/templates/new')}><Plus size={15} /> Create template</HrButton> : undefined}>Letter templates</SubHeading>
+    <div className="lt-stack">
+      {canCreate && <div className="lt-row-end"><Button variant="primary" icon="plus" onClick={() => navigate('/hrms/letters/templates/new')}>Create template</Button></div>}
       <LetterTemplatesList />
     </div>
   )

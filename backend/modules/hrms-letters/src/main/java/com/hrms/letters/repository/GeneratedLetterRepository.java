@@ -20,6 +20,24 @@ public interface GeneratedLetterRepository extends JpaRepository<GeneratedLetter
     @Query("SELECT g FROM GeneratedLetter g WHERE g.employeeId = :employeeId AND g.deletedAt IS NULL ORDER BY g.createdAt DESC")
     Page<GeneratedLetter> findActiveByEmployeeId(@Param("employeeId") UUID employeeId, Pageable pageable);
 
+    /**
+     * The letters an employee is shown in My letters (redesign BW-75): letters
+     * that were sent to them, by HR or in a distribution, and letters they have
+     * opened or signed. A sent letter HR later voided stays (shown as withdrawn);
+     * HR's unsent drafts, and drafts voided before they were sent, do not.
+     */
+    String SENT_TO_EMPLOYEE = "(g.sentAt IS NOT NULL OR g.status IN ('VIEWED', 'SIGNED') "
+            + "OR EXISTS (SELECT 1 FROM DistributionRecipient r WHERE r.generatedLetterId = g.id AND r.sendStatus = 'SENT'))";
+
+    @Query(value = "SELECT g FROM GeneratedLetter g WHERE g.employeeId = :employeeId AND g.deletedAt IS NULL AND "
+            + SENT_TO_EMPLOYEE + " ORDER BY COALESCE(g.sentAt, g.createdAt) DESC",
+            countQuery = "SELECT COUNT(g) FROM GeneratedLetter g WHERE g.employeeId = :employeeId AND g.deletedAt IS NULL AND "
+                    + SENT_TO_EMPLOYEE)
+    Page<GeneratedLetter> findSentToEmployee(@Param("employeeId") UUID employeeId, Pageable pageable);
+
+    @Query("SELECT COUNT(g) > 0 FROM GeneratedLetter g WHERE g.id = :id AND g.deletedAt IS NULL AND " + SENT_TO_EMPLOYEE)
+    boolean isSentToEmployee(@Param("id") UUID id);
+
     @Query("SELECT g FROM GeneratedLetter g WHERE g.id = :id AND g.deletedAt IS NULL")
     Optional<GeneratedLetter> findActiveById(@Param("id") UUID id);
 

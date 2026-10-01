@@ -141,6 +141,13 @@ public class LetterDistributionProcessor {
                     ? job.getSubjectOverride() : email.subject();
             emailService.send(r.getEmail(), null, subject, email.html(), pdf, buildFilename(templateName, emp),
                     generationService.senderNameFor(gen.companyId()));
+            // BW-75: the letter was emailed, so it is SENT (My letters shows sent letters only).
+            // Best effort: the email has gone out, so a failure here must not mark the recipient failed.
+            try {
+                generationService.markSentByDistribution(gen.id(), r.getEmail());
+            } catch (Exception e) {
+                log.warn("Distribution {}: letter {} was emailed but not marked sent: {}", job.getId(), gen.id(), e.getMessage());
+            }
             r.setGeneratedLetterId(gen.id());
             r.setSendStatus("SENT");
             r.setSentAt(Instant.now());
