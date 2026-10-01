@@ -269,13 +269,13 @@ public class PerformanceCycleService {
     /**
      * Submitted manager reviews in a cycle by whole rating (5 down to 1). A manager
      * review is reviewer type MANAGER (also what a review written directly by HR or
-     * a manager is stored as). Ratings round half up (4.5 → 5); 0 to 1.4 count as 1.
+     * a manager is stored as). A rating counts in its whole number (4.6 → 4, as the design reads "4.6 · Exceeds"); under 1 counts as 1.
      */
     @Transactional(readOnly = true)
     public CycleRatings ratings(UUID tenantId, UUID cycleId, Set<UUID> visible) {
         cycleRow(tenantId, cycleId);
         StringBuilder sql = new StringBuilder("""
-                SELECT GREATEST(1, LEAST(5, ROUND(r.overall_rating)))::int AS bucket, COUNT(*) AS n,
+                SELECT GREATEST(1, LEAST(5, FLOOR(r.overall_rating)))::int AS bucket, COUNT(*) AS n,
                        SUM(r.overall_rating) AS total
                   FROM performance_mgmt.performance_reviews r
                  WHERE r.tenant_id = ? AND r.cycle_id = ? AND r.reviewer_type = 'MANAGER'
