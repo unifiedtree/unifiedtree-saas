@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { NotificationBell } from '@/design/shell/notifications/NotificationBell'
 import { TopBarSearch } from '@/shared/components/TopBarSearch'
-import { PAGE_REGISTRY, visibleEntries } from '@/shared/navigation/pageRegistry'
+import { PAGE_REGISTRY } from '@/shared/navigation/pageRegistry'
 import { useAccessContext } from '@/shared/navigation/useAccess'
 import { openSearch } from '@/design/shell/search/searchStore'
 import { usePageTitle, useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
@@ -15,26 +15,27 @@ import { PageSkeleton } from '@/shared/components/PageSkeleton'
 import { preloadPath, preloadPathsWhenIdle } from '@/shared/routing/lazyPage'
 import { litRail, railViaOn, railViaTo, readRailVia, saveRailVia, type RailVia } from '@/layouts/railLit'
 import { AppRail, type RailGroupView, type RailItem } from '@/design/shell/AppRail'
-import { PagesPanel } from '@/design/shell/PagesPanel'
+import { ModuleTabs } from '@/design/shell/ModuleTabs'
 import { TopBar } from '@/design/shell/TopBar'
 import { MorePanel, type MoreSection } from '@/design/shell/MorePanel'
 import { HelpPanel, useHelpContacts } from '@/design/shell/HelpPanel'
-import { HeaderSlotProvider } from '@/design/shell/HeaderTabs'
-import { DesignTooltip, MobileDrawer, WorkspaceTile } from '@/design/shell/ShellChrome'
+import { DesignTooltip, MobileDrawer, WorkspaceTile, type DrawerPages } from '@/design/shell/ShellChrome'
 import { useHome } from '@/design/shell/useHome'
 import { guardedGo } from '@/design/shell/navigationGuard'
 import { pageTitleLabel } from '@/design/shell/pageTitle'
 import {
-  SETTINGS_MODULE, activePage, clearLastPages, fitRail, isMorePath, isSettingsPath, matchPath, moduleTarget, owningModules,
+  SETTINGS_MODULE, clearLastPages, drawsOwnPages, fitRail, isMorePath, isSettingsPath, litPage, matchPath, moduleTarget, owningModules,
   preferencesTarget, railGroups, readLastPages, readPinned, routeOf, saveLastPage, savePinned, settingsActive, settingsPages,
   type NavPage, type VisibleModule,
 } from '@/design/shell/navModel'
 
 // The app shell (design: HrmsPlatform.dc.html). A 72px rail of named groups that widens on hover or
-// focus (or stays open when pinned), the Pages panel for a module's pages, a white top bar where each
-// page publishes its tabs (HeaderTabs) or shows its name as one pill, and More: the person's space,
-// what didn't fit the rail, settings, the theme and Sign out. Who sees what is decided by permissions
-// alone (design/shell/navModel.ts over shared/navigation/pageRegistry.ts); which item is lit by railLit.
+// focus (or stays open when pinned), a white top bar with the open module's pages as tabs (ModuleTabs;
+// a page that is its module's only page shows its name as one pill), and More: the person's space,
+// what didn't fit the rail, settings, the theme and Sign out. A page's own views sit inside the page,
+// under the top bar (DECISIONS 21: the left Pages panel is gone). Who sees what is decided by
+// permissions alone (design/shell/navModel.ts over shared/navigation/pageRegistry.ts); which item is
+// lit by railLit. On a phone the drawer is the rail with the open module's pages under its item.
 
 // A role's display name for the More card when the person's employee record has no job title.
 // Presentation only: nothing is decided by it.
@@ -67,17 +68,6 @@ function openInApp(navigate: (to: string) => void, path: string) {
   if (samePage) window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
 }
 
-const PHONE = '(max-width: 767px)'
-const isPhone = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(PHONE).matches
-const onPhoneChange = (cb: () => void) => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {}
-  const m = window.matchMedia(PHONE)
-  m.addEventListener('change', cb)
-  return () => m.removeEventListener('change', cb)
-}
-/** Phone width, kept up to date (the side Pages panel doesn't show there: the Pages button opens it over the page). */
-const usePhone = () => useSyncExternalStore(onPhoneChange, isPhone, () => false)
-
 /** The plan catalog's "launching soon" module keys (the business apps' Soon badges); plan admins only. */
 function useSoonApps(enabled: boolean): ReadonlySet<string> {
   const plans = useQuery({
@@ -96,12 +86,8 @@ export function PlatformShell() {
   const [moreOpen, setMoreOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [pinned, setPinned] = useState(readPinned)
-  // The Pages panel: open for one module (a rail click on a module with several pages opens it).
-  const [panel, setPanel] = useState<{ open: boolean; module: string | null }>({ open: false, module: null })
-  const phone = usePhone()
-  const [mobilePages, setMobilePages] = useState(false)
-  // The rail item the person came through (a rail click, or a page in its Pages panel) and the page
-  // that click opened; see railLit.ts.
+  // The rail item the person came through (a rail click, or one of its pages in the top bar's tabs)
+  // and the page that click opened; see railLit.ts.
   const [railVia, setRailVia] = useState<RailVia | null>(readRailVia)
   const [listH, setListH] = useState(0)
   // Bumped to show a page again from scratch (after its "?q=" filter is cleared).
@@ -117,7 +103,7 @@ export function PlatformShell() {
   const { workspaceName } = useWorkspaceBranding()
   const pathname = location.pathname
 
-  useEffect(() => { setNotifOpen(false); setMobileOpen(false); setMoreOpen(false); setMobilePages(false) }, [pathname])
+  useEffect(() => { setNotifOpen(false); setMobileOpen(false); setMoreOpen(false) }, [pathname])
 
   // Menus are permission-only: a link shows when the person holds the permission its page needs and
   // the workspace has the page's module (the same rules the ⌘K search uses).
@@ -153,15 +139,17 @@ export function PlatformShell() {
   const lit = litRail(owning.map(m => ({ key: m.key, tabs: m.pages.length })), railViaOn(railVia, pathname), { morePage: isMorePath(pathname), overflow })
   const litModule: VisibleModule | undefined = lit.module ? owning.find(m => m.key === lit.module) : undefined
   const sPages = useMemo(() => settingsPages(accessCtx), [accessCtx])
-  const visible = useMemo(() => visibleEntries(accessCtx), [accessCtx])
   const current: { key: string; label: string; icon: string; pages: NavPage[] } | null = settingsScope
     ? { key: SETTINGS_MODULE.key, label: SETTINGS_MODULE.label, icon: SETTINGS_MODULE.icon, pages: sPages }
     : litModule ? { key: litModule.key, label: litModule.name, icon: litModule.icon, pages: litModule.pages } : null
-  const currentPage = settingsScope ? settingsActive(sPages, pathname) : litModule ? activePage(litModule.pages, pathname) : undefined
-  const multiPage = !!current && current.pages.length > 1
-  // Not on a phone: there the side panel has no room, and the top bar keeps its Pages button.
-  const panelShown = !phone && multiPage && panel.open && panel.module === current!.key
-  const push = pinned && !panelShown
+  const currentPage = settingsScope ? settingsActive(sPages, pathname) : litModule ? litPage(litModule.key, litModule.pages, pathname) : undefined
+  // The module's pages show as tabs along the top bar when it has several (a page that draws the
+  // module's pages itself keeps its own bar: navModel.drawsOwnPages).
+  const tabPages = current && current.pages.length > 1 && !drawsOwnPages(current.key)
+    ? current.pages.map((p) => ({ label: p.label, href: p.path, active: p === currentPage }))
+    : null
+  // A pinned rail takes its room.
+  const push = pinned
 
   // The click counts only on the page it opened. Any other move to another page (a link on the page,
   // search, a notification, Back, a load or sign-in elsewhere) forgets it. Checked only when the page
@@ -192,20 +180,21 @@ export function PlatformShell() {
 
   // ── Moving around (every move asks the leave guards first) ──
   const remember = (key: string, to: string) => { const v = railViaTo(key, to); setRailVia(v); saveRailVia(v) }
-  const openModule = (m: VisibleModule, withPanel: boolean) => {
+  const openModule = (m: VisibleModule) => {
     const target = moduleTarget(m, readLastPages())
     guardedGo(() => {
       remember(m.key, target)
-      if (withPanel && m.pages.length > 1) setPanel({ open: true, module: m.key })
       setMoreOpen(false)
       setMobileOpen(false)
       navigate(target)
     })
   }
   const byKey = (key: string) => groups.flatMap(g => g.modules).find(m => m.key === key)
+  // One of the open module's pages (its tab in the top bar, or under its item in the phone drawer):
+  // the module's rail item stays lit.
   const openPage = (href: string) => guardedGo(() => {
     if (current && current.key !== SETTINGS_MODULE.key) remember(current.key, href)
-    setMobilePages(false)
+    setMobileOpen(false)
     navigate(href)
   })
   const goTo = (to: string, after?: () => void) => guardedGo(() => {
@@ -215,9 +204,9 @@ export function PlatformShell() {
     navigate(to)
   })
   const goHome = () => goTo(home.path, () => { setRailVia(null); saveRailVia(null) })
-  const openPreferences = () => goTo(preferencesTarget(accessCtx), () => setPanel({ open: true, module: SETTINGS_MODULE.key }))
+  const openPreferences = () => goTo(preferencesTarget(accessCtx))
   const signOut = () => { saveRailVia(null); clearLastPages(); logout() }
-  const togglePin = () => { const next = !pinned; setPinned(next); savePinned(next); if (next) setPanel(p => ({ ...p, open: false })) }
+  const togglePin = () => { const next = !pinned; setPinned(next); savePinned(next) }
 
   // ── The rail and More ──
   const railItem = (m: VisibleModule): RailItem => ({
@@ -235,15 +224,18 @@ export function PlatformShell() {
       key: `over-${g.key}`, label: g.label,
       rows: g.modules.filter(m => overflow.has(m.key) && !m.soon).map(m => ({
         key: m.key, label: m.railLabel, icon: m.icon, href: moduleTarget(m, readLastPages()), active: lit.module === m.key,
-        onClick: () => openModule(m, true),
+        onClick: () => openModule(m),
       })),
     }))
     .filter(g => g.rows.length > 0)
   const moreCount = overflowSections.reduce((n, g) => n + g.rows.length, 0)
+  // Org chart (P-ORG): for every role with HRMS; the server limits what each person sees.
+  const canSeeOrgChart = accessCtx.modules.includes('hrms') && (accessCtx.self || accessCtx.has('hrms.employee.read'))
   const mySpace: MoreSection = {
     key: 'my-space', label: 'My space', rows: [
       { key: 'my-workspace', label: 'My workspace', icon: 'grid', href: home.path, onClick: goHome },
       { key: 'my-profile', label: 'My profile', icon: 'user', href: '/profile', active: matchPath(pathname, '/profile'), onClick: () => goTo('/profile') },
+      ...(canSeeOrgChart ? [{ key: 'org-chart', label: 'Org chart', icon: 'users', href: '/hrms/org-chart', active: matchPath(pathname, '/hrms/org-chart'), onClick: () => goTo('/hrms/org-chart') }] : []),
       { key: 'all-apps', label: 'All apps', icon: 'layers', href: '/modules', active: matchPath(pathname, '/modules'), onClick: () => goTo('/modules') },
     ],
   }
@@ -274,9 +266,17 @@ export function PlatformShell() {
     if (!label) return null
     return { label, icon: current?.icon ?? (matchPath(pathname, '/profile') ? 'user' : matchPath(pathname, '/modules') ? 'layers' : 'grid') }
   }
+  const intent = (href: string) => preloadPath(routeOf(href))
+  const topTabs = tabPages && current
+    ? <ModuleTabs module={{ label: current.label, icon: current.icon }} pages={tabPages} onSelect={openPage} onIntent={intent} />
+    : null
+  // The phone drawer lists the open module's pages under its item (the settings pages, on a settings page).
+  const drawerPages: DrawerPages | null = current && current.pages.length > 1
+    ? { key: current.key, label: current.label, items: current.pages.map((p) => ({ label: p.label, href: p.path, active: p === currentPage })) }
+    : null
 
   return (
-    <HeaderSlotProvider>
+    <>
       <div className="company-workspace ut-shell">
         <a href="#workspace-content" className="workspace-skip-link">Skip to workspace</a>
         <AppRail
@@ -291,8 +291,8 @@ export function PlatformShell() {
           push={push}
           noExpand={moreOpen && !push}
           more={{ open: moreOpen, lit: lit.more, count: moreCount, onToggle: () => { setNotifOpen(false); setMoreOpen(v => !v) } }}
-          onItem={(key) => { const m = byKey(key); if (m) openModule(m, true) }}
-          onIntent={(href) => preloadPath(routeOf(href))}
+          onItem={(key) => { const m = byKey(key); if (m) openModule(m) }}
+          onIntent={intent}
           listRef={listRef}
         >
           {moreOpen && (
@@ -300,20 +300,10 @@ export function PlatformShell() {
           )}
         </AppRail>
 
-        {panelShown && current && (
-          <PagesPanel
-            module={{ label: current.label, icon: current.icon }}
-            pages={current.pages.map(p => ({ label: p.label, href: p.path, active: p === currentPage, tabs: tabCount(p, visible) }))}
-            onSelect={openPage}
-            onHide={() => setPanel(p => ({ ...p, open: false }))}
-            onIntent={(href) => preloadPath(routeOf(href))}
-          />
-        )}
-
         <main className="ut-shell__main">
           <TopBar
-            pages={multiPage && !panelShown ? { label: current!.label, onOpen: () => { if (isPhone()) setMobilePages(true); else setPanel({ open: true, module: current!.key }) } } : null}
-            pill={pillFor()}
+            tabs={topTabs}
+            pill={topTabs ? null : pillFor()}
             chip={chip}
             search={
               <TopBarSearch
@@ -330,7 +320,9 @@ export function PlatformShell() {
             onSearch={() => openSearch()}
             mark={<WorkspaceTile />}
           />
-          <div id="workspace-content" tabIndex={-1} className="workspace-content flex-1 overflow-auto">
+          {/* data-module-tabs: the module whose pages the top bar shows as tabs; a page that still draws
+              the same pages itself hides that copy (shell.css). */}
+          <div id="workspace-content" tabIndex={-1} className="workspace-content flex-1 overflow-auto" data-module-tabs={topTabs && current ? current.key : undefined}>
             {/* The shell stays put between pages: a broken page is contained here, and a page whose
                 code is still arriving shows its own outline instead of blanking the app. */}
             <RouteErrorBoundary resetKey={pathname} routeLabel={pathname}>
@@ -340,21 +332,14 @@ export function PlatformShell() {
         </main>
 
         {moreOpen && <div className="ut-more-backdrop" aria-hidden="true" onClick={() => setMoreOpen(false)} />}
-        {mobilePages && current && (
-          <PagesPanel
-            overlay
-            module={{ label: current.label, icon: current.icon }}
-            pages={current.pages.map(p => ({ label: p.label, href: p.path, active: p === currentPage, tabs: tabCount(p, visible) }))}
-            onSelect={openPage}
-            onHide={() => setMobilePages(false)}
-          />
-        )}
         {mobileOpen && (
           <MobileDrawer
             groups={drawerView}
             workspaceName={workspaceName}
             onClose={() => setMobileOpen(false)}
-            onItem={(key) => { const m = byKey(key); if (m) openModule(m, false) }}
+            onItem={(key) => { const m = byKey(key); if (m) openModule(m) }}
+            pages={drawerPages}
+            onPage={openPage}
             sections={[mySpace, settingsSection]}
             {...moreContent}
           />
@@ -362,14 +347,7 @@ export function PlatformShell() {
         <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} contacts={helpContacts} />
         <DesignTooltip />
       </div>
-    </HeaderSlotProvider>
+    </>
   )
 }
 
-/** How many tabs a page shows this person (its registry tabs they may see). */
-function tabCount(page: NavPage, visible: ReturnType<typeof visibleEntries>): number {
-  const route = routeOf(page.path)
-  const entry = PAGE_REGISTRY.find(e => !e.parent && e.path === route)
-  if (!entry) return 0
-  return visible.filter(e => e.parent === entry.id && e.state === 'open').length
-}

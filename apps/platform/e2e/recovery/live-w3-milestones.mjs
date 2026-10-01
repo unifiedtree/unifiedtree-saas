@@ -1,5 +1,6 @@
 /* global process, console, URL, URLSearchParams, fetch, document */
-// Live check for w3 "Upcoming milestones: date ranges" (26 Sep 2026), against a
+// Live check for w3 "Upcoming milestones: date ranges" (26 Sep 2026; the card is "Upcoming events" since
+// Release 1.1 and adds a Holidays list from the holiday calendar endpoint), against a
 // local backend + web app (the shared live slot):
 //  1. API: each list (birthdays, work anniversaries, retirements) follows its
 //     own range — every preset, a custom range across the year end, 29 February
@@ -90,6 +91,8 @@ const in6 = addDays(firstOfMonth(today, 5), 9)
 // The nearest December-to-January inside a year of today (the reach of a birthday range).
 const yeY = today < `${year}-01-20` ? year - 1 : year
 const yearEnd = { from: `${yeY}-12-15`, to: `${yeY + 1}-01-20` }
+// The "Next 3 months" fixture falls inside that range when today is early October (in3 = 15 Dec): then it must be listed.
+const b3InYearEnd = !!occurrence(withYear(in3, 1992), yearEnd)
 // Retirement fixtures outside the milestones list's reach: 7 years on, and 2 months ago (still working).
 const farRetire = addMonths(today, 84)
 const pastRetire = addMonths(today, -2)
@@ -170,7 +173,7 @@ try {
   check('API anniversaries count the years (1 and 3)', a3row?.years === 1 && aNextRow?.years === 3, JSON.stringify([a3row, aNextRow]).slice(0, 200))
   const ye = await ms(owner, { birthdayFrom: yearEnd.from, birthdayTo: yearEnd.to })
   const yeRows = (ye.json?.birthdays || []).filter((m) => [F.bDec.id, F.bJan.id].includes(m.employeeId))
-  check('API birthdays across the year end: 20 Dec and 5 Jan, soonest first', ye.status === 200 && yeRows.length === 2 && yeRows[0].date === `${yeY}-12-20` && yeRows[1].date === `${yeY + 1}-01-05` && !ids(ye.json?.birthdays).has(F.b3.id), JSON.stringify(yeRows).slice(0, 200))
+  check('API birthdays across the year end: 20 Dec and 5 Jan, soonest first', ye.status === 200 && yeRows.length === 2 && yeRows[0].date === `${yeY}-12-20` && yeRows[1].date === `${yeY + 1}-01-05` && ids(ye.json?.birthdays).has(F.b3.id) === b3InYearEnd, JSON.stringify(yeRows).slice(0, 200))
   // A February to March in a non-leap year, inside a year of today.
   const nonLeap = [year - 1, year, year + 1].find((y) => !((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) && `${y}-02-01` >= addMonths(today, -12) && `${y}-03-31` <= addMonths(today, 12))
   const leapRes = await ms(owner, { birthdayFrom: `${nonLeap}-02-01`, birthdayTo: `${nonLeap}-03-31` })
@@ -243,7 +246,7 @@ try {
     // This feature's calls must not fail; anything else that fails is printed as a note.
     page.on('response', (r) => {
       if (!r.url().includes('/api/')) return
-      const mine = /\/milestones|\/retirements\/due|milestone=/.test(r.url())
+      const mine = /\/milestones|\/retirements\/due|milestone=|\/settings\/holidays\?.*from=/.test(r.url())
       if (mine) asked.push(decodeURIComponent(r.url()))
       if (r.status() >= 400) (mine ? failed : other).push(`${r.status()} ${new URL(r.url()).pathname}${new URL(r.url()).search}`)
     })
@@ -302,9 +305,25 @@ try {
     const card = page.locator('[data-milestones-card]')
     await card.waitFor({ timeout: 30_000 })
     await settle(page)
-    check('UI owner: the card shows three lists, each on its old window', (await col(page, 'birthdays').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 14 days')
+    check('UI owner: the card is "Upcoming events"', (await card.getByText('Upcoming events', { exact: true }).count()) > 0 && (await card.getByText('Upcoming milestones').count()) === 0)
+    check('UI owner: the card shows the three people lists, each on its old window, and Holidays on the next 3 months', (await col(page, 'birthdays').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 14 days')
       && (await col(page, 'anniversaries').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 31 days')
-      && (await col(page, 'retirements').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 6 months'))
+      && (await col(page, 'retirements').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 6 months')
+      && (await col(page, 'holidays').locator('button[aria-haspopup="menu"]').innerText()).includes('Next 3 months'))
+    // Holidays: a preset asks the holiday calendar for its dates and lists what it answers.
+    {
+      asked.length = 0
+      await choose(page, 'holidays', 'This year')
+      const r = PRESETS['This year']
+      const req = asked.find((u) => u.includes('/settings/holidays?'))
+      const api = await owner.call(`/v1/settings/holidays?companyId=${company}&from=${r.from}&to=${r.to}`)
+      const names = (Array.isArray(api.json) ? api.json : []).map((h) => h.holidayName)
+      const t = await listText(page, 'holidays')
+      check('UI owner holidays "This year": asks the holiday calendar for those dates and lists its holidays', !!req && req.includes(`from=${r.from}`) && req.includes(`to=${r.to}`) && api.status === 200
+        && names.every((n) => t.includes(n)) && (names.length > 0 || t.includes('No holidays in the rest of this year.')), `req=${req || 'none'} api=${api.status} ${names.length}`)
+      const viewAll = col(page, 'holidays').getByRole('button', { name: /View all/ })
+      check('UI owner holidays: View all is there (the Leave page’s Holidays view opens for the owner)', (await viewAll.count()) === 1)
+    }
     await card.scrollIntoViewIfNeeded()
     await card.screenshot({ path: `${shots}/milestones-card-1440.png` })
     const seen = {}
@@ -339,7 +358,7 @@ try {
     await pickDate(page, pickers.nth(1), yearEnd.to)
     const ct = await listText(page, 'birthdays')
     const req = asked.find((u) => u.includes(`birthdayFrom=${yearEnd.from}`) && u.includes(`birthdayTo=${yearEnd.to}`))
-    check('UI owner custom range across the year end lists 20 Dec and 5 Jan, not November', !!req && ct.includes(F.bDec.name) && ct.includes(F.bJan.name) && !ct.includes(F.b3.name), `req=${!!req}`)
+    check('UI owner custom range across the year end lists 20 Dec and 5 Jan, and no one outside it', !!req && ct.includes(F.bDec.name) && ct.includes(F.bJan.name) && ct.includes(F.b3.name) === b3InYearEnd, `req=${!!req}`)
     const toAria = (await pickers.nth(1).innerText()) || ''
     check('UI owner custom range: the To calendar shows the chosen day', toAria.includes(`${Number(yearEnd.to.slice(8))} Jan ${yeY + 1}`), toAria)
     await card.screenshot({ path: `${shots}/milestones-custom-1440.png` })
@@ -355,7 +374,7 @@ try {
     await page.getByText(F.bDec.name).first().waitFor({ timeout: 30_000 }).catch(() => {})
     await page.waitForTimeout(800)
     const body = await page.locator('body').innerText()
-    check('UI owner directory: only the people inside the range (20 Dec, 5 Jan)', body.includes(F.bDec.name) && body.includes(F.bJan.name) && !body.includes(F.b3.name) && !body.includes(F.bSoon.name))
+    check('UI owner directory: only the people inside the range (20 Dec, 5 Jan)', body.includes(F.bDec.name) && body.includes(F.bJan.name) && body.includes(F.b3.name) === b3InYearEnd && !body.includes(F.bSoon.name))
     // Retirements from retirement due (a company is chosen): the calendar is not limited to the milestones list's reach.
     await page.goto(base + '/dashboard')
     await card.waitFor({ timeout: 30_000 })

@@ -180,7 +180,7 @@ export function Facts({ children }: { children: React.ReactNode }) {
 /** A white section card with the design's header (15px title, 12.5px sub, action on the right). */
 export function WsCard({ title, hint, action, children, flush }: { title: string; hint?: string; action?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
   return (
-    <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>
+    <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)" }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', borderBottom: flush ? '1px solid #f1f5f9' : undefined }}>
         <div style={{ flex: '1 1 200px', minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{title}</div>

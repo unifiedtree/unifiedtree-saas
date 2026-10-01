@@ -13,7 +13,7 @@ import './PayRuns.view.css'
 export function PayRunsView({ v }: { v: any }) {
   return (
     <>
-      <div ref={v.rootRef} style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "28px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div ref={v.rootRef} style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "28px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
         <div style={{marginBottom: "-32px", minWidth: "0"}}>
           <HrPageHeader crumb="Payroll" title="Processing & Payslips" subtitle="Process monthly payroll, review payslips and lock the period." actions={v.headerActions} />
         </div>
@@ -22,7 +22,7 @@ export function PayRunsView({ v }: { v: any }) {
             <span aria-hidden="true" style={{flex: "0 0 auto", width: "36px", height: "36px", boxSizing: "border-box", borderRadius: "11px", background: "#ecfdf5", border: "1px solid #d1fae5", color: "#0f6e56", display: "inline-flex", alignItems: "center", justifyContent: "center"}}>
               {txt(v.icFlow)}
             </span>
-            <h2 id="pr-steps-h" style={{margin: "0", flex: "1 1 220px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "21px", fontWeight: "700", letterSpacing: "-.015em", lineHeight: "1.25"}}>
+            <h2 id="pr-steps-h" style={{margin: "0", flex: "1 1 220px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "21px", fontWeight: "700", letterSpacing: "-.015em", lineHeight: "1.25"}}>
               {"How a payroll run moves"}
             </h2>
             {v.noStepFilter ? (
@@ -47,7 +47,7 @@ export function PayRunsView({ v }: { v: any }) {
             <span aria-hidden="true" style={{flex: "0 0 auto", width: "36px", height: "36px", boxSizing: "border-box", borderRadius: "11px", background: "#ecfdf5", border: "1px solid #d1fae5", color: "#0f6e56", display: "inline-flex", alignItems: "center", justifyContent: "center"}}>
               {txt(v.icReceipt)}
             </span>
-            <h2 id="pr-runs-h" style={{margin: "0", flex: "1 1 220px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "21px", fontWeight: "700", letterSpacing: "-.015em", lineHeight: "1.25"}}>
+            <h2 id="pr-runs-h" style={{margin: "0", flex: "1 1 220px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "21px", fontWeight: "700", letterSpacing: "-.015em", lineHeight: "1.25"}}>
               {"All runs"}
             </h2>
             <span aria-live="polite" style={{flex: "0 0 auto", padding: "5px 12px", borderRadius: "999px", border: "1px solid #e2e8f0", background: "#fff", fontSize: "12.5px", fontWeight: "500", color: "#475569", fontVariantNumeric: "tabular-nums"}}>

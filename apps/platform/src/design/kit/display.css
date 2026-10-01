@@ -17,7 +17,7 @@
   .uk-pill, .uk-count, .uk-chip, .uk-sdot, .uk-av, .uk-empty, .uk-skelblock, .uk-bar, .uk-stack, .uk-legend, .uk-meter,
   .uk-barlist, .uk-pring, .uk-donut, .uk-cal, .uk-seg, .uk-fpills, .uk-mstat, .uk-kv, .uk-slink, .uk-sact, .uk-retry,
   .uk-btn, .uk-table-wrap, .uk-colchart, .uk-ledger, .uk-ledger-net, .uk-steps, .uk-callout) {
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   /* The design's text sits at the font's normal line height unless it says otherwise; the app's body sets 1.5. */
   line-height: normal;
   box-sizing: border-box;
@@ -115,16 +115,20 @@
 .uk-ph--greet .uk-ph__sub { line-height: 21px; }
 .uk-ph__wave { display: inline-block; transform-origin: 70% 75%; }
 
-/* ── Pill tabs (top bar) ─────────────────────────────────────────────────── */
+/* ── Pill tabs (a page's own views and tabs, inside the page) ───────────────
+   The second level of navigation (DECISIONS 21): the top bar shows the module's pages as outlined pills
+   with a solid green one (design/shell ModuleTabs); a page's own views sit under it, in the page, and are
+   lighter on purpose so the two levels never look alike: quiet text pills, the chosen one a soft brand
+   tint with a hairline. */
 .uk-ptabs {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 6px 2px;
+  padding: 4px 2px;
 }
 .uk-ptabs::-webkit-scrollbar { display: none; }
 .uk-ptabs.is-fade-end { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
@@ -133,36 +137,36 @@
 .uk-ptab {
   position: relative;
   flex-shrink: 0;
-  height: 40px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  border: 1px solid var(--u-ln, #E3E9E6);
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--u-sf, #fff);
+  background: transparent;
   color: var(--u-ink2, #4A5A54);
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
   outline: none;
-  transition: border-color .3s, color .3s, background .3s, transform .4s cubic-bezier(.2,.8,.2,1);
+  transition: border-color .2s, color .2s, background .2s;
 }
-.uk-ptab.has-icon { padding: 0 16px 0 13px; }
-.uk-ptab:hover { border-color: var(--u-brl, #BFDFD1); color: var(--u-brt, #0F6E56); background: var(--u-brs, #E8F3EE); transform: translateY(-1px); }
+.uk-ptab.has-icon { padding: 0 13px 0 11px; }
+.uk-ptab:hover { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
 .uk-ptab.is-on,
 .uk-ptab.is-on:hover {
-  border: 0;
-  background: var(--u-br, #0F6E56);
-  color: var(--u-onbr, #fff);
-  transform: none;
+  border-color: var(--u-brl, #BFDFD1);
+  background: var(--u-brs, #E8F3EE);
+  color: var(--u-brt, #0F6E56);
   cursor: default;
-  box-shadow: 0 10px 20px -12px rgba(15, 110, 86, .9), inset 0 1px 0 rgba(255, 255, 255, .16);
 }
-.uk-ptab:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+/* A count inside the chosen tab (HrTabs' badge carries its own colours for the old solid tab). */
+.uk-ptab.is-on > span[aria-hidden="true"]:not(.uk-ptab__icon) { background: var(--u-sf, #fff); color: var(--u-brt, #0F6E56); }
+.uk-ptab:disabled { opacity: .5; cursor: not-allowed; }
 .uk-ptab__icon { display: inline-flex; flex-shrink: 0; }
 .uk-ptab__icon svg { width: 17px; height: 17px; stroke-width: 1.9; }
 .uk-ptab:not(.is-on) .uk-ptab__icon svg { transform: rotate(calc(var(--fx, 0) * -10deg)) scale(calc(1 + var(--fx, 0) * .12)); transition: transform .5s cubic-bezier(.34,1.56,.64,1); }
@@ -262,7 +266,7 @@
   width: 100%;
   margin: 0;
 }
-button.uk-stat { font: inherit; font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif); cursor: pointer; }
+button.uk-stat { font: inherit; font-family: var(--u-font, 'Inter', system-ui, sans-serif); cursor: pointer; }
 .uk-stat.uk-stat--link { cursor: pointer; }
 
 /* UtStat */

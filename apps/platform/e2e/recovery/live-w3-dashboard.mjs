@@ -237,7 +237,7 @@ try {
   check(`${PAST}: activity is up to the day`, (await page.getByText(`Activity up to ${PAST_LABEL}`).count()) > 0)
   check(`${PAST}: notices are those up that day`, (await page.getByText(noticesSql ? `up on ${PAST_LABEL}` : `No company notices were up on ${PAST_LABEL}.`).count()) > 0)
   check(`${PAST}: notices can't be edited in the past`, (await page.getByRole('button', { name: /Add notice/ }).count()) === 0)
-  check(`${PAST}: the banner says Upcoming milestones counts from today`, (await page.getByText('except Upcoming milestones, which counts from today', { exact: false }).count()) > 0)
+  check(`${PAST}: the banner says Upcoming events' dated lists count from today`, (await page.getByText('in Upcoming events, which count from today', { exact: false }).count()) > 0)
   const want = ['/v1/admin/dashboard/stats', '/v1/admin/dashboard/alerts', '/v1/admin/dashboard/notices', '/v1/admin/dashboard/performers', '/v1/admin/dashboard/onboarding', '/v1/admin/dashboard/hiring', '/v1/hrms/projects', '/v1/probation/upcoming', '/v1/reports/headcount']
   const missing = want.filter((p) => !calls.some((c) => c.startsWith(p) && (c.includes(`date=${PAST}`) || c.includes(`asOf=${PAST}`))))
   check(`${PAST}: every card asks for that day`, missing.length === 0, missing.join(', '))
