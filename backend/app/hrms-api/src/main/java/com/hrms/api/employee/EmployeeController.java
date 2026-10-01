@@ -430,7 +430,7 @@ public class EmployeeController {
         }
         try {
             Map<String, Object> row = jdbcTemplate.queryForMap(
-                    "SELECT (password_hash IS NOT NULL) AS activated, "
+                    "SELECT id, (password_hash IS NOT NULL) AS activated, "
                             + "invited_at, last_login_at, is_active "
                             + "FROM auth.user_credentials WHERE employee_id = ? LIMIT 1",
                     employeeId);
@@ -442,7 +442,7 @@ public class EmployeeController {
                     "activated", activated,
                     "invitedAt", isoInstant(invitedAt),
                     "lastLoginAt", isoInstant(lastLoginAt),
-                    "lastLoginDevice", lastLoginDevice(employeeId)
+                    "lastLoginDevice", lastLoginDevice(row.get("id") instanceof UUID u ? u : null)
             ));
         } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
             // No credential row yet -> never invited / never activated.
@@ -469,18 +469,18 @@ public class EmployeeController {
      * token. Additive and best effort: "" when there is no session or the lookup
      * fails, so the invitation status itself never fails because of it.
      */
-    private String lastLoginDevice(UUID employeeId) {
-        if (jdbcTemplate == null || employeeId == null) return "";
+    private String lastLoginDevice(UUID userId) {
+        if (jdbcTemplate == null || userId == null) return "";
         try {
+            // The same login whose times are returned (one employee can, rarely, have two logins).
             List<String> rows = jdbcTemplate.queryForList(
-                    "SELECT rt.user_agent FROM auth.refresh_tokens rt "
-                            + "JOIN auth.user_credentials uc ON uc.id = rt.user_id "
-                            + "WHERE uc.employee_id = ? AND rt.tenant_id = ? "
-                            + "ORDER BY COALESCE(rt.last_used_at, rt.issued_at) DESC LIMIT 1",
-                    String.class, employeeId, TenantContext.getTenantId());
+                    "SELECT user_agent FROM auth.refresh_tokens "
+                            + "WHERE user_id = ? AND tenant_id = ? "
+                            + "ORDER BY COALESCE(last_used_at, issued_at) DESC LIMIT 1",
+                    String.class, userId, TenantContext.getTenantId());
             return rows.isEmpty() ? "" : LoginDevice.describe(rows.get(0));
         } catch (RuntimeException e) {
-            log.warn("Last sign-in device lookup failed for employee {}: {}", employeeId, e.getMessage());
+            log.warn("Last sign-in device lookup failed for login {}: {}", userId, e.getMessage());
             return "";
         }
     }
