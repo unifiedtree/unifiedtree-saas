@@ -63,7 +63,7 @@ export function TeamDashboard() {
   const teamLabel = summary.data?.scope === 'DEPARTMENT' && summary.data.departmentNames.length ? summary.data.departmentNames.join(', ') : null
 
   return (
-    <PageFrame width="narrow" label="My team" className={view === 'approvals' ? 'tm-page tm-page--approvals' : 'tm-page'}>
+    <PageFrame width="narrow" label="My team" className="tm-page">
       {allowed.length > 1 && (
         <Views label="My team views" active={view} onChange={(k) => go(k as TeamView)}
           items={TEAM_VIEWS.filter((v) => allowed.includes(v.key)).map((v) => ({
@@ -76,7 +76,7 @@ export function TeamDashboard() {
           onView={go} onMessage={() => setMessaging(true)} onAttendance={() => navigate('/hrms/attendance')} />
       )}
       {view === 'schedule' && <TeamSchedule canOpenPeople={canOpenPeople} onView={go} />}
-      {view === 'approvals' && <TeamApprovals tab={tab} onTab={(t) => go('approvals', t)} />}
+      {view === 'approvals' && <div className="tm-approvals"><TeamApprovals tab={tab} onTab={(t) => go('approvals', t)} /></div>}
       {canMessage && (
         <MessageTeamPanel open={messaging} onClose={() => setMessaging(false)}
           teamSize={members ? members.length : null} teamLabel={teamLabel} />

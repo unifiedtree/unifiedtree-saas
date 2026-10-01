@@ -88,7 +88,7 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
 
   const header = (
     <PageHeader title="Approvals"
-      sub={inbox.isLoading ? 'Loading what is waiting for you…' : inbox.error ? undefined : approvalsSub(waiting, warned, tab)}
+      sub={inbox.isLoading ? 'Loading what is waiting for you…' : inbox.error || inbox.notAvailable ? undefined : approvalsSub(waiting, warned, tab)}
       actions={easy.length > 1 ? (
         <Button variant="primary" size={40} icon="check" onClick={() => setConfirmAll(true)}>{`Approve ${easy.length} with no warnings`}</Button>
       ) : undefined} />

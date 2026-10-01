@@ -3,8 +3,8 @@
  * the theme. */
 
 .tm-page { font-variant-numeric: tabular-nums; }
-/* The Approvals view is narrower in the design (1100). */
-.uk-page.tm-page--approvals { max-width: 1100px; }
+/* The Approvals view is narrower in the design (1100); the views bar above it stays where it is. */
+.tm-approvals { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: var(--uk-gap, 20px); min-width: 0; }
 
 /* Team today: the roster beside the cards; one column on narrow screens. */
 .tm-cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; min-width: 0; }

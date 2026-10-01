@@ -136,7 +136,7 @@ function Roster({ today, summary, team, rows, tiles, filter, onFilter }: {
   const title = active ? `${active.label} · ${count}` : `Who’s in · ${count} ${count === 1 ? 'person' : 'people'}`
 
   return (
-    <Section title={team.isLoading || team.error ? 'Who’s in' : title}
+    <Section variant="panel" title={team.isLoading || team.error ? 'Who’s in' : title}
       body="list" loading={team.isLoading} error={team.error} onRetry={() => team.refetch()} retrying={team.isFetching}
       actions={filter ? <Button variant="ghost" size={30} onClick={() => onFilter(null)}>Show everyone</Button> : undefined}
       empty={count === 0
@@ -225,7 +225,7 @@ function WaitingCard({ inbox, onSeeAll }: { inbox: ReturnType<typeof useApproval
 
   const nothing = rows.length === 0 && decided.length === 0
   return (
-    <Section title="Waiting for you" body="list" loading={inbox.isLoading} error={inbox.error} onRetry={() => inbox.refetch()}
+    <Section variant="panel" title="Waiting for you" body="list" loading={inbox.isLoading} error={inbox.error} onRetry={() => inbox.refetch()}
       retrying={inbox.isFetching}
       action={total > 0 ? { label: `See all ${total}`, onClick: onSeeAll } : undefined}
       empty={inbox.notAvailable
@@ -259,7 +259,7 @@ function ProbationCard({ canDecide }: { canDecide: boolean }) {
   const list = (q.data ?? []).slice(0, 3)
   if (q.notAvailable || (!q.isLoading && !q.error && list.length === 0)) return null
   return (
-    <Section title="Probation" level={2} loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching}
+    <Section variant="panel" title="Probation" level={2} loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching}
       count={q.data && q.data.length > 3 ? `· ${q.data.length}` : undefined}>
       <div className="tm-prob-list">
         {list.map((r) => (
@@ -300,7 +300,7 @@ function ReviewsCard() {
   if (!loading && !failed && !pick) return null
   const m = reviewsModel(pick)
   return (
-    <Section title={pick?.cycleName ?? 'Reviews'} level={2} loading={loading} error={failed} body="list"
+    <Section variant="panel" title={pick?.cycleName ?? 'Reviews'} level={2} loading={loading} error={failed} body="list"
       onRetry={() => { cycles.refetch(); progress.forEach((x) => x.refetch()) }}
       sub={pick ? `${m.selfIn} of ${m.selfTotal} self-reviews are in.${m.ready > 0 ? ' Start with those.' : ''}` : undefined}>
       <ListRows label="Review progress">
@@ -320,7 +320,7 @@ function OutSoonCard({ today }: { today: string }) {
   const items = outSoon(q.data, today)
   if (q.notAvailable) return null
   return (
-    <Section title="Out soon" body="list" loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching}
+    <Section variant="panel" title="Out soon" body="list" loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching}
       empty={items.length === 0 ? { title: 'No one is out in the next two weeks.', variant: 'plain', icon: 'calendar' } : false}>
       <ListRows label="Out soon">
         {items.map((o) => (

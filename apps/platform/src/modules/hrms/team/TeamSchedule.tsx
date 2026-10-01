@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiJson } from '@/core/api/client'
-import { Button, PageHeader, Section } from '@/design/kit/display'
+import { Button, Callout, Card, ErrorState, PageHeader } from '@/design/kit/display'
 import { Pager, WeekGrid, WeekLegend, shiftWeek, weekCoverage, weekDays, weekLabel, type WeekCell, type WeekRow } from '@/design/kit/data'
 import { istToday } from '@/design/dc/dates'
 import { fmtDayFull } from '@/shared/components/calendar/dateMath'
@@ -75,12 +75,16 @@ export function TeamSchedule({ canOpenPeople, onView }: { canOpenPeople: boolean
             <Button variant="secondary" size={38} onClick={() => move(1)}>Next →</Button>
           </>
         )} />
-      <Section title="Schedule" level={2} body="flush" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching}
-        className="tm-sched" sub={timeOff.error ? 'Work from home and waiting requests couldn’t be loaded; shifts, leave and days off are shown.' : undefined}>
-        <WeekGrid days={days} rows={pageRows} label={`Team schedule, ${label}`} variant="tiles" coverage={coverage}
-          loading={q.isLoading} loadingRows={6} onWeekChange={(d) => move(d)}
-          empty="No one in your team scope. Shifts for the people who report to you appear here." />
-      </Section>
+      {timeOff.error ? (
+        <Callout tone="warning" icon="alertTriangle">Work from home and waiting requests couldn’t be loaded just now; shifts, leave and days off are shown.</Callout>
+      ) : null}
+      <Card as="section" label="Schedule" padding="none" className="tm-sched">
+        {q.error ? <ErrorState title="Couldn’t load the schedule" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} /> : (
+          <WeekGrid days={days} rows={pageRows} label={`Team schedule, ${label}`} variant="tiles" coverage={coverage}
+            loading={q.isLoading} loadingRows={6} onWeekChange={(d) => move(d)}
+            empty="No one in your team scope. Shifts for the people who report to you appear here." />
+        )}
+      </Card>
       {allRows.length > PER_PAGE && (
         <Pager page={page} pageSize={PER_PAGE} total={allRows.length} onPageChange={setPage} noun="people" />
       )}
