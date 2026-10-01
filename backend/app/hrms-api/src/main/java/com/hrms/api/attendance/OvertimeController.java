@@ -20,10 +20,13 @@ public class OvertimeController {
  private final JdbcTemplate jdbc;
  private final NamedParameterJdbcTemplate named;
  private final OvertimeReasons reasons;
- /** Company overtime rules (BW-29). No rule, or no table, leaves the list and decisions exactly as they were. */
+ /** Company overtime rules (DECISIONS 22): the minimum (60 minutes when a company set none, or without the table) and the cap. */
  private final OvertimeRules rules;
  @org.springframework.beans.factory.annotation.Autowired(required=false)
  private org.springframework.context.ApplicationEventPublisher eventPublisher;
+ /** The monthly cap, shared with overtime requests. */
+ @org.springframework.beans.factory.annotation.Autowired(required=false)
+ private OvertimeCap cap;
  public OvertimeController(TeamEmployeeScope scope,JdbcTemplate jdbc,NamedParameterJdbcTemplate named,OvertimeReasons reasons,OvertimeRules rules) {this.scope=scope;this.jdbc=jdbc;this.named=named;this.reasons=reasons;this.rules=rules;}
  public record Decision(@Size(max=1000) String note) {}
  /** The employee's own explanation for an overtime entry. */
@@ -64,44 +67,40 @@ public class OvertimeController {
   if(employees.isEmpty())return Map.of("content",List.of(),"totalElements",0);
   var params=Map.of("tenant",TenantContext.requireTenantId(),"employees",employees,"from",from,"to",to,"offset",page*20);
   String where=" WHERE r.tenant_id=:tenant AND r.employee_id IN (:employees) AND r.attendance_date BETWEEN :from AND :to AND r.overtime_minutes>0 AND r.check_out_at IS NOT NULL";
-  // A company "counts after" rule (BW-29) changes which rows are overtime; without one, this is today's list exactly.
-  if(rules!=null&&rules.countsAfterInUse(TenantContext.requireTenantId()))return listCounted(params,where);
-  var content=named.queryForList("""
-   SELECT r.id,r.employee_id AS "employeeId",concat_ws(' ',e.first_name,e.last_name) AS "employeeName",
-    r.attendance_date AS date,r.overtime_minutes AS minutes,
-    CASE WHEN d.reviewed_minutes=r.overtime_minutes THEN d.status ELSE 'PENDING' END AS status,
-    d.note,d.decided_at AS "decidedAt",NULLIF(concat_ws(' ',reviewer.first_name,reviewer.last_name),'') AS "decidedBy",
-   """+DETAILS_SQL+"""
-   FROM attendance.records r JOIN hrms.employees e ON e.id=r.employee_id AND e.tenant_id=r.tenant_id
-   LEFT JOIN attendance.overtime_decisions d ON d.record_id=r.id AND d.tenant_id=r.tenant_id
-   LEFT JOIN hrms.employees reviewer ON reviewer.id=d.decided_by AND reviewer.tenant_id=r.tenant_id
-   """+SHIFT_JOIN+where+" ORDER BY r.attendance_date DESC,e.first_name,r.id LIMIT 20 OFFSET :offset",params);
-  Long count=named.queryForObject("SELECT count(*) FROM attendance.records r"+where,params,Long.class);
-  return Map.of("content",content,"totalElements",count);
+  return listCounted(params,where,rules!=null&&rules.tableReady());
  }
- /** The person's company's rules: {@code orr.counts_after_minutes} is null for a company without them. */
+ /** The person's company's rules: {@code orr.minimum_minutes} is null for a company that set none. */
  static final String RULES_JOIN=" LEFT JOIN attendance.overtime_rules orr ON orr.tenant_id=r.tenant_id AND orr.company_id=e.company_id\n";
- /** Only the minutes past "counts after" are overtime; a day with none left is not listed. */
- static final String COUNTED_WHERE=" AND r.overtime_minutes>COALESCE(orr.counts_after_minutes,0)";
+ /** The minimum in force for the row: the company's, else the default (also when the rules table is missing). */
+ static String minimumExpr(boolean rulesTable) {
+  return rulesTable?"COALESCE(orr.minimum_minutes,"+OvertimeRules.DEFAULT_MINIMUM+")":String.valueOf(OvertimeRules.DEFAULT_MINIMUM);
+ }
  /**
-  * The list when some company has a "counts after" rule: the same rows and fields, less the days whose extra time is
-  * all inside the uncounted minutes, and each row gains {@code countedMinutes}, the part that counts. {@code minutes}
-  * stays the stored overtime, which the rules never change.
+  * A day is overtime when its extra time reaches the minimum (a threshold, DECISIONS 22), or when it was already
+  * decided for the minutes stored now (decisions made before the minimum existed stay on the list as they were).
   */
- Map<String,Object> listCounted(Map<String,Object> params,String where) {
+ static String countedWhere(boolean rulesTable) {
+  return " AND (r.overtime_minutes>="+minimumExpr(rulesTable)+" OR d.reviewed_minutes=r.overtime_minutes)";
+ }
+ /**
+  * The Overtime list (BW-29 as changed on 2 Oct 2026): today's rows and fields, less the days whose extra time is
+  * under the minimum, and each row gains {@code countedMinutes} (all of the stored minutes once the minimum is reached)
+  * and {@code minimumMinutes}. {@code minutes} stays the stored overtime, which the rules never change.
+  */
+ Map<String,Object> listCounted(Map<String,Object> params,String where,boolean rulesTable) {
+  String min=minimumExpr(rulesTable),join=rulesTable?RULES_JOIN:"\n",counted=countedWhere(rulesTable);
   var content=named.queryForList("""
    SELECT r.id,r.employee_id AS "employeeId",concat_ws(' ',e.first_name,e.last_name) AS "employeeName",
     r.attendance_date AS date,r.overtime_minutes AS minutes,
     CASE WHEN d.reviewed_minutes=r.overtime_minutes THEN d.status ELSE 'PENDING' END AS status,
     d.note,d.decided_at AS "decidedAt",NULLIF(concat_ws(' ',reviewer.first_name,reviewer.last_name),'') AS "decidedBy",
-   """+DETAILS_SQL+"""
-   ,GREATEST(0,r.overtime_minutes-COALESCE(orr.counts_after_minutes,0)) AS "countedMinutes"
+   """+DETAILS_SQL+"   ,r.overtime_minutes AS \"countedMinutes\","+min+" AS \"minimumMinutes\"\n"+"""
    FROM attendance.records r JOIN hrms.employees e ON e.id=r.employee_id AND e.tenant_id=r.tenant_id
    LEFT JOIN attendance.overtime_decisions d ON d.record_id=r.id AND d.tenant_id=r.tenant_id
    LEFT JOIN hrms.employees reviewer ON reviewer.id=d.decided_by AND reviewer.tenant_id=r.tenant_id
-   """+RULES_JOIN+SHIFT_JOIN+where+COUNTED_WHERE+" ORDER BY r.attendance_date DESC,e.first_name,r.id LIMIT 20 OFFSET :offset",params);
+   """+join+SHIFT_JOIN+where+counted+" ORDER BY r.attendance_date DESC,e.first_name,r.id LIMIT 20 OFFSET :offset",params);
   Long count=named.queryForObject("SELECT count(*) FROM attendance.records r JOIN hrms.employees e ON e.id=r.employee_id AND e.tenant_id=r.tenant_id"
-    +RULES_JOIN+where+COUNTED_WHERE,params,Long.class);
+    +" LEFT JOIN attendance.overtime_decisions d ON d.record_id=r.id AND d.tenant_id=r.tenant_id"+join+where+counted,params,Long.class);
   return Map.of("content",content,"totalElements",count);
  }
  @PostMapping("/{id}/approve")
@@ -133,14 +132,14 @@ public class OvertimeController {
   if(scope.resolve(jwt,null).stream().noneMatch(e->e.getId().equals(employee)))throw new BusinessRuleException("Employee is outside your approval scope","OVERTIME_SCOPE_DENIED");
   int minutes=((Number)rows.getFirst().get("overtime_minutes")).intValue();
   if(jdbc.queryForObject("SELECT count(*) FROM attendance.overtime_decisions WHERE tenant_id=? AND record_id=? AND reviewed_minutes=?",Integer.class,tenant,id,minutes)>0)throw new BusinessRuleException("This overtime has already been reviewed","OVERTIME_ALREADY_REVIEWED");
-  // Company rules (BW-29): only the counted part is overtime, and approvals stop at the monthly cap. Without rules
-  // the counted part is all of it and nothing here changes. The stored minutes are what gets reviewed either way.
+  // Company rules (DECISIONS 22): extra time under the minimum (60 minutes unless the company changed it) isn't
+  // overtime; from the minimum on, all of it is. Approvals stop at the monthly cap. The stored minutes are what is reviewed.
   OvertimeRules.Rules companyRules=rulesFor(tenant,employee);
   int counted=companyRules.counted(minutes);
-  if(counted<=0)throw new BusinessRuleException("This extra time is within the first "+companyRules.countsAfterMinutes()+" minutes after the shift, which don't count as overtime","OVERTIME_NOT_COUNTED");
+  if(counted<=0)throw new BusinessRuleException("This extra time is under the "+OvertimeCap.hm(companyRules.minimumMinutes())+" minimum, so it isn't overtime","OVERTIME_NOT_COUNTED");
   if("APPROVED".equals(status)&&companyRules.monthlyCapMinutes()!=null){
    java.sql.Date day=(java.sql.Date)rows.getFirst().get("attendance_date");
-   requireWithinMonthlyCap(tenant,employee,id,day.toLocalDate(),counted,companyRules);
+   (cap!=null?cap:new OvertimeCap(jdbc)).requireWithin(tenant,employee,day.toLocalDate(),counted,companyRules.monthlyCapMinutes(),id,null);
   }
   UUID actor=UUID.fromString(jwt.getClaimAsString("employee_id")!=null?jwt.getClaimAsString("employee_id"):jwt.getSubject());
   jdbc.update("""
@@ -163,31 +162,5 @@ public class OvertimeController {
   if(rules==null||!rules.tableReady())return OvertimeRules.Rules.none(null);
   List<UUID> company=jdbc.queryForList("SELECT company_id FROM hrms.employees WHERE id=? AND tenant_id=?",UUID.class,employee,tenant);
   return company.isEmpty()||company.getFirst()==null?OvertimeRules.Rules.none(null):rules.forCompany(tenant,company.getFirst());
- }
- /**
-  * Refuses an approval that would take the person past the monthly cap: the counted minutes already approved in the
-  * record's calendar month (decisions still in force, i.e. for the minutes stored now), plus this one. Locked per
-  * person, so two approvers acting at once can't both slip under the cap.
-  */
- void requireWithinMonthlyCap(UUID tenant,UUID employee,UUID record,LocalDate day,int counted,OvertimeRules.Rules r) {
-  jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",(org.springframework.jdbc.core.ResultSetExtractor<Void>)rs->null,
-    "overtime-cap:"+tenant+":"+employee);
-  int after=r.countsAfterMinutes()==null?0:Math.max(0,r.countsAfterMinutes());
-  Integer approved=jdbc.queryForObject("""
-   SELECT COALESCE(SUM(GREATEST(0,d.reviewed_minutes-?)),0)::int FROM attendance.overtime_decisions d
-   JOIN attendance.records rec ON rec.id=d.record_id AND rec.attendance_date=d.record_date AND rec.tenant_id=d.tenant_id
-   WHERE d.tenant_id=? AND rec.employee_id=? AND d.status='APPROVED' AND d.reviewed_minutes=rec.overtime_minutes
-     AND d.record_date BETWEEN ? AND ? AND d.record_id<>?
-   """,Integer.class,after,tenant,employee,day.withDayOfMonth(1),day.withDayOfMonth(day.lengthOfMonth()),record);
-  int already=approved==null?0:approved;
-  if(already+counted>r.monthlyCapMinutes())throw new BusinessRuleException(
-    "This would take them past the monthly overtime cap of %s (%s already approved in %s)".formatted(
-      hm(r.monthlyCapMinutes()),hm(already),day.getMonth().getDisplayName(java.time.format.TextStyle.FULL,java.util.Locale.ENGLISH)),
-    "OVERTIME_MONTHLY_CAP_REACHED");
- }
- /** 150 → "2h 30m", 120 → "2h", 45 → "45m". */
- static String hm(int minutes) {
-  int h=minutes/60,m=minutes%60;
-  return h>0&&m>0?h+"h "+m+"m":h>0?h+"h":m+"m";
  }
 }
