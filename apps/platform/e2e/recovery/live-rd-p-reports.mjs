@@ -322,11 +322,21 @@ async function uiPhase() {
     const made = await row.first().waitFor({ timeout: 10_000 }).then(() => true, () => false)
     check('center: a weekday email at 11:00 is set up in the panel', made && num(`select count(*) from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}' and frequency='WEEKDAYS' and send_hour=11`) === 1)
     for (const id of sql(`select id from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}'`).split('\n').filter(Boolean)) fx.schedules.push(id)
+    // The panel slides out first; the row menu, then the confirm dialog.
+    await panel.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {})
+    await o.page.waitForTimeout(500)
     await row.first().getByRole('button', { name: /More actions for the headcount/ }).click()
     await o.page.getByRole('menuitem', { name: /Delete/ }).click()
     const confirm = o.page.getByRole('dialog', { name: 'Delete this scheduled email?' })
-    await confirm.getByRole('button', { name: 'Delete' }).click()
+    await confirm.waitFor({ timeout: 10_000 })
+    await o.page.waitForTimeout(400)
+    await Promise.all([
+      o.page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes('/v1/reports/schedules/'), { timeout: 15_000 }).catch(() => null),
+      confirm.getByRole('button', { name: 'Delete', exact: true }).click(),
+    ])
     await row.first().waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {})
+    await confirm.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {})
+    if ((await row.count()) > 0) await shot(o.page, 'debug-delete-failed')
     check('center: the email is deleted from the row menu', (await row.count()) === 0 && num(`select count(*) from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}'`) === 0)
     await o.page.getByRole('button', { name: 'Attrition report' }).click()
     await o.page.waitForURL((u) => u.pathname === '/hrms/reports/attrition', { timeout: 15_000 }).catch(() => {})
