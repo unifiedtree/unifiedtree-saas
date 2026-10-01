@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { NOTIFICATION_TYPES, groupFor, iconForGroup, isWebShapedRoute, timeAgo, webRouteFor, withinDays } from './notificationRoutes'
+import { PAGE_REGISTRY } from '@/shared/navigation/pageRegistry'
+import { NOTIFICATION_TYPES, groupFor, iconForGroup, isWebShapedRoute, livePath, timeAgo, webRouteFor, withinDays } from './notificationRoutes'
 
 // Every route pattern App.tsx registers ("/hrms/employees/:id" → a regex).
 const appSource = readFileSync(fileURLToPath(new URL('../../App.tsx', import.meta.url)), 'utf8')
@@ -15,7 +16,7 @@ const CATALOG: Record<string, string> = {
   LEAVE_ENCASHMENT_SUBMITTED: 'Leave', LEAVE_ENCASHMENT_APPROVED: 'Leave', LEAVE_ENCASHMENT_REJECTED: 'Leave',
   WFH_SUBMITTED: 'Work from home', WFH_APPROVED: 'Work from home', WFH_REJECTED: 'Work from home', WFH_CANCELLED: 'Work from home',
   CORRECTION_SUBMITTED: 'Attendance', CORRECTION_APPROVED: 'Attendance', CORRECTION_REJECTED: 'Attendance',
-  OVERTIME_APPROVED: 'Attendance', OVERTIME_REJECTED: 'Attendance', FACE_ENROLLMENT_COMPLETE: 'Attendance', FACE_ENROLLMENT_FAILED: 'Attendance',
+  OVERTIME_REQUESTED: 'Attendance', OVERTIME_APPROVED: 'Attendance', OVERTIME_REJECTED: 'Attendance', FACE_ENROLLMENT_COMPLETE: 'Attendance', FACE_ENROLLMENT_FAILED: 'Attendance',
   ATTENDANCE_STATUS_CHANGED: 'Attendance', CHECKIN_REMINDER: 'Attendance', TIMESHEET_SUBMITTED: 'Attendance', TIMESHEET_DECIDED: 'Attendance',
   SHIFT_CHANGE_SUBMITTED: 'Shifts', SHIFT_CHANGE_APPROVED: 'Shifts', SHIFT_CHANGE_REJECTED: 'Shifts',
   EXPENSE_SUBMITTED: 'Expenses and advances', EXPENSE_APPROVED: 'Expenses and advances', EXPENSE_REJECTED: 'Expenses and advances',
@@ -60,6 +61,8 @@ describe('notification routes', () => {
     expect(webRouteFor('EXPENSE_REJECTED', { route: '/my-claims' })).toBe('/hrms/expenses?tab=my')
     expect(webRouteFor('ADVANCE_APPROVED', { route: '/my-advances' })).toBe('/hrms/advances?tab=my')
     expect(webRouteFor('OVERTIME_APPROVED', { route: '/attendance' })).toBe('/hrms/attendance?tab=my')
+    expect(webRouteFor('OVERTIME_REQUESTED', { route: '/hrms/shifts?tab=overtime' })).toBe('/hrms/shifts?tab=overtime')
+    expect(webRouteFor('OVERTIME_REQUESTED', null)).toBe('/hrms/shifts?tab=overtime')
     expect(webRouteFor('DOCUMENT_UPLOADED', { route: '/documents/pending' })).toBe('/hrms/documents/pending')
     expect(webRouteFor('DOCUMENT_VERIFIED', { route: '/profile' })).toBe('/hrms/documents?view=my')
   })
@@ -71,7 +74,9 @@ describe('notification routes', () => {
     expect(webRouteFor('PROBATION_TEAM_DECISION', { route: '/notifications', employeeId: 'e1' }, { employeeId: 'e1' })).toBe('/profile')
     expect(webRouteFor('PROBATION_TEAM_DECISION', { route: '/notifications', employeeId: 'e1' }, { employeeId: 'hr' })).toBe('/hrms/employees/e1')
     // Pages that aren't live in this release are never targets.
-    expect(webRouteFor('TIMESHEET_DECIDED', null)).toBe('/hrms/attendance')
+    const timesheetLive = PAGE_REGISTRY.some((e) => e.path === '/hrms/attendance?tab=timesheet')
+    expect(webRouteFor('TIMESHEET_DECIDED', null)).toBe(timesheetLive ? '/hrms/attendance?tab=timesheet' : '/hrms/attendance')
+    expect(livePath('/no/such/page', '/hrms/attendance')).toBe('/hrms/attendance')
   })
   it('keeps the cancelled fan-out per recipient', () => {
     expect(webRouteFor('LEAVE_CANCELLED', { audience: 'approver' })).toBe('/hrms/leave?tab=approvals')
