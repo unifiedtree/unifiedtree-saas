@@ -26,7 +26,7 @@ export class ProcessPipeline extends DCLogic<{ steps: PipelineStep[]; aside?: Pi
     const steps = p.steps || [], aside = p.aside ?? null, loading = !!p.loading, TONES = ['gray', 'blue', 'teal', 'green', 'red']
     const inRow = w >= steps.length * 200 + (steps.length - 1) * 16
     const bar = (bw: number, bh: number) => createElement('span', { 'aria-hidden': true, style: { display: 'inline-block', width: bw, height: bh, borderRadius: 8, background: '#eef2f5', animation: 'ut-pulse 1.4s ease-in-out infinite' } })
-    const big = (v: string) => createElement('strong', { style: { fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: 26, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-.02em', color: '#0f172a', fontVariantNumeric: 'tabular-nums' } }, v)
+    const big = (v: string) => createElement('strong', { style: { fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: 26, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-.02em', color: '#0f172a', fontVariantNumeric: 'tabular-nums' } }, v)
     const all = steps.map((s, i) => ({ ...s, main: true, idx: i })).concat(aside ? [{ ...aside, main: false, idx: -1 }] : [])
     const tiles = all.map((s) => {
       const tone = TONES.includes(s.tone || '') ? s.tone : 'gray', on = !!s.active, click = typeof s.onSelect === 'function', idle = !on && s.main

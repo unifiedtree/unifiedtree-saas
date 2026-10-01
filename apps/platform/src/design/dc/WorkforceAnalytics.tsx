@@ -51,7 +51,7 @@ function ExportMenu({ busy, onPick, allow }: { busy: boolean; onPick: (k: Export
   }, [open])
   const item = (k: ExportKind, label: string, sub: string) => h('button', {
     type: 'button', role: 'menuitem', key: k, onClick: () => { setOpen(false); onPick(k) },
-    style: { display: 'flex', flexDirection: 'column', gap: 1, width: '100%', textAlign: 'left', padding: '8px 11px', border: 0, background: 'transparent', borderRadius: 8, cursor: 'pointer', font: "600 13.5px 'Plus Jakarta Sans',sans-serif", color: '#0f172a' },
+    style: { display: 'flex', flexDirection: 'column', gap: 1, width: '100%', textAlign: 'left', padding: '8px 11px', border: 0, background: 'transparent', borderRadius: 8, cursor: 'pointer', font: "600 13.5px var(--u-font,'Inter',system-ui,sans-serif)", color: '#0f172a' },
     onMouseEnter: (e: any) => (e.currentTarget.style.background = '#f0fdf4'), onMouseLeave: (e: any) => (e.currentTarget.style.background = 'transparent'),
   }, label, h('span', { style: { fontSize: 11.5, fontWeight: 500, color: '#64748b' } }, sub))
   return h('div', { ref, style: { position: 'relative' } },

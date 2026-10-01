@@ -4,7 +4,7 @@
 //
 // A guard gets `proceed` (carry on with the move) and returns true when it stopped the move (it will
 // call `proceed` itself if the person chooses to leave), false to let it through. The shell runs the
-// guards before every move it makes (rail, Pages panel, More, the settings pages, Home), and a page's
+// guards before every move it makes (rail, the top bar's page tabs, More, the settings pages, Home), and a page's
 // own section navigation can use runNavigationGuards() the same way.
 //
 // This replaces `window.__utLeaveGuard`. That global still works while pages move over: the shell

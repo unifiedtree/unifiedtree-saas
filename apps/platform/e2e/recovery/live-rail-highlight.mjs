@@ -5,8 +5,8 @@
 // opened: a card on Home, a button on a page, search, Back or a new sign-in go by the page alone.
 // Settings pages light More (which replaced the header gear) and no rail item; HR setup's pages light
 // HR setup, Workforce's rules and policy documents light Workforce, Payroll settings light Payroll,
-// expense policies light Expenses (or More, when that item moved into More for lack of room). Pages
-// in a module's Pages panel keep the module lit.
+// expense policies light Expenses (or More, when that item moved into More for lack of room). A
+// module's pages (tabs along the top bar since Release 1.1; the left Pages panel is gone) keep the module lit.
 // Read-only: it only opens pages (and signs out and in once).
 //
 //   RECOVERY_APP_URL=http://demo.localhost:3115 node e2e/recovery/live-rail-highlight.mjs
@@ -52,11 +52,11 @@ const rail = (page) => page.evaluate((sel) => {
   const links = nav ? [...nav.querySelectorAll('a.ut-rail__item')] : []
   return { items: links.map((a) => a.title), lit: links.filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.title), more: nav?.querySelector('.ut-rail__more')?.getAttribute('aria-current') === 'page' }
 }, RAIL)
-// The Pages panel (it replaced the "<Module> sections" tab row under the header).
+// The module's pages: the top bar's tabs (Release 1.1; before, the left Pages panel).
 const panel = (page) => page.evaluate(() => {
-  const nav = [...document.querySelectorAll('nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
+  const nav = [...document.querySelectorAll('.ut-topbar nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
   if (!nav) return null
-  const label = (a) => a.querySelector('.ut-pages__label')?.textContent.trim()
+  const label = (a) => a.textContent.replace(/\s+/g, ' ').trim()
   const links = [...nav.querySelectorAll('a')]
   return { label: nav.getAttribute('aria-label'), pages: links.map(label), current: links.filter((a) => a.getAttribute('aria-current') === 'page').map(label) }
 })
@@ -71,7 +71,7 @@ async function clickRail(page, title) {
 }
 async function clickPage(page, label) {
   const p = await panel(page)
-  await page.locator(`nav[aria-label="${p.label}"]`).getByRole('link', { name: label, exact: true }).click()
+  await page.locator(`.ut-topbar nav[aria-label="${p.label}"]`).getByRole('link', { name: label, exact: true }).click()
   await settle(page)
 }
 // A link opened with nothing remembered in this browser tab (bookmark, email link, a new tab):
@@ -140,7 +140,7 @@ try {
       check(`${who}: the rail shows`, items.length > 0, items.join(', '))
       const has = (t) => items.includes(t)
 
-      // Every rail item: the clicked one is the only one lit; every page in its Pages panel keeps it lit.
+      // Every rail item: the clicked one is the only one lit; every page in its top tabs keeps it lit.
       const bad = []
       for (const title of items) {
         await clickRail(page, title)
@@ -156,7 +156,7 @@ try {
           else if (!after || after.label !== p.label || !after.current.includes(pg)) bad.push(`${title} › ${pg}: panel ${JSON.stringify(after)}`)
         }
       }
-      check(`${who}: every rail item and every page in its Pages panel keeps that item lit`, !bad.length, bad.slice(0, 4).join(' | '))
+      check(`${who}: every rail item and every page in its top tabs keeps that item lit`, !bad.length, bad.slice(0, 4).join(' | '))
 
       if (has('Leave')) {
         await clickRail(page, 'Leave')
@@ -168,7 +168,7 @@ try {
           const old = await leaveClickOn(before, email)
           check(`${who}: Leave click opens the same page and view as before`, old.at === opened.at && old.view === opened.view, `before ${JSON.stringify(old)}, now ${JSON.stringify(opened)}`)
         }
-        check(`${who}: Leave (one page) opens no Pages panel`, !(await panel(page)), JSON.stringify(await panel(page)))
+        check(`${who}: Leave (one page) shows no page tabs, only its name`, !(await panel(page)), JSON.stringify(await panel(page)))
         if (shots && who === 'mgr') await page.screenshot({ path: `${shots}/railfix-mgr-leave-click-1440.png` })
         await page.reload(); await settle(page)
         r = await litOnly(page, 'Leave')
@@ -176,7 +176,7 @@ try {
       }
 
       // My work: a page it shares with an admin item keeps the My work item lit when you came through it,
-      // with its Pages panel when it has several pages.
+      // with its pages as top tabs when it has several.
       for (const [item, pageLabel, path] of [['My leave', 'Leave', '/hrms/leave'], ['My time', 'Attendance', '/hrms/attendance'], ['My documents', 'Letters', '/hrms/letters/my']]) {
         if (!has(item)) continue
         await clickRail(page, item)
@@ -184,7 +184,7 @@ try {
         if (p && !p.current.includes(pageLabel)) { await clickPage(page, pageLabel); p = await panel(page) }
         const r = await litOnly(page, item)
         const panelOk = !p || p.current.includes(pageLabel)
-        check(`${who}: ${item} → ${pageLabel} keeps ${item} lit${p ? ' with its Pages panel' : ''}`, r.ok && panelOk && new URL(page.url()).pathname === path, `${r.detail}; panel ${JSON.stringify(p)}`)
+        check(`${who}: ${item} → ${pageLabel} keeps ${item} lit${p ? ' with its page tabs' : ''}`, r.ok && panelOk && new URL(page.url()).pathname === path, `${r.detail}; panel ${JSON.stringify(p)}`)
         if (item === 'My leave') {
           if (shots && who === 'mgr') await page.screenshot({ path: `${shots}/railfix-mgr-my-leave-1440.png` })
           await page.reload(); await settle(page)
@@ -351,9 +351,6 @@ try {
       }
       if (has('My time') && has('Leave')) {
         await mobileGo(page, 'Leave'); await mobileGo(page, 'My time')
-        // My time has several pages: on a phone its Pages panel opens over the page; close it.
-        const hide = page.getByRole('button', { name: 'Hide pages' })
-        if (await hide.isVisible().catch(() => false)) await hide.click()
         await page.goBack(); await settle(page)
         const r = await mobileLitIs(page, 'Leave')
         check(`${who} (phone): Leave, My time, then Back to /hrms/leave lights Leave`, r.ok && new URL(page.url()).pathname === '/hrms/leave', r.detail)

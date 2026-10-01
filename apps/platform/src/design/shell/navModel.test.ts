@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccessContext } from '@/shared/navigation/access'
 import {
-  activePage, fitRail, isMorePath, isSettingsPath, moduleTarget, NAV_MODULES, owningModules, preferencesTarget, railGroups,
+  activePage, drawsOwnPages, fitRail, isMorePath, litPage, isSettingsPath, moduleTarget, NAV_MODULES, owningModules, preferencesTarget, railGroups,
   readLastPages, readPinned, saveLastPage, savePinned, settingsActive, settingsPages, SETTINGS_PAGES, type VisibleGroup,
 } from './navModel'
 import { pageTitleLabel } from './pageTitle'
@@ -205,5 +205,24 @@ describe('browser tab titles stay as they were', () => {
     expect(pageTitleLabel('/hrms/expenses', ctx(EMPLOYEE))).toBe('Expense Center')
     expect(pageTitleLabel('/team', ctx(DEPT_MANAGER))).toBe('My Team')
     expect(pageTitleLabel('/hrms/attendance', ctx(DEPT_MANAGER))).toBe('Daily Tracking')
+  })
+})
+
+describe('the top bar’s page tabs (Release 1.1)', () => {
+  const master = NAV_MODULES.find((m) => m.key === 'master')!
+  it('lights the page the address belongs to', () => {
+    expect(litPage('master', master.pages, '/hrms/master/shift-rules')?.label).toBe('Rules & Policies')
+    expect(litPage('master', master.pages, '/hrms/master')?.label).toBe('Overview')
+    expect(litPage('master', master.pages, '/hrms/employees/123')?.label).toBe('Workforce Directory')
+  })
+  it('lights nothing when that page is one the person does not see (not a shorter page that also matches)', () => {
+    const seen = master.pages.filter((p) => ['Overview', 'Workforce Directory', 'Payroll Configuration'].includes(p.label))
+    expect(litPage('master', seen, '/hrms/master/shift-rules')).toBeUndefined()
+    expect(litPage('master', seen, '/hrms/master')?.label).toBe('Overview')
+  })
+  it('the Attendance page still draws its own pages bar, so its module shows no tabs; others do', () => {
+    expect(drawsOwnPages('attendance')).toBe(true)
+    expect(drawsOwnPages('master')).toBe(false)
+    expect(drawsOwnPages('mytime')).toBe(false)
   })
 })

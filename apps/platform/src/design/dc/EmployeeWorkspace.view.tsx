@@ -14,7 +14,7 @@ import './EmployeeWorkspace.view.css'
 export function EmployeeWorkspaceView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "flex", flexDirection: "column", gap: "12px", fontFamily: "'Plus Jakarta Sans',sans-serif", color: "#0f172a", minWidth: "0", fontSize: "13.5px"}}>
+      <div style={{display: "flex", flexDirection: "column", gap: "12px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a", minWidth: "0", fontSize: "13.5px"}}>
         <a onClick={v.back} style={{display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13.5px", fontWeight: "600", color: "#475569", textDecoration: "none", cursor: "pointer", alignSelf: "flex-start"}} className="dc-employee-workspace-0">
           {"← Back"}
         </a>
@@ -105,7 +105,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                             <div role="menu" style={{position: "absolute", right: "0", top: "calc(100% + 6px)", zIndex: "60", minWidth: "200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", boxShadow: "0 16px 40px -14px rgba(15,110,86,.3)", padding: "5px"}}>
                               {arr(v.acts).map((a: any, $index: number) => (
                                 <Fragment key={$index}>
-                                  <button type="button" role="menuitem" onClick={a?.on} style={{display: "block", width: "100%", textAlign: "left", padding: "8px 11px", border: "0", background: "transparent", borderRadius: "8px", font: "600 13.5px 'Plus Jakarta Sans',sans-serif", color: "#0f172a", cursor: "pointer"}} className="dc-employee-workspace-1">
+                                  <button type="button" role="menuitem" onClick={a?.on} style={{display: "block", width: "100%", textAlign: "left", padding: "8px 11px", border: "0", background: "transparent", borderRadius: "8px", font: "600 13.5px var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a", cursor: "pointer"}} className="dc-employee-workspace-1">
                                     {txt(a?.label)}
                                   </button>
                                 </Fragment>
@@ -477,7 +477,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
         {v.dShift ? (
           <>
             <HrDrawer title="Change employee shift" onClose={v.closeD} footer={v.shiftFooter}>
-              <div style={{display: "flex", flexDirection: "column", gap: "16px", fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "13.5px"}}>
+              <div style={{display: "flex", flexDirection: "column", gap: "16px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "13.5px"}}>
                 <div style={{padding: "10px 12px", borderRadius: "10px", background: "#f8fafc", border: "1px solid #e2e8f0"}}>
                   <div style={{fontSize: "11.5px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em"}}>
                     {"Current shift"}
@@ -515,7 +515,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
         {v.dEdit ? (
           <>
             <HrDrawer title="Edit employee" onClose={v.closeD} footer={v.editFooter}>
-              <div style={{display: "flex", flexDirection: "column", gap: "14px", fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "13.5px"}}>
+              <div style={{display: "flex", flexDirection: "column", gap: "14px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "13.5px"}}>
                 <div style={{display: "flex", gap: "8px"}}>
                   {arr(v.steps).map((s: any, $index: number) => (
                     <Fragment key={$index}>
@@ -574,7 +574,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
           </>
         ) : null}
         <Modal open={v.mOpen} onOpenChange={v.mChange} title={v.mTitle} description={v.mDesc} size="sm">
-          <div style={{display: "flex", flexDirection: "column", gap: "12px", marginTop: "14px", fontFamily: "'Plus Jakarta Sans',sans-serif"}}>
+          <div style={{display: "flex", flexDirection: "column", gap: "12px", marginTop: "14px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)"}}>
             {arr(v.mFields).map((f: any, $index: number) => (
               <Fragment key={$index}>
                 <div style={{display: "flex", flexDirection: "column", gap: "6px"}}>

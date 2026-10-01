@@ -1,15 +1,16 @@
-// The top bar (HrmsPlatform.dc.html header): the Pages button, the page's tabs (HeaderTabs portal into
-// the slot here) or one solid pill with the page's name, and on the right the "?q=" filter chip, the
-// search and the bell. On a phone it adds the menu button and wraps the tabs onto a second row.
+// The top bar (HrmsPlatform.dc.html header): on the left the open module's pages as tabs (ModuleTabs),
+// or, for a page that is its module's only page (or belongs to none), one solid pill with its name; on
+// the right the "?q=" filter chip, the search and the bell. On a phone it adds the menu button and puts
+// the tabs on a second row, as a sideways scroller. A page's own views are never up here: they sit inside
+// the page, under this bar (DECISIONS 21).
 import type { ReactNode } from 'react'
 import { PagePill } from '@/design/kit/display'
-import { useHeaderSlotHost } from './HeaderTabs'
 import { ShellIcon } from './shellIcons'
 
 export interface TopBarProps {
-  /** The Pages button (a module with several pages whose panel is closed). */
-  pages: { label: string; onOpen: () => void } | null
-  /** The page's name, shown as one solid pill when the page publishes no tabs. */
+  /** The module's pages as tabs (ModuleTabs), when the module has several pages. */
+  tabs: ReactNode
+  /** The page's name as one solid pill, when there are no tabs. */
   pill: { label: string; icon: string } | null
   /** The page's "?q=" filter (pages that read it). */
   chip: { query: string; onClear: () => void } | null
@@ -23,8 +24,7 @@ export interface TopBarProps {
   mark: ReactNode
 }
 
-export function TopBar({ pages, pill, chip, search, bell, onMenu, onSearch, mark }: TopBarProps) {
-  const { slotRef, hasBar } = useHeaderSlotHost()
+export function TopBar({ tabs, pill, chip, search, bell, onMenu, onSearch, mark }: TopBarProps) {
   return (
     <header className="ut-topbar">
       <div className="ut-topbar__phone">
@@ -34,14 +34,7 @@ export function TopBar({ pages, pill, chip, search, bell, onMenu, onSearch, mark
         <span className="ut-topbar__tile" aria-hidden="true">{mark}</span>
       </div>
       <div className="ut-topbar__main">
-        {pages && (
-          <button type="button" className="ut-topbar__pages" onClick={pages.onOpen} title="Show pages" aria-label={`Show pages: ${pages.label}`}>
-            <ShellIcon name="panelOpen" size={16} />
-            <span className="ut-topbar__pageslabel">{pages.label}</span>
-          </button>
-        )}
-        <div ref={slotRef} className="ut-topbar__slot" data-empty={hasBar ? undefined : ''} />
-        {!hasBar && pill && <PagePill label={pill.label} icon={<ShellIcon name={pill.icon} size={17} />} className="ut-topbar__pill" />}
+        {tabs || (pill && <PagePill label={pill.label} icon={<ShellIcon name={pill.icon} size={16} />} className="ut-topbar__pill" />)}
       </div>
       <div className="ut-topbar__right">
         {chip && (

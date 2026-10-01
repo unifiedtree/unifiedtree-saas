@@ -25,11 +25,11 @@ const SELF_FIRST: RailGroupKey[] = ['home', 'team', 'mine', 'people', 'time', 'p
 const ADMIN_FIRST: RailGroupKey[] = ['home', 'people', 'time', 'pay', 'org', 'insights', 'team', 'mine', 'apps']
 
 export interface NavPage {
-  /** Today's page name (Pages panel row; the page pill). */
+  /** Today's page name (its tab in the top bar; the page pill). */
   label: string
   /** Where it opens; a My work page may carry the tab it opens on (?tab=my). */
   path: string
-  /** Other routes that belong to this page (its lit row in the Pages panel). */
+  /** Other routes that belong to this page (its tab is lit on them). */
   also?: string[]
   /** Owns only its own address, not the ones under it (Home at /me doesn't own /me/payslips). */
   exact?: boolean
@@ -154,6 +154,16 @@ export const NAV_MODULES: readonly NavModule[] = [
   { key: 'procurement', label: 'Purchase', icon: 'cart', group: 'apps', app: 'purchase', pages: [{ label: 'Procurement', path: '/procurement', also: ['/purchase'] }] },
 ]
 
+/**
+ * Modules whose pages still draw the module's pages themselves, inside the page: the Attendance page's
+ * "Attendance sections" bar (Analytics, Daily Tracking, Shifts & Overtime), until that page is rebuilt.
+ * The top bar then shows the page's name as one pill rather than the same pages again as tabs. When the
+ * rebuilt page drops its own bar, remove its key here so the top bar shows the module's pages.
+ * (Payroll's and Workforce's own bars are hidden instead, by the shell's CSS, while the top bar shows them.)
+ */
+export const OWN_PAGES_BAR: ReadonlySet<string> = new Set(['attendance'])
+export const drawsOwnPages = (moduleKey: string) => OWN_PAGES_BAR.has(moduleKey)
+
 // ── Settings: not a rail module (More → Settings → Preferences opens it; More lights on it) ──
 
 /** Settings addresses that must pass their route guard as well as their menu rule (App.tsx). */
@@ -242,7 +252,7 @@ export function railGroups(ctx: AccessContext, opts: RailOptions): VisibleGroup[
     .filter((g) => g.modules.length > 0)
 }
 
-/** The settings pages this person may see (the settings module's Pages panel). */
+/** The settings pages this person may see (the top bar's tabs on a settings page). */
 export function settingsPages(ctx: AccessContext): NavPage[] {
   return SETTINGS_PAGES.filter((p) => pageVisible(p, undefined, ctx))
 }
@@ -279,6 +289,18 @@ export function activePage(pages: readonly NavPage[], pathname: string): NavPage
   let best: NavPage | undefined, score = 0
   for (const p of pages) { const s = pageScore(p, pathname); if (s > score) { best = p; score = s } }
   return best
+}
+
+/**
+ * The page of a module to light for this address, among the pages this person sees. The best match is
+ * found among ALL the module's pages, so an address that belongs to a page the person doesn't see
+ * (Workforce's Rules & Policies for Finance) lights none, rather than a shorter page that also matches
+ * (Overview at /hrms/master).
+ */
+export function litPage(moduleKey: string, visible: readonly NavPage[], pathname: string): NavPage | undefined {
+  const all = NAV_MODULES.find((m) => m.key === moduleKey)?.pages ?? visible
+  const best = activePage(all, pathname)
+  return best ? visible.find((p) => p.path === best.path) : undefined
 }
 
 /** The rail modules that own this address (railLit decides which one to light). */

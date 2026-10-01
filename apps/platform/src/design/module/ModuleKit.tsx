@@ -20,8 +20,8 @@ import { SectionHeading } from '@/design/kit/Section'
 import { ErrorState } from '@/design/kit/EmptyState'
 import './ModuleKit.css'
 
-export const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
-export const HEAD_FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
+export const FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
+export const HEAD_FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
 /** The design's card surface (UtSection): white, 18px corners, hairline, card shadow. */
 export const CARD: CSSProperties = { background: 'var(--u-sf,#fff)', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 18, boxShadow: 'var(--u-shc,0 1px 2px rgba(14,27,22,.05))', minWidth: 0 }
 
@@ -39,9 +39,10 @@ export function ModulePage({ crumb, title, subtitle, actions, children, gap = 20
 
 export interface ViewTab { key: string; label: string; count?: number | string | null; urgent?: boolean; icon?: string; tip?: string }
 /**
- * The design's view pills. The active one is kept in ?view= (or the given param) so links and Back work.
- * `placement="header"` puts a page's top-level bar into the shell's top bar (SHELL CONTRACT 1);
- * the default `'inline'` keeps it where it stands.
+ * The page's own views, as the kit's lighter in-page pills, inside the page under the top bar. The
+ * active one is kept in ?view= (or the given param) so links and Back work. The top bar shows the
+ * module's pages (SHELL CONTRACT UPDATE, DECISIONS 21), so `placement` no longer moves the bar: both
+ * values render it here (the prop stays for the callers that pass it).
  */
 export function Views({ items, active, onChange, label = 'Views', placement = 'inline' }: { items: ViewTab[]; active: string; onChange: (k: string) => void; label?: string; placement?: 'header' | 'inline' }) {
   return h(SubTabs as any, {

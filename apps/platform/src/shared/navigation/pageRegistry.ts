@@ -42,7 +42,7 @@ export interface PageEntry {
 
 /**
  * Release switch (lead-owned): the redesign packages whose new pages and tabs are live. A page or tab
- * declared with `pkg` is left out of PAGE_REGISTRY (search, menus, Pages panel counts) until its
+ * declared with `pkg` is left out of PAGE_REGISTRY (search, menus) until its
  * package is listed here, so nothing points at a page that isn't built yet; today's page is all there
  * is. Add a package's key when it ships, e.g. new Set(['P-TEAM']).
  */

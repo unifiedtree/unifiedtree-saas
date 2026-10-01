@@ -45,7 +45,7 @@ export function PastBanner({ sel, onBack }: { sel: string; onBack: () => void })
     <div role="status" className="ud-past">
       <span className="ud-past__ic" aria-hidden="true">{dashIcon('calendarDays', 18)}</span>
       <span className="ud-past__txt">
-        Viewing <strong>{fmtWd(sel)}</strong>. Every card shows that day as it was, except Upcoming milestones, which counts from today. Anything marked “As of today” keeps no history, so it shows today.
+        Viewing <strong>{fmtWd(sel)}</strong>. Every card shows that day as it was, except the holidays, birthdays, anniversaries and retirements in Upcoming events, which count from today. Anything marked “As of today” keeps no history, so it shows today.
       </span>
       <Button variant="secondary" size={32} onClick={onBack}>Back to today</Button>
     </div>
