@@ -176,6 +176,7 @@ public class GlobalSearchService {
             case OFFER -> queries.offers(tenant, words, limit).stream().map(GlobalSearchService::offerHit).toList();
             case JOB -> queries.jobs(tenant, words, limit).stream().map(GlobalSearchService::jobHit).toList();
             case POLICY -> queries.policies(tenant, reach != Reach.ALL, words, limit).stream().map(r -> policyHit(r, reach)).toList();
+            case HOLIDAY -> queries.holidays(tenant, c.employeeId(), LocalDate.now().getYear(), words, limit).stream().map(GlobalSearchService::holidayHit).toList();
         };
     }
 
@@ -288,6 +289,15 @@ public class GlobalSearchService {
                 r.effective() == null ? null : "effective " + day(r.effective()));
         return new SearchHit(SearchType.POLICY.key, r.id().toString(), r.title(), sub, url,
                 reach == Reach.ALL && !"ACTIVE".equals(r.status()) ? tab : null);
+    }
+
+    /** "Diwali", "Thu, 12 Nov 2026 · National holiday"; opens the Leave page's Holidays tab. */
+    static SearchHit holidayHit(GlobalSearchQueries.HolidayRow r) {
+        String when = r.on() == null ? null
+                : r.on().getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + ", " + day(r.on());
+        String kind = r.type() == null || r.type().isBlank() ? "Holiday" : pretty(r.type()) + " holiday";
+        return new SearchHit(SearchType.HOLIDAY.key, r.id().toString(), r.name(), joinNonBlank(" · ", when, kind),
+                "/hrms/leave?tab=holidays", null);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

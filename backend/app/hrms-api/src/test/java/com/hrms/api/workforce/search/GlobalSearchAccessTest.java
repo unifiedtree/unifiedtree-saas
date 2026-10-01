@@ -84,4 +84,13 @@ class GlobalSearchAccessTest {
             assertThat(reach(t, Set.of(), true)).as(t.key).isEqualTo(Reach.NONE);
         }
     }
+
+    @Test
+    void holidaysReachWhoeverOpensTheLeavePage() {
+        assertThat(reach(SearchType.HOLIDAY, EMPLOYEE, true)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, HR, false)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, Set.of("hrms.ess.read"), true)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, Set.of("hrms.leave.read"), false)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, Set.of("payroll.runs.read"), true)).isEqualTo(Reach.NONE);
+    }
 }

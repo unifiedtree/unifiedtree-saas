@@ -18,6 +18,7 @@ import java.util.Set;
  *   <li>Documents, letters: the admin read permission, or your own.</li>
  *   <li>Candidates and job openings: {@code hrms.hiring.read}; offers carry salary,
  *       so {@code hrms.hiring.offer.read} only.</li>
+ *   <li>Holidays: the company's holiday list (open to anyone signed in), for people who open the Leave page.</li>
  *   <li>Policies: authors see every status, readers only published ones
  *       (PolicyController.listPolicies).</li>
  * </ul>
@@ -49,6 +50,10 @@ public final class GlobalSearchAccess {
                 boolean reader = perms.contains("hrms.policy.read") || perms.contains("hrms.policy.acknowledge.self");
                 yield !reader ? Reach.NONE : perms.contains("hrms.policy.write") ? Reach.ALL : Reach.PUBLISHED;
             }
+            // The holiday list itself is open to anyone signed in (SettingsController.listHolidays);
+            // the result links to the Leave page's Holidays tab, so it's offered to those who open that page.
+            case HOLIDAY -> perms.contains("hrms.leave.read") || perms.contains("hrms.ess.read") || perms.contains("leave.request.self")
+                    ? Reach.ALL : Reach.NONE;
         };
     }
 

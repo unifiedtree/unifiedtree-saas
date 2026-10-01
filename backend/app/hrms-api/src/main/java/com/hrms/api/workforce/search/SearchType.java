@@ -22,7 +22,9 @@ public enum SearchType {
     CANDIDATE("candidate", "Candidates", "hrms", List.of("candidate", "candidates", "applicant", "applicants")),
     OFFER("offer", "Job offers", "hrms", List.of("offer", "offers")),
     JOB("job", "Job openings", "hrms", List.of("job", "jobs", "opening", "openings", "requisition", "requisitions", "vacancy", "vacancies")),
-    POLICY("policy", "Policies", "hrms", List.of("policy", "policies", "handbook"));
+    POLICY("policy", "Policies", "hrms", List.of("policy", "policies", "handbook")),
+    // Redesign BW-04: the company's holidays this year and next (the Leave page's Holidays tab).
+    HOLIDAY("holiday", "Holidays", "hrms", List.of("holiday", "holidays", "festival", "festivals"));
 
     public final String key;
     public final String label;

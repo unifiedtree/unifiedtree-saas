@@ -52,6 +52,7 @@ public class GlobalSearchQueries {
     public record OfferRow(UUID id, String candidateName, String roleTitle, String status) {}
     public record JobRow(UUID id, String title, String location, String status, Integer openings, String departmentName) {}
     public record PolicyRow(UUID id, String title, String category, String version, String status, LocalDate effective) {}
+    public record HolidayRow(UUID id, String name, LocalDate on, String type) {}
 
     // What each type's words are matched against (fixed SQL, no user input).
     static final String LEAVE_TEXT = "concat_ws(' ', e.first_name, e.last_name, e.employee_code, lt.name, lr.status)";
@@ -66,6 +67,7 @@ public class GlobalSearchQueries {
     static final String OFFER_TEXT = "concat_ws(' ', o.candidate_name, o.role_title, o.status)";
     static final String JOB_TEXT = "concat_ws(' ', j.title, j.location, j.status, d.name)";
     static final String POLICY_TEXT = "concat_ws(' ', p.title, replace(p.category, '_', ' '))";
+    static final String HOLIDAY_TEXT = "concat_ws(' ', h.holiday_name, replace(h.holiday_type, '_', ' '), to_char(h.holiday_date, 'FMMonth'))";
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -260,5 +262,30 @@ public class GlobalSearchQueries {
         return jdbc.query(sql, p, (rs, i) -> new PolicyRow(
                 rs.getObject("id", UUID.class), rs.getString("title"), rs.getString("category"),
                 rs.getString("policy_version"), rs.getString("status"), date(rs, "effective_date")));
+    }
+
+    /**
+     * Redesign BW-04: holidays this year and next, upcoming first. With an employee record, their
+     * company's list; without one (an owner with no record), every company in the workspace.
+     */
+    public List<HolidayRow> holidays(UUID tenant, UUID employeeId, int year, List<String> words, int limit) {
+        MapSqlParameterSource p = params(tenant, words, limit).addValue("from", LocalDate.of(year, 1, 1)).addValue("to", LocalDate.of(year + 1, 12, 31));
+        String company = "";
+        if (employeeId != null) {
+            p.addValue("me", employeeId);
+            company = "\n   AND h.company_id = (SELECT e.company_id FROM hrms.employees e WHERE e.id = :me AND e.tenant_id = :tenant)";
+        }
+        String sql = """
+            SELECT h.id, h.holiday_name, h.holiday_date, h.holiday_type
+              FROM settings.holiday_calendar h
+             WHERE h.tenant_id = :tenant AND COALESCE(h.is_active, TRUE)
+               AND h.holiday_date BETWEEN :from AND :to""" + company + wordClauses(HOLIDAY_TEXT, words.size()) + """
+
+             ORDER BY CASE WHEN h.holiday_date >= CURRENT_DATE THEN 0 ELSE 1 END,
+                      CASE WHEN h.holiday_date >= CURRENT_DATE THEN h.holiday_date END ASC,
+                      h.holiday_date DESC, h.id
+             LIMIT :limit""";
+        return jdbc.query(sql, p, (rs, i) -> new HolidayRow(
+                rs.getObject("id", UUID.class), rs.getString("holiday_name"), date(rs, "holiday_date"), rs.getString("holiday_type")));
     }
 }

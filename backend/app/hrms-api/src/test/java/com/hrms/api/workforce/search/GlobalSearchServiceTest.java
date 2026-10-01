@@ -239,4 +239,16 @@ class GlobalSearchServiceTest {
         assertThat(live.badge()).isNull();
         verify(queries, never()).policies(any(), anyBoolean(), anyList(), anyInt());
     }
+
+    @Test
+    void holidaysShowTheirDayAndKindAndOpenTheHolidaysTab() {
+        UUID id = UUID.randomUUID();
+        SearchHit h = GlobalSearchService.holidayHit(new GlobalSearchQueries.HolidayRow(id, "Christmas Eve", java.time.LocalDate.of(2027, 12, 24), "NATIONAL"));
+        assertThat(h.type()).isEqualTo("holiday");
+        assertThat(h.title()).isEqualTo("Christmas Eve");
+        assertThat(h.subtitle()).isEqualTo("Fri, 24 Dec 2027 · National holiday");
+        assertThat(h.url()).isEqualTo("/hrms/leave?tab=holidays");
+        assertThat(h.badge()).isNull();
+        assertThat(GlobalSearchService.holidayHit(new GlobalSearchQueries.HolidayRow(id, "X", null, null)).subtitle()).isEqualTo("Holiday");
+    }
 }

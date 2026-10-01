@@ -8,6 +8,7 @@ import com.unifiedtree.notifications.service.AppNotificationService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -47,8 +49,10 @@ public class NotificationsController {
     public ResponseEntity<PageResponse<NotificationDto>> list(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(name = "unreadOnly", defaultValue = "false") boolean unreadOnly,
+            // Optional (redesign BW-05): only rows created at or after this instant (ISO-8601).
+            @RequestParam(name = "since", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(service.list(extractUserId(jwt), unreadOnly, pageable));
+        return ResponseEntity.ok(service.list(extractUserId(jwt), unreadOnly, since, pageable));
     }
 
     @GetMapping("/unread-count")
