@@ -69,11 +69,12 @@ try {
     const { ctx, page } = await session('reader@unifiedtree.demo')
 
     await page.goto(base + '/me')
-    await page.getByText('Your balance this year').waitFor({ timeout: 30_000 })
-    const salaryCard = page.getByRole('button', { name: /^Salary.*View/ })
+    // Home (P-HOME): today's shortcuts sit in the Shortcuts card; "Apply leave" is the greeting's main button.
+    await page.getByRole('heading', { name: 'Shortcuts' }).waitFor({ timeout: 30_000 })
+    const salaryCard = page.getByRole('button', { name: /^Salary/ })
     check('/me shows a My Salary shortcut to the employee', (await salaryCard.count()) === 1)
 
-    const applyLeave = page.getByRole('button', { name: /Apply for leave/ })
+    const applyLeave = page.locator('header.uk-ph').getByRole('button', { name: 'Apply leave' })
     check('/me shows "Apply leave" to the employee', (await applyLeave.count()) === 1)
     check('/me shows the Onboarding Tasks shortcut (employee holds onboarding.instance.read / task.complete)',
       (await page.getByText('Onboarding tasks', { exact: true }).count()) === 1)
@@ -88,7 +89,7 @@ try {
     assertClean('/hrms/leave?tab=apply')
 
     await page.goto(base + '/me')
-    await page.getByRole('button', { name: /^Salary.*View/ }).click()
+    await page.getByRole('button', { name: /^Salary/ }).click()
     await page.waitForURL((u) => u.pathname === '/me/salary', { timeout: 15_000 })
     await page.getByRole('heading', { name: 'Salary', level: 1 }).waitFor({ timeout: 30_000 })
     check('My Salary shortcut on /me opens /me/salary', path(page) === '/me/salary')

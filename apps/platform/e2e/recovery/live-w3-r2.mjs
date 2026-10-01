@@ -1,4 +1,4 @@
-// Live check (wave 3, r2): the shared calendar on the leave, WFH, shift change,
+// Live check (wave 3, r2): the shared calendar on the leave, shift change (WFH: day chips since P-HOME),
 // holiday, time entry, attendance history, muster roll, manual entry and exit
 // screens. Picks dates with the mouse (including a previous year through the
 // year view), checks each value lands, and that a required date still blocks
@@ -88,32 +88,39 @@ try {
   check('leave: To shows the picked day', (await text(leaveTo)).includes(short(lt)), await text(leaveTo))
   await shot('leave-apply-1440')
 
-  // ── 2. Work from home: From bumps To; the day count follows both ──
+  // ── 2. Work from home (P-HOME): separate days are picked as chips, not a From/To range ──
   await page.goto(base + '/me/wfh')
-  const wfhFrom = page.getByRole('combobox', { name: 'From *', exact: true })
-  const wfhTo = page.getByRole('combobox', { name: 'To *', exact: true })
-  await wfhFrom.waitFor({ timeout: 20000 })
-  const wf = `${nm}-20`
-  await pickDay(wfhFrom, wf)
-  check('wfh: From shows the picked day', (await text(wfhFrom)).includes(short(wf)), await text(wfhFrom))
-  check('wfh: To moved up to From (same onChange rule as before)', (await text(wfhTo)).includes(short(wf)), await text(wfhTo))
-  await page.locator('textarea').first().fill('Live calendar check, not sent')
-  check('wfh: 1 day from home', await page.getByText('1 day from home').first().isVisible())
-  await pickDay(wfhTo, addDays(wf, 2), { viaYear: false })
-  check('wfh: 3 days from home after picking To', await page.getByText('3 days from home').first().isVisible(), await text(wfhTo))
+  const chips = page.getByRole('group', { name: 'Pick days' }).getByRole('button')
+  await chips.first().waitFor({ timeout: 20000 })
+  const free = page.getByRole('group', { name: 'Pick days' }).locator('button:not([disabled])')
+  const nFree = await free.count()
+  check('wfh: day chips for the coming working days', (await chips.count()) >= 5, `${await chips.count()} chips, ${nFree} free`)
+  if (nFree >= 2) {
+    await free.nth(0).click()
+    await free.nth(1).click()
+    check('wfh: picked chips are pressed', (await page.getByRole('group', { name: 'Pick days' }).locator('button[aria-pressed="true"]').count()) === 2)
+    check('wfh: 2 days picked', await page.getByText(/^2 days: /).first().isVisible())
+    await page.getByRole('button', { name: 'Later days' }).click()
+    await page.getByRole('button', { name: 'Earlier days' }).click()
+    check('wfh: picks are kept across pages', (await page.getByRole('group', { name: 'Pick days' }).locator('button[aria-pressed="true"]').count()) === 2)
+  } else check('wfh: at least two free days to pick', false, `${nFree} free`)
+  await page.locator('textarea').first().fill('Live chip check, not sent')
 
   // ── 3. Shift change request ──
   await page.goto(base + '/me/shift-change')
-  const shiftDate = page.getByRole('combobox', { name: 'Starting from *', exact: true })
+  // P-HOME: the date field is "From" and opens once a shift card is picked.
+  const shiftDate = page.getByRole('combobox', { name: /^From/ })
   const hasForm = await shiftDate.waitFor({ timeout: 20000 }).then(() => true).catch(() => false)
-  check('shift change: Starting from is the shared calendar', hasForm)
-  // The field stays disabled until the employee, company and shift list have loaded.
+  check('shift change: From is the shared calendar', hasForm)
+  // The field stays disabled until a shift card is picked.
   await page.waitForLoadState('networkidle')
+  const card = page.getByRole('group', { name: 'Shifts' }).locator('button:not([disabled])').first()
+  if (await card.count()) await card.click()
   for (let i = 0; hasForm && i < 20 && (await shiftDate.isDisabled()); i++) await page.waitForTimeout(500)
   if (hasForm && !(await shiftDate.isDisabled())) {
     const sd = `${nm}-25`
     await pickDay(shiftDate, sd)
-    check('shift change: Starting from shows the picked day', (await text(shiftDate)).includes(short(sd)), await text(shiftDate))
+    check('shift change: From shows the picked day', (await text(shiftDate)).includes(short(sd)), await text(shiftDate))
   } else if (hasForm) check('shift change: field disabled (no other shift to move to)', true)
   check('leave/wfh/shift pages: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
 
@@ -276,20 +283,16 @@ try {
   } else check('exit: someone on notice to open Edit dates', false, 'no Edit dates button')
   check('owner pages: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
 
-  // Phone: WFH form fits, and its calendar is a bottom sheet inside the screen.
+  // Phone: the WFH day chips fit the screen (P-HOME: chips instead of the From/To calendar).
   await login('mgr@unifiedtree.demo', { width: 390, height: 844 })
   await page.goto(base + '/me/wfh')
-  const pf = page.getByRole('combobox', { name: 'From *', exact: true })
-  await pf.waitFor({ timeout: 20000 })
+  const pc = page.getByRole('group', { name: 'Pick days' }).getByRole('button').first()
+  await pc.waitFor({ timeout: 20000 })
   const pw = await page.evaluate(() => document.documentElement.scrollWidth)
   check('390px: no horizontal page scroll on /me/wfh', pw <= 390, String(pw))
-  await pf.click()
-  await dateDialog().waitFor({ timeout: 5000 })
-  await page.waitForTimeout(350)
-  await dateDialog().getByRole('button', { name: 'Choose year' }).click()
-  await page.waitForTimeout(250)
-  await shot('wfh-years-390')
-  await page.keyboard.press('Escape')
+  const cb = await pc.boundingBox()
+  check('390px: the day chips stay inside the viewport', !!cb && cb.x >= 0 && cb.x + cb.width <= 390.5, JSON.stringify(cb))
+  await shot('wfh-chips-390')
   check('no failed API calls', failed.length === 0, failed.slice(0, 5).join(' | '))
 } catch (e) {
   check('script completed', false, String(e.message || e).slice(0, 300))
