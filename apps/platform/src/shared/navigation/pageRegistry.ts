@@ -344,6 +344,8 @@ export const MENU_RULES: Record<string, Access[]> = {
   'home:/me': [...entry('me').access, { noneOf: [...ADMIN_HOME_CODES], when: notAdminRole }],
   // My work: today's self-service rules, page by page, with the admin-role exclusion.
   'mytime:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }],
+  // My Shift for people without the team view (the team's Shifts & Overtime is under Attendance & time).
+  'mytime:/hrms/shifts': [{ ...any('attendance.checkin.self'), noneOf: ['attendance.team.read'], module: HR, self: true, when: notAdminRole }],
   'mytime:/me/wfh': mine('me-wfh'),
   'mytime:/me/shift-change': mine('me-shift'),
   'myleave:/hrms/leave': [{ ...any('leave.request.self'), module: HR, self: true, when: notAdminRole }],

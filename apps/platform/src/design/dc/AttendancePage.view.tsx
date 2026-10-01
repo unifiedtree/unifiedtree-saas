@@ -22,49 +22,7 @@ export function AttendancePageView({ v }: { v: any }) {
   return (
     <>
       <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font)", color: "#0f172a"}}>
-        <nav aria-label="Attendance sections" style={{position: "relative", marginBottom: "8px", background: "#fff", boxShadow: "0 0 0 100vmax #fff", clipPath: "inset(0 -100vmax)"}}>
-          <span aria-hidden="true" style={{position: "absolute", left: "0", right: "0", bottom: "0", height: "1px", background: "#e2e8f0", boxShadow: "0 0 0 100vmax #e2e8f0", clipPath: "inset(0 -100vmax)"}} />
-          <div style={{position: "relative", display: "flex", alignItems: "stretch", gap: "28px", overflowX: "auto", scrollbarWidth: "none"}}>
-            {arr(v.sections).map((s: any, $index: number) => (
-              <Fragment key={$index}>
-                {s?.active ? (
-                  <>
-                    <button type="button" aria-current="page" onClick={s?.onClick} data-tip={s?.tip} style={{flex: "0 0 auto", display: "inline-flex", alignItems: "center", gap: "8px", height: "56px", padding: "0 4px", border: "0", background: "none", font: "inherit", fontSize: "14.5px", fontWeight: "700", color: "#0f6e56", whiteSpace: "nowrap", cursor: "default", boxShadow: "inset 0 -3px 0 #0f6e56"}}>
-                      {txt(s?.icon)}
-                      <span>
-                        {txt(s?.label)}
-                      </span>
-                      {s?.hasCount ? (
-                        <>
-                          <span style={{minWidth: "20px", height: "20px", padding: "0 6px", boxSizing: "border-box", borderRadius: "999px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", fontSize: "11px", fontWeight: "800", display: "inline-flex", alignItems: "center", justifyContent: "center", fontVariantNumeric: "tabular-nums"}}>
-                            {txt(s?.count)}
-                          </span>
-                        </>
-                      ) : null}
-                    </button>
-                  </>
-                ) : null}
-                {s?.inactive ? (
-                  <>
-                    <button type="button" onClick={s?.onClick} data-tip={s?.tip} style={{flex: "0 0 auto", display: "inline-flex", alignItems: "center", gap: "8px", height: "56px", padding: "0 4px", border: "0", background: "none", font: "inherit", fontSize: "14.5px", fontWeight: "600", color: "#475569", whiteSpace: "nowrap", cursor: "pointer", boxShadow: "inset 0 -3px 0 transparent", transition: "color .15s,box-shadow .15s"}} className="dc-attendance-page-0">
-                      {txt(s?.icon)}
-                      <span>
-                        {txt(s?.label)}
-                      </span>
-                      {s?.hasCount ? (
-                        <>
-                          <span style={{minWidth: "20px", height: "20px", padding: "0 6px", boxSizing: "border-box", borderRadius: "999px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", fontSize: "11px", fontWeight: "800", display: "inline-flex", alignItems: "center", justifyContent: "center", fontVariantNumeric: "tabular-nums"}}>
-                            {txt(s?.count)}
-                          </span>
-                        </>
-                      ) : null}
-                    </button>
-                  </>
-                ) : null}
-              </Fragment>
-            ))}
-          </div>
-        </nav>
+        {/* The module's pages (Analytics · Daily Tracking · Shifts & Overtime) are the shell's top tabs now (navModel). */}
         <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
           <span aria-hidden="true" style={{position: "absolute", right: "-60px", top: "-150px", width: "380px", height: "320px", borderRadius: "999px", background: "rgba(16,185,129,.10)", filter: "blur(60px)", pointerEvents: "none"}} />
           <div style={{position: "relative", display: "grid", gap: "20px", padding: "clamp(18px,2.4vw,28px) clamp(18px,2.6vw,32px)"}}>
