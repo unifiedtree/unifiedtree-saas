@@ -14,8 +14,8 @@ import { greetingName as greetingNameOf } from './greetingName'
  * and the profile menu can never disagree.
  *
  * Returned tuple:
- *   greetingName  the SHORT personal name for greetings + the sidebar chip.
- *                 Almost always firstName; falls back progressively.
+ *   greetingName  the name greetings show: the full name, first + last
+ *                 (greetingName.ts); falls back progressively.
  *   fullName      the FORMAL name for tooltips, profile menus, page titles.
  *                 firstName + lastName joined, or greetingName if lastName is
  *                 missing.
@@ -52,17 +52,10 @@ export function useDisplayName(): DisplayName {
 
   const emailLocal = email.includes('@') ? email.split('@')[0] : email
 
-  // Greeting name = SHORT, one word ideally. Prefer displayName only if it
-  // reads as a single first word — otherwise it's usually "Firstname Lastname"
-  // and we still want "Firstname" for the greeting.
-  const greetingName = (() => {
-    // An initial alone ("S.") becomes the full name — see greetingName.ts.
-    if (first) return greetingNameOf(first, last) ?? first
-    if (displayName) return displayName.split(/\s+/)[0]
-    if (last) return last
-    if (emailLocal) return emailLocal
-    return 'there'
-  })()
+  // Greeting name = the full name, first + last (greetingName.ts: the client's
+  // "full name, everywhere"); without either, the chosen display name, then the
+  // email's local part.
+  const greetingName = greetingNameOf(first, last) || displayName || emailLocal || 'there'
 
   // Full name = FORMAL. Prefer explicit displayName (user picked it); else
   // stitch first + last; else fall back to the greeting name.
