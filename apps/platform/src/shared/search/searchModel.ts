@@ -184,8 +184,17 @@ export function buildResults(input: ResultsInput): Results {
   return { groups, counts, hasRecords: recordCount > 0 }
 }
 
-/** The empty dialog's quick-action tiles: the first six the person can complete (design: six). */
-export const quickTiles = (actions: readonly QuickAction[], n = 6) => actions.slice(0, n)
+/** An action for the person's own self-service (applying leave, their payslip…). */
+export const isSelfAction = (a: QuickAction) => a.access.some((r) => r.self || [...(r.allOf ?? []), ...(r.anyOf ?? [])].some((c) => c.endsWith('.self')))
+
+/**
+ * The empty dialog's quick-action tiles: the first six the person can complete (design: six). People
+ * whose Home is the admin dashboard see the company's actions first, then their own (the design's admin row).
+ */
+export function quickTiles(actions: readonly QuickAction[], adminFirst = false, n = 6): QuickAction[] {
+  const list = adminFirst ? [...actions.filter((a) => !isSelfAction(a)), ...actions.filter(isSelfAction)] : [...actions]
+  return list.slice(0, n)
+}
 
 /** A rail module as "Jump to" lists it. */
 export interface JumpModule { key: string; label: string; icon: string; group: string; soon?: boolean; pages: { label: string; path: string }[] }

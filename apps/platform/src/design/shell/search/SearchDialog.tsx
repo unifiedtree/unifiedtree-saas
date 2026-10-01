@@ -205,7 +205,7 @@ export function SearchDialog({ onOpen, onThisPage }: SearchDialogProps) {
   const tooShort = !slashMode && q.length > 0 && q.length < GLOBAL_SEARCH_MIN_CHARS
   const nothing = !!q && !searching && !failed && flat.length === 0
   const scopes: Scope[] = ['all', 'people', 'pages', 'actions', ...(results.hasRecords || scope === 'records' ? ['records' as const] : [])]
-  const tiles = quickTiles(actions)
+  const tiles = quickTiles(actions, home.kind === 'admin')
   const orgChartLive = PAGE_REGISTRY.some((e) => e.path.split('?')[0] === ORG_CHART)
   const activeId = current ? `tbs-row-${cursor}` : undefined
   let flatIndex = -1
@@ -251,7 +251,7 @@ export function SearchDialog({ onOpen, onThisPage }: SearchDialogProps) {
                 const n = results.counts[s]
                 return (
                   <button key={s} type="button" className="ut-sd__scope" aria-pressed={scope === s} onClick={() => { setScope(s); inputRef.current?.focus() }}>
-                    {SCOPE_LABEL[s]}{n != null && <span className="ut-sd__scopen">{s === 'people' && truncated ? `${n}+` : n}</span>}
+                    {SCOPE_LABEL[s]}{n != null && !searching && <span className="ut-sd__scopen">{s === 'people' && truncated ? `${n}+` : n}</span>}
                   </button>
                 )
               })}

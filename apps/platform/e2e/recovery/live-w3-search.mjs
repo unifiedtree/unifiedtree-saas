@@ -13,10 +13,13 @@
 //  - owner types a name → People → Enter opens the directory filtered by it;
 //    "payroll" lists the payroll pages; a payslip opens its run searched by
 //    code; the test's document opens on the person's Documents tab;
-//    keyboard ↑/↓/Esc; "Advanced search" (link and Ctrl K) opens the palette
-//    with the text carried over;
+//    keyboard ↑/↓/Esc; the palette's actions show in the same dialog with the
+//    text typed, and Ctrl K opens it;
 //  - the employee sees no people and no admin pages;
 //  - phone (390 wide): the header's search icon opens the search sheet.
+// (Redesign F3b: the top bar's box and the "Advanced search" palette became one
+//  dialog that the search pill, Ctrl K and the phone icon open. The checks are
+//  the same; the box is reached by opening the dialog first.)
 // Everything it creates (two documents) is deleted at the end.
 //
 //   node e2e/recovery/live-w3-search.mjs
@@ -71,6 +74,15 @@ function watch(page, label) {
     if (u.includes('/api/') && r.status() >= 400) failed.push(`${label}: ${r.status()} ${new URL(u).pathname}`)
   })
   return { errors, failed }
+}
+/** Opens the search dialog from the top bar's search pill (unless it is open) and returns its box. */
+async function openSearch(page) {
+  const box = page.getByTestId('top-search-input')
+  if (!(await box.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Search everything' }).click()
+    await box.waitFor({ timeout: 10_000 })
+  }
+  return box
 }
 
 const browser = await chromium.launch()
@@ -137,8 +149,8 @@ try {
   await signIn(page, 'owner@unifiedtree.demo')
   await page.goto(base + '/dashboard')
   const box = page.getByTestId('top-search-input')
-  await box.waitFor({ timeout: 30_000 })
-  await box.click()
+  await page.getByRole('button', { name: 'Search everything' }).waitFor({ timeout: 30_000 })
+  await openSearch(page)
   await box.fill('reader')
   await page.locator('[data-result-group="employee"]').waitFor({ timeout: 20_000 })
   check('ui: typing a name shows People', await visible(page.locator('[data-result-group="employee"]').getByText('Reader User').first()))
@@ -154,6 +166,7 @@ try {
   await box.press('Escape')
   check('ui: Escape closes the results', (await page.getByTestId('top-search-results').count()) === 0)
   // Enter on the person opens the directory with the query in its search box.
+  await openSearch(page)
   await box.fill('reader user')
   await page.locator('[data-result-group="employee"] [role=option]').first().waitFor({ timeout: 20_000 })
   const personRow = page.locator('[data-result-group="employee"] [role=option]').first()
@@ -166,7 +179,7 @@ try {
   check('ui: the directory is filtered to them', await visible(page.getByText('EMP002').first()))
 
   // A page by name.
-  await box.click()
+  await openSearch(page)
   await box.fill('payroll')
   await page.locator('[data-result-group="page"]').waitFor({ timeout: 10_000 })
   const pageTitles = await page.locator('[data-result-group="page"] [role=option]').allInnerTexts()
@@ -177,7 +190,7 @@ try {
   check('ui: choosing a page opens it', new URL(page.url()).pathname === '/hrms/payroll-dashboard')
 
   // A payslip opens its run with the search filled by employee code.
-  await box.click()
+  await openSearch(page)
   await box.fill('reader')
   await page.locator('[data-result-group="payslip"] [role=option]').first().waitFor({ timeout: 20_000 })
   await page.locator('[data-result-group="payslip"] [role=option]').first().click()
@@ -187,7 +200,7 @@ try {
   check('ui: a payslip opens its payroll run, searched by the employee code', runOk && (await runBox.inputValue()) === 'EMP002', runOk ? await runBox.inputValue() : 'run page search not shown')
 
   // The test's document opens on the person's Documents tab.
-  await box.click()
+  await openSearch(page)
   await box.fill(token)
   await page.locator('[data-result-group="document"] [role=option]').first().waitFor({ timeout: 20_000 })
   await page.locator('[data-result-group="document"] [role=option]').filter({ hasText: `${token} reader certificate` }).click()
@@ -195,22 +208,21 @@ try {
   const docShown = await visible(page.getByText(`${token} reader certificate`).first())
   check('ui: a document opens on the person\'s Documents tab', docShown && page.url().includes('tab=documents'), page.url())
 
-  // Advanced search: from the link (text carried over) and from the shortcut.
-  await box.click()
+  // The former "Advanced search" palette is the same dialog: its actions show with the text typed; Ctrl K opens it.
+  await openSearch(page)
   await box.fill('leave')
-  await page.getByTestId('top-search-advanced').click()
-  const adv = page.getByRole('dialog', { name: 'Advanced search' })
-  await adv.waitFor({ timeout: 10_000 })
-  check('ui: "Advanced search" opens the palette with the text carried over', (await adv.locator('input[role=combobox]').inputValue()) === 'leave')
+  const adv = page.getByRole('dialog', { name: 'Search' })
+  await adv.locator('[data-result-group="action"]').waitFor({ timeout: 10_000 })
+  check('ui: the palette\'s actions show in the same dialog with the text typed', (await adv.getByTestId('top-search-input').inputValue()) === 'leave' && (await adv.locator('[data-result-group="action"] [role=option]').count()) > 0)
   await page.screenshot({ path: `${SHOTS}/search-advanced-1440.png` })
   await page.keyboard.press('Escape')
   await adv.waitFor({ state: 'detached', timeout: 10_000 })
   await page.keyboard.press('Control+k')
-  check('ui: Ctrl K still opens Advanced search', await visible(page.getByRole('dialog', { name: 'Advanced search' }), 10_000))
+  check('ui: Ctrl K still opens the search', await visible(page.getByRole('dialog', { name: 'Search' }), 10_000))
   await page.keyboard.press('Escape')
 
   // Nothing found.
-  await box.click()
+  await openSearch(page)
   await box.fill('zzqxnomatch')
   const empty = await page.getByTestId('top-search-empty').waitFor({ timeout: 20_000 }).then(() => true, () => false)
   check('ui: a search with no results says so', empty)
@@ -226,8 +238,8 @@ try {
   // Sign-in shows a welcome screen and lands on the app launcher (no top bar there); open their workspace.
   await rpage.goto(base + '/me')
   const rbox = rpage.getByTestId('top-search-input')
-  await rbox.waitFor({ timeout: 30_000 })
-  await rbox.click()
+  await rpage.getByRole('button', { name: 'Search everything' }).waitFor({ timeout: 30_000 })
+  await openSearch(rpage)
   await rbox.fill('manager')
   await rpage.getByTestId('top-search-loading').waitFor({ state: 'detached', timeout: 20_000 }).catch(() => {})
   await rpage.waitForTimeout(500)

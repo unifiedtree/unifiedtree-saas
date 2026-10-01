@@ -83,6 +83,13 @@ describe('empty dialog', () => {
     expect(tiles.length).toBeLessThanOrEqual(6)
     expect(tiles.map((t) => t.id)).not.toContain('run-payroll')
   })
+  it('puts the company’s actions first for an admin home', () => {
+    const allowed = QUICK_ACTIONS.filter((a) => canOpen(a.access, ctx([...HR, ...EMP])))
+    expect(quickTiles(allowed)[0].id).toBe('apply-leave')
+    const admin = quickTiles(allowed, true)
+    expect(admin[0].id).not.toBe('apply-leave')
+    expect(admin.map((t) => t.id)).toContain('run-payroll')
+  })
   it('jumps to the first page of the first rail modules, skipping business apps and Soon', () => {
     const mods: JumpModule[] = [
       { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', group: 'home', pages: [{ label: 'Dashboard', path: '/dashboard' }] },
