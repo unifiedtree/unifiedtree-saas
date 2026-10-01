@@ -1,0 +1,105 @@
+/* Daily tracking (DailyTracking.tsx and its views). Tokens only, so light and dark both read right. */
+.udt { font-family: var(--u-font, 'Inter', system-ui, sans-serif); color: var(--u-ink, #0E1B16); }
+.udt-views { margin-bottom: -4px; }
+.udt-q { color: var(--u-ink3, #6A7A73); font-size: 12.5px; }
+.udt-q2 { color: var(--u-ink2, #4A5A54); }
+.udt-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.udt-right { text-align: right; justify-self: end; }
+.udt-pad { padding: 12px 20px; margin: 0; }
+.udt-two { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }
+.udt-clip { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.udt-late {
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11.5px;
+  background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10);
+}
+.udt-worked { display: grid; gap: 6px; min-width: 110px; }
+.udt-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.udt-more {
+  width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--u-ink3, #6A7A73);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+.udt-more:hover { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
+.udt-more:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+
+.udt-dayrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.udt-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 384px); gap: 20px; align-items: start; }
+.udt-split--cal { grid-template-columns: minmax(0, 1fr) minmax(0, 440px); }
+.udt-side { display: grid; gap: 20px; min-width: 0; }
+.udt-main { min-width: 0; }
+.udt-filters { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.udt-filters .uko-field { margin: 0; min-width: 150px; }
+.udt-search {
+  height: 36px; min-width: 180px; padding: 0 12px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); font: inherit; font-size: 13.5px;
+}
+.udt-search:focus { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.udt-live { display: inline-flex; align-items: center; gap: 6px; }
+.udt-live__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.udt-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--u-ln2, #EDF1EF); }
+.udt-pager__btns { display: inline-flex; gap: 8px; }
+
+.udt-attn { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.udt-attn__row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.udt-attn__ic {
+  width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10);
+}
+.udt-attn__txt { display: grid; gap: 2px; min-width: 0; }
+.udt-attn__t { font-size: 14px; line-height: 1.35; }
+.udt-branches { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.udt-branches li { display: grid; gap: 8px; }
+.udt-branches__row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.udt-branches__row b { font-weight: 500; }
+
+.udt-panel-acts { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.udt-facts { display: grid; gap: 14px; }
+.udt-facts dl { margin: 0; display: grid; gap: 0; }
+.udt-facts__row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--u-ln2, #EDF1EF); font-size: 14px; }
+.udt-facts__row dt { color: var(--u-ink3, #6A7A73); }
+.udt-facts__row dd { margin: 0; color: var(--u-ink, #0E1B16); overflow-wrap: anywhere; }
+
+.udt-bulk, .udt-bulk-result { display: grid; gap: 18px; }
+.udt-bulk-people { display: grid; gap: 10px; }
+.udt-bulk-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.udt-bulk-title { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.udt-bulk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 340px; overflow-y: auto; }
+.udt-bulk-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+
+.udt-cards { display: grid; gap: 12px; }
+.udt-mine { list-style: none; margin: 0; padding: 0; }
+.udt-mine__row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  padding: 12px 20px; border-top: 1px solid var(--u-ln2, #EDF1EF); font-size: 14px;
+}
+.udt-mine__row:first-child { border-top: 0; }
+.udt-row-acts { display: inline-flex; align-items: center; gap: 10px; }
+
+.udt-myday { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.udt-myday__txt { display: grid; gap: 8px; min-width: 0; flex: 1 1 320px; }
+.udt-myday__line { margin: 0; font-size: 16px; line-height: 1.45; }
+.udt-myday__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; font-size: 13.5px; color: var(--u-ink2, #4A5A54); }
+.udt-myday__facts b { font-weight: 500; color: var(--u-ink, #0E1B16); }
+.udt-myday__acts { display: flex; flex-wrap: wrap; gap: 10px; }
+.udt-monthnav { display: inline-flex; gap: 6px; }
+.udt-dayinfo { display: grid; gap: 14px; }
+.udt-dayinfo__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.udt-tswrap { overflow-x: auto; }
+.udt-ts { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.udt-ts th, .udt-ts td { padding: 12px 20px; text-align: left; border-top: 1px solid var(--u-ln2, #EDF1EF); vertical-align: middle; }
+.udt-ts thead th { border-top: 0; background: var(--u-sf2, #F7F9F8); color: var(--u-ink3, #6A7A73); font-size: 12.5px; font-weight: 500; }
+.udt-ts tbody th { font-weight: 400; }
+.udt-ts__day td { vertical-align: top; }
+.udt-ts__day td > .udt-num { display: block; margin-bottom: 6px; }
+.udt-ts b { font-weight: 500; }
+
+@media (max-width: 1100px) {
+  .udt-split, .udt-split--cal { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .udt-filters { width: 100%; }
+  .udt-filters > * { flex: 1 1 140px; }
+  .udt-search { min-width: 0; width: 100%; }
+  .udt-facts__row { grid-template-columns: 120px minmax(0, 1fr); }
+  .udt-myday__acts > * { flex: 1 1 auto; }
+}

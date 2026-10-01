@@ -315,6 +315,43 @@ public class AttendanceReviewService {
         return out;
     }
 
+    /**
+     * Every face punch (in and out, passed or not) of ONE person in your team
+     * between two days (default this month; at most {@link #MAX_RANGE_DAYS}),
+     * newest first: the Face Punch tab's month calendar (V143.53 redesign,
+     * client decision "face punches calendar-wise"). Same row as faceEvents;
+     * someone outside your team answers 403.
+     */
+    @Transactional(readOnly = true)
+    public List<FaceEvent> faceEventsOf(Jwt jwt, UUID employeeId, LocalDate from, LocalDate to) {
+        LocalDate today = EffectiveDayStatusService.today();
+        LocalDate[] r = range(from, to, today.withDayOfMonth(1), today);
+        Employee emp = team(jwt).stream().filter(e -> e.getId().equals(employeeId)).findFirst()
+                .orElseThrow(() -> new AccessDeniedException("This person isn't in your team."));
+        Instant start = r[0].atStartOfDay(AttendancePolicyEvaluator.IST).toInstant();
+        Instant end = r[1].plusDays(1).atStartOfDay(AttendancePolicyEvaluator.IST).toInstant();
+        List<Object[]> rows = new ArrayList<>();
+        jdbc.query("""
+                SELECT ev.id, ev.purpose, ev.result, ev.score_bucket, ev.created_at, uc.employee_id,
+                       COALESCE(NULLIF(btrim(ev.device_fingerprint), ''), punch.device_id) AS device
+                  FROM attendance.face_verification_events ev
+                  JOIN auth.user_credentials uc ON uc.id = ev.employee_id
+                """ + FACE_DEVICE_JOIN + """
+                 WHERE uc.employee_id = ?
+                   AND ev.purpose IN ('PUNCH_IN', 'PUNCH_OUT') AND ev.created_at >= ? AND ev.created_at < ?
+                 ORDER BY ev.created_at DESC LIMIT 2000
+                """, (RowCallbackHandler) rs -> rows.add(new Object[]{rs.getObject("id"), rs.getString("purpose"),
+                rs.getString("result"), rs.getString("score_bucket"), rs.getTimestamp("created_at").toInstant(),
+                rs.getObject("employee_id"), rs.getString("device")}), employeeId, Timestamp.from(start), Timestamp.from(end));
+        List<UUID> ids = rows.stream().map(o -> (UUID) o[0]).toList();
+        Map<UUID, Object[]> decisions = latestDecisions(ids);
+        Map<UUID, String> punchedBy = punchedBy(ids);
+        String dept = emp.getDepartmentId() != null ? departmentNames(List.of(emp)).get(emp.getDepartmentId()) : null;
+        List<FaceEvent> out = new ArrayList<>();
+        for (Object[] o : rows) out.add(faceEvent(o, emp, dept, decisions.get((UUID) o[0]), punchedBy.get((UUID) o[0])));
+        return out;
+    }
+
     /** "Yes, it's them" (CONFIRMED) or "Not them" (REJECTED — the punch no longer counts). */
     @Transactional
     public FaceDecisionResult decideFace(Jwt jwt, UUID eventId, String decisionIn, String noteIn) {

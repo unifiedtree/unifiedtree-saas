@@ -51,3 +51,15 @@
   .uwp-scan, .uwp-spin { animation: none; }
 }
 [data-ufx="off"] .uwp-scan { animation: none; }
+
+/* Assisted punch: the people you can punch for. */
+.uwp-pick { display: grid; gap: 12px; }
+.uwp-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: min(52vh, 420px); overflow-y: auto; }
+.uwp-person {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; text-align: left; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.uwp-person:hover { background: var(--u-hv, #F0F4F2); }
+.uwp-person:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uwp-person__tags { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; }
