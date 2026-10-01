@@ -1,14 +1,19 @@
+/* global process, console, fetch, Buffer */
 // Live API check for P-ATT-DAY's backend half (HRMS redesign; V143_53, V143_65).
 // API only (the pages come in the UI half). Against a running backend and its
 // database, with every migration applied:
-//  - the migrations: the "Allow web check-in" column (off), WEB in both method
+//  - the migrations: the "Allow web check-in" column (on by default), WEB in both method
 //    checks on the partitioned records, the punch-rules and timesheet tables,
 //    hrms.timesheet.approve seeded and granted to exactly OWNER, SUPER_ADMIN,
 //    HR_MANAGER and DEPT_MANAGER
-//  - web check-in: refused while the switch is off; who may switch it (403s);
-//    refused without a location; a web punch, a break, check-out (the open break
+//  - web check-in: on by default; who may switch it (403s); refused while off,
+//    without a location or without a face photo; the face scan (a stand-in face
+//    worker on :8091, as live-w3-punch): not enrolled, a stranger's face, then
+//    reader@ enrols from the web and punches in and out with a matching face
+//    (both in the face log, from the browser); a break, check-out (the open break
 //    ends with it, worked hours stay check-in to check-out), undo check-out, the
-//    10-minute window; switched back off, web punches are refused again
+//    10-minute window; one person's face punches for the month calendar;
+//    switched off, web punches are refused again
 //  - "Anywhere" per person: who may set it, and the phone's pre-punch zone check
 //  - bulk "Mark attendance", recent manual entries, the day register CSV (and
 //    its export-log row), one employee's month, the roster/review/fix fields
@@ -23,6 +28,7 @@
 //
 //   RECOVERY_API_URL=http://127.0.0.1:8080/api RECOVERY_DB=ut_w3_dev node e2e/recovery/live-rd-p-att-day-api.mjs
 import { execFileSync } from 'node:child_process'
+import { createServer } from 'node:http'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const db = process.env.RECOVERY_DB || 'ut_w3_dev'
@@ -49,7 +55,7 @@ async function login(email) {
   const d = await r.json()
   const call = async (method, path, body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (json && json.errorCode === 'FEATURE_NOT_READY' && !renaming) unexpectedNotReady.push(`${method} ${path}`)
     return { status: res.status, json, text, headers: res.headers }
   }
@@ -57,6 +63,31 @@ async function login(email) {
 }
 
 const code = (r) => (r.json && r.json.errorCode) || ''
+
+// ── a stand-in face worker on :8091 (as live-w3-punch): one face in every photo; a photo starting with MATCH matches ──
+const b64 = (s) => Buffer.from(s).toString('base64')
+const MATCH_PHOTO = b64('MATCH-photo-of-reader-' + Date.now())
+const STRANGER_PHOTO = b64('STRANGER-photo-' + Date.now())
+const embedding = (() => { const f = new Float32Array(128); for (let i = 0; i < 128; i++) f[i] = Math.sin(i + 1) / 8; return Buffer.from(f.buffer).toString('base64') })()
+const worker = createServer((req, res) => {
+  let body = ''
+  req.on('data', (c) => { body += c })
+  req.on('end', () => {
+    const json = (o) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)) }
+    if (req.url === '/health') return json({ status: 'ok', models_loaded: true })
+    let b = {}; try { b = JSON.parse(body || '{}') } catch { /* empty */ }
+    const face = { face_detected: true, exactly_one_face: true, quality_score: 0.9, liveness_score: 0.9 }
+    if (req.url === '/face/enroll/sample') return json({ ...face, embedding_base64: embedding, embedding_dim: 128 })
+    if (req.url === '/face/verify') {
+      const photo = Buffer.from(b.imageBase64 || '', 'base64').toString()
+      const n = (b.candidateEmbeddingsBase64 || []).length
+      const score = photo.startsWith('MATCH') ? 0.95 : 0.3
+      return json({ ...face, match_score: score, match_mean: score, match_scores: Array(n).fill(score), candidate_count: n })
+    }
+    res.writeHead(404); res.end()
+  })
+})
+const workerUp = await new Promise((resolve) => { worker.once('error', () => resolve(false)); worker.listen(8091, () => resolve(true)) })
 const ist = (dateIso, hhmm) => new Date(`${dateIso}T${hhmm}:00+05:30`).toISOString()
 
 // ── fixtures and what was there before ───────────────────────────────────────
@@ -73,6 +104,9 @@ const area = (() => {
   return { latitude: lat, longitude: lng }
 })()
 const far = { latitude: 12.9716, longitude: 77.5946 } // Bengaluru, far from the work area
+const readerHadEnrollment = sql(`select count(*) from attendance.face_enrollments where tenant_id='${tenant}' and employee_id='${READER}'`) !== '0'
+const readerEnrolled = readerHadEnrollment && sql(`select status from attendance.face_enrollments where tenant_id='${tenant}' and employee_id='${READER}'`) === 'ACTIVE'
+let createdEnrollment = false
 const readerHadToday = sql(`select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) !== '0'
 const hrConfigRows = sql(`select count(*) from settings.hr_configuration where tenant_id='${tenant}' and company_id='${company}'`)
 const webWas = hrConfigRows === '0' ? null : sql(`select allow_web_punch from settings.hr_configuration where tenant_id='${tenant}' and company_id='${company}'`)
@@ -96,7 +130,7 @@ const lastMonday = sql(`select (date_trunc('week', '${today}'::date) - interval 
 const lastTuesday = sql(`select ('${lastMonday}'::date + 1)::text`)
 const lastWednesday = sql(`select ('${lastMonday}'::date + 2)::text`)
 let projectId = null
-let wfhRecord = null
+let wfhRecord
 let correctionId = null
 const entryIds = []
 
@@ -121,6 +155,12 @@ function cleanup() {
   }
   if (correctionId) q(`delete from attendance.regularization_requests where id='${correctionId}'`)
   q(`delete from public.geo_fence_audits where tenant_id='${tenant}' and employee_id in ('${READER}','${FIN}') and created_at >= '${start}'`)
+  // the face checks and the enrolment this run made
+  q(`delete from attendance.face_verification_events where tenant_id='${tenant}' and employee_id='${READER}' and created_at >= '${start}'`)
+  if (createdEnrollment) {
+    q(`delete from attendance.face_embedding_templates where tenant_id='${tenant}' and employee_id='${READER}'`)
+    q(`delete from attendance.face_enrollments where tenant_id='${tenant}' and employee_id='${READER}'`)
+  }
   // the timesheet
   q(`do $$ begin if to_regclass('hrms.timesheet_weeks') is not null then delete from hrms.timesheet_weeks where tenant_id='${tenant}' and employee_id in ('${READER}','${HRM}') and created_at >= '${start}'; end if; end $$`)
   if (entryIds.length) q(`delete from hrms.time_entries where id in (${entryIds.map((i) => `'${i}'`).join(',')})`)
@@ -142,8 +182,8 @@ try {
   const reader = await login('reader@unifiedtree.demo')
 
   // ── 0. the migrations ──────────────────────────────────────────────────────
-  check('V143_53: "Allow web check-in" column is there, off by default',
-    sql(`select column_default from information_schema.columns where table_schema='settings' and table_name='hr_configuration' and column_name='allow_web_punch'`) === 'false')
+  check('V143_53: "Allow web check-in" column is there, on by default',
+    sql(`select column_default from information_schema.columns where table_schema='settings' and table_name='hr_configuration' and column_name='allow_web_punch'`) === 'true')
   check('V143_53: both method checks on the partitioned records accept WEB and are validated',
     sql(`select count(*) from pg_constraint where conrelid='attendance.records'::regclass and conname in ('ck_attendance_records_check_in_method','ck_attendance_records_check_out_method') and convalidated and pg_get_constraintdef(oid) like '%''WEB''%'`) === '2'
     && sql(`select count(*) from pg_constraint where conrelid='attendance.records'::regclass and conname like '%_web'`) === '0')
@@ -156,91 +196,145 @@ try {
   check('V143_65: granted to exactly OWNER, SUPER_ADMIN, HR_MANAGER and DEPT_MANAGER',
     sql(`select string_agg(r.code, ',' order by r.code) from rbac.role_permissions rp join rbac.roles r on r.id = rp.role_id and r.tenant_id is null where rp.permission_code = 'hrms.timesheet.approve'`) === 'DEPT_MANAGER,HR_MANAGER,OWNER,SUPER_ADMIN')
 
-  // ── A. web check-in ────────────────────────────────────────────────────────
+  // ── A. web check-in: on by default, a face scan like the phone ─────────────
   if (readerHadToday) check('reader@ has no attendance record today (needed for the web punch)', false, 'a record exists; the web punch steps are skipped')
   const g0 = await reader.call('GET', `/v1/attendance/web-punch-setting?companyId=${company}`)
-  check('anyone signed in reads the switch; it is off', g0.status === 200 && g0.json.allowWebPunch === false, `${g0.status} ${g0.text}`)
-  const offPunch = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB' })
-  check('switch off: a web check-in is refused (422 WEB_PUNCH_NOT_ALLOWED)', offPunch.status === 422 && code(offPunch) === 'WEB_PUNCH_NOT_ALLOWED', `${offPunch.status} ${code(offPunch)}`)
+  check('anyone signed in reads the switch; it is on by default', g0.status === 200 && g0.json.allowWebPunch === true, `${g0.status} ${g0.text}`)
+  const puts = await Promise.all([reader, mgr, fin].map((u) => u.call('PUT', `/v1/attendance/web-punch-setting?companyId=${company}`, { allowWebPunch: false })))
+  check('reader@, mgr@ and fin@ may not change the switch (403)', puts.every((p) => p.status === 403), puts.map((p) => p.status).join('/'))
+  const hrOff = await hrm.call('PUT', `/v1/attendance/web-punch-setting?companyId=${company}`, { allowWebPunch: false })
+  check('hrm@ (attendance policy) turns web check-in off', hrOff.status === 200 && hrOff.json.allowWebPunch === false, `${hrOff.status}`)
+  check('…stored on the company row', sql(`select allow_web_punch from settings.hr_configuration where tenant_id='${tenant}' and company_id='${company}'`) === 'f')
+  const offPunch = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
+  check('switch off: a web check-in is refused (422 WEB_PUNCH_NOT_ALLOWED), before any face check', offPunch.status === 422 && code(offPunch) === 'WEB_PUNCH_NOT_ALLOWED'
+    && sql(`select count(*) from attendance.face_verification_events where tenant_id='${tenant}' and employee_id='${READER}' and created_at >= '${start}'`) === '0', `${offPunch.status} ${code(offPunch)}`)
   const offBreak = await reader.call('POST', '/v1/attendance/breaks/start')
   check('switch off: no break from the web either', offBreak.status === 422 && code(offBreak) === 'WEB_PUNCH_NOT_ALLOWED', `${offBreak.status} ${code(offBreak)}`)
   const day0 = await reader.call('GET', '/v1/attendance/my-day')
   check('my day before punching: not in, web check-in off, nothing to undo',
     day0.status === 200 && day0.json.checkedIn === false && day0.json.webPunchAllowed === false && day0.json.canUndoCheckOut === false,
     `${day0.status} ${day0.text?.slice(0, 200)}`)
-
-  const puts = await Promise.all([reader, mgr, fin].map((u) => u.call('PUT', `/v1/attendance/web-punch-setting?companyId=${company}`, { allowWebPunch: true })))
-  check('reader@, mgr@ and fin@ may not change the switch (403)', puts.every((p) => p.status === 403), puts.map((p) => p.status).join('/'))
-  const hrOn = await hrm.call('PUT', `/v1/attendance/web-punch-setting?companyId=${company}`, { allowWebPunch: false })
-  check('hrm@ (attendance policy) may change it', hrOn.status === 200 && hrOn.json.allowWebPunch === false, `${hrOn.status}`)
   const on = await owner.call('PUT', `/v1/attendance/web-punch-setting?companyId=${company}`, { allowWebPunch: true })
-  check('owner@ switches web check-in on', on.status === 200 && on.json.allowWebPunch === true && on.json.companyId === company, `${on.status} ${on.text}`)
+  check('owner@ switches web check-in back on', on.status === 200 && on.json.allowWebPunch === true && on.json.companyId === company, `${on.status} ${on.text}`)
   check('the switch is stored on the company row',
     sql(`select allow_web_punch from settings.hr_configuration where tenant_id='${tenant}' and company_id='${company}'`) === 't')
 
   if (!readerHadToday) {
-    const noLoc = await reader.call('POST', '/v1/attendance/checkin', { latitude: 0, longitude: 0, checkInMethod: 'WEB' })
+    const noLoc = await reader.call('POST', '/v1/attendance/checkin', { latitude: 0, longitude: 0, checkInMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
     check('a web check-in without the browser\'s location is refused (422 LOCATION_REQUIRED)', noLoc.status === 422 && code(noLoc) === 'LOCATION_REQUIRED', `${noLoc.status} ${code(noLoc)}`)
-    const inn = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: 'bm90LWEtZmFjZQ==', offlineCaptured: true, capturedAt: ist(today, '06:00') })
-    check('web check-in inside the work area: 200, method WEB, no face score', inn.status === 200 && inn.json.checkInMethod === 'WEB' && inn.json.faceConfidenceScore == null, `${inn.status} ${inn.text?.slice(0, 200)}`)
-    check('…stamped by the server clock, not the client\'s capture time',
-      inn.status === 200 && Math.abs(new Date(inn.json.checkInTime).getTime() - Date.now()) < 5 * 60e3, inn.json?.checkInTime)
-    check('…stored as WEB on the record', sql(`select check_in_method from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'WEB')
+    const noFace = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB' })
+    check('a web check-in without a face photo is refused (422 FACE_IMAGE_REQUIRED)', noFace.status === 422 && code(noFace) === 'FACE_IMAGE_REQUIRED', `${noFace.status} ${code(noFace)}`)
 
-    const b1 = await reader.call('POST', '/v1/attendance/breaks/start')
-    check('take a break: on a break', b1.status === 200 && b1.json.onBreak === true && !!b1.json.breakStartedAt, `${b1.status} ${b1.text}`)
-    const b1b = await reader.call('POST', '/v1/attendance/breaks/start')
-    check('one break at a time (422 BREAK_ALREADY_STARTED)', b1b.status === 422 && code(b1b) === 'BREAK_ALREADY_STARTED', `${b1b.status} ${code(b1b)}`)
-    const md = await reader.call('GET', '/v1/attendance/my-day')
-    check('my day: checked in by web, on a break, web check-in allowed, the day counted as worked',
-      md.status === 200 && md.json.checkedIn && !md.json.checkedOut && md.json.onBreak && md.json.webPunchAllowed
-      && md.json.record?.checkInMethod === 'WEB' && ['PRESENT', 'LATE', 'HALF_DAY'].includes(md.json.status),
-      `${md.status} status=${md.json?.status} onBreak=${md.json?.onBreak}`)
-    const b1e = await reader.call('POST', '/v1/attendance/breaks/end')
-    check('end the break', b1e.status === 200 && b1e.json.onBreak === false && b1e.json.breaks.length === 1, `${b1e.status}`)
-    check('breaks are event-log rows only; the record\'s worked hours are untouched',
-      sql(`select count(*) from attendance.event_logs where employee_id='${READER}' and event_date='${today}' and event_type in ('BREAK_START','BREAK_END') and created_at >= '${start}'`) === '2'
-      && sql(`select coalesce(work_hours::text, 'none') from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'none')
-    await reader.call('POST', '/v1/attendance/breaks/start') // left open: check-out must end it
+    // reader@'s face: none yet → FACE_NOT_ENROLLED; then enrolled through the self enrolment the web uses.
+    let enrolled = readerEnrolled
+    if (!enrolled) {
+      const ne = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
+      check('no enrolled face: refused (409 FACE_NOT_ENROLLED), nothing punched', ne.status === 409 && code(ne) === 'FACE_NOT_ENROLLED'
+        && sql(`select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === '0', `${ne.status} ${code(ne)}`)
+      if (workerUp) {
+        const st = await reader.call('POST', '/v1/attendance/face/enroll/start', { deviceFingerprint: 'Web browser (live-rd-p-att-day)' })
+        createdEnrollment = !readerHadEnrollment
+        let ok = st.status === 200
+        for (const angle of (st.json?.captureSequence || ['FRONT', 'LEFT_30', 'RIGHT_30'])) {
+          if (!ok) break
+          const s = await reader.call('POST', '/v1/attendance/face/enroll/sample', { enrollmentId: st.json.enrollmentId, captureAngle: angle, imageBase64: MATCH_PHOTO, challengePerformed: 'BLINK' })
+          ok = s.status === 200 && s.json?.accepted !== false
+        }
+        const done = ok ? await reader.call('POST', '/v1/attendance/face/enroll/complete') : { status: 0 }
+        enrolled = done.status === 200
+        check('reader@ enrols their face from the web (stand-in worker)', enrolled, `start ${st.status} complete ${done.status}`)
+      }
+    }
+    if (!enrolled || !workerUp) {
+      check('the face-matched web punch steps ran', false, !workerUp ? 'port 8091 is in use (a real face worker?), so the stand-in worker could not start' : 'reader@ could not be enrolled')
+    } else {
+      const bad = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: STRANGER_PHOTO })
+      check('a face that isn\'t reader@\'s: 403 FAIL_MATCH, nothing punched', bad.status === 403 && code(bad) === 'FAIL_MATCH'
+        && sql(`select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === '0', `${bad.status} ${code(bad)}`)
+      const inn = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: MATCH_PHOTO, deviceId: 'Web browser (Chrome on Windows)', offlineCaptured: true, capturedAt: ist(today, '06:00') })
+      check('web check-in with a matching face inside the work area: 200, method WEB, no face score on the record', inn.status === 200 && inn.json.checkInMethod === 'WEB' && inn.json.faceConfidenceScore == null, `${inn.status} ${inn.text?.slice(0, 200)}`)
+      check('…stamped by the server clock, not the client\'s capture time',
+        inn.status === 200 && Math.abs(new Date(inn.json.checkInTime).getTime() - Date.now()) < 5 * 60e3, inn.json?.checkInTime)
+      check('…stored as WEB on the record', sql(`select check_in_method from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'WEB')
+      check('…the face check is in the face log: PUNCH_IN, passed, from the browser',
+        sql(`select purpose || '|' || result || '|' || coalesce(device_fingerprint, '') from attendance.face_verification_events where tenant_id='${tenant}' and employee_id='${READER}'
+              and created_at >= '${start}' and result = 'PASS' order by created_at desc limit 1`) === 'PUNCH_IN|PASS|Web browser (Chrome on Windows)')
+      const again = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
+      check('a second web check-in is refused before the face scan (422 ALREADY_CHECKED_IN)', again.status === 422 && code(again) === 'ALREADY_CHECKED_IN', `${again.status} ${code(again)}`)
 
-    const out = await reader.call('POST', '/v1/attendance/checkout', { ...area, checkOutMethod: 'WEB' })
-    check('web check-out: 200, method WEB', out.status === 200 && out.json.checkOutMethod === 'WEB' && !!out.json.checkOutTime, `${out.status} ${out.text?.slice(0, 200)}`)
-    check('the open break ended with the check-out, at the check-out time',
-      sql(`select count(*) from attendance.event_logs l join attendance.records r on r.id = l.record_id and r.attendance_date = l.event_date
-            where r.employee_id='${READER}' and r.attendance_date='${today}' and l.event_type='BREAK_END' and l.event_at = r.check_out_at`) === '1')
-    check('worked hours are check-in to check-out, breaks not taken off',
-      sql(`select (abs(work_hours - round((extract(epoch from (check_out_at - check_in_at))::bigint / 60 / 60.0)::numeric, 2)) < 0.011)::text
-             from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'true')
-    const md2 = await reader.call('GET', '/v1/attendance/my-day')
-    const until = md2.json?.undoCheckOutUntil ? new Date(md2.json.undoCheckOutUntil).getTime() : 0
-    check('my day after check-out: undo offered until check-out + 10 minutes',
-      md2.status === 200 && md2.json.checkedOut && md2.json.canUndoCheckOut && Math.abs(until - (new Date(out.json.checkOutTime).getTime() + 600e3)) < 2000,
-      `${md2.status} can=${md2.json?.canUndoCheckOut} until=${md2.json?.undoCheckOutUntil}`)
-    const undo = await reader.call('POST', '/v1/attendance/checkout/undo')
-    check('undo check-out: 200, checked in again', undo.status === 200 && undo.json.checkOutTime == null && undo.json.workHours == null, `${undo.status} ${undo.text?.slice(0, 200)}`)
-    check('…the record is as before checking out, and the undo is logged',
-      sql(`select (check_out_at is null and check_out_method is null and work_hours is null and overtime_minutes is null)::text from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'true'
-      && sql(`select count(*) from attendance.event_logs where employee_id='${READER}' and event_date='${today}' and event_type='MANUAL_OVERRIDE' and created_at >= '${start}'`) === '1')
-    const undo2 = await reader.call('POST', '/v1/attendance/checkout/undo')
-    check('nothing left to undo (422 NOT_CHECKED_OUT)', undo2.status === 422 && code(undo2) === 'NOT_CHECKED_OUT', `${undo2.status} ${code(undo2)}`)
-    const out2 = await reader.call('POST', '/v1/attendance/checkout', { ...area, checkOutMethod: 'WEB' })
-    // Back-date this test's own punch (in an hour ago, out 11 minutes ago), unless that would cross midnight.
-    const moved = sql(`update attendance.records set check_in_at = now() - interval '60 minutes', check_out_at = now() - interval '11 minutes'
-        where employee_id='${READER}' and attendance_date='${today}' and ((now() - interval '60 minutes') at time zone 'Asia/Kolkata')::date = '${today}'
-        returning 1`).split('\n')[0] === '1'
-    const late = await reader.call('POST', '/v1/attendance/checkout/undo')
-    check('after 10 minutes the check-out can\'t be undone (422 CHECKOUT_UNDO_WINDOW_PASSED)',
-      out2.status === 200 && moved && late.status === 422 && code(late) === 'CHECKOUT_UNDO_WINDOW_PASSED',
-      `${out2.status} moved=${moved} ${late.status} ${code(late)}`)
-    const today1 = await reader.call('GET', '/v1/attendance/today')
-    check('the mobile app\'s /today keeps its fields and says WEB',
-      today1.status === 200 && today1.json.checkInMethod === 'WEB' && 'attendanceType' in today1.json && 'manualEntry' in today1.json && 'faceConfidenceScore' in today1.json, `${today1.status}`)
+      const b1 = await reader.call('POST', '/v1/attendance/breaks/start')
+      check('take a break: on a break', b1.status === 200 && b1.json.onBreak === true && !!b1.json.breakStartedAt, `${b1.status} ${b1.text}`)
+      const b1b = await reader.call('POST', '/v1/attendance/breaks/start')
+      check('one break at a time (422 BREAK_ALREADY_STARTED)', b1b.status === 422 && code(b1b) === 'BREAK_ALREADY_STARTED', `${b1b.status} ${code(b1b)}`)
+      const md = await reader.call('GET', '/v1/attendance/my-day')
+      check('my day: checked in by web, on a break, web check-in allowed, the day counted as worked',
+        md.status === 200 && md.json.checkedIn && !md.json.checkedOut && md.json.onBreak && md.json.webPunchAllowed
+        && md.json.record?.checkInMethod === 'WEB' && ['PRESENT', 'LATE', 'HALF_DAY'].includes(md.json.status),
+        `${md.status} status=${md.json?.status} onBreak=${md.json?.onBreak}`)
+      const b1e = await reader.call('POST', '/v1/attendance/breaks/end')
+      check('end the break', b1e.status === 200 && b1e.json.onBreak === false && b1e.json.breaks.length === 1, `${b1e.status}`)
+      check('breaks are event-log rows only; the record\'s worked hours are untouched',
+        sql(`select count(*) from attendance.event_logs where employee_id='${READER}' and event_date='${today}' and event_type in ('BREAK_START','BREAK_END') and created_at >= '${start}'`) === '2'
+        && sql(`select coalesce(work_hours::text, 'none') from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'none')
+      await reader.call('POST', '/v1/attendance/breaks/start') // left open: check-out must end it
+
+      const outNoFace = await reader.call('POST', '/v1/attendance/checkout', { ...area, checkOutMethod: 'WEB' })
+      check('a web check-out without a face photo is refused (422 FACE_IMAGE_REQUIRED)', outNoFace.status === 422 && code(outNoFace) === 'FACE_IMAGE_REQUIRED', `${outNoFace.status} ${code(outNoFace)}`)
+      const out = await reader.call('POST', '/v1/attendance/checkout', { ...area, checkOutMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
+      check('web check-out with a matching face: 200, method WEB', out.status === 200 && out.json.checkOutMethod === 'WEB' && !!out.json.checkOutTime, `${out.status} ${out.text?.slice(0, 200)}`)
+      check('…its face check is in the face log as PUNCH_OUT',
+        sql(`select count(*) from attendance.face_verification_events where tenant_id='${tenant}' and employee_id='${READER}' and created_at >= '${start}' and purpose='PUNCH_OUT' and result='PASS'`) === '1')
+      check('the open break ended with the check-out, at the check-out time',
+        sql(`select count(*) from attendance.event_logs l join attendance.records r on r.id = l.record_id and r.attendance_date = l.event_date
+              where r.employee_id='${READER}' and r.attendance_date='${today}' and l.event_type='BREAK_END' and l.event_at = r.check_out_at`) === '1')
+      check('worked hours are check-in to check-out, breaks not taken off',
+        sql(`select (abs(work_hours - round((extract(epoch from (check_out_at - check_in_at))::bigint / 60 / 60.0)::numeric, 2)) < 0.011)::text
+               from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'true')
+      const md2 = await reader.call('GET', '/v1/attendance/my-day')
+      const until = md2.json?.undoCheckOutUntil ? new Date(md2.json.undoCheckOutUntil).getTime() : 0
+      check('my day after check-out: undo offered until check-out + 10 minutes',
+        md2.status === 200 && md2.json.checkedOut && md2.json.canUndoCheckOut && Math.abs(until - (new Date(out.json.checkOutTime).getTime() + 600e3)) < 2000,
+        `${md2.status} can=${md2.json?.canUndoCheckOut} until=${md2.json?.undoCheckOutUntil}`)
+      const outAgain = await reader.call('POST', '/v1/attendance/checkout', { ...area, checkOutMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
+      check('a second web check-out is refused before the face scan (422 ALREADY_CHECKED_OUT)', outAgain.status === 422 && code(outAgain) === 'ALREADY_CHECKED_OUT', `${outAgain.status} ${code(outAgain)}`)
+      const undo = await reader.call('POST', '/v1/attendance/checkout/undo')
+      check('undo check-out: 200, checked in again', undo.status === 200 && undo.json.checkOutTime == null && undo.json.workHours == null, `${undo.status} ${undo.text?.slice(0, 200)}`)
+      check('…the record is as before checking out, and the undo is logged',
+        sql(`select (check_out_at is null and check_out_method is null and work_hours is null and overtime_minutes is null)::text from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === 'true'
+        && sql(`select count(*) from attendance.event_logs where employee_id='${READER}' and event_date='${today}' and event_type='MANUAL_OVERRIDE' and created_at >= '${start}'`) === '1')
+      const undo2 = await reader.call('POST', '/v1/attendance/checkout/undo')
+      check('nothing left to undo (422 NOT_CHECKED_OUT)', undo2.status === 422 && code(undo2) === 'NOT_CHECKED_OUT', `${undo2.status} ${code(undo2)}`)
+      const out2 = await reader.call('POST', '/v1/attendance/checkout', { ...area, checkOutMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
+      // Back-date this test's own punch (in up to an hour ago but not before today began, out 11 minutes ago),
+      // unless the check-out would then fall before today began (the first 12 minutes after midnight).
+      const dayStart = `('${today}'::timestamp at time zone 'Asia/Kolkata')`
+      const moved = sql(`update attendance.records set check_in_at = greatest(now() - interval '60 minutes', ${dayStart} + interval '1 minute'),
+            check_out_at = now() - interval '11 minutes'
+          where employee_id='${READER}' and attendance_date='${today}' and now() - interval '11 minutes' > ${dayStart} + interval '1 minute'
+          returning 1`).split('\n')[0] === '1'
+      const late = await reader.call('POST', '/v1/attendance/checkout/undo')
+      check('after 10 minutes the check-out can\'t be undone (422 CHECKOUT_UNDO_WINDOW_PASSED)',
+        out2.status === 200 && moved && late.status === 422 && code(late) === 'CHECKOUT_UNDO_WINDOW_PASSED',
+        `${out2.status} moved=${moved} ${late.status} ${code(late)}`)
+      const today1 = await reader.call('GET', '/v1/attendance/today')
+      check('the mobile app\'s /today keeps its fields and says WEB',
+        today1.status === 200 && today1.json.checkInMethod === 'WEB' && 'attendanceType' in today1.json && 'manualEntry' in today1.json && 'faceConfidenceScore' in today1.json, `${today1.status}`)
+
+      // The Face Punch tab's month calendar: one person's face punches.
+      const fe = await hrm.call('GET', `/v1/attendance/review/face-events/employee/${READER}?from=${today}&to=${today}`)
+      const mine = (fe.json || []).filter((e) => e.employeeId === READER && String(e.device || '').startsWith('Web browser'))
+      check('one person\'s face punches (hrm@): today\'s web punch in and out, with the name and device',
+        fe.status === 200 && mine.some((e) => e.purpose === 'PUNCH_IN') && mine.some((e) => e.purpose === 'PUNCH_OUT') && mine.every((e) => e.employeeName && e.date === today),
+        `${fe.status} ${mine.length}`)
+      const feDenied = await reader.call('GET', `/v1/attendance/review/face-events/employee/${READER}`)
+      check('…not for someone without the face log or review permission (reader@ 403)', feDenied.status === 403, `${feDenied.status}`)
+    }
   }
 
   const off = await owner.call('PUT', `/v1/attendance/web-punch-setting?companyId=${company}`, { allowWebPunch: false })
-  const offAgain = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB' })
+  const offAgain = await reader.call('POST', '/v1/attendance/checkin', { ...area, checkInMethod: 'WEB', faceImageBase64: MATCH_PHOTO })
   const offUndo = await reader.call('POST', '/v1/attendance/checkout/undo')
-  check('switched back off: web punches and undo are refused again',
+  check('switched off: web punches and undo are refused again',
     off.status === 200 && off.json.allowWebPunch === false && code(offAgain) === 'WEB_PUNCH_NOT_ALLOWED' && code(offUndo) === 'WEB_PUNCH_NOT_ALLOWED',
     `${off.status} ${code(offAgain)} ${code(offUndo)}`)
 

@@ -630,6 +630,33 @@ public class DomainEventListener {
         }
     }
 
+    /**
+     * An employee asked for overtime on a day (DECISIONS 22): their approver is told, by the same chain as fix and
+     * shift change requests (reporting manager, else HR, else a super admin).
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onOvertimeRequested(com.unifiedtree.notifications.events.OvertimeRequestedEvent e) {
+        try {
+            UUID approverId = resolveCorrectionApprover(e.employeeId(), e.tenantId());
+            if (approverId == null) {
+                log.warn("No approver resolvable for overtime request {} (employee={}); skipping notification",
+                        e.requestId(), e.employeeId());
+                return;
+            }
+            String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.OVERTIME_REQUESTED.name());
+            data.put("overtimeRequestId", e.requestId().toString());
+            data.put("route", "/hrms/shifts?tab=overtime");
+            dispatcher.dispatch(e.tenantId(), approverId, "attendance.overtime_requested", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "hours", "%.1fh".formatted(e.minutes() / 60.0),
+                    "date", fmt(e.onDate())), data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish OVERTIME_REQUESTED notification for {}: {}", e.requestId(), ex.getMessage());
+        }
+    }
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onOvertimeDecided(OvertimeDecidedEvent e) {
         try {

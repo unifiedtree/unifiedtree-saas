@@ -24,6 +24,8 @@ export interface ShiftRequest {
   decidedAt?: string | null
   /** Who decided it; null while pending and for requests that expired on their own. */
   approverName?: string | null
+  /** BW-31: the last day of a temporary change; null = permanent. */
+  requestedEndDate?: string | null
 }
 
 export function usePendingShiftRequests(opts?: { enabled?: boolean }) {

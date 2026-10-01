@@ -29,6 +29,8 @@ export interface MonthlyStatsResponse {
   holidays: number
   onTimeDays: number
   attendanceScore: number
+  /** Days on approved leave so far this month (V143.53 redesign, BW-15); missing on older servers. */
+  leaveDays?: number | null
 }
 
 export interface DayRecordResponse {
@@ -40,6 +42,16 @@ export interface DayRecordResponse {
   /** Why the day has this status (attendance policy or a reviewer); V143.10. */
   note?: string | null
   manual?: boolean
+  // Day details (V143.53 redesign, BW-15): null on days without a punch, missing on older servers.
+  /** OFFICE / WFH / FIELD_WORK … */
+  attendanceType?: string | null
+  /** Minutes after the start time, only when the arrival was past the grace. */
+  lateMinutes?: number | null
+  checkInMethod?: string | null
+  checkOutMethod?: string | null
+  locationName?: string | null
+  /** The day's times were fixed: an approved fix request or an entry by HR. */
+  regularized?: boolean | null
 }
 
 export interface StaffStatusResponse {
@@ -106,6 +118,16 @@ export interface StaffStatusResponse {
   punchRejected?: boolean
   earlyByMinutes?: number | null
   workedMinutes?: number | null
+  // Roster row facts (V143.53 redesign, BW-13); missing on older servers.
+  branchName?: string | null
+  /** How the day's check-in was made (FACE_RECOGNITION, GPS, WEB, MANAGER_OVERRIDE …). */
+  checkInMethod?: string | null
+  /** The approved leave covering the date: its type, first and last day. */
+  leaveTypeName?: string | null
+  leaveFrom?: string | null
+  leaveTo?: string | null
+  /** A leave request still waiting for approval covers the date (never counts as on leave). */
+  pendingLeave?: boolean
 }
 
 export interface AttendanceSummaryCounts {
@@ -213,6 +235,10 @@ export interface CorrectionRequestResponse {
   approverComment?: string
   decidedAt?: string
   createdAt: string
+  /** Who the request went to (V143.53 redesign, BW-23); missing on older servers. */
+  approverName?: string | null
+  /** Who decided it. */
+  decidedByName?: string | null
 }
 
 // ── Employee self-service ──────────────────────────────────────────────────────

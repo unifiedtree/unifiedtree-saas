@@ -92,7 +92,8 @@ async function greetingOn(page, path) {
   await page.goto(base + path)
   const h = page.getByRole('heading', { level: 1 }).filter({ hasText: GREETING }).first()
   await h.waitFor({ timeout: 30_000 })
-  return (await h.innerText()).trim()
+  // The waving hand after a greeting (PageHeader wave) is decoration, not part of the name.
+  return (await h.innerText()).replace(/\s*\u{1F44B}\s*$/u, '').trim()
 }
 
 const restore = []
@@ -118,7 +119,7 @@ try {
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-daily.png` })
 
     const f = await openDaily(s.page, '?tab=my')
-    check('owner: ?tab=my opens the first tab they have (Daily Logs)', /Daily Logs/.test(f.selected) && /Daily Logs/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
+    check('owner: ?tab=my opens the first tab they have (Daily Logs)', /Daily Logs/.test(f.selected) && /^Today$/.test(f.heading) /* Daily Logs' title is the design's "Today" (P-ATT-DAY) */, `selected="${f.selected}" heading="${f.heading}"`)
     check('owner: ?tab=my shows no My Attendance tab', !f.tabs.some((t) => /My Attendance/i.test(t)), f.tabs.join(', '))
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-tab-my.png` })
 
@@ -162,13 +163,17 @@ try {
     const d = await openDaily(s.page)
     check(`${who}: Daily Tracking still has the My Attendance tab`, d.tabs.some((t) => /My Attendance/.test(t)), d.tabs.join(', '))
     const f = await openDaily(s.page, '?tab=my')
-    check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /My Attendance/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
+    check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /^Attendance$/.test(f.heading) /* the design's title (P-ATT-DAY) */, `selected="${f.selected}" heading="${f.heading}"`)
     if (who === 'employee') await s.page.screenshot({ path: `${shots}/greeting-myatt-employee-tab-my.png` })
     if (who === 'dept manager') {
       // P-TEAM: My team's title is "Team today"; the manager's greeting moved to Home (AUDIT §5.14), where P-HOME checks it.
       await s.page.goto(base + '/team')
       const ok = await s.page.getByRole('heading', { level: 1, name: 'Team today' }).waitFor({ timeout: 30_000 }).then(() => true, () => false)
       check('dept manager: My team shows "Team today" (the greeting moved to Home)', ok)
+      // P-HOME: a manager's Home is /me with the team blocks; the greeting uses the shared name rule
+      // (first name today, the full name once Release 1.1 changes the rule), so either is accepted.
+      const hg = await greetingOn(s.page, '/me')
+      check('dept manager: Home (/me) greets them by name ("Dept" or "Dept Manager")', /, Dept( Manager)?(\s|$)/.test(hg), hg)
     }
     check(`${who}: no page errors`, s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
     check(`${who}: no failed API calls`, s.failedApi.length === 0, s.failedApi.slice(0, 4).join(' | '))

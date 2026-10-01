@@ -9,10 +9,11 @@
 --    (ShiftChangeRequestService; no JPA entity maps it). Its startup bootstrap
 --    (ShiftChangeRequestSchemaBootstrap) is left as it is: the runtime role
 --    can't ALTER the table, so the column comes from here.
--- 2. attendance.overtime_rules: per company, when extra time starts to count
---    as overtime (minutes past the shift) and the most overtime that can be
---    approved per person per month. No row, or NULL values, means today's
---    behaviour exactly. The rules change only which minutes are counted and
+-- 2. attendance.overtime_rules: per company, the minimum overtime (extra time
+--    under it doesn't count; once it is reached ALL the extra time counts) and
+--    the most overtime that can be approved per person per month. No row, or a
+--    NULL minimum, means the default minimum of 60 minutes (client decision,
+--    2 Oct 2026); a NULL cap means no cap. The rules change only which minutes are counted and
 --    approved: stored overtime minutes, work hours and pay never change, and
 --    overtime is still recorded, not paid. JDBC only (OvertimeRulesController,
 --    OvertimeController); no JPA entity maps it.
@@ -49,23 +50,23 @@ END $$;
 CREATE TABLE IF NOT EXISTS attendance.overtime_rules (
     tenant_id             UUID          NOT NULL,
     company_id            UUID          NOT NULL,
-    counts_after_minutes  INTEGER,
+    minimum_minutes       INTEGER,
     monthly_cap_minutes   INTEGER,
     updated_by_user_id    UUID,
     updated_by_name       VARCHAR(200),
     created_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT pk_overtime_rules PRIMARY KEY (tenant_id, company_id),
-    CONSTRAINT ck_overtime_rules_counts_after
-        CHECK (counts_after_minutes IS NULL OR counts_after_minutes BETWEEN 0 AND 1440),
+    CONSTRAINT ck_overtime_rules_minimum
+        CHECK (minimum_minutes IS NULL OR minimum_minutes BETWEEN 0 AND 1440),
     CONSTRAINT ck_overtime_rules_monthly_cap
         CHECK (monthly_cap_minutes IS NULL OR monthly_cap_minutes BETWEEN 0 AND 44640)
 );
 
 COMMENT ON TABLE attendance.overtime_rules IS
-    'Company overtime rules: minutes past the shift before extra time counts, and the monthly approval cap per person. NULL = no rule (V143.54).';
-COMMENT ON COLUMN attendance.overtime_rules.counts_after_minutes IS
-    'Extra minutes that do not count as overtime; only the time past them does. NULL = from the first minute.';
+    'Company overtime rules: the minimum overtime (a threshold) and the monthly approval cap per person (V143.54).';
+COMMENT ON COLUMN attendance.overtime_rules.minimum_minutes IS
+    'Minimum overtime: extra time under it does not count; once reached, all of it counts. NULL = the default, 60 minutes.';
 COMMENT ON COLUMN attendance.overtime_rules.monthly_cap_minutes IS
     'Most counted overtime that can be approved per person per calendar month. NULL = no cap.';
 

@@ -1,8 +1,10 @@
 // P-ATT-PLAN backend (redesign .be milestone) — API-level live check against the
 // real local API. Covers:
-//   BW-29 company overtime rules: GET/PUT /v1/attendance/overtime-rules, the
-//         Overtime list and decisions applying "counts after" and the monthly
-//         cap, then cleared (the list is today's again, with no new fields)
+//   BW-29 company overtime rules (DECISIONS 22): the 1-hour default minimum is a
+//         threshold (45 min doesn't count, 1 h 20 m counts fully), a company's own
+//         minimum and monthly cap, then cleared back to the default
+//   Overtime requests (V143_66): reader asks, the approver is told, mgr approves,
+//         reader is told; under the minimum, twice a day and withdraw
 //   BW-31 a shift change with an end date ("Until"): approved, the new shift
 //         runs to the end date and the old shift comes back the day after;
 //         and for someone with no shift before, none after
@@ -77,11 +79,11 @@ const roles = Object.values(U)
 console.log(`DB ${DB}, today ${today}, API ${base}`)
 
 try {
-  // ── BW-29 · company overtime rules ─────────────────────────────────────────
+  // ── BW-29 · company overtime rules (DECISIONS 22: a 1-hour minimum by default, a threshold) ──
   await run('overtime rules', async () => {
-    const before = sql(`select coalesce(counts_after_minutes::text,'null')||'|'||coalesce(monthly_cap_minutes::text,'null') from attendance.overtime_rules where tenant_id='${tenant}' and company_id='${company}'`)
+    const before = sql(`select coalesce(minimum_minutes::text,'null')||'|'||coalesce(monthly_cap_minutes::text,'null') from attendance.overtime_rules where tenant_id='${tenant}' and company_id='${company}'`)
     cleanup.push(() => before
-      ? sql(`update attendance.overtime_rules set counts_after_minutes=${before.split('|')[0]}, monthly_cap_minutes=${before.split('|')[1]} where tenant_id='${tenant}' and company_id='${company}'`)
+      ? sql(`update attendance.overtime_rules set minimum_minutes=${before.split('|')[0]}, monthly_cap_minutes=${before.split('|')[1]} where tenant_id='${tenant}' and company_id='${company}'`)
       : sql(`delete from attendance.overtime_rules where tenant_id='${tenant}' and company_id='${company}'`))
     cleanup.push(() => sql(`delete from audit.events where action='OVERTIME_RULES_UPDATED' and occurred_at >= '${testStart}'`))
     const path = `/v1/attendance/overtime-rules?companyId=${company}`
@@ -90,61 +92,98 @@ try {
       check(`${u.name}: read the rules → ${expectStatus(u, can(u, 'attendance.team.read', 'attendance.policy.manage'))}`,
         r.status === expectStatus(u, can(u, 'attendance.team.read', 'attendance.policy.manage')), r.status)
       if (!can(u, 'attendance.policy.manage')) {
-        const w = await call(u, 'PUT', path, { countsAfterMinutes: 5, monthlyCapMinutes: null })
+        const w = await call(u, 'PUT', path, { minimumMinutes: 5, monthlyCapMinutes: null })
         check(`${u.name}: cannot change the rules (403)`, w.status === 403, w.status)
       }
     }
     if (!before) {
       const none = await call(U.owner, 'GET', path)
-      check('never set: nulls', none.status === 200 && none.json.companyId === company && none.json.countsAfterMinutes === null
-        && none.json.monthlyCapMinutes === null && none.json.updatedByName === null, JSON.stringify(none.json))
+      check('never set: the 1-hour default minimum and no cap', none.status === 200 && none.json.companyId === company && none.json.minimumMinutes === 60
+        && none.json.minimumIsDefault === true && none.json.defaultMinimumMinutes === 60 && none.json.monthlyCapMinutes === null && none.json.updatedByName === null, JSON.stringify(none.json))
     }
-    const bad = await call(U.owner, 'PUT', path, { countsAfterMinutes: -5, monthlyCapMinutes: null })
-    check('a negative "counts after" is refused (422 OVERTIME_RULES_INVALID)', bad.status === 422 && bad.json?.errorCode === 'OVERTIME_RULES_INVALID', `${bad.status} ${bad.json?.errorCode}`)
-    const set = await call(U.owner, 'PUT', path, { countsAfterMinutes: 30, monthlyCapMinutes: 40 })
-    check('owner sets the rules: 30 min, 40 min cap', set.status === 200 && set.json.countsAfterMinutes === 30 && set.json.monthlyCapMinutes === 40
-      && !!set.json.updatedByName && !!set.json.updatedAt, JSON.stringify(set.json))
-    const seen = await call(U.mgr, 'GET', path)
-    if (can(U.mgr, 'attendance.team.read')) check('a manager reads the same rules', seen.json?.countsAfterMinutes === 30 && seen.json?.monthlyCapMinutes === 40, JSON.stringify(seen.json))
+    const bad = await call(U.owner, 'PUT', path, { minimumMinutes: -5, monthlyCapMinutes: null })
+    check('a negative minimum is refused (422 OVERTIME_RULES_INVALID)', bad.status === 422 && bad.json?.errorCode === 'OVERTIME_RULES_INVALID', `${bad.status} ${bad.json?.errorCode}`)
 
-    // Fixture punches for fin@ (two days this month or last): 20 extra minutes (inside the rule) and 77 (47 count).
+    // Fixture punches for fin@ on two days: 45 extra minutes (under the hour) and 80 (1 h 20 m).
     const d0 = Number(today.slice(8)) >= 4 ? `${today.slice(0, 8)}02` : `${plus(`${today.slice(0, 8)}01`, -1).slice(0, 8)}10`
     const d1 = plus(d0, 1)
     const fin = U.fin.employeeId
-    const small = sql(`insert into attendance.records(id,tenant_id,employee_id,company_id,attendance_date,check_in_at,check_out_at,overtime_minutes,remarks) values (gen_random_uuid(),'${tenant}','${fin}','${company}','${d0}','${d0}T03:30:00Z','${d0}T12:20:00Z',20,'QA P-ATT-PLAN overtime fixture') returning id`).split('\n')[0]
-    const big = sql(`insert into attendance.records(id,tenant_id,employee_id,company_id,attendance_date,check_in_at,check_out_at,overtime_minutes,remarks) values (gen_random_uuid(),'${tenant}','${fin}','${company}','${d1}','${d1}T03:30:00Z','${d1}T13:17:00Z',77,'QA P-ATT-PLAN overtime fixture') returning id`).split('\n')[0]
+    const small = sql(`insert into attendance.records(id,tenant_id,employee_id,company_id,attendance_date,check_in_at,check_out_at,overtime_minutes,remarks) values (gen_random_uuid(),'${tenant}','${fin}','${company}','${d0}','${d0}T03:30:00Z','${d0}T12:45:00Z',45,'QA P-ATT-PLAN overtime fixture') returning id`).split('\n')[0]
+    const big = sql(`insert into attendance.records(id,tenant_id,employee_id,company_id,attendance_date,check_in_at,check_out_at,overtime_minutes,remarks) values (gen_random_uuid(),'${tenant}','${fin}','${company}','${d1}','${d1}T03:30:00Z','${d1}T13:20:00Z',80,'QA P-ATT-PLAN overtime fixture') returning id`).split('\n')[0]
     cleanup.push(() => sql(`delete from attendance.overtime_decisions where record_id in ('${small}','${big}'); delete from attendance.records where id in ('${small}','${big}'); delete from notif.notifications where data::text like '%${small}%' or data::text like '%${big}%'`))
     const listPath = `/v1/attendance/overtime?from=${d0}&to=${d1}`
-    let list = await call(U.owner, 'GET', listPath)
-    let rows = list.json?.content || []
+    let rows = (await call(U.owner, 'GET', listPath)).json?.content || []
     const bigRow = rows.find((r) => r.id === big)
-    check('with the rule: 77 extra minutes are listed, 47 of them counted', list.status === 200 && bigRow?.minutes === 77 && bigRow?.countedMinutes === 47, JSON.stringify(bigRow))
-    check('with the rule: 20 extra minutes are not overtime (not listed)', !rows.some((r) => r.id === small), rows.map((r) => r.minutes).join(','))
-    const inside = await call(U.owner, 'POST', `/v1/attendance/overtime/${small}/approve`, { note: 'QA' })
-    check('approving time inside the rule is refused (422 OVERTIME_NOT_COUNTED)', inside.status === 422 && inside.json?.errorCode === 'OVERTIME_NOT_COUNTED', `${inside.status} ${inside.json?.errorCode}`)
+    check('default 1-hour minimum: 1 h 20 m counts fully (80 of 80)', bigRow?.minutes === 80 && bigRow?.countedMinutes === 80 && bigRow?.minimumMinutes === 60, JSON.stringify(bigRow))
+    check('default 1-hour minimum: 45 minutes isn’t overtime (not listed)', !rows.some((r) => r.id === small), rows.map((r) => r.minutes).join(','))
+    const under = await call(U.owner, 'POST', `/v1/attendance/overtime/${small}/approve`, { note: 'QA' })
+    check('approving 45 minutes is refused (422 OVERTIME_NOT_COUNTED)', under.status === 422 && under.json?.errorCode === 'OVERTIME_NOT_COUNTED', `${under.status} ${under.json?.message}`)
+
+    const set = await call(U.owner, 'PUT', path, { minimumMinutes: 30, monthlyCapMinutes: 60 })
+    check('owner sets a 30-minute minimum and a 1-hour cap', set.status === 200 && set.json.minimumMinutes === 30 && set.json.minimumIsDefault === false && set.json.monthlyCapMinutes === 60
+      && !!set.json.updatedByName && !!set.json.updatedAt, JSON.stringify(set.json))
+    const seen = await call(U.mgr, 'GET', path)
+    if (can(U.mgr, 'attendance.team.read')) check('a manager reads the same rules', seen.json?.minimumMinutes === 30 && seen.json?.monthlyCapMinutes === 60, JSON.stringify(seen.json))
+    rows = (await call(U.owner, 'GET', listPath)).json?.content || []
+    check('a 30-minute minimum: 45 minutes counts fully now', rows.find((r) => r.id === small)?.countedMinutes === 45, JSON.stringify(rows.find((r) => r.id === small)))
     const capped = await call(U.owner, 'POST', `/v1/attendance/overtime/${big}/approve`, { note: 'QA' })
-    check('approving 47 counted minutes past a 40-minute cap is refused (422 OVERTIME_MONTHLY_CAP_REACHED)', capped.status === 422 && capped.json?.errorCode === 'OVERTIME_MONTHLY_CAP_REACHED', `${capped.status} ${capped.json?.message}`)
-    await call(U.owner, 'PUT', path, { countsAfterMinutes: 30, monthlyCapMinutes: null })
-    const approved = await call(U.owner, 'POST', `/v1/attendance/overtime/${big}/approve`, { note: 'QA approve' })
-    check('without the cap it is approved', approved.status === 200 && approved.json?.status === 'APPROVED', `${approved.status} ${JSON.stringify(approved.json)}`)
-    const stored = sql(`select overtime_minutes||'|'||(select reviewed_minutes from attendance.overtime_decisions where record_id='${big}') from attendance.records where id='${big}'`)
-    check('the stored minutes never change; the stored minutes are what was reviewed', stored === '77|77', stored)
+    check('approving 80 minutes past a 60-minute cap is refused (422 OVERTIME_MONTHLY_CAP_REACHED)', capped.status === 422 && capped.json?.errorCode === 'OVERTIME_MONTHLY_CAP_REACHED', `${capped.status} ${capped.json?.message}`)
     const noNote = await call(U.owner, 'POST', `/v1/attendance/overtime/${small}/reject`, { note: '  ' })
     check('a rejection needs a note (422 OVERTIME_REASON_REQUIRED)', noNote.status === 422 && noNote.json?.errorCode === 'OVERTIME_REASON_REQUIRED', `${noNote.status} ${noNote.json?.errorCode}`)
-
-    const cleared = await call(U.owner, 'PUT', path, { countsAfterMinutes: null, monthlyCapMinutes: null })
-    check('rules cleared: nulls back', cleared.status === 200 && cleared.json.countsAfterMinutes === null && cleared.json.monthlyCapMinutes === null, JSON.stringify(cleared.json))
-    list = await call(U.owner, 'GET', listPath)
-    rows = list.json?.content || []
-    check('cleared: both days are overtime again', rows.some((r) => r.id === small) && rows.some((r) => r.id === big), rows.map((r) => r.minutes).join(','))
-    check('cleared: the list has exactly today\'s fields (no countedMinutes)', rows.length > 0 && rows.every((r) => !('countedMinutes' in r)) && Object.keys(list.json).sort().join() === 'content,totalElements', Object.keys(rows[0] || {}).join(','))
     const rejected = await call(U.owner, 'POST', `/v1/attendance/overtime/${small}/reject`, { note: 'QA reject' })
-    check('cleared: the 20 minutes can be decided again', rejected.status === 200 && rejected.json?.status === 'REJECTED', `${rejected.status}`)
+    check('rejected with a note', rejected.status === 200 && rejected.json?.status === 'REJECTED', `${rejected.status}`)
+    await call(U.owner, 'PUT', path, { minimumMinutes: 30, monthlyCapMinutes: null })
+    const approved = await call(U.owner, 'POST', `/v1/attendance/overtime/${big}/approve`, { note: 'QA approve' })
+    check('without the cap 1 h 20 m is approved', approved.status === 200 && approved.json?.status === 'APPROVED', `${approved.status} ${JSON.stringify(approved.json)}`)
+    const stored = sql(`select overtime_minutes||'|'||(select reviewed_minutes from attendance.overtime_decisions where record_id='${big}') from attendance.records where id='${big}'`)
+    check('the stored minutes never change; all 80 were reviewed', stored === '80|80', stored)
+
+    const cleared = await call(U.owner, 'PUT', path, { minimumMinutes: null, monthlyCapMinutes: null })
+    check('rules cleared: back to the 1-hour default, no cap', cleared.status === 200 && cleared.json.minimumMinutes === 60 && cleared.json.minimumIsDefault && cleared.json.monthlyCapMinutes === null, JSON.stringify(cleared.json))
+    rows = (await call(U.owner, 'GET', listPath)).json?.content || []
+    check('cleared: the decided 45 minutes stay listed as they were; 80 too', rows.find((r) => r.id === small)?.status === 'REJECTED' && rows.find((r) => r.id === big)?.status === 'APPROVED', rows.map((r) => `${r.minutes}:${r.status}`).join(','))
     for (const u of [U.reader, U.fin]) {
       if (can(u, 'attendance.overtime.approve')) continue
-      const r = await call(u, 'POST', `/v1/attendance/overtime/${small}/approve`, { note: 'x' })
+      const r = await call(u, 'POST', `/v1/attendance/overtime/${big}/approve`, { note: 'x' })
       check(`${u.name}: cannot decide overtime (403)`, r.status === 403, r.status)
     }
+  })
+
+  // ── DECISIONS 22 · overtime requests (V143_66) ────────────────────────────
+  await run('overtime requests', async () => {
+    const reader = U.reader
+    cleanup.push(() => sql(`delete from notif.notifications where created_at >= '${testStart}' and (data->>'overtimeRequestId' in (select id::text from attendance.overtime_requests where created_at >= '${testStart}') or data->>'overtimeId' in (select id::text from attendance.overtime_requests where created_at >= '${testStart}')); delete from attendance.overtime_requests where created_at >= '${testStart}'`))
+    const day = plus(today, -1), day2 = plus(today, -2)
+    const low = await call(reader, 'POST', '/v1/attendance/overtime/requests', { date: day, minutes: 45, reason: 'QA overtime — forty five minutes' })
+    check('reader asks for 45 minutes: refused, under the 1-hour minimum (422 OVERTIME_BELOW_MINIMUM)', low.status === 422 && low.json?.errorCode === 'OVERTIME_BELOW_MINIMUM', `${low.status} ${low.json?.message}`)
+    const asked = await call(reader, 'POST', '/v1/attendance/overtime/requests', { date: day, minutes: 80, reason: 'QA overtime — month-end closing' })
+    check('reader asks for 1 h 20 m on a day they choose', asked.status === 201 && asked.json?.status === 'PENDING' && asked.json?.minutes === 80 && asked.json?.date === day, `${asked.status} ${JSON.stringify(asked.json)}`)
+    const again = await call(reader, 'POST', '/v1/attendance/overtime/requests', { date: day, minutes: 90, reason: 'QA overtime — the same day again' })
+    check('the same day twice is refused (422 OVERTIME_REQUEST_EXISTS)', again.status === 422 && again.json?.errorCode === 'OVERTIME_REQUEST_EXISTS', `${again.status}`)
+    const id = asked.json?.id
+    const told = sql(`select count(*) from notif.notifications where type='OVERTIME_REQUESTED' and data->>'overtimeRequestId'='${id}'`)
+    check('the approver is told (OVERTIME_REQUESTED)', told === '1', told)
+    const mineList = (await call(reader, 'GET', '/v1/attendance/overtime/requests/my')).json || []
+    check('it is in the reader’s own list', mineList.some((r) => r.id === id && r.status === 'PENDING'))
+    const self = await call(reader, 'POST', `/v1/attendance/overtime/requests/${id}/approve`, { note: '' })
+    check('the reader can’t decide it (403)', self.status === 403, self.status)
+    for (const u of roles) {
+      const t = await call(u, 'GET', `/v1/attendance/overtime/requests?from=${plus(today, -7)}&to=${today}`)
+      check(`${u.name}: team list → ${expectStatus(u, can(u, 'attendance.team.read'))}`, t.status === expectStatus(u, can(u, 'attendance.team.read')), t.status)
+    }
+    const mgrList = (await call(U.mgr, 'GET', `/v1/attendance/overtime/requests?from=${plus(today, -7)}&to=${today}`)).json || []
+    check('mgr sees the request from their report', mgrList.some((r) => r.id === id))
+    const ok = await call(U.mgr, 'POST', `/v1/attendance/overtime/requests/${id}/approve`, { note: 'Thanks' })
+    check('mgr approves it', ok.status === 200 && ok.json?.status === 'APPROVED' && ok.json?.decidedByName, `${ok.status} ${JSON.stringify(ok.json)}`)
+    const twice = await call(U.mgr, 'POST', `/v1/attendance/overtime/requests/${id}/reject`, { note: 'again' })
+    check('deciding twice is refused (422 OVERTIME_REQUEST_NOT_PENDING)', twice.status === 422 && twice.json?.errorCode === 'OVERTIME_REQUEST_NOT_PENDING', `${twice.status}`)
+    const decidedTold = sql(`select count(*) from notif.notifications where type='OVERTIME_APPROVED' and data->>'overtimeId'='${id}'`)
+    check('the reader is told it was approved', decidedTold === '1', decidedTold)
+    const second = await call(reader, 'POST', '/v1/attendance/overtime/requests', { date: day2, minutes: 70, reason: 'QA overtime — to withdraw' })
+    const w = await call(reader, 'POST', `/v1/attendance/overtime/requests/${second.json?.id}/cancel`)
+    check('reader withdraws a waiting request', second.status === 201 && w.status === 200 && w.json?.status === 'CANCELLED', `${second.status} / ${w.status}`)
+    const noNote = await call(U.mgr, 'POST', `/v1/attendance/overtime/requests/${second.json?.id}/reject`, { note: '' })
+    check('a withdrawn request can’t be decided', noNote.status === 422, noNote.status)
   })
 
   // ── BW-31 · a temporary shift change ────────────────────────────────────────
@@ -274,12 +313,23 @@ try {
       sql('alter table attendance.overtime_rules rename to overtime_rules_qa_renamed')
       const g = await call(U.owner, 'GET', `/v1/attendance/overtime-rules?companyId=${company}`)
       check('table missing: reading the rules → 503 FEATURE_NOT_READY', g.status === 503 && g.json?.errorCode === 'FEATURE_NOT_READY', `${g.status} ${g.json?.errorCode}`)
-      const p = await call(U.owner, 'PUT', `/v1/attendance/overtime-rules?companyId=${company}`, { countsAfterMinutes: 10, monthlyCapMinutes: null })
+      const p = await call(U.owner, 'PUT', `/v1/attendance/overtime-rules?companyId=${company}`, { minimumMinutes: 10, monthlyCapMinutes: null })
       check('table missing: saving the rules → 503 FEATURE_NOT_READY', p.status === 503 && p.json?.errorCode === 'FEATURE_NOT_READY', `${p.status} ${p.json?.errorCode}`)
       const list = await call(U.owner, 'GET', `/v1/attendance/overtime?from=${plus(today, -30)}&to=${today}`)
-      check('table missing: the Overtime list works as it always did', list.status === 200 && Array.isArray(list.json?.content), list.status)
+      check('table missing: the Overtime list still works, with the 1-hour default', list.status === 200 && Array.isArray(list.json?.content) && (list.json.content).every((r) => r.minimumMinutes === 60 && (r.minutes >= 60 || r.status !== 'PENDING')), list.status)
     } finally {
       sql('alter table attendance.overtime_rules_qa_renamed rename to overtime_rules')
+    }
+    try {
+      sql('alter table attendance.overtime_requests rename to overtime_requests_qa_renamed')
+      const c = await call(U.reader, 'POST', '/v1/attendance/overtime/requests', { date: plus(today, -3), minutes: 90, reason: 'QA not ready — request' })
+      check('requests table missing: asking → 503 FEATURE_NOT_READY', c.status === 503 && c.json?.errorCode === 'FEATURE_NOT_READY', `${c.status} ${c.json?.errorCode}`)
+      const my = await call(U.reader, 'GET', '/v1/attendance/overtime/requests/my')
+      check('requests table missing: their list → 503 FEATURE_NOT_READY', my.status === 503 && my.json?.errorCode === 'FEATURE_NOT_READY', my.status)
+      const okList = await call(U.owner, 'GET', `/v1/attendance/overtime?from=${plus(today, -30)}&to=${today}`)
+      check('requests table missing: the Overtime list still works', okList.status === 200, okList.status)
+    } finally {
+      sql('alter table attendance.overtime_requests_qa_renamed rename to overtime_requests')
       renameStep = false
     }
     const back = await call(U.owner, 'GET', `/v1/attendance/overtime-rules?companyId=${company}`)
@@ -368,10 +418,11 @@ try {
     + (select count(*) from attendance.employee_shift_assignments where created_at >= '${testStart}')
     + (select count(*) from settings.holiday_calendar where holiday_name='QA day-facts holiday')
     + (select count(*) from leave_mgmt.leave_requests where reason='QA day-facts leave')
-    + (select count(*) from audit.events where action='OVERTIME_RULES_UPDATED' and occurred_at >= '${testStart}')`)
+    + (select count(*) from audit.events where action='OVERTIME_RULES_UPDATED' and occurred_at >= '${testStart}')
+    + (select count(*) from attendance.overtime_requests where created_at >= '${testStart}')`)
   check('cleanup: nothing the test made is left', left === '0', `${left} left`)
   const cols = sql(`select count(*) from pg_attribute where attrelid='attendance.shift_change_requests'::regclass and attname='requested_end_date' and not attisdropped`)
-  check('cleanup: the column and table have their names back', cols === '1' && sql(`select to_regclass('attendance.overtime_rules') is not null`) === 't')
+  check('cleanup: the column and tables have their names back', cols === '1' && sql(`select to_regclass('attendance.overtime_rules') is not null and to_regclass('attendance.overtime_requests') is not null`) === 't')
   check('no unexpected FEATURE_NOT_READY or 5xx', unexpected.length === 0, unexpected.join(' | '))
   mkdirSync('test-results/recovery', { recursive: true })
   writeFileSync('test-results/recovery/live-rd-p-att-plan-api.json', JSON.stringify({ ranAt: new Date().toISOString(), db: DB, checks }, null, 2))

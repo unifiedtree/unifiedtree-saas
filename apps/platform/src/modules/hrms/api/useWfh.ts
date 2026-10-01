@@ -24,6 +24,8 @@ export interface WfhRequestResponse {
   decisionNote: string | null
   decidedAt: string | null
   createdAt: string
+  /** Who it's with: the approver while it waits, then whoever decided (BW-35; absent on older servers). */
+  approverName?: string | null
 }
 
 /**
@@ -58,6 +60,34 @@ export function useMyWfhRequests(page = 0, size = 20) {
   })
 }
 
+/** Home's lists (My requests, Needs you) and the approvals inbox show WFH requests too. */
+const ESS_KEY = ['ess'] as const
+const INBOX_KEYS = [['team', 'approvals'], ['approvals', 'recent-decisions']] as const
+
+/** Body of POST /v1/wfh/batch: separate days (yyyy-MM-dd), each run of consecutive days becomes one request. */
+export interface WfhBatchRequest {
+  dates: string[]
+  reason?: string
+}
+
+/** What POST /v1/wfh/batch answers: the requests it made, earliest first, and the days they cover. */
+export interface WfhBatchResult {
+  requests: WfhRequestResponse[]
+  days: number
+}
+
+export function useApplyWfhBatch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: WfhBatchRequest) =>
+      apiJson<WfhBatchResult>('/v1/wfh/batch', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'wfh'] })
+      qc.invalidateQueries({ queryKey: ESS_KEY })
+    },
+  })
+}
+
 export function useApplyWfh() {
   const qc = useQueryClient()
   return useMutation({
@@ -65,6 +95,7 @@ export function useApplyWfh() {
       apiJson<WfhRequestResponse>('/v1/wfh', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hrms', 'wfh'] })
+      qc.invalidateQueries({ queryKey: ESS_KEY })
     },
   })
 }
@@ -74,7 +105,10 @@ export function useCancelWfh() {
   return useMutation({
     mutationFn: (requestId: string) =>
       apiJson<void>(`/v1/wfh/${requestId}/cancel`, { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'wfh'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'wfh'] })
+      qc.invalidateQueries({ queryKey: ESS_KEY })
+    },
   })
 }
 
@@ -123,9 +157,8 @@ export function useWfhDecision() {
       // The leave approvals queue includes WFH now — invalidate both so the
       // union list re-renders without a stale row.
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'approvals'] })
-      // Every decision changes the Approvals inbox and the Undo offers (approval Undo, BW-06).
-      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox })
-      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions })
+      // The team's approvals inbox and its Undo offers (SHARED_KEYS) list WFH too.
+      for (const queryKey of INBOX_KEYS) qc.invalidateQueries({ queryKey })
     },
   })
 }
