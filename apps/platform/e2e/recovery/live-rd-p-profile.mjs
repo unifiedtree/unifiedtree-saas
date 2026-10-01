@@ -192,21 +192,22 @@ try {
 
     // ── C. Access: give reader a role, then remove it ──
     await s.go(`/hrms/employees/${READER}?tab=access`)
-    await s.page.getByRole('heading', { name: 'Roles' }).waitFor({ timeout: 20_000 })
+    await s.page.getByRole('heading', { name: 'Roles', exact: true }).waitFor({ timeout: 20_000 })
     check('Access: sign-in status shows', await s.page.getByText('Sign-in status').count() > 0 && await s.page.getByText('Can sign in').count() > 0)
     check('Access: links to Users & access', await s.page.getByRole('button', { name: 'Open Users & access' }).count() > 0)
     await s.page.getByRole('button', { name: 'Give a role' }).click()
     const panel = s.page.getByRole('dialog', { name: 'Give a role' })
     await panel.waitFor({ timeout: 10_000 })
     const gives = panel.getByRole('button', { name: /^Give / })
-    let gave = null
-    for (let i = 0; i < await gives.count(); i++) {
-      const b = gives.nth(i)
-      if (await b.isDisabled()) continue
-      gave = (await b.getAttribute('aria-label')).replace(/^Give /, '')
-      await b.click()
-      break
+    // A working role rather than an admin one when one can be given.
+    let pickBtn = null
+    for (const want of ['Department Manager', 'Dept Manager', 'Finance Lead', 'HR Manager']) {
+      const b = panel.getByRole('button', { name: `Give ${want}`, exact: true })
+      if (await b.count() && !(await b.isDisabled())) { pickBtn = b; break }
     }
+    for (let i = 0; !pickBtn && i < await gives.count(); i++) if (!(await gives.nth(i).isDisabled())) pickBtn = gives.nth(i)
+    let gave = null
+    if (pickBtn) { gave = (await pickBtn.getAttribute('aria-label')).replace(/^Give /, ''); await pickBtn.click() }
     const confirmGive = s.page.getByRole('dialog', { name: /^Give the / })
     if (await confirmGive.count()) await confirmGive.getByRole('button', { name: 'Give role' }).click()
     const gaveOk = gave && await toast(s.page, new RegExp(`${gave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} given to`))
@@ -253,6 +254,7 @@ try {
       const cp = s.page.getByRole('dialog', { name: 'New claim on behalf' })
       await cp.waitFor({ timeout: 10_000 })
       await cp.getByLabel('Title').fill(`QA P-PROFILE claim ${stamp}`)
+      await cp.getByLabel('Category').selectOption('OTHER')
       await cp.getByLabel('Amount (₹)').fill('120')
       await cp.getByRole('button', { name: /^Raise claim/ }).click()
       const ok = await toast(s.page, /Claim raised for Reader User/)
@@ -280,8 +282,10 @@ try {
     await s.page.getByRole('heading', { name: 'Reader User' }).first().waitFor({ timeout: 30_000 })
     const t = await s.tabs()
     check('fin: Payroll with payslips, no Personal, no Access', t.includes('Payroll') && !t.includes('Personal') && !t.includes('Access') && await s.page.getByRole('heading', { name: 'Payslips' }).count() > 0, t.join(','))
-    // Finance holds attendance.team.read, but the server scopes it: reader isn't theirs, so the tab says so.
-    check('fin: no page errors or unexpected API errors', !s.errors.length && !clean(s, [/\/attendance\/employee\//]).length, s.errors[0] || clean(s, [/\/attendance\/employee\//])[0] || '')
+    // Finance holds attendance.team.read, but the server scopes attendance and shift reads to their own
+    // people: reader isn't theirs, so those blocks say so (as before the redesign).
+    const scoped = [/\/attendance\/employee\//, /\/shifts\/employee\//]
+    check('fin: no page errors or unexpected API errors', !s.errors.length && !clean(s, scoped).length, s.errors[0] || clean(s, scoped)[0] || '')
     await s.ctx.close()
   }
   {
@@ -332,6 +336,7 @@ try {
     // BW-100: the browser sign-in above is the newest session.
     const inv = await owner.call(`/v1/employees/${READER}/invitation-status`)
     check('BW-100: invitation-status names the last sign-in device', inv.status === 200 && /Chrome on Windows|Chrome/.test(inv.json?.lastLoginDevice || ''), JSON.stringify(inv.json))
+    check('invitation-status gives sign-in times as ISO instants', /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(inv.json?.lastLoginAt || ''), inv.json?.lastLoginAt)
   }
   {
     const s = await open('owner@unifiedtree.demo')

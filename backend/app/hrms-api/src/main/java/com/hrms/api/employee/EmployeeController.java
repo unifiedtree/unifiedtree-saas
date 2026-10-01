@@ -440,14 +440,27 @@ public class EmployeeController {
             Object lastLoginAt = row.get("last_login_at");
             return ResponseEntity.ok(Map.of(
                     "activated", activated,
-                    "invitedAt", invitedAt instanceof Instant i ? i.toString() : (invitedAt == null ? "" : invitedAt.toString()),
-                    "lastLoginAt", lastLoginAt instanceof Instant i ? i.toString() : (lastLoginAt == null ? "" : lastLoginAt.toString()),
+                    "invitedAt", isoInstant(invitedAt),
+                    "lastLoginAt", isoInstant(lastLoginAt),
                     "lastLoginDevice", lastLoginDevice(employeeId)
             ));
         } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
             // No credential row yet -> never invited / never activated.
             return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", "", "lastLoginDevice", ""));
         }
+    }
+
+    /**
+     * A timestamp column as an ISO instant ("2026-10-02T03:51:00Z"), "" when null. The driver hands
+     * back java.sql.Timestamp, whose toString() has no time zone, so a browser in another zone read
+     * the time wrong; the date was right, which is all the page used to show (the redesign shows the time).
+     */
+    static String isoInstant(Object v) {
+        if (v == null) return "";
+        if (v instanceof Instant i) return i.toString();
+        if (v instanceof java.sql.Timestamp t) return t.toInstant().toString();
+        if (v instanceof java.time.OffsetDateTime o) return o.toInstant().toString();
+        return v.toString();
     }
 
     /**

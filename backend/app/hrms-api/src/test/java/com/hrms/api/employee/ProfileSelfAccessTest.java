@@ -171,6 +171,14 @@ class ProfileSelfAccessTest {
         assertEquals("", LoginDevice.describe("curl/8.4.0"));
     }
 
+    @Test void signInTimesAreIsoInstants() {
+        java.time.Instant at = java.time.Instant.parse("2026-10-02T03:51:00Z");
+        assertEquals("2026-10-02T03:51:00Z", EmployeeController.isoInstant(java.sql.Timestamp.from(at)));
+        assertEquals("2026-10-02T03:51:00Z", EmployeeController.isoInstant(at));
+        assertEquals("2026-10-02T03:51:00Z", EmployeeController.isoInstant(at.atOffset(java.time.ZoneOffset.ofHoursMinutes(5, 30))));
+        assertEquals("", EmployeeController.isoInstant(null));
+    }
+
     // ── BW-101: nominee total ─────────────────────────────────────────────
 
     private static EmployeeDependent dep(boolean nominee, Integer pct) {
