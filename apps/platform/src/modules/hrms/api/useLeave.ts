@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { SHARED_KEYS } from './shared/contracts'
 
 /** Default rows per page for the my-leaves list. Was the literal 20
  *  inlined in the query string; named so the pager label can never
@@ -208,6 +209,54 @@ export function useLeaveDecision() {
       // The overview carries pendingApprovals, so the dashboard's count read
       // one stale until the next navigation. useApplyLeave already does this.
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'overview'] })
+      // Every decision changes the Approvals inbox and the Undo offers (approval Undo, BW-06).
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox })
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions })
+    },
+  })
+}
+
+/** One request's outcome in a bulk decision (LeaveBulkDecisions.Result). */
+export interface LeaveBulkResult {
+  id: string
+  ok: boolean
+  /** The new status when decided. */
+  status: string | null
+  /** Why it wasn't decided (the single decision's own refusal). */
+  errorCode: string | null
+  message: string | null
+}
+
+export interface LeaveBulkOutcome {
+  requested: number
+  decided: number
+  failed: number
+  results: LeaveBulkResult[]
+}
+
+/** Most ids one bulk decision takes (LeaveBulkDecisions.MAX_IDS). */
+export const LEAVE_BULK_MAX = 100
+
+/**
+ * Approve or reject several leave requests at once (POST /v1/leave/approvals/bulk-decision, BW-42):
+ * the same decision as useLeaveDecision once per request, with a result per request; one refused
+ * request doesn't stop the others. Refreshes what useLeaveDecision refreshes.
+ */
+export function useBulkLeaveDecision() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ids, status, comment }: { ids: string[]; status: 'APPROVED' | 'REJECTED'; comment?: string }) =>
+      apiJson<LeaveBulkOutcome>('/v1/leave/approvals/bulk-decision', {
+        method: 'POST',
+        body: JSON.stringify({ ids, status, comment }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'approvals'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'my'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'balances'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'overview'] })
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox })
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions })
     },
   })
 }
