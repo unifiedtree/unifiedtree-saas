@@ -2,13 +2,13 @@
 // report layout (ReportKit). A department opens in the Workforce Directory.
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
-import { HrStatusPill } from '@/shared/components/hr'
+import { StatusPill, type StatusTone } from '@/design/kit/display'
 import { useHeadcountReport } from '@/modules/hrms/api/useReports'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
 import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, pctOf, sortKey, slug, type Kpi } from './ReportKit'
 
-const SERIES: [string, string][] = [['Active', '#0f6e56'], ['On notice', '#34d399'], ['Probation', '#a7f3d0']]
+const SERIES: [string, string][] = [['Active', 'var(--u-br,#0F6E56)'], ['On notice', 'var(--u-g2,#5FB39C)'], ['Probation', 'var(--u-g3,#A9D6C6)']]
 const long = longDate
 
 export function HeadcountReport() {
@@ -43,14 +43,14 @@ export function HeadcountReport() {
   const chart = () => stackedBarsSvg({ title: 'Headcount by department', subtitle: `${co.companyName} · as of ${long(asOf)}`, bars: rows.map((r) => ({ label: r.dept, parts: [r.active, r.notice, r.probation] })), series: SERIES })
   const table = (): (string | number)[][] => rows.map((r) => [r.dept, r.total, r.active, r.notice, r.probation, pctOf(r.total, t.total)])
   const HEAD = ['Department', 'Total', 'Active', 'On notice', 'Probation', 'Share %']
-  const pill = (v: number, tone: string) => (v ? <HrStatusPill tone={tone as any}>{num(v)}</HrStatusPill> : <span style={{ color: '#94a3b8' }}>0</span>)
+  const pill = (v: number, tone: StatusTone) => (v ? <StatusPill tone={tone}>{num(v)}</StatusPill> : <span className="rp-muted">0</span>)
   const share = (v: number) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><b style={{ minWidth: 32 }}>{pctOf(v, t.total)}%</b>
-      <span style={{ width: 64, height: 6, borderRadius: 4, background: '#f1f5f9', overflow: 'hidden', display: 'inline-block' }}><span style={{ display: 'block', height: '100%', width: `${t.total ? (v / t.total) * 100 : 0}%`, background: '#0f6e56' }} /></span></span>
+    <span className="rp-share"><b>{pctOf(v, t.total)}%</b>
+      <span className="rp-share__track"><span className="rp-share__fill" style={{ width: `${t.total ? (v / t.total) * 100 : 0}%` }} /></span></span>
   )
 
   return (
-    <ReportPage title="Headcount Report" subtitle="Active, probation and notice-period headcount by department, on any date" report="headcount" co={co}
+    <ReportPage title="Headcount report" subtitle="Active, probation and notice-period headcount by department, on any date" report="headcount" co={co}
       filters={<DateFilter label="As of" value={asOf} max={TODAY} onChange={setAsOf} />} note={`Data as of ${long(asOf)}`}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{
@@ -58,7 +58,7 @@ export function HeadcountReport() {
         sheets: () => [{ name: 'Summary', widths: [26, 30], rows: [['Headcount report', ''], ['Company', co.companyName], ['As of', long(asOf)], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Departments', widths: [28, 10, 10, 12, 12, 10], rows: [HEAD, ...table(), ['Total', t.total, t.active, t.notice, t.probation, 100]] }],
       }}>
       <KpiRow items={kpis} />
-      <ReportSection title="Headcount by department" pill={<HrStatusPill tone="green">{`${named} ${named === 1 ? 'dept' : 'depts'}`}</HrStatusPill>} legend={SERIES}
+      <ReportSection title="Headcount by department" pill={<StatusPill tone="success">{`${named} ${named === 1 ? 'dept' : 'depts'}`}</StatusPill>} legend={SERIES}
         onDownload={() => downloadChart(`headcount-by-department-${slug(co.companyName)}-${asOf}.png`, chart(), { report: 'headcount', companyId: co.company, filters: { asOf } })}>
         <BarsChart series={SERIES} footnote="Click to open in directory"
           bars={rows.map((r) => ({ key: r.id, label: r.dept, none: r.none, parts: [r.active, r.notice, r.probation], onClick: open ? () => open(r) : undefined, hint: open ? (r.none ? 'Open the people without a department' : `Open ${r.dept} in the directory`) : undefined }))} />
@@ -68,15 +68,14 @@ export function HeadcountReport() {
         rows={rows.map((r) => ({ ...r, sT: sortKey(r.total), sA: sortKey(r.active), sN: sortKey(r.notice), sP: sortKey(r.probation) }))}
         onRowClick={open}
         columns={[
-          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ fontWeight: 700, color: r.none ? '#64748b' : '#0f6e56', fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span className={r.none ? 'rp-italic' : 'rp-brand'}>{r.dept}</span> },
           { key: 'sT', header: 'Total', sortable: true, render: (r) => <b>{num(r.total)}</b> },
           { key: 'sA', header: 'Active', sortable: true, render: (r) => num(r.active) },
-          { key: 'sN', header: 'On notice', sortable: true, render: (r) => pill(r.notice, 'orange') },
-          { key: 'sP', header: 'Probation', sortable: true, render: (r) => pill(r.probation, 'blue') },
+          { key: 'sN', header: 'On notice', sortable: true, render: (r) => pill(r.notice, 'warning') },
+          { key: 'sP', header: 'Probation', sortable: true, render: (r) => pill(r.probation, 'info') },
           { key: 'share', header: 'Share', render: (r) => share(r.total) },
         ]}
         footerCells={['Total', num(t.total), num(t.active), num(t.notice), num(t.probation), '100%']}
-        card={(r) => ({ title: r.dept, muted: r.none, big: num(r.total), small: `${pctOf(r.total, t.total)}%`, stats: [['Active', num(r.active)], ['On notice', num(r.notice)], ['Probation', num(r.probation)]] })}
       />
     </ReportPage>
   )

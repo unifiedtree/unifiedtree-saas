@@ -4,6 +4,8 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { httpStatusOf } from '@/core/api/featureNotReady'
+import { asAvailable, useAvailableQuery } from './shared/available'
 
 export interface ExportLogRow {
   id: string
@@ -44,6 +46,12 @@ export function useExportLog(scope: 'all' | 'mine' | undefined, page: number, si
   })
 }
 
+/** DAILY and WEEKDAYS need V143_62 (see useScheduleOptions). */
+export type ScheduleFrequency = 'DAILY' | 'WEEKDAYS' | 'WEEKLY' | 'MONTHLY'
+
+/** GET /v1/reports/schedules/options: what the form may offer. */
+export interface ScheduleOptions { ready: boolean; frequencies: ScheduleFrequency[]; firstHour: number; lastHour: number }
+
 export interface ScheduleRecipient { id: string; name: string | null; email: string | null; active: boolean }
 export interface ReportSchedule {
   id: string
@@ -51,9 +59,11 @@ export interface ReportSchedule {
   reportLabel: string
   companyId: string
   companyName: string | null
-  frequency: 'WEEKLY' | 'MONTHLY'
+  frequency: ScheduleFrequency
   dayOfWeek: number | null
   dayOfMonth: number | null
+  /** Hour (India time, 7–23) it goes out; null = first thing in the morning (07:05). Null until V143_62. */
+  sendHour: number | null
   recipients: ScheduleRecipient[]
   active: boolean
   nextRunOn: string
@@ -66,11 +76,13 @@ export interface ReportSchedule {
 export interface ScheduleInput {
   report: string
   companyId: string
-  frequency: 'WEEKLY' | 'MONTHLY'
+  frequency: ScheduleFrequency
   dayOfWeek: number | null
   dayOfMonth: number | null
   recipientIds: string[]
   active: boolean
+  /** Sent only when set (it needs V143_62); null = first thing in the morning. */
+  sendHour?: number | null
 }
 export interface EligibleRecipient { id: string; name: string | null; email: string | null }
 export interface SendResult { status: 'SENT' | 'PARTIAL' | 'FAILED' | 'SKIPPED'; sent: number; failed: number; skipped: number; message: string }
@@ -113,5 +125,19 @@ export function useSendScheduleNow() {
   return useMutation({
     mutationFn: (id: string) => apiJson<SendResult>(`/v1/reports/schedules/${id}/send-now`, { method: 'POST' }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); qc.invalidateQueries({ queryKey: ['reports', 'exports'] }) },
+  })
+}
+
+/**
+ * Daily and weekday emails and a send hour exist only once V143_62 is applied.
+ * Before the backend has the endpoint (404, or 405 from the /{id} routes) or
+ * the migration, the form offers weekly and monthly as today.
+ */
+export function useScheduleOptions(enabled: boolean) {
+  return useAvailableQuery<ScheduleOptions>({
+    queryKey: [...KEY, 'options'],
+    queryFn: () => asAvailable(() => apiJson<ScheduleOptions>('/v1/reports/schedules/options'), (e) => httpStatusOf(e) === 405),
+    enabled,
+    staleTime: 5 * 60_000,
   })
 }

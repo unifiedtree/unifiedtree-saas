@@ -4,16 +4,16 @@
 // specified" rather than left out.
 import { useReportCompany } from './useReportCompany'
 import { useDiversityReport } from '@/modules/hrms/api/useReports'
-import { HrStatusPill } from '@/shared/components/hr'
+import { StatusPill } from '@/design/kit/display'
 import { donutSvg, stackedBarsSvg } from '@/shared/export/charts'
 import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, DonutChart, BarsChart, ReportTable, downloadChart, num, pctOf, sortKey, slug, type Kpi } from './ReportKit'
 
 const GENDERS: { key: string; label: string; color: string }[] = [
-  { key: 'FEMALE', label: 'Women', color: '#0f6e56' },
-  { key: 'MALE', label: 'Men', color: '#34d399' },
-  { key: 'OTHER', label: 'Other', color: '#6ee7b7' },
-  { key: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say', color: '#a7f3d0' },
-  { key: 'NOT_SPECIFIED', label: 'Not specified', color: '#d1fae5' },
+  { key: 'FEMALE', label: 'Women', color: 'var(--u-br,#0F6E56)' },
+  { key: 'MALE', label: 'Men', color: 'var(--u-g2,#5FB39C)' },
+  { key: 'OTHER', label: 'Other', color: 'var(--u-brl,#BFDFD1)' },
+  { key: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say', color: 'var(--u-g3,#A9D6C6)' },
+  { key: 'NOT_SPECIFIED', label: 'Not specified', color: 'var(--u-gy,#C9D2CE)' },
 ]
 
 export function DiversityReport() {
@@ -34,7 +34,7 @@ export function DiversityReport() {
   for (const d of depts) for (const [g, n] of Object.entries(d.counts)) totals[g] = (totals[g] || 0) + n
   const people = Object.values(totals).reduce((a, v) => a + v, 0)
   // Only the genders that actually occur, in a fixed order (plus any the API adds later).
-  const series = [...GENDERS.filter((g) => totals[g.key]), ...Object.keys(totals).filter((k) => !GENDERS.some((g) => g.key === k)).map((k) => ({ key: k, label: k.replace(/_/g, ' ').toLowerCase(), color: '#94a3b8' }))]
+  const series = [...GENDERS.filter((g) => totals[g.key]), ...Object.keys(totals).filter((k) => !GENDERS.some((g) => g.key === k)).map((k) => ({ key: k, label: k.replace(/_/g, ' ').toLowerCase(), color: 'var(--u-ink3,#6A7A73)' }))]
   const state = q.isLoading ? 'loading' : q.error ? 'error' : people ? 'live' : 'empty'
   const recorded = people - (totals.NOT_SPECIFIED || 0)
   const balanced = depts.filter((d) => !d.none && (d.counts.FEMALE || 0) + (d.counts.MALE || 0) > 0).sort((a, b) => Math.abs(50 - pctOf(a.counts.FEMALE || 0, tot(a))) - Math.abs(50 - pctOf(b.counts.FEMALE || 0, tot(b))))[0]
@@ -54,20 +54,20 @@ export function DiversityReport() {
   type Row = (typeof depts)[number] & { sT: string; sW: string }
 
   return (
-    <ReportPage title="Diversity Report" subtitle="Gender split of the current workforce, company-wide and by department" report="diversity" co={co} note={`Data as of ${today}`}
+    <ReportPage title="Diversity report" subtitle="Gender split of the current workforce, company-wide and by department" report="diversity" co={co} note={`Data as of ${today}`}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{
         fileBase, csvParams: {},
         sheets: () => [{ name: 'Summary', widths: [26, 34], rows: [['Diversity report', ''], ['Company', co.companyName], ['As of', today], ...kpis.map((k) => [k.label, k.value])] }, { name: 'By department', widths: [28, ...series.map(() => 12), 10, 10], rows: [HEAD, ...table(), foot] }],
       }}>
       <KpiRow items={kpis} />
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'stretch' }}>
-        <ReportSection title="Gender split" flex="1 1 300px" pill={<HrStatusPill tone="purple">{`${num(people)} people`}</HrStatusPill>}
+      <div className="rp-row">
+        <ReportSection title="Gender split" pill={<StatusPill tone="holiday">{`${num(people)} people`}</StatusPill>}
           onDownload={() => downloadChart(`gender-split-${slug(co.companyName)}.png`, donut(), { report: 'diversity', companyId: co.company })}>
           <DonutChart parts={series.map((g) => ({ label: g.label, value: totals[g.key] || 0, color: g.color }))}
-            footer={<div style={{ width: '100%', padding: '9px 11px', borderRadius: 10, background: '#f8fafc', border: '1px solid #f1f5f9', fontSize: 12.5, color: '#475569', fontWeight: 500, boxSizing: 'border-box' }}>Most balanced: <b style={{ color: '#0f172a' }}>{balanced ? `${balanced.dept} · ${pctOf(balanced.counts.FEMALE || 0, tot(balanced))}% women` : recorded ? 'Not enough data' : 'No gender recorded yet'}</b></div>} />
+            footer={<div className="rp-callout">Most balanced: <b>{balanced ? `${balanced.dept} · ${pctOf(balanced.counts.FEMALE || 0, tot(balanced))}% women` : recorded ? 'Not enough data' : 'No gender recorded yet'}</b></div>} />
         </ReportSection>
-        <ReportSection title="Gender by department" flex="2 1 520px" legend={series.map((g) => [g.label, g.color] as [string, string])}
+        <ReportSection title="Gender by department" legend={series.map((g) => [g.label, g.color] as [string, string])}
           onDownload={() => downloadChart(`gender-by-department-${slug(co.companyName)}.png`, bars(), { report: 'diversity', companyId: co.company })}>
           <BarsChart series={series.map((g) => [g.label, g.color] as [string, string])} unit="people"
             bars={depts.map((d) => ({ key: d.id, label: d.dept, none: d.none, parts: series.map((g) => d.counts[g.key] || 0) }))} />
@@ -77,13 +77,12 @@ export function DiversityReport() {
         title="By department" subtitle="Everyone currently employed, including probation and notice"
         rows={depts.map((d) => ({ ...d, sT: sortKey(tot(d)), sW: sortKey(pctOf(d.counts.FEMALE || 0, tot(d))) }))}
         columns={[
-          { key: 'dept', header: 'Department', sortable: true, render: (d) => <span style={{ fontWeight: 700, color: d.none ? '#64748b' : '#0f6e56', fontStyle: d.none ? 'italic' : 'normal' }}>{d.dept}</span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (d) => <span className={d.none ? 'rp-italic' : 'rp-brand'}>{d.dept}</span> },
           ...series.map((g) => ({ key: g.key, header: g.label, render: (d: Row) => num(d.counts[g.key] || 0) })),
           { key: 'sT', header: 'Total', sortable: true, render: (d) => <b>{num(tot(d))}</b> },
           { key: 'sW', header: 'Women', sortable: true, render: (d) => `${pctOf(d.counts.FEMALE || 0, tot(d))}%` },
         ]}
         footerCells={foot.map((c, i) => (i === foot.length - 1 ? `${c}%` : typeof c === 'number' ? num(c) : c))}
-        card={(d) => ({ title: d.dept, muted: d.none, big: num(tot(d)), small: `${pctOf(d.counts.FEMALE || 0, tot(d))}% women`, stats: series.slice(0, 3).map((g) => [g.label, num(d.counts[g.key] || 0)] as [string, string]) })}
       />
     </ReportPage>
   )

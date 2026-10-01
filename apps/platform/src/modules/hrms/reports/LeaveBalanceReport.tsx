@@ -3,14 +3,14 @@
 // (ReportKit).
 import { useSearchParams } from 'react-router-dom'
 import { useLeaveBalanceReport } from '@/modules/hrms/api/useReports'
-import { HrSelect } from '@/shared/components/hr'
+import { Select } from '@/design/kit/overlays'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
 import { ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const YEAR = new Date().getFullYear()
 const YEARS = [YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => ({ value: String(y), label: String(y) }))
-const SERIES: [string, string][] = [['Used', '#0f6e56'], ['Pending', '#34d399'], ['Available', '#a7f3d0']]
+const SERIES: [string, string][] = [['Used', 'var(--u-br,#0F6E56)'], ['Pending', 'var(--u-g2,#5FB39C)'], ['Available', 'var(--u-g3,#A9D6C6)']]
 const d1 = (n: number) => (Number.isInteger(n) ? num(n) : n.toFixed(1))
 /** Codes like CASUAL_LEAVE read as "Casual leave"; real names are kept as written. */
 const typeLabel = (t: string) => (/^[A-Z0-9_]+$/.test(t) ? t.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : t)
@@ -45,8 +45,8 @@ export function LeaveBalanceReport() {
   const foot = ['Total', '', '', '', sum('ent'), sum('cf'), sum('used'), sum('pending'), sum('avail')]
 
   return (
-    <ReportPage title="Leave Balance Report" subtitle="Entitlement, carry-forward, used, pending and available days per person" report="leave-balance" co={co}
-      filters={<div style={{ flex: '0 1 140px', minWidth: 0 }}><HrSelect value={year} options={YEARS} onChange={setYear} size="sm" /></div>}
+    <ReportPage title="Leave balance report" subtitle="Entitlement, carry-forward, used, pending and available days per person" report="leave-balance" co={co}
+      filters={<div style={{ flex: '0 1 140px', minWidth: 0 }}><Select aria-label="Leave year" value={year} options={YEARS} onChange={(e) => setYear(e.target.value)} size="md" /></div>}
       note={`Leave year ${year}`}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{
@@ -63,16 +63,15 @@ export function LeaveBalanceReport() {
         search={{ placeholder: 'Search name, code, department or type…', match: (r, s) => `${r.name} ${r.code} ${r.dept} ${r.type}`.toLowerCase().includes(s) }}
         rows={rows.map((r) => ({ ...r, sE: sortKey(r.ent + r.cf), sU: sortKey(r.used), sP: sortKey(r.pending), sA: sortKey(r.avail) }))}
         columns={[
-          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ display: 'block', fontSize: 12, color: '#64748b', fontFamily: 'JetBrains Mono,monospace' }}>{r.code}</span></span> },
-          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ color: r.none ? '#64748b' : undefined, fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
-          { key: 'type', header: 'Leave type', sortable: true, render: (r) => <span style={{ fontWeight: 600 }}>{r.type}</span> },
-          { key: 'sE', header: 'Entitled', sortable: true, render: (r) => <span>{d1(r.ent)}{r.cf ? <span style={{ color: '#64748b' }}> + {d1(r.cf)}</span> : null}</span> },
+          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span>{r.name}</span><span className="rp-code">{r.code}</span></span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span className={r.none ? 'rp-italic' : undefined}>{r.dept}</span> },
+          { key: 'type', header: 'Leave type', sortable: true, render: (r) => <span>{r.type}</span> },
+          { key: 'sE', header: 'Entitled', sortable: true, render: (r) => <span>{d1(r.ent)}{r.cf ? <span className="rp-muted"> + {d1(r.cf)}</span> : null}</span> },
           { key: 'sU', header: 'Used', sortable: true, render: (r) => d1(r.used) },
-          { key: 'sP', header: 'Pending', sortable: true, render: (r) => (r.pending ? <b style={{ color: '#b45309' }}>{d1(r.pending)}</b> : <span style={{ color: '#94a3b8' }}>0</span>) },
-          { key: 'sA', header: 'Available', sortable: true, render: (r) => <b style={{ color: r.avail < 0 ? '#b91c1c' : '#0f6e56' }}>{d1(r.avail)}</b> },
+          { key: 'sP', header: 'Pending', sortable: true, render: (r) => (r.pending ? <span style={{ color: 'var(--u-gdt,#8A5A10)' }}>{d1(r.pending)}</span> : <span className="rp-muted">0</span>) },
+          { key: 'sA', header: 'Available', sortable: true, render: (r) => <span style={{ color: r.avail < 0 ? 'var(--u-rdt,#B42318)' : 'var(--u-brt,#0F6E56)', fontWeight: 500 }}>{d1(r.avail)}</span> },
         ]}
         footerCells={['Total', '', '', `${d1(sum('ent'))} + ${d1(sum('cf'))}`, d1(sum('used')), d1(sum('pending')), d1(sum('avail'))]}
-        card={(r) => ({ title: `${r.name} · ${r.type}`, big: d1(r.avail), small: 'available', stats: [['Entitled', d1(r.ent + r.cf)], ['Used', d1(r.used)], ['Pending', d1(r.pending)]] })}
       />
     </ReportPage>
   )

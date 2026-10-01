@@ -3,14 +3,14 @@
 // shown as recorded minutes: it is approval-only and isn't paid through payroll.
 import { useSearchParams } from 'react-router-dom'
 import { useAttendanceSummaryReport } from '@/modules/hrms/api/useReports'
-import { HrStatusPill } from '@/shared/components/hr'
+import { StatusPill } from '@/design/kit/display'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
 import { todayIso, monthStartIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const long = longDate
 const hm = (mins: number) => (mins ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : '—')
-const SERIES: [string, string][] = [['On time', '#0f6e56'], ['Late', '#34d399']]
+const SERIES: [string, string][] = [['On time', 'var(--u-br,#0F6E56)'], ['Late', 'var(--u-g2,#5FB39C)']]
 
 export function AttendanceSummaryReport() {
   const [params, setParams] = useSearchParams()
@@ -44,7 +44,7 @@ export function AttendanceSummaryReport() {
   const table = () => rows.map((r) => [r.code, r.name, r.dept, r.present, r.late, r.hours == null ? null : Number(r.hours.toFixed(2)), r.ot])
 
   return (
-    <ReportPage title="Attendance Summary" subtitle="Present days, late days, average hours and recorded overtime per person" report="attendance-summary" co={co} skeleton="bars"
+    <ReportPage title="Attendance summary" subtitle="Present days, late days, average hours and recorded overtime per person" report="attendance-summary" co={co} skeleton="bars"
       filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
       note={range}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
@@ -62,15 +62,14 @@ export function AttendanceSummaryReport() {
         search={{ placeholder: 'Search name, code or department…', match: (r, s) => `${r.name} ${r.code} ${r.dept}`.toLowerCase().includes(s) }}
         rows={rows.map((r) => ({ ...r, sP: sortKey(r.present), sL: sortKey(r.late), sH: sortKey(r.hours ?? -1), sO: sortKey(r.ot) }))}
         columns={[
-          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ display: 'block', fontSize: 12, color: '#64748b', fontFamily: 'JetBrains Mono,monospace' }}>{r.code}</span></span> },
-          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ color: r.none ? '#64748b' : undefined, fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
+          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span>{r.name}</span><span className="rp-code">{r.code}</span></span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span className={r.none ? 'rp-italic' : undefined}>{r.dept}</span> },
           { key: 'sP', header: 'Present', sortable: true, render: (r) => <b>{num(r.present)}</b> },
-          { key: 'sL', header: 'Late', sortable: true, render: (r) => (r.late ? <HrStatusPill tone="orange">{num(r.late)}</HrStatusPill> : <span style={{ color: '#94a3b8' }}>0</span>) },
+          { key: 'sL', header: 'Late', sortable: true, render: (r) => (r.late ? <StatusPill tone="warning">{num(r.late)}</StatusPill> : <span className="rp-muted">0</span>) },
           { key: 'sH', header: 'Avg hours', sortable: true, render: (r) => (r.hours == null ? '—' : r.hours.toFixed(1)) },
           { key: 'sO', header: 'Overtime', sortable: true, render: (r) => hm(r.ot) },
         ]}
         footerCells={['Total', '', num(present), num(late), avgHours == null ? '—' : `${avgHours.toFixed(1)} avg`, hm(ot)]}
-        card={(r) => ({ title: r.name, big: num(r.present), small: 'present', stats: [['Late', num(r.late)], ['Avg hours', r.hours == null ? '—' : r.hours.toFixed(1)], ['Overtime', hm(r.ot)]] })}
       />
     </ReportPage>
   )

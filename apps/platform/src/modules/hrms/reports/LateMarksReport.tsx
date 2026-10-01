@@ -3,7 +3,7 @@
 // late after its shift's start plus that shift's grace.
 import { useSearchParams } from 'react-router-dom'
 import { useLateMarksReport } from '@/modules/hrms/api/useReports'
-import { HrStatusPill } from '@/shared/components/hr'
+import { StatusPill } from '@/design/kit/display'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
 import { todayIso, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
@@ -11,7 +11,7 @@ import { todayIso, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_IC
 const long = longDate, dayShort = dayMonth
 const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—')
 const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`)
-const SERIES: [string, string][] = [['Late marks', '#0f6e56']]
+const SERIES: [string, string][] = [['Late marks', 'var(--u-br,#0F6E56)']]
 
 export function LateMarksReport() {
   const [params, setParams] = useSearchParams()
@@ -46,7 +46,7 @@ export function LateMarksReport() {
   const table = () => rows.map((r) => [long(r.date), r.code, r.name, r.dept, time(r.checkIn), r.late])
 
   return (
-    <ReportPage title="Late Marks Report" subtitle="Every late arrival, with minutes late and check-in time" report="late-marks" co={co}
+    <ReportPage title="Late marks report" subtitle="Every late arrival, with minutes late and check-in time" report="late-marks" co={co}
       filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
       note={range}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
@@ -64,13 +64,12 @@ export function LateMarksReport() {
         search={{ placeholder: 'Search name, code or department…', match: (r, s) => `${r.name} ${r.code} ${r.dept}`.toLowerCase().includes(s) }}
         rows={rows.map((r) => ({ ...r, sL: sortKey(r.late) }))}
         columns={[
-          { key: 'date', header: 'Date', sortable: true, render: (r) => <span style={{ fontWeight: 600 }}>{long(r.date)}</span> },
-          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ display: 'block', fontSize: 12, color: '#64748b', fontFamily: 'JetBrains Mono,monospace' }}>{r.code}</span></span> },
-          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ color: r.none ? '#64748b' : undefined, fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
+          { key: 'date', header: 'Date', sortable: true, render: (r) => <span>{long(r.date)}</span> },
+          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span>{r.name}</span><span className="rp-code">{r.code}</span></span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span className={r.none ? 'rp-italic' : undefined}>{r.dept}</span> },
           { key: 'checkIn', header: 'Check-in', render: (r) => time(r.checkIn) },
-          { key: 'sL', header: 'Late by', sortable: true, render: (r) => <HrStatusPill tone={r.late >= 30 ? 'red' : 'orange'}>{mins(r.late)}</HrStatusPill> },
+          { key: 'sL', header: 'Late by', sortable: true, render: (r) => <StatusPill tone={r.late >= 30 ? 'danger' : 'warning'}>{mins(r.late)}</StatusPill> },
         ]}
-        card={(r) => ({ title: r.name, big: mins(r.late), small: 'late', stats: [['Date', dayShort(r.date)], ['Check-in', time(r.checkIn)], ['Department', r.dept]] })}
       />
     </ReportPage>
   )
