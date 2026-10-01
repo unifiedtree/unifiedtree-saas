@@ -1,0 +1,90 @@
+/* The self-service Home (EmpHome.dc.html). Tokens only (var(--u-*, light fallback));
+   colour-mix tints carry a plain fallback first for older phone browsers. */
+
+/* Two columns of cards that stack on narrow screens. */
+.uh-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 16px; align-items: start; }
+.uh-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.uh-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 16px; }
+
+/* ── Your day ───────────────────────────────────────────────────────────── */
+.uh-day {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+  padding: 10px 12px 10px 14px; border-radius: 14px;
+  background: var(--u-success-soft, #E3F2EA);
+  background: color-mix(in oklab, var(--u-success, #12805F) 6%, var(--u-sf, #fff));
+  border: 1px solid var(--u-ln, #E3E9E6);
+  border-color: color-mix(in oklab, var(--u-success, #12805F) 20%, var(--u-ln, #E3E9E6));
+  color: var(--u-ink, #0E1B16);
+}
+.uh-day__icon {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; box-sizing: border-box;
+  background: var(--u-sf, #fff); color: var(--u-success, #12805F);
+  border: 1px solid var(--u-ln, #E3E9E6);
+  border-color: color-mix(in oklab, var(--u-success, #12805F) 22%, var(--u-ln, #E3E9E6));
+  display: flex; align-items: center; justify-content: center;
+}
+.uh-day__tag { font-size: 11.5px; font-weight: 600; letter-spacing: .1em; color: var(--u-brt, #0F6E56); white-space: nowrap; }
+.uh-day__time { font-size: 20px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.uh-day__of { font-size: 13px; font-weight: 500; color: var(--u-ink3, #6A7A73); }
+.uh-day__bar { flex: 0 1 200px; min-width: 80px; height: 8px; border-radius: 4px; overflow: hidden;
+  background: var(--u-success-soft, #E3F2EA);
+  background: color-mix(in oklab, var(--u-success, #12805F) 14%, var(--u-sf, #fff)); }
+.uh-day__bar > span { display: block; height: 100%; border-radius: 4px; background: var(--u-success, #12805F); transition: width .75s cubic-bezier(.2, .8, .2, 1); }
+.uh-day__text { flex: 1 1 260px; min-width: 0; font-size: 13.5px; line-height: 1.45; color: var(--u-ink2, #4A5A54); }
+.uh-day__text b { font-weight: 500; color: var(--u-ink, #0E1B16); }
+.uh-day__btn {
+  height: 36px; padding: 0 14px; border-radius: 10px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--u-ln, #E3E9E6);
+  border-color: color-mix(in oklab, var(--u-success, #12805F) 30%, var(--u-ln, #E3E9E6));
+  background: var(--u-sf, #fff); color: var(--u-brt, #0F6E56); font: inherit; font-size: 13px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.uh-day__btn:hover:not(:disabled) { border-color: var(--u-br, #0F6E56); }
+.uh-day__btn:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.uh-day__btn:disabled { opacity: .6; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .uh-day__bar > span { transition: none; } }
+
+/* ── Punch for a team member (managers) ─────────────────────────────────── */
+.uh-punch {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--u-brs, #E8F3EE);
+  border: 1px solid var(--u-brl, #BFDFD1);
+  color: var(--u-ink, #0E1B16);
+}
+.uh-punch__icon { width: 40px; height: 40px; flex-shrink: 0; border-radius: 11px; background: var(--u-br, #0F6E56); color: var(--u-onbr, #fff);
+  display: flex; align-items: center; justify-content: center; }
+.uh-punch__text { flex: 1 1 260px; min-width: 0; }
+.uh-punch__title { display: block; font-size: 14.5px; font-weight: 500; }
+.uh-punch__sub { display: block; margin-top: 2px; font-size: 13px; color: var(--u-ink2, #4A5A54); }
+
+/* ── My requests ────────────────────────────────────────────────────────── */
+.uh-req {
+  width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px 8px; margin: 0 -8px; box-sizing: content-box;
+  border: 0; border-radius: 12px; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.uh-req:hover { background: var(--u-hv, #F0F4F2); }
+.uh-req:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.uh-req__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: 100%; }
+.uh-req__title { display: block; font-size: 14px; font-weight: 500; }
+.uh-req__sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+
+/* ── Today's team ───────────────────────────────────────────────────────── */
+.uh-team-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF); }
+.uh-team-row:last-child { box-shadow: none; }
+.uh-team-row__who { flex: 1; min-width: 0; }
+.uh-team-row__name { display: block; font-size: 14px; font-weight: 500; }
+.uh-team-row__role { display: block; font-size: 12.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uh-team-row__at { flex-shrink: 0; min-width: 44px; text-align: right; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ── Pay ────────────────────────────────────────────────────────────────── */
+.uh-pay__label { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.uh-pay__net { margin-top: 2px; font-size: 26px; line-height: 1.15; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+/* Shortcuts list (today's /me entry points) */
+.uh-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 4px 12px; }
+
+@media (max-width: 520px) {
+  .uh-day { gap: 8px 12px; }
+  .uh-day__bar { flex-basis: 100%; order: 5; }
+}

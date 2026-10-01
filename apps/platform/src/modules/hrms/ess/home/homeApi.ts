@@ -1,22 +1,16 @@
 // The self-service Home's own reads and actions (redesign P-HOME):
-//   GET  /v1/attendance/my-day            "Your day" (P-ATT-DAY, BW-27; attendance.checkin.self)
-//   POST /v1/attendance/breaks/start|end   breaks pause the Your day timer only (BW-26)
-//   POST /v1/attendance/checkout/undo      take back one's own check-out within 10 minutes (BW-25)
+//   Your day, breaks and undo check-out: P-ATT-DAY's shared hooks, re-exported below
 //   GET  /v1/ess/my-requests?limit=        My requests (BW-119)
 //   GET  /v1/ess/needs-you                 Needs you (BW-120)
 //   GET  /v1/ess/around-me?days=           Upcoming events (BW-121)
 //   GET  /v1/attendance/assisted-punch/eligible   who a manager may punch for (V143.40)
 // The lists answer "not available" (404, or 503 FEATURE_NOT_READY) before their
 // backend is live; each block then hides instead of erroring (DECISIONS 18).
-// P-ATT-DAY's own hooks for the day may later replace the first three here.
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
-import type { AttendanceDto } from '../../api/useAttendance'
 import { asAvailable, defaultApi, useAvailableQuery, type ApiFetch, type SharedQueryOptions } from '../../api/shared/available'
 
-/** Query-key prefixes. My day sits under today's attendance prefix, so attendance changes refresh it. */
+/** Query-key prefixes for Home's own lists. */
 export const HOME_KEYS = {
-  myDay: ['hrms', 'attendance', 'my-day'],
   ess: ['ess'],
   myRequests: ['ess', 'my-requests'],
   needsYou: ['ess', 'needs-you'],
@@ -24,66 +18,10 @@ export const HOME_KEYS = {
   eligible: ['attendance', 'assisted-punch', 'eligible'],
 } as const
 
-// ── Your day ────────────────────────────────────────────────────────────────
+// ── Your day: P-ATT-DAY's shared hooks (attendance/webpunch/useMyDay) ─────────
 
-export interface MyDayShift {
-  name: string | null
-  /** IST "HH:mm". */
-  start: string | null
-  end: string | null
-  graceMinutes: number | null
-  workingHours: number | null
-  expectedStart: string | null
-  expectedEnd: string | null
-}
-
-export interface BreakSpan { startedAt: string; endedAt: string | null }
-
-export interface MyDay {
-  date: string
-  record: AttendanceDto | null
-  /** PRESENT, LATE, HALF_DAY, ABSENT, NOT_MARKED, ON_LEAVE, HOLIDAY, WEEKLY_OFF, NOT_TRACKED. */
-  status: string | null
-  statusNote: string | null
-  shift: MyDayShift | null
-  checkedIn: boolean
-  checkedOut: boolean
-  /** Check-in to check-out (or to now). */
-  workedMinutes: number | null
-  /** Worked less breaks: the number "Your day" shows. */
-  activeMinutes: number | null
-  onBreak: boolean
-  breakStartedAt: string | null
-  breakMinutes: number
-  breaks: BreakSpan[]
-  /** The company's "Allow web check-in" (and its migration): breaks and undo need it. */
-  webPunchAllowed: boolean
-  canUndoCheckOut: boolean
-  undoCheckOutUntil: string | null
-}
-
-export interface BreaksResponse { onBreak: boolean; breakStartedAt: string | null; breakMinutes: number; breaks: BreakSpan[] }
-
-export function myDayQuery(api: ApiFetch = defaultApi): SharedQueryOptions<MyDay> {
-  return { queryKey: HOME_KEYS.myDay, queryFn: () => asAvailable(() => api<MyDay>('/v1/attendance/my-day')) }
-}
-
-export function useMyDay(enabled: boolean) {
-  // The timer moves on the page; a refetch each minute keeps check-out, breaks and undo windows true.
-  return useAvailableQuery<MyDay>({ ...myDayQuery(), enabled, staleTime: 20_000, refetchInterval: 60_000 })
-}
-
-function useDayAction<R>(path: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => apiJson<R>(path, { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance'] }),
-  })
-}
-
-export const useStartBreak = () => useDayAction<BreaksResponse>('/v1/attendance/breaks/start')
-export const useEndBreak = () => useDayAction<BreaksResponse>('/v1/attendance/breaks/end')
-export const useUndoCheckOut = () => useDayAction<AttendanceDto>('/v1/attendance/checkout/undo')
+export { useMyDay, useBreak, useUndoCheckOut, MY_DAY_KEY, refreshAfterPunch } from '../../attendance/webpunch/useMyDay'
+export type { MyDay, MyDayShift, BreakSpan } from '../../attendance/webpunch/useMyDay'
 
 // ── My requests ─────────────────────────────────────────────────────────────
 
