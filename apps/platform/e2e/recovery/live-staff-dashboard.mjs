@@ -60,7 +60,8 @@ try {
     page.on('pageerror', (e) => push(pageErrors, String(e).split('\n')[0]))
     // The web punch dialog asks for the camera and location; a headless browser has neither.
     page.on('console', (m) => { if (m.type() === 'error' && !/getUserMedia|camera|NotAllowed|NotFound|geolocation/i.test(m.text())) push(pageErrors, 'console: ' + m.text().slice(0, 160)) })
-    page.on('requestfailed', (r) => { if (r.url().includes('/api/')) push(pageErrors, `requestfailed ${r.failure()?.errorText} ${r.url().slice(0, 120)}`) })
+    // ERR_ABORTED is a request cut short because the walk navigated away, not a failure.
+    page.on('requestfailed', (r) => { if (r.failure()?.errorText !== 'net::ERR_ABORTED') push(pageErrors, `requestfailed ${r.failure()?.errorText} ${r.url().slice(0, 120)}`) })
     page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400 && !r.url().includes('/canonical-auth/refresh')) push(failedApi, `${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`) })
 
     await page.goto(base + '/login')
@@ -79,7 +80,8 @@ try {
     }
     await openHome()
     check(`[${tag}] Home renders at /me`, true)
-    const root = page.locator('main').first()
+    // The Home page itself (PageFrame's region), not the shell around it (search, notifications).
+    const root = page.getByRole('region', { name: 'Home', exact: true })
     const text = await root.innerText()
     check(`[${tag}] no hard-coded "Ionora"`, !/Ionora/.test(text))
     const sub = (await page.locator('header.uk-ph .uk-ph__sub').first().innerText().catch(() => '')).trim()
