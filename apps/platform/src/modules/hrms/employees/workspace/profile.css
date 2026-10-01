@@ -1,0 +1,96 @@
+/* The profile page frame (prototype PgProfile): banner, left card, right card with
+   underline tabs. Tokens only (var(--u-*, light fallback)), so dark mode follows. */
+.upf { position: relative; width: 100%; font-family: var(--u-font, 'Inter', system-ui, sans-serif); color: var(--u-ink, #0E1B16); font-variant-numeric: tabular-nums; }
+
+/* Banner: the design's light hills; dark mode dims it so it sits on the dark page. */
+.upf-banner { position: relative; height: 230px; overflow: hidden; background-color: var(--u-brs2, #D2EADF); background-position: center bottom; background-size: cover; background-repeat: no-repeat; }
+.upf-banner::before { content: ''; position: absolute; inset: 0; background: transparent; }
+:root[data-theme='dark'] .upf-banner::before, [data-theme='dark'] .upf-banner::before { background: rgba(6, 12, 10, .62); }
+.upf-banner__fade { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(180deg, transparent, var(--u-bg, #F3F6F4)); }
+
+.upf-body { position: relative; box-sizing: border-box; max-width: 1440px; margin: -168px auto 0; padding: 0 clamp(16px, 2.4vw, 36px) 56px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.upf-card { box-sizing: border-box; border-radius: 22px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); box-shadow: 0 24px 50px -34px rgba(14, 27, 22, .4); }
+:root[data-theme='dark'] .upf-card, [data-theme='dark'] .upf-card { box-shadow: var(--u-shc, 0 1px 2px rgba(0,0,0,.5)); }
+
+/* Left card */
+.upf-left { flex: 0 1 340px; min-width: min(100%, 290px); display: flex; flex-direction: column; gap: 16px; padding: 22px; }
+.upf-back { align-self: flex-start; height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px 0 6px; border: 0; border-radius: 8px; background: transparent; color: var(--u-ink2, #4A5A54); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.upf-back:hover { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
+.upf-back:focus-visible, .upf-tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.upf-who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.upf-av { position: relative; flex-shrink: 0; }
+.upf-who__text { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.upf-who__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.upf-name { margin: 0; color: inherit; font-size: 21px; line-height: 27px; font-weight: 500; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.upf-role { font-size: 14px; color: var(--u-ink2, #4A5A54); }
+.upf-email { font-size: 12.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upf-rule { height: 1px; background: var(--u-ln2, #EDF1EF); }
+.upf-fields { display: flex; flex-direction: column; gap: 12px; }
+.upf-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--u-ink3, #6A7A73); }
+.upf-field__k { cursor: default; }
+.upf-field__box { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; box-sizing: border-box; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); min-width: 0; }
+.upf-field__box[data-edit]:focus-within { border-color: var(--u-brl, #BFDFD1); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.upf-field__box[data-invalid] { border-color: var(--u-rd, #C4453A); }
+.upf-field__ic { display: inline-flex; flex-shrink: 0; color: var(--u-ink3, #6A7A73); }
+.upf-field__v { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upf-field__v a, .upf-field__v button { color: var(--u-brt, #0F6E56); font: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none; }
+.upf-field__v a:hover, .upf-field__v button:hover { text-decoration: underline; }
+.upf-field__input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; font: inherit; font-size: 13.5px; font-weight: 400; color: inherit; }
+.upf-field__ok { flex-shrink: 0; color: var(--u-success-2, #1F9D6E); }
+.upf-field__err { font-size: 12px; font-weight: 400; color: var(--u-rdt, #B42318); }
+
+/* Left-card actions */
+.upf-acts { display: flex; flex-direction: column; gap: 8px; }
+.upf-acts__two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.upf-acts__two > * { min-width: 0; }
+.upf-acts__more { display: flex; flex-wrap: wrap; gap: 8px; }
+.upf-update { display: flex; justify-content: flex-end; }
+
+/* Right card + tabs */
+.upf-right { flex: 1 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 18px; padding: 6px 22px 22px; }
+.upf-tabs { display: flex; gap: 24px; overflow-x: auto; scrollbar-width: none; box-shadow: inset 0 -1px 0 var(--u-ln, #E3E9E6); }
+.upf-tabs::-webkit-scrollbar { display: none; }
+.upf-tab { flex-shrink: 0; height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; background: transparent; font: inherit; font-size: 14px; font-weight: 500; color: var(--u-ink3, #6A7A73); cursor: pointer; white-space: nowrap; }
+.upf-tab:hover { color: var(--u-ink, #0E1B16); }
+.upf-tab[data-on] { color: var(--u-brt, #0F6E56); box-shadow: inset 0 -2px 0 var(--u-br, #0F6E56); cursor: default; }
+.upf-tab__badge { font-size: 12px; font-weight: 500; line-height: 20px; padding: 0 7px; border-radius: 999px; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.upf-panel { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+/* Panel layouts (PgProfile / PgProfileTabs): a two-column flow of cards. */
+.upf-flow { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.upf-flow > .upf-main { flex: 2 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.upf-flow > .upf-side { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.upf-flow > .upf-half { flex: 1 1 440px; min-width: 0; }
+.upf-flow > .upf-full { flex: 1 1 100%; min-width: 0; }
+.upf-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.upf-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+
+/* Small pieces inside the cards */
+.upf-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--u-ink3, #6A7A73); text-wrap: pretty; }
+.upf-kvline { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.upf-kvline > span:first-child { color: var(--u-ink3, #6A7A73); }
+.upf-kvline > span:last-child { font-weight: 500; text-align: right; }
+.upf-banner-ok { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); font-size: 13.5px; font-weight: 500; }
+.upf-banner-warn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); font-size: 13.5px; font-weight: 500; }
+.upf-attn { display: flex; flex-direction: column; }
+.upf-attn__row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; flex-wrap: wrap; }
+.upf-attn__row:hover { background: var(--u-sf2, #F7F9F8); }
+.upf-attn__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--u-gdt, #8A5A10); }
+.upf-attn__dot[data-tone='red'] { background: var(--u-rdt, #B42318); }
+.upf-attn__dot[data-tone='ok'] { background: var(--u-brt, #0F6E56); }
+.upf-attn__t { flex: 1 1 200px; min-width: 0; }
+.upf-attn__title { font-size: 13.5px; font-weight: 500; }
+.upf-attn__sub { margin-top: 2px; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.upf-attn__acts { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.upf-net { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.upf-net > span:first-child { font-size: 14px; font-weight: 500; }
+.upf-net > span:last-child { font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
+.upf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+@media (max-width: 767px) {
+  .upf-banner { height: 150px; }
+  .upf-body { margin-top: -96px; gap: 16px; }
+  .upf-left, .upf-right { flex-basis: 100%; }
+  .upf-left { padding: 18px; }
+  .upf-right { padding: 4px 16px 18px; }
+}

@@ -1,26 +1,26 @@
 /**
- * Employee workspace — the page every employee reference lands on
- * (/hrms/employees/:id, from the directory, ⌘K search and every name link).
+ * Employee profile, HR view (/hrms/employees/:id) — the page every employee reference lands on
+ * (the directory, ⌘K search, every name link). Redesign: prototype PgProfile (self=false) +
+ * PgProfileTabs, on the kit, in ProfileFrame (banner, left card, right card with tabs).
  *
- * Built to the Claude Design export docs/Designs/UnifiedTree Employee Workspace
- * (offline).html: the view is src/design/dc/EmployeeWorkspace.view.tsx (generated)
- * and its logic src/design/dc/EmployeeWorkspace.tsx. This file loads the real
- * record and everything the header and Overview show, maps each action to its
- * API, and puts each section's real content in the design's frame. Nothing is
- * invented: a value the API doesn't have shows a dash. The Leave and Expenses tabs
- * read the per-employee endpoints (V143.13), scoped by the server: HR / admin see
- * anyone, department managers their team, everyone else themselves.
+ * This file loads the record and everything the left card and Overview show, maps each action to
+ * its API, and puts each tab's real sections in the frame. Nothing is invented: a value the API
+ * doesn't have shows a dash, and a block the viewer can't read says so.
  *
- * The tab lives in the URL (?tab=, replaced, so Back leaves the page rather than
- * stepping through tabs).
+ * Who sees what (unchanged, plus the redesign's additions):
+ *   - the record: hrms.employee.read; a direct manager holding hrms.employee.team.manage gets the
+ *     list view without pay, bank or identity (BW-97), and only the tabs their permissions open;
+ *   - each tab by its read permission (see `tabs` below); each endpoint enforces its own scope;
+ *   - Access (client, 1 Oct): workspace.users.manage — sign-in, roles, extra permissions.
+ * The tab lives in the URL (?tab=, replaced, so Back leaves the page rather than stepping tabs).
  */
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
-import { DesignFrame } from '@/design/dc/DesignFrame'
-import { EmployeeWorkspace, type WorkspaceData, type WsStatus, type WsField } from '@/design/dc/EmployeeWorkspace'
+import { Button, EmptyState, ErrorState, Section, Skeleton, type CalendarDay, type StatusTone } from '@/design/kit/display'
+import { Menu, useToast } from '@/design/kit/overlays'
 import { istToday } from '@/design/dc/dates'
 import {
   useWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice, useEmployeesByIds, useUpdateWorkforceEmployee,
@@ -33,15 +33,24 @@ import { useEmployeeShift, useShiftPolicies } from '../api/useShiftPolicies'
 import { useEmployeeStructure } from '../api/usePayroll'
 import { useEmployeeDocuments } from '../api/useDocument'
 import { useEmployeeKpis } from '../api/usePerformance'
+import { useEmployeeLeaveBalances } from '../api/useLeave'
 import type { OnboardingRecordData } from '../onboarding/OnboardingRecord'
+import { dayCell } from '../attendance/daily/MyAttendance'
 import { sendInvite, resendInvite } from './api/useInvitation'
 import { resetFaceEnrollment } from './api/useFaceAdmin'
+import { invitationKey, useEmployeeMonth, useInvitationStatus } from './api/useProfileData'
 import { EmployeeFaceEnrollButton, employeeFaceLine, useEmployeeFaceStatus } from '../attendance/face/FaceEnrollment'
 import { faceErrorText } from '../attendance/face/faceEnroll'
 import { EmployeeForm } from './EmployeeForm'
+import { ProfileFrame, type ProfileField } from './workspace/ProfileFrame'
+import { AccountCard, AttentionList, EmploymentCard, GlanceRow, MonthCard, OnboardingCard, type Attention, type Glance, type OnboardingView } from './workspace/HrOverview'
+import { EditProfilePanel, LifecycleDialog, ShiftPanel, type EditField, type LifecycleCalls, type LifecycleKind } from './workspace/HrPanels'
+import { FaceResetDialog } from './workspace/FaceResetDialog'
+import { EmployeeAccess, useCanManageAccess } from './workspace/EmployeeAccess'
 import { EmployeePersonal } from './workspace/EmployeePersonal'
 import { EmployeeJob } from './workspace/EmployeeJob'
 import { EmployeeAttendance } from './workspace/EmployeeAttendance'
+import { EmployeeMonth } from './workspace/EmployeeMonth'
 import { EmployeePayroll } from './workspace/EmployeePayroll'
 import { EmployeeDocuments, EMPLOYEE_DOCUMENTS_PAGE_SIZE } from './workspace/EmployeeDocuments'
 import { EmployeeLetters } from './workspace/EmployeeLetters'
@@ -49,31 +58,35 @@ import { EmployeePerformance } from './workspace/EmployeePerformance'
 import { EmployeeExit } from './workspace/EmployeeExit'
 import { EmployeeLeave } from './workspace/EmployeeLeave'
 import { EmployeeExpenses } from './workspace/EmployeeExpenses'
+import { daysUntil, fmtDate, fmtDateTime, hrs, inr, plural, tenure } from './workspace/profileFormat'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { greetingName } from '@/shared/hooks/greetingName'
 
-const STATUS: Record<string, WsStatus> = { ACTIVE: 'Active', PROBATION: 'Probation', NOTICE_PERIOD: 'Notice period', SUSPENDED: 'Suspended', EXITED: 'Exited', TERMINATED: 'Terminated' }
+const STATUS: Record<string, [string, StatusTone]> = {
+  ACTIVE: ['Active', 'brand'], PROBATION: ['Probation', 'mint'], NOTICE_PERIOD: ['Notice period', 'warning'],
+  SUSPENDED: ['Suspended', 'danger'], EXITED: ['Exited', 'muted'], TERMINATED: ['Terminated', 'danger'],
+}
 const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full time', PART_TIME: 'Part time', INTERN: 'Intern', CONTRACT: 'Contract', CONSULTANT: 'Consultant' }
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const fmt = (s?: string | null) => { if (!s) return '—'; const d = new Date(s.length === 10 ? s + 'T12:00:00' : s); return isNaN(+d) ? '—' : `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}` }
-const days = (s: string, today: string) => Math.round((new Date(s + 'T12:00:00').getTime() - new Date(today + 'T12:00:00').getTime()) / 86_400_000)
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
-const inr = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
-const hrs = (h?: number) => { if (h == null) return '—'; const a = Math.floor(h), m = Math.round((h - a) * 60); return m ? `${a}h ${m}m` : `${a}h` }
-const seedOf = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 8 }
 const humanize = (k: string) => k.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase())
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : '')
-
-const TABS = ['overview', 'personal', 'job', 'attendance', 'payroll', 'leave', 'expenses', 'documents', 'letters', 'performance', 'exit'] as const
+const NON_WORKING = new Set(['WEEKEND', 'WEEKLY_OFF', 'HOLIDAY'])
 
 export function EmployeeDetail() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const toast = useToast()
   const [params, setParams] = useSearchParams()
   const today = istToday()
   const [fullForm, setFullForm] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [shiftOpen, setShiftOpen] = useState(false)
+  const [life, setLife] = useState<LifecycleKind | null>(null)
+  const [resetAsk, setResetAsk] = useState(false)
+  const [inviting, setInviting] = useState(false)
 
   // ── permissions (the codes each endpoint checks) ──
+  const canRead = usePermission(P.HRMS_EMPLOYEE_READ)
   const canWrite = usePermission(P.HRMS_EMPLOYEE_WRITE), canInvite = usePermission(P.HRMS_EMPLOYEE_INVITE)
   const canFace = usePermission('attendance.face.admin.reset'), canShift = usePermission('attendance.workforce.admin')
   const canPii = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ), canIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
@@ -83,33 +96,33 @@ export function EmployeeDetail() {
   // Leave / Expenses tabs: anyone (HR, admin; finance for claims), a manager's team, or yourself.
   const canLeave = usePermission('hrms.leave.employee.read'), canLeaveTeam = usePermission('hrms.leave.approve.l1')
   const canClaims = usePermission('hrms.expense.employee.read'), canClaimsTeam = usePermission('hrms.expense.claim.approve')
+  const canAccess = useCanManageAccess()
   const { data: me } = useCurrentUser()
   const self = !!me?.employeeId && me.employeeId === id
 
   // ── data ──
   const empQ = useWorkforceEmployee(id)
   const emp = empQ.data
+  const co = emp?.companyId ?? ''
   // The real face enrollment (the record's own flag isn't kept up to date by face punch-in).
   const faceQ = useEmployeeFaceStatus(emp?.id, canFace)
-  const co = emp?.companyId ?? ''
   const { data: companies = [] } = useCompanies()
   const { data: departments = [] } = useDepartments(co)
   const { data: designations = [] } = useDesignations(co)
   const { data: branches = [] } = useBranches(co)
   const { data: types = [] } = useEmploymentTypes(canWrite ? co : '')
   const { data: shiftList = [] } = useShiftPolicies(canShift ? co : '')
-  const { data: managers } = useEmployeesByIds(emp?.reportingManagerId ? [emp.reportingManagerId] : [])
+  const { data: managers } = useEmployeesByIds(emp?.reportingManagerId ? [emp.reportingManagerId] : [], { enabled: canRead })
   const week = useEmployeeWeeklySummary(id, undefined, { enabled: canAttendance && !!emp })
   const shift = useEmployeeShift(id, { enabled: (canAttendance || canShift) && !!emp })
   const structure = useEmployeeStructure(canSalary && emp ? id : '')
+  const balances = useEmployeeLeaveBalances(id, Number(today.slice(0, 4)), !canSalary && (canLeave || canLeaveTeam) && !!emp)
   const documents = useEmployeeDocuments(id, 0, canDocs && !!emp, EMPLOYEE_DOCUMENTS_PAGE_SIZE)
   // Goals tile: only goals still being worked on (active or at risk), not completed or dropped ones.
   const kpis = useEmployeeKpis(id, { enabled: canPerf && !!emp, activeOnly: true })
-  const invitation = useQuery({
-    queryKey: ['hrms', 'employee', id, 'invitation-status'],
-    queryFn: () => apiJson<{ activated?: boolean; invitedAt?: string; lastLoginAt?: string }>(`/v1/employees/${id}/invitation-status`),
-    enabled: !!emp, retry: false,
-  })
+  const invitation = useInvitationStatus(id, !!emp)
+  const ym = today.slice(0, 7)
+  const month = useEmployeeMonth(id, Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), canAttendance && !!emp)
   const onboarding = useQuery({
     queryKey: ['hrms', 'onboarding-record', id],
     queryFn: () => apiJson<OnboardingRecordData>(`/v1/hrms/employees/${id}/onboarding-record`),
@@ -120,68 +133,150 @@ export function EmployeeDetail() {
   const extendM = useExtendProbation(), updateM = useUpdateWorkforceEmployee()
 
   const tabParam = params.get('tab') || 'overview'
-  const tab = (TABS as readonly string[]).includes(tabParam) ? tabParam : 'overview'
   const setTab = (k: string) => { const n = new URLSearchParams(params); if (k === 'overview') n.delete('tab'); else n.set('tab', k); setParams(n, { replace: true }) }
   const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/hrms/employees'))
 
-  const data: WorkspaceData = useMemo(() => {
-    const base = {
-      onRetry: () => { void empQ.refetch() }, onBack: back, today,
-    }
-    if (empQ.isLoading || !emp) {
-      return {
-        ...base, state: empQ.isLoading ? 'loading' : empQ.error ? ((empQ.error as { status?: number }).status === 404 ? 'missing' : 'failed') : 'missing',
-      } as unknown as WorkspaceData
-    }
+  const view = useMemo(() => {
+    if (!emp) return null
     const name = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ') || emp.employeeCode
-    const first = emp.firstName || name
-    const st = STATUS[emp.employmentStatus || 'ACTIVE'] || 'Active'
+    const call = greetingName(emp.firstName, emp.lastName) || name
+    const [stLabel, stTone] = STATUS[emp.employmentStatus || 'ACTIVE'] || ['Active', 'brand']
     const company = companies.find((c) => c.id === emp.companyId), dept = departments.find((d) => d.id === emp.departmentId)
     const desig = designations.find((d) => d.id === emp.designationId), branch = branches.find((b) => b.id === emp.branchId)
-    const separated = st === 'Exited' || st === 'Terminated'
+    const separated = emp.employmentStatus === 'EXITED' || emp.employmentStatus === 'TERMINATED'
+    const mgr = managers?.[0]
+    const mgrName = mgr ? [mgr.firstName, mgr.lastName].filter(Boolean).join(' ') : emp.reportingManagerId && emp.reportingManagerId === me?.employeeId ? 'You' : ''
+    const s = shift.data
+    const shiftLabel = (n?: string | null, a?: string | null, b?: string | null) => (n ? `${n}${a ? ` · ${hm(a)} – ${hm(b)}` : ''}` : 'No shift assigned')
+    const w = week.data
+    const todayRow = w?.days?.find((d) => d.date === today)
+    const inv = invitation.data
+    const active = !!(inv?.activated ?? emp.hasAccount)
 
-    // Probation banner (only while on probation)
-    let probation: WorkspaceData['probation'] = null
-    if (st === 'Probation') {
-      if (!emp.probationEndDate) probation = { title: 'Probation end date not set', sub: 'Set a date so the confirmation reminder runs on time' }
-      else {
-        const d = days(emp.probationEndDate, today)
-        probation = d >= 0
-          ? { title: `Probation ends in ${plural(d, 'day')} · ${fmt(emp.probationEndDate)}`, sub: 'Confirm or extend before the end date' }
-          : { title: 'Probation period has ended', sub: `It ended on ${fmt(emp.probationEndDate)} — confirm, extend or begin exit` }
-      }
-    }
-
-    // Needs attention — the same rules the workspace always used, each opening where it's fixed.
-    const w = week.data, absent = w?.days?.filter((x) => x.status === 'ABSENT' && x.date < today).length ?? 0, late = w?.days?.filter((x) => x.status === 'LATE').length ?? 0
-    const attention: WorkspaceData['attention'] = []
-    if (st === 'Probation' && emp.probationEndDate) {
-      const d = days(emp.probationEndDate, today)
-      if (d <= 30) attention.push({ tone: 'amber', title: d < 0 ? `Probation ended ${plural(-d, 'day')} ago and isn’t confirmed yet` : `Probation ends in ${plural(d, 'day')}`, cta: 'Review lifecycle', onClick: () => setTab('exit') })
-    }
-    if (st === 'Notice period') attention.push({ tone: 'orange', title: emp.lastWorkingDay ? (days(emp.lastWorkingDay, today) >= 0 ? `Serving notice — last working day in ${plural(days(emp.lastWorkingDay, today), 'day')}` : 'Notice period has passed its last working day') : 'Serving notice', cta: 'Open exit', onClick: () => setTab('exit') })
-    if (canSalary && !structure.isLoading && !structure.error && !structure.data && !separated) attention.push({ tone: 'red', title: 'No salary structure — this employee cannot be included in a payroll run.', cta: 'Set up payroll', onClick: () => setTab('payroll') })
-    if ((canAttendance || canShift) && !shift.isLoading && !shift.error && !shift.data?.shiftPolicyId && !separated) attention.push({ tone: 'amber', title: 'No shift assigned — lateness and overtime can’t be measured.', cta: 'Open attendance', onClick: () => setTab('attendance') })
-    if (absent > 0) attention.push({ tone: 'amber', title: `${plural(absent, 'unmarked/absent day')} this week.`, cta: 'See attendance', onClick: () => setTab('attendance') })
-
-    const docTotal = documents.data?.totalElements
-    const glance: WorkspaceData['glance'] = [
-      { l: 'This week', v: canAttendance ? (w ? hrs(w.totalHours) : '…') : '—', s: canAttendance ? (w ? `${w.presentDays} present${late ? ` · ${late} late` : ''}` : '') : 'No access', onClick: () => setTab('attendance') },
-      { l: 'Salary structure', v: canSalary ? (structure.data ? inr(Number(structure.data.ctcAnnual || 0)) : structure.isLoading ? '…' : '—') : '—', s: canSalary ? (structure.data?.effectiveFrom ? `Effective ${fmt(structure.data.effectiveFrom)}` : structure.isLoading ? '' : 'Not set up') : 'No access', onClick: () => setTab('payroll') },
-      { l: 'Documents', v: canDocs ? (docTotal != null ? String(docTotal) : '…') : '—', s: canDocs ? 'on record' : 'No access', onClick: () => setTab('documents') },
-      { l: 'Goals', v: canPerf ? (kpis.data ? String(kpis.data.total) : '…') : '—', s: canPerf ? 'active goals & KPIs' : 'No access', onClick: () => setTab('performance') },
+    // ── left card ──
+    const fields: ProfileField[] = [
+      { key: 'code', label: 'Employee code', icon: 'code', value: emp.employeeCode },
+      { key: 'email', label: 'Work email', icon: 'mail', value: emp.email, verified: active, verifiedLabel: 'Account active' },
+      { key: 'mobile', label: 'Mobile', icon: 'phone', value: emp.phone },
+      {
+        key: 'mgr', label: 'Reports to', icon: 'user',
+        value: mgr ? <button type="button" onClick={() => navigate(`/hrms/employees/${mgr.id}`)}>{mgrName}</button> : (mgrName || (emp.reportingManagerId ? '—' : 'No manager set')),
+      },
+      { key: 'loc', label: 'Work location', icon: 'pin', value: branch?.name || '' },
+      { key: 'joined', label: 'Joined', icon: 'cal', value: emp.dateOfJoining ? [fmtDate(emp.dateOfJoining), tenure(emp.dateOfJoining, today)].filter(Boolean).join(' · ') : '' },
     ]
 
-    // Onboarding record (people who can edit employees only — the endpoint's rule)
+    // ── Overview: glance ──
+    const scheduled = w?.dailyTargetHours ? w.dailyTargetHours * (w.days?.filter((d) => !NON_WORKING.has(d.status)).length ?? 0) : 0
+    const late = w?.days?.filter((x) => x.status === 'LATE').length ?? 0
+    const docTotal = documents.data?.totalElements
+    const docRows = documents.data?.content ?? []
+    // Pending can only be counted when every document is on this first page.
+    const docPending = docTotal != null && docTotal <= docRows.length ? docRows.filter((d) => ((d as { verificationStatus?: string }).verificationStatus || 'PENDING') === 'PENDING').length : null
+    const leaveLeft = (balances.data ?? []).reduce((n, b) => n + (b.available || 0), 0)
+    const glance: Glance[] = [
+      canAttendance
+        ? { label: 'This week', value: w ? hrs(w.totalHours) : null, loading: week.isLoading, icon: 'clock', tone: 'brand', note: w ? (scheduled ? `of ${hrs(scheduled)} scheduled` : `${w.presentDays} present${late ? ` · ${late} late` : ''}`) : week.error ? 'Couldn’t load' : '', onClick: () => setTab('attendance') }
+        : { label: 'This week', value: null, icon: 'clock', tone: 'gray', note: 'No access', onClick: () => setTab('overview') },
+      canSalary
+        ? { label: 'Annual CTC', value: structure.data ? inr(Number(structure.data.ctcAnnual || 0)) : structure.isLoading ? null : '—', loading: structure.isLoading, icon: 'rupee', tone: 'brand', note: structure.data?.effectiveFrom ? `since ${fmtDate(structure.data.effectiveFrom)}` : structure.isLoading ? '' : 'No salary structure yet', onClick: () => setTab('payroll') }
+        : (canLeave || canLeaveTeam)
+          ? { label: 'Leave balance', value: balances.data ? `${Number.isInteger(leaveLeft) ? leaveLeft : leaveLeft.toFixed(1)} days` : null, loading: balances.isLoading, icon: 'calendarDays', tone: 'brand', note: balances.error ? 'No access' : 'left this year', onClick: () => setTab('leave') }
+          : { label: 'Annual CTC', value: null, icon: 'rupee', tone: 'gray', note: 'No access', onClick: () => setTab('overview') },
+      canDocs
+        ? { label: 'Documents', value: docTotal != null ? String(docTotal) : null, loading: documents.isLoading, icon: 'file', tone: docPending ? 'gold' : 'brand', note: docPending ? `${docPending} waiting for review` : 'on record', onClick: () => setTab('documents') }
+        : { label: 'Documents', value: null, icon: 'file', tone: 'gray', note: 'No access', onClick: () => setTab('overview') },
+      canPerf
+        ? { label: 'Goals', value: kpis.data ? String(kpis.data.total) : null, loading: kpis.isLoading, icon: 'target', tone: 'brand', note: 'active goals and KPIs', onClick: () => setTab('performance') }
+        : { label: 'Goals', value: null, icon: 'target', tone: 'gray', note: 'No access', onClick: () => setTab('overview') },
+    ]
+
+    // ── Overview: Employment ──
+    const onProbation = emp.employmentStatus === 'PROBATION'
+    const probation = onProbation
+      ? (emp.probationEndDate ? (daysUntil(emp.probationEndDate, today) >= 0 ? `Ends in ${plural(daysUntil(emp.probationEndDate, today), 'day')} · ${fmtDate(emp.probationEndDate)}` : `Ended ${fmtDate(emp.probationEndDate)}, not confirmed`) : 'End date not set')
+      : emp.confirmationDate ? `Completed ${fmtDate(emp.confirmationDate)}` : '—'
+    const employment = [
+      { label: 'Designation', value: desig?.title || '—' },
+      { label: 'Department', value: dept?.name || '—' },
+      { label: 'Employment type', value: TYPE_LABEL[emp.employmentType || ''] || emp.employmentType || '—' },
+      { label: 'Company', value: company?.name || '—' },
+      { label: 'Work location', value: branch?.name || '—' },
+      { label: 'Joined', value: fmtDate(emp.dateOfJoining) },
+      { label: 'Probation', value: probation },
+      { label: 'Reports to', value: mgrName || '—' },
+      ...((canAttendance || canShift) ? [{ label: 'Shift', value: shift.isLoading ? '…' : shiftLabel(s?.shiftName, s?.startTime, s?.endTime) }] : []),
+      ...(emp.lastWorkingDay ? [{ label: 'Last working day', value: fmtDate(emp.lastWorkingDay) }] : []),
+    ]
+
+    // ── Overview: Needs attention (today's rules, plus a missed punch-out this week) ──
+    const attention: Attention[] = []
+    if (onProbation) {
+      const d = emp.probationEndDate ? daysUntil(emp.probationEndDate, today) : null
+      if (d == null || d <= 30) {
+        attention.push({
+          tone: 'amber',
+          title: d == null ? 'Probation end date not set' : d < 0 ? `Probation ended ${plural(-d, 'day')} ago and isn’t confirmed yet` : `Probation ends in ${plural(d, 'day')}`,
+          sub: d == null ? 'Set a date so the confirmation reminder runs on time' : d < 0 ? `It ended on ${fmtDate(emp.probationEndDate)}: confirm, extend or begin exit` : `${fmtDate(emp.probationEndDate)} · confirm or extend before the end date`,
+          actions: canWrite ? <>
+            <Button size={30} variant="soft" onClick={() => setLife('confirm')}>Confirm as permanent</Button>
+            <Button size={30} variant="secondary" onClick={() => setLife('extend')}>Extend</Button>
+          </> : undefined,
+        })
+      }
+    }
+    if (emp.employmentStatus === 'NOTICE_PERIOD') {
+      const d = emp.lastWorkingDay ? daysUntil(emp.lastWorkingDay, today) : null
+      attention.push({ tone: 'amber', title: d == null ? 'Serving notice' : d >= 0 ? `Serving notice: last working day in ${plural(d, 'day')}` : 'Notice period has passed its last working day', sub: emp.lastWorkingDay ? fmtDate(emp.lastWorkingDay) : undefined, cta: { label: 'Open exit', onClick: () => setTab('exit') } })
+    }
+    if (canSalary && !structure.isLoading && !structure.error && !structure.data && !separated) attention.push({ tone: 'red', title: 'No salary structure', sub: `${call} can’t be included in a payroll run until one is set up.`, cta: { label: 'Set up payroll', onClick: () => setTab('payroll') } })
+    if ((canAttendance || canShift) && !shift.isLoading && !shift.error && !s?.shiftPolicyId && !separated) attention.push({ tone: 'amber', title: 'No shift assigned', sub: 'Lateness and overtime can’t be measured.', cta: { label: 'See attendance', onClick: () => setTab(canAttendance ? 'attendance' : 'job') } })
+    const absent = w?.days?.filter((x) => x.status === 'ABSENT' && x.date < today).length ?? 0
+    if (absent > 0) attention.push({ tone: 'amber', title: `${plural(absent, 'day')} with no attendance this week`, sub: 'Unmarked or absent', cta: { label: 'See attendance', onClick: () => setTab('attendance') } })
+    const noOut = w?.days?.filter((x) => x.checkInTime && !x.checkOutTime && x.date < today) ?? []
+    if (noOut.length) attention.push({ tone: 'amber', title: `${plural(noOut.length, 'day')} with no punch-out this week`, sub: noOut.map((x) => fmtDate(x.date)).join(', '), cta: { label: 'See attendance', onClick: () => setTab('attendance') } })
+    if (docPending) attention.push({ tone: 'amber', title: `${plural(docPending, 'document')} to review`, sub: 'Verify each one before payroll uses it', cta: { label: 'Review', onClick: () => setTab('documents') } })
+
+    // ── Overview: this month ──
+    const cells: CalendarDay[] = (month.data ?? []).map((d) => dayCell(d, today))
+
+    // ── Overview: Account ──
+    const lastAt = inv?.lastLoginAt
+    const invite = canInvite && !active ? {
+      label: inv?.invitedAt ? 'Resend invitation' : 'Send invitation', primary: !inv?.invitedAt, busy: inviting,
+      onClick: async () => {
+        if (!emp.email) { toast.error('Add a work email before sending an invitation'); return }
+        setInviting(true)
+        try {
+          if (inv?.invitedAt) await resendInvite(emp.id); else await sendInvite(emp.id)
+          await qc.invalidateQueries({ queryKey: invitationKey(id) })
+          toast.success(`Invitation sent to ${emp.email}`)
+        } catch (e) { toast.error('Couldn’t send the invitation', { detail: (e as Error)?.message }) } finally { setInviting(false) }
+      },
+    } : null
+    const account = {
+      active,
+      title: active ? 'Account active' : inv?.invitedAt ? 'Invitation sent' : 'No login account yet',
+      sub: active ? '' : inv?.invitedAt ? `${emp.email} · sent ${fmtDate(inv.invitedAt)}` : `${call} can’t sign in until invited.`,
+      lastSignIn: lastAt ? [fmtDateTime(lastAt, today), inv?.lastLoginDevice].filter(Boolean).join(' · ') : active ? 'Hasn’t signed in yet' : '—',
+      face: canFace ? employeeFaceLine(faceQ, emp.faceEnrolled ? 'Enrolled' : 'Not enrolled') : null,
+      resetNote: canFace,
+      invite,
+      faceActions: canFace ? <>
+        {faceQ.data && <EmployeeFaceEnrollButton employeeId={emp.id} name={name} status={faceQ.data} onEnrolled={() => void faceQ.refetch()} />}
+        <Button size={36} variant="secondary" onClick={() => setResetAsk(true)}>Reset face enrollment</Button>
+      </> : undefined,
+    }
+
+    // ── Overview: onboarding record (people who can edit employees only: the endpoint's rule) ──
     const rec = onboarding.data
     const recEmpty = !rec || !Object.keys(rec).length
-    const onb: WorkspaceData['onboarding'] = {
-      show: canWrite, sub: `Captured when ${first} was hired · ${fmt(emp.dateOfJoining)}`,
+    const onb: OnboardingView = {
+      sub: `Captured when ${call} was hired · ${fmtDate(emp.dateOfJoining)}`,
       note: onboarding.isLoading ? 'Loading…' : onboarding.error ? 'The onboarding record couldn’t be loaded.' : recEmpty ? 'No onboarding record was saved for this hire.' : '',
-      // Hire details (V143.20) come first: kept on the onboarding, filled from the candidate and accepted offer.
       fields: [
         ...([
-          rec?.hire?.offerAcceptedOn ? { l: 'Offer accepted', v: fmt(rec.hire.offerAcceptedOn) } : null,
+          rec?.hire?.offerAcceptedOn ? { l: 'Offer accepted', v: fmtDate(rec.hire.offerAcceptedOn) } : null,
           rec?.hire?.hiringManager ? { l: 'Hiring manager', v: rec.hire.hiringManager.name } : null,
           rec?.hire?.recruiter ? { l: 'Recruiter', v: rec.hire.recruiter.name } : null,
           rec?.hire?.source ? { l: 'Source', v: rec.hire.source } : null,
@@ -189,100 +284,79 @@ export function EmployeeDetail() {
         ].filter(Boolean) as { l: string; v: string }[]),
         ...Object.entries(rec?.details ?? {}).filter(([, v]) => v).map(([k, v]) => ({ l: humanize(k), v: String(v) })),
       ],
-      assets: (rec?.assets ?? []).map((a, i) => ({ id: String(i), type: a.type, model: a.model, serial: a.serial, on: fmt(a.issuedOn) })),
+      assets: (rec?.assets ?? []).map((a, i) => ({ id: String(i), type: a.type, model: a.model, serial: a.serial, on: fmtDate(a.issuedOn) })),
       policies: rec?.selectedPolicies ?? [],
       checklists: [
-        rec?.joiningChecklist && Object.keys(rec.joiningChecklist).length ? { title: 'Joining checklist', rows: Object.entries(rec.joiningChecklist).map(([k, ok]) => ({ l: humanize(k), s: ok ? 'Confirmed' : 'Pending', t: ok ? 'ok' : 'warn' })) } : null,
-        rec?.documentChecklist && Object.keys(rec.documentChecklist).length ? { title: 'Document verification checklist', rows: Object.entries(rec.documentChecklist).map(([k, d]) => ({ l: `${humanize(k)}${d.fileName ? ' · ' + d.fileName : ''}`, s: d.status === 'VERIFIED' ? 'Confirmed' : d.status === 'REJECTED' ? 'Rejected' : 'Pending', t: d.status === 'VERIFIED' ? 'ok' : d.status === 'REJECTED' ? 'red' : 'warn' })) } : null,
-      ].filter(Boolean) as WorkspaceData['onboarding']['checklists'],
+        rec?.joiningChecklist && Object.keys(rec.joiningChecklist).length ? { title: 'Joining checklist', rows: Object.entries(rec.joiningChecklist).map(([k, ok]) => ({ l: humanize(k), s: ok ? 'Confirmed' : 'Pending', t: ok ? 'ok' as const : 'warn' as const })) } : null,
+        rec?.documentChecklist && Object.keys(rec.documentChecklist).length ? { title: 'Document verification checklist', rows: Object.entries(rec.documentChecklist).map(([k, d]) => ({ l: `${humanize(k)}${d.fileName ? ' · ' + d.fileName : ''}`, s: d.status === 'VERIFIED' ? 'Confirmed' : d.status === 'REJECTED' ? 'Rejected' : 'Pending', t: d.status === 'VERIFIED' ? 'ok' as const : d.status === 'REJECTED' ? 'red' as const : 'warn' as const })) } : null,
+      ].filter(Boolean) as OnboardingView['checklists'],
     }
 
-    // Account
-    const inv = invitation.data
-    const active = !!(inv?.activated ?? emp.hasAccount)
-    const account: WorkspaceData['account'] = active
-      ? { active: true, activeSub: `${emp.email || 'No email'} · ${inv?.lastLoginAt ? 'last signed in ' + fmt(inv.lastLoginAt) : 'hasn’t signed in yet'}`, title: '', sub: '', cta: '', primary: false, onInvite: async () => '' }
-      : {
-        active: false, activeSub: '',
-        title: inv?.invitedAt ? 'Invitation sent' : 'No login account yet',
-        sub: inv?.invitedAt ? `${emp.email} · sent ${fmt(inv.invitedAt)}` : `${first} can’t sign in until invited`,
-        cta: inv?.invitedAt ? 'Resend' : 'Send invitation', primary: !inv?.invitedAt,
-        onInvite: async () => {
-          if (!emp.email) throw new Error('Add a work email before sending an invitation')
-          if (inv?.invitedAt) await resendInvite(emp.id); else await sendInvite(emp.id)
-          await qc.invalidateQueries({ queryKey: ['hrms', 'employee', id, 'invitation-status'] })
-          return `Invitation sent to ${emp.email}`
-        },
-      }
-
-    // Shift drawer
-    const s = shift.data
-    const shiftLabel = (n?: string | null, a?: string | null, b?: string | null) => (n ? `${n}${a ? ` · ${hm(a)} – ${hm(b)}` : ''}` : 'No shift assigned')
-    const shiftD: WorkspaceData['shift'] = {
-      current: shiftLabel(s?.shiftName, s?.startTime, s?.endTime),
-      upcoming: s?.upcomingShiftName ? `Changes to ${s.upcomingShiftName} from ${fmt(s.upcomingEffectiveFrom)}` : '',
-      options: shiftList.map((p) => ({ value: p.id, label: shiftLabel(p.name, p.startTime, p.endTime) })),
-      effMin: today,
-      onSave: async (shiftId, from) => {
-        await assignEmployeeShift(emp.id, shiftId, from > today ? from : undefined)
-        await qc.invalidateQueries({ queryKey: ['shifts'] })
-        const nm = shiftList.find((p) => p.id === shiftId)?.name || 'the new shift'
-        return `${name} moves to ${nm}${from > today ? ' from ' + fmt(from) : ' from today'}`
-      },
-    }
-
-    // Edit drawer
+    // ── Edit panel ──
     const typeOpts = (types.length ? types.filter((t) => t.code && TYPE_LABEL[t.code]).map((t) => ({ value: t.code!, label: t.name })) : Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label })))
     const withCur = (opts: { value: string; label: string }[], cur?: string | null) => (cur && !opts.some((o) => o.value === cur) ? [...opts, { value: cur, label: TYPE_LABEL[cur] || cur }] : opts)
-    const basic: WsField[] = [
-      { key: 'firstName', l: 'First name', v: emp.firstName || '', req: true },
-      { key: 'lastName', l: 'Last name', v: emp.lastName || '' },
-      { key: 'email', l: 'Work email', v: emp.email || '', type: 'email', check: (v) => (/^\S+@\S+\.\S+$/.test(v) ? '' : 'Enter a valid email address') },
-      { key: 'phone', l: 'Mobile', v: emp.phone || '', ph: '+91 98450 12345', check: (v) => (/^[+\d][\d\s-]{6,19}$/.test(v) ? '' : 'Enter a valid phone number') },
-      { key: 'departmentId', l: 'Department', v: emp.departmentId || '', opts: departments.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.name })) },
-      { key: 'designationId', l: 'Designation', v: emp.designationId || '', opts: designations.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.title })) },
-      { key: 'branchId', l: 'Branch', v: emp.branchId || '', opts: branches.filter((b) => b.active !== false).map((b) => ({ value: b.id, label: b.name })) },
-      { key: 'employmentType', l: 'Employment type', v: emp.employmentType || '', opts: withCur(typeOpts, emp.employmentType) },
-      { key: 'dateOfJoining', l: 'Date of joining', v: emp.dateOfJoining || '', type: 'date' },
+    const basic: EditField[] = [
+      { key: 'firstName', label: 'First name', value: emp.firstName || '', required: true },
+      { key: 'lastName', label: 'Last name', value: emp.lastName || '' },
+      { key: 'email', label: 'Work email', value: emp.email || '', type: 'email', check: (v) => (/^\S+@\S+\.\S+$/.test(v) ? '' : 'Enter a valid email address') },
+      { key: 'phone', label: 'Mobile', value: emp.phone || '', placeholder: '+91 98450 12345', check: (v) => (/^[+\d][\d\s-]{6,19}$/.test(v) ? '' : 'Enter a valid phone number') },
+      { key: 'departmentId', label: 'Department', value: emp.departmentId || '', options: departments.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.name })) },
+      { key: 'designationId', label: 'Designation', value: emp.designationId || '', options: designations.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.title })) },
+      { key: 'branchId', label: 'Branch', value: emp.branchId || '', options: branches.filter((b) => b.active !== false).map((b) => ({ value: b.id, label: b.name })) },
+      { key: 'employmentType', label: 'Employment type', value: emp.employmentType || '', options: withCur(typeOpts, emp.employmentType) },
+      { key: 'dateOfJoining', label: 'Date of joining', value: emp.dateOfJoining || '', type: 'date' },
     ]
-    const financial: WsField[] = [
-      { key: 'ctcAnnual', l: 'Annual CTC (₹)', v: emp.ctcAnnual != null ? String(emp.ctcAnnual) : '', type: 'number', ph: 'Leave blank to keep the current CTC', check: (v) => (Number(v) > 0 ? '' : 'Enter an amount above 0') },
-      { key: 'bankAccountNumber', l: 'Bank account number', v: '', ph: emp.bankAccountNumber ? `Leave blank to keep ${emp.bankAccountNumber}` : '12–18 digits', check: (v) => (/^\d{9,18}$/.test(v.replace(/\s/g, '')) ? '' : 'Use 9 to 18 digits') },
-      { key: 'bankIfsc', l: 'IFSC', v: emp.bankIfsc || '', ph: 'SBIN0001234', check: (v) => (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.toUpperCase()) ? '' : 'Format: SBIN0001234') },
-      { key: 'panNumber', l: 'PAN', v: '', ph: 'Leave blank to keep the PAN on record', check: (v) => (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.toUpperCase()) ? '' : 'Format: ABCDE1234F') },
-      { key: 'uanNumber', l: 'UAN', v: emp.uan || '', ph: '12 digits', check: (v) => (/^\d{12}$/.test(v) ? '' : 'UAN has 12 digits') },
-      { key: 'taxRegime', l: 'Tax regime', v: '', off: true, ph: 'Set on the salary structure', hint: 'The tax regime lives on each salary structure (Payroll tab).' },
+    const financial: EditField[] = [
+      { key: 'ctcAnnual', label: 'Annual CTC (₹)', value: emp.ctcAnnual != null ? String(emp.ctcAnnual) : '', type: 'number', placeholder: 'Leave blank to keep the current CTC', check: (v) => (Number(v) > 0 ? '' : 'Enter an amount above 0') },
+      { key: 'bankAccountNumber', label: 'Bank account number', value: '', placeholder: emp.bankAccountNumber ? `Leave blank to keep ${emp.bankAccountNumber}` : '12–18 digits', check: (v) => (/^\d{9,18}$/.test(v.replace(/\s/g, '')) ? '' : 'Use 9 to 18 digits') },
+      { key: 'bankIfsc', label: 'IFSC', value: emp.bankIfsc || '', placeholder: 'SBIN0001234', check: (v) => (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.toUpperCase()) ? '' : 'Format: SBIN0001234') },
+      { key: 'panNumber', label: 'PAN', value: '', placeholder: 'Leave blank to keep the PAN on record', check: (v) => (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.toUpperCase()) ? '' : 'Format: ABCDE1234F') },
+      { key: 'uanNumber', label: 'UAN', value: emp.uan || '', placeholder: '12 digits', check: (v) => (/^\d{12}$/.test(v) ? '' : 'UAN has 12 digits') },
+      { key: 'taxRegime', label: 'Tax regime', value: '', off: true, placeholder: 'Set on the salary structure', hint: 'The tax regime lives on each salary structure (Payroll tab).' },
     ]
-    const edit: WorkspaceData['edit'] = {
-      basic, financial, onFullForm: () => setFullForm(true),
-      onSave: async (v) => {
-        const patch: UpdateWorkforceEmployeePayload = {}
-        for (const f of basic) { const nv = (v[f.key] ?? '').trim(); if (nv !== (f.v ?? '')) (patch as any)[f.key] = nv }
-        if (patch.employmentType) patch.employmentType = patch.employmentType as EmploymentType
-        const ctc = (v.ctcAnnual ?? '').trim(); if (ctc && ctc !== financial[0].v) patch.ctcAnnual = Number(ctc)
-        const acct = (v.bankAccountNumber ?? '').replace(/\s/g, ''); if (acct) patch.bankAccountNumber = acct
-        const ifsc = (v.bankIfsc ?? '').trim().toUpperCase(); if (ifsc && ifsc !== financial[2].v) patch.bankIfsc = ifsc
-        const pan = (v.panNumber ?? '').trim().toUpperCase(); if (pan) patch.panNumber = pan
-        const uan = (v.uanNumber ?? '').trim(); if (uan && uan !== financial[4].v) patch.uanNumber = uan
-        if (!Object.keys(patch).length) return 'No changes to save'
-        await updateM.mutateAsync({ id: emp.id, data: patch })
-        return 'Employee details saved'
-      },
+    const saveEdit = async (v: Record<string, string>) => {
+      const patch: UpdateWorkforceEmployeePayload = {}
+      for (const f of basic) { const nv = (v[f.key] ?? '').trim(); if (nv !== (f.value ?? '')) (patch as Record<string, unknown>)[f.key] = nv }
+      if (patch.employmentType) patch.employmentType = patch.employmentType as EmploymentType
+      const ctc = (v.ctcAnnual ?? '').trim(); if (ctc && ctc !== financial[0].value) patch.ctcAnnual = Number(ctc)
+      const acct = (v.bankAccountNumber ?? '').replace(/\s/g, ''); if (acct) patch.bankAccountNumber = acct
+      const ifsc = (v.bankIfsc ?? '').trim().toUpperCase(); if (ifsc && ifsc !== financial[2].value) patch.bankIfsc = ifsc
+      const pan = (v.panNumber ?? '').trim().toUpperCase(); if (pan) patch.panNumber = pan
+      const uan = (v.uanNumber ?? '').trim(); if (uan && uan !== financial[4].value) patch.uanNumber = uan
+      if (!Object.keys(patch).length) return 'No changes to save'
+      await updateM.mutateAsync({ id: emp.id, data: patch })
+      return 'Employee details saved'
     }
 
-    const L = emp.lastWorkingDay || ''
-    const lifecycle: WorkspaceData['lifecycle'] = {
-      defaults: { noticeStart: emp.noticeStartDate || today, lwd: L, reason: emp.exitReason || '', extendTo: emp.probationEndDate || '', exitType: emp.exitType || '' },
+    // ── Lifecycle ──
+    const lifecycle: LifecycleCalls = {
+      defaults: { noticeStart: emp.noticeStartDate || today, lwd: emp.lastWorkingDay || '', reason: emp.exitReason || '', extendTo: emp.probationEndDate || '', exitType: emp.exitType || '' },
       exitTypes: EXIT_TYPES,
-      onConfirm: async (date) => { await confirmM.mutateAsync({ id: emp.id, confirmationDate: date }); return `${name} confirmed from ${fmt(date)}` },
-      onExtend: async (date) => { await extendM.mutateAsync({ employeeId: emp.id, newEndDate: date }); await empQ.refetch(); return `Probation extended to ${fmt(date)}` },
-      onNotice: async (start, lwd, reason, exitType) => { await noticeM.mutateAsync({ id: emp.id, noticeStart: start, lastWorkingDay: lwd, reason: reason || undefined, exitType: (exitType || undefined) as ExitType | undefined }); return `Notice started (${exitTypeLabel(exitType)}) · last working day ${fmt(lwd)}` },
-      onExit: async (lwd, reason, exitType) => { await exitM.mutateAsync({ id: emp.id, lastWorkingDay: lwd, reason: reason || undefined, exitType: (exitType || undefined) as ExitType | undefined }); return `${name} marked as exited (${exitTypeLabel(exitType)}) · ${fmt(lwd)}` },
-      onCancel: async () => { await cancelM.mutateAsync(emp.id); return `Notice cancelled — ${name} is active again` },
+      onConfirm: async (date) => { await confirmM.mutateAsync({ id: emp.id, confirmationDate: date }); return `${name} confirmed from ${fmtDate(date)}` },
+      onExtend: async (date) => { await extendM.mutateAsync({ employeeId: emp.id, newEndDate: date }); await empQ.refetch(); return `Probation extended to ${fmtDate(date)}` },
+      onNotice: async (start, lwd, reason, exitType) => { await noticeM.mutateAsync({ id: emp.id, noticeStart: start, lastWorkingDay: lwd, reason: reason || undefined, exitType: (exitType || undefined) as ExitType | undefined }); return `Notice started (${exitTypeLabel(exitType)}) · last working day ${fmtDate(lwd)}` },
+      onExit: async (lwd, reason, exitType) => { await exitM.mutateAsync({ id: emp.id, lastWorkingDay: lwd, reason: reason || undefined, exitType: (exitType || undefined) as ExitType | undefined }); return `${name} marked as exited (${exitTypeLabel(exitType)}) · ${fmtDate(lwd)}` },
+      onCancel: async () => { await cancelM.mutateAsync(emp.id); return `Notice cancelled: ${name} is active again` },
     }
 
-    // Tabs: each shows when the viewer can read something in it (every section re-checks its own
-    // permission, and every endpoint enforces its own; a manager outside their team gets a no-access state).
+    // ── Left-card actions: Edit profile, then the two that fit the status, the rest in More actions. ──
+    type Act = { key: string; label: string; icon: string; onClick: () => void }
+    const acts: Act[] = []
+    const lifeAct = (k: LifecycleKind, label: string, icon: string): Act => ({ key: k, label, icon, onClick: () => setLife(k) })
+    if (canWrite && onProbation) acts.push(lifeAct('confirm', 'Confirm probation', 'checkCircle'), lifeAct('extend', 'Extend probation', 'calendarPlus'))
+    else if (canWrite && emp.employmentStatus === 'NOTICE_PERIOD') acts.push(lifeAct('cancel', 'Cancel notice', 'x'), lifeAct('exit', 'Mark exited', 'logOut'))
+    if (canShift) acts.push({ key: 'shift', label: 'Change shift', icon: 'clock', onClick: () => setShiftOpen(true) })
+    if (canWrite && (emp.employmentStatus === 'ACTIVE' || onProbation)) acts.push(lifeAct('notice', 'Start notice', 'logOut'))
+    const two = acts.slice(0, 2), more = acts.slice(2)
+    const moreItems = [
+      ...more.map((a) => ({ key: a.key, label: a.label, icon: a.icon, onSelect: a.onClick })),
+      ...(invite ? [{ key: 'invite', label: invite.label, icon: 'mail', onSelect: () => void invite.onClick() }] : []),
+      ...(canAccess ? [{ key: 'access', label: 'Roles and access', icon: 'shield', onSelect: () => setTab('access') }] : []),
+      { key: 'org', label: 'View in org chart', icon: 'workflow', onSelect: () => navigate(`/hrms/org-chart?focus=${emp.id}`) },
+    ]
+
+    // ── Tabs: each shows when the viewer can read something in it (every section re-checks its own
+    // permission and every endpoint enforces its own; a manager outside their team gets a no-access state).
     const tabs = [
       { key: 'overview', label: 'Overview' },
       ...(canPii || canIdentity ? [{ key: 'personal', label: 'Personal' }] : []),
@@ -295,57 +369,124 @@ export function EmployeeDetail() {
       ...(canLetters ? [{ key: 'letters', label: 'Letters' }] : []),
       ...(canPerf || canSkills ? [{ key: 'performance', label: 'Performance' }] : []),
       { key: 'exit', label: 'Exit' },
+      ...(canAccess ? [{ key: 'access', label: 'Access' }] : []),
     ]
-    const visibleTab = tabs.some((t) => t.key === tab) ? tab : 'overview'
-    const content = visibleTab === 'personal' ? <EmployeePersonal emp={emp} />
-      : visibleTab === 'job' ? <EmployeeJob emp={emp} />
-        : visibleTab === 'attendance' ? <EmployeeAttendance employeeId={emp.id} />
-          : visibleTab === 'payroll' ? <EmployeePayroll emp={emp} />
-            : visibleTab === 'leave' ? <EmployeeLeave employeeId={emp.id} firstName={first} />
-            : visibleTab === 'expenses' ? <EmployeeExpenses employeeId={emp.id} firstName={first} self={self} />
-            : visibleTab === 'documents' ? <EmployeeDocuments employeeId={emp.id} />
-              : visibleTab === 'letters' ? <EmployeeLetters employeeId={emp.id} />
-                : visibleTab === 'performance' ? <EmployeePerformance employeeId={emp.id} />
-                  : visibleTab === 'exit' ? <EmployeeExit emp={emp} /> : null
-    const mgr = managers?.[0]
-    const mgrDesig = mgr && designations.find((d) => d.id === mgr.designationId)
-
     return {
-      ...base, state: 'ready', name, code: emp.employeeCode, seed: seedOf(emp.id),
-      metaLine: [company?.name, dept?.name, emp.dateOfJoining ? `Joined ${fmt(emp.dateOfJoining)}` : ''].filter(Boolean).join(' · '),
-      status: st, probation, tabs, tab: visibleTab, onTab: setTab, otherContent: content,
-      otherPlaceholder: null,
-      jobTitle: desig?.title || 'No designation', jobSub: [dept?.name || 'No department', branch?.name].filter(Boolean).join(' · '),
-      facts: [
-        { l: 'Company', v: company?.name || '—' }, { l: 'Employment type', v: TYPE_LABEL[emp.employmentType || ''] || emp.employmentType || '—' },
-        { l: 'Joined', v: fmt(emp.dateOfJoining) }, { l: 'Branch', v: branch?.name || '—' },
-        st === 'Probation' ? { l: 'Probation ends', v: fmt(emp.probationEndDate) } : { l: 'Confirmation', v: emp.confirmationDate ? `Confirmed on ${fmt(emp.confirmationDate)}` : '—' },
-        { l: 'Last working day', v: fmt(emp.lastWorkingDay) },
-      ],
-      mgr: mgr ? { name: [mgr.firstName, mgr.lastName].filter(Boolean).join(' '), sub: mgrDesig?.title || mgr.employeeCode, seed: seedOf(mgr.id), onOpen: () => navigate(`/hrms/employees/${mgr.id}`) } : null,
-      account, face: {
-        sub: employeeFaceLine(faceQ, emp.faceEnrolled ? 'Enrolled' : 'Not enrolled'),
-        // faceErrorText turns the server's `CODE:sentence` into plain English —
-        // without it a person with no login yet gets the raw FACE_NO_LOGIN: line.
-        onReset: async () => {
-          try { await resetFaceEnrollment(emp.id) } catch (err) { throw new Error(faceErrorText(err, false)) }
-          await empQ.refetch(); void faceQ.refetch()
-          return `Face enrollment cleared — ${first} must enroll again before face punch-in works.`
+      name, call, stLabel, stTone, fields, glance, employment, attention, cells, account, onb, basic, financial, saveEdit, lifecycle,
+      two, moreItems, tabs, roleLine: `${desig?.title || 'No designation'} · ${dept?.name || 'No department'}`,
+      checkedIn: !!todayRow?.checkInTime && !todayRow?.checkOutTime,
+      shiftD: {
+        current: shiftLabel(s?.shiftName, s?.startTime, s?.endTime),
+        upcoming: s?.upcomingShiftName ? `changes to ${s.upcomingShiftName} from ${fmtDate(s.upcomingEffectiveFrom)}` : '',
+        options: shiftList.map((p) => ({ value: p.id, label: shiftLabel(p.name, p.startTime, p.endTime) })),
+        onSave: async (shiftId: string, from: string) => {
+          await assignEmployeeShift(emp.id, shiftId, from > today ? from : undefined)
+          await qc.invalidateQueries({ queryKey: ['shifts'] })
+          const nm = shiftList.find((p) => p.id === shiftId)?.name || 'the new shift'
+          return `${name} moves to ${nm}${from > today ? ' from ' + fmtDate(from) : ' from today'}`
         },
-        enroll: canFace && faceQ.data ? <EmployeeFaceEnrollButton employeeId={emp.id} name={name} status={faceQ.data} onEnrolled={() => void faceQ.refetch()} /> : null,
       },
-      attention, glance, onboarding: onb,
-      can: { shift: canShift, edit: canWrite, lifecycle: canWrite, invite: canInvite && !active, face: canFace },
-      shift: shiftD, edit, lifecycle,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emp, empQ.isLoading, empQ.error, companies, departments, designations, branches, types, shiftList, managers, week.data, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, documents.data, kpis.data, invitation.data, onboarding.data, onboarding.isLoading, onboarding.error, faceQ.data, faceQ.isLoading, tab, today, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, self])
+  }, [emp, companies, departments, designations, branches, types, shiftList, managers, week.data, week.isLoading, week.error, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, balances.data, balances.isLoading, balances.error, documents.data, documents.isLoading, kpis.data, kpis.isLoading, invitation.data, month.data, onboarding.data, onboarding.isLoading, onboarding.error, faceQ.data, faceQ.isLoading, inviting, today, me?.employeeId, canRead, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, canAccess, self])
+
+  if (empQ.isLoading) {
+    return (
+      <div role="status" aria-label="Loading employee" style={{ maxWidth: 1440, margin: '0 auto', padding: '28px clamp(16px,2.4vw,36px) 56px', display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+        <Skeleton style={{ flex: '0 1 340px', height: 520, borderRadius: 22 }} />
+        <Skeleton style={{ flex: '1 1 620px', height: 520, borderRadius: 22 }} />
+      </div>
+    )
+  }
+  if (!emp || !view) {
+    const status = (empQ.error as { status?: number } | null)?.status
+    return (
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px clamp(16px,2.4vw,36px) 56px', display: 'grid', gap: 12 }}>
+        <div><Button size={32} variant="ghost" icon="chevronLeft" onClick={back}>Workforce directory</Button></div>
+        <Section title="Employee profile" variant="section">
+          {empQ.error && status !== 404 && status !== 403
+            ? <ErrorState error={empQ.error} onRetry={() => void empQ.refetch()} />
+            : status === 403
+              ? <EmptyState title="You can’t open this profile" hint="Managers open their own team’s profiles; HR and admins open everyone’s." variant="dashed" />
+              : <EmptyState title="Employee not found" hint="Check the details and try again." variant="dashed" action={<Button size={36} variant="secondary" onClick={() => navigate('/hrms/employees')}>Back to employees</Button>} />}
+        </Section>
+      </div>
+    )
+  }
+
+  const v = view
+  const visibleTab = v.tabs.some((t) => t.key === tabParam) ? tabParam : 'overview'
+  const content = visibleTab === 'personal' ? <EmployeePersonal emp={emp} />
+    : visibleTab === 'job' ? <EmployeeJob emp={emp} />
+      : visibleTab === 'attendance' ? <div className="upf-stack"><EmployeeMonth employeeId={emp.id} name={v.call} /><EmployeeAttendance employeeId={emp.id} /></div>
+        : visibleTab === 'payroll' ? <EmployeePayroll emp={emp} />
+          : visibleTab === 'leave' ? <EmployeeLeave employeeId={emp.id} firstName={v.call} companyId={emp.companyId} name={v.name} self={self} />
+            : visibleTab === 'expenses' ? <EmployeeExpenses employeeId={emp.id} firstName={v.call} self={self} name={v.name} />
+              : visibleTab === 'documents' ? <EmployeeDocuments employeeId={emp.id} />
+                : visibleTab === 'letters' ? <EmployeeLetters employeeId={emp.id} />
+                  : visibleTab === 'performance' ? <EmployeePerformance employeeId={emp.id} />
+                    : visibleTab === 'exit' ? <EmployeeExit emp={emp} />
+                      : visibleTab === 'access' ? <EmployeeAccess employeeId={emp.id} name={v.name} email={emp.email} canInvite={canInvite} />
+                        : (
+                          <>
+                            <GlanceRow items={v.glance} />
+                            <div className="upf-flow">
+                              <div className="upf-main">
+                                <EmploymentCard items={v.employment} onEdit={canWrite ? () => setEditOpen(true) : undefined} />
+                                <Section title="Needs attention" variant="section" count={v.attention.length || undefined} countTone="gold" body="list"
+                                  empty={v.attention.length ? undefined : { title: 'Nothing needs attention right now' }}>
+                                  <AttentionList items={v.attention} />
+                                </Section>
+                              </div>
+                              <div className="upf-side">
+                                {canAttendance && <MonthCard ym={ym} days={v.cells} loading={month.isLoading} error={month.error} onRetry={() => void month.refetch()} onOpen={() => setTab('attendance')} />}
+                                <AccountCard a={v.account} />
+                              </div>
+                            </div>
+                            {canWrite && <OnboardingCard o={v.onb} />}
+                          </>
+                        )
 
   return (
-    <DesignFrame>
-      <EmployeeWorkspace data={data} />
-      {fullForm && emp && <EmployeeForm employee={emp} onClose={() => { setFullForm(false); void empQ.refetch() }} />}
-    </DesignFrame>
+    <>
+      <ProfileFrame
+        screenLabel="Employee profile"
+        back={{ label: 'Workforce directory', onClick: back }}
+        avatar={{ name: v.name, src: emp.profilePhotoUrl, checkedIn: v.checkedIn }}
+        name={v.name}
+        status={{ label: v.stLabel, tone: v.stTone }}
+        roleLine={v.roleLine}
+        email={emp.email}
+        fields={v.fields}
+        footer={
+          <div className="upf-acts">
+            {canWrite && <Button size={40} variant="primary" icon="pencil" block onClick={() => setEditOpen(true)}>Edit profile</Button>}
+            {v.two.length > 0 && (
+              <div className="upf-acts__two" style={v.two.length === 1 ? { gridTemplateColumns: '1fr' } : undefined}>
+                {v.two.map((a) => <Button key={a.key} size={38} variant="secondary" icon={a.icon} block onClick={a.onClick}>{a.label}</Button>)}
+              </div>
+            )}
+            <Menu label="More actions" items={v.moreItems} placement="bottom-start" width={260}
+              trigger={({ props }) => <Button {...props} size={36} variant="neutral" trailingIcon="chevronDown" block>More actions</Button>} />
+          </div>
+        }
+        tabs={v.tabs}
+        active={visibleTab}
+        onTab={setTab}
+      >
+        {content}
+      </ProfileFrame>
+      <EditProfilePanel open={editOpen} onClose={() => setEditOpen(false)} basic={v.basic} financial={v.financial} onSave={v.saveEdit} onFullForm={() => setFullForm(true)} />
+      <ShiftPanel open={shiftOpen} onClose={() => setShiftOpen(false)} today={today} {...v.shiftD} />
+      <LifecycleDialog kind={life} onClose={() => setLife(null)} name={v.name} today={today} calls={v.lifecycle} />
+      <FaceResetDialog open={resetAsk} onClose={() => setResetAsk(false)} name={v.call}
+        onReset={async () => {
+          // faceErrorText turns the server's `CODE:sentence` into plain English (a person with no login gets a 409).
+          try { await resetFaceEnrollment(emp.id) } catch (err) { throw new Error(faceErrorText(err, false), { cause: err }) }
+          await empQ.refetch(); void faceQ.refetch()
+          return `Face enrollment cleared: ${v.call} must enrol again before face punch-in works.`
+        }} />
+      {fullForm && <EmployeeForm employee={emp} onClose={() => { setFullForm(false); void empQ.refetch() }} />}
+    </>
   )
 }
-

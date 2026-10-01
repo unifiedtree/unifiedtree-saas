@@ -8,8 +8,8 @@
 
 import React, { useState } from 'react'
 import type { useWorkforceEmployee } from '../../api/useWorkforce'
-import { Info } from 'lucide-react'
-import { SectionState, SubSection, WsEmpty } from './shared'
+import { EmployeePayslips } from './EmployeePayslips'
+import { SectionState, SubSection, WsEmpty, useWsToast } from './shared'
 import type {
   EmployeeAddress, EmployeeIdentityResponse, EmployeeBankAccountResponse,
   EmployeeEducation, EmployeeExperience, EmployeeDependent, EmergencyContact,
@@ -34,7 +34,6 @@ import { FileText, Plus, Trash2, XCircle } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
 import { format } from 'date-fns'
-import { toast } from 'sonner'
 import { useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents } from '../../api/usePayroll'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -42,6 +41,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 // ── Tab: Bank Accounts (PII) ──────────────────────────────────────────────────
 
 function BankTab({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const [open, setOpen] = useState(false)
   const { data = [], isLoading, error, refetch } = useBankAccounts(employeeId)
   const addMut    = useAddBankAccount(employeeId)
@@ -77,7 +77,7 @@ function BankTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeBankAccountResponse[]).map((acc) => (
-            <div key={acc.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <div key={acc.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
               <div className="space-y-0.5">
                 <p className="text-sm font-medium text-text-primary">{acc.accountHolderName}</p>
                 <p className="text-xs text-text-secondary">{acc.bankName} {acc.branchName ? `· ${acc.branchName}` : ''}</p>
@@ -121,6 +121,7 @@ function BankTab({ employeeId }: { employeeId: string }) {
 // ── Tab: Salary (payroll structure) ───────────────────────────────────────────
 
 function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: string }) {
+  const toast = useWsToast()
   const { data: structure, isLoading } = useEmployeeStructure(employeeId)
   const { data: history = [] } = useStructureHistory(employeeId)
   const { data: components = [] } = useSalaryComponents()
@@ -186,10 +187,10 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
               computed by the payroll engine, so show the same four money cards
               the Salary Structure page does. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p><p className="text-xs text-text-tertiary">{inr(structure.ctcMonthly)} / month</p></div>
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Gross / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.grossMonthly ?? structure.ctcMonthly)}</p></div>
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Deductions / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.totalDeductions ?? 0)}</p></div>
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Net pay / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.netMonthly ?? structure.ctcMonthly)}</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p><p className="text-xs text-text-tertiary">{inr(structure.ctcMonthly)} / month</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}><p className="text-xs text-text-secondary">Gross / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.grossMonthly ?? structure.ctcMonthly)}</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}><p className="text-xs text-text-secondary">Deductions / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.totalDeductions ?? 0)}</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}><p className="text-xs text-text-secondary">Net pay / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.netMonthly ?? structure.ctcMonthly)}</p></div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
             <span>Tax regime: <span className="font-semibold text-text-primary">{structure.taxRegime}</span></span>
@@ -244,7 +245,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm text-text-primary">
-              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#059669]" /> PF applicable
+              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[var(--u-br)]" /> PF applicable
             </label>
             {ctcComponents.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-border">
@@ -277,6 +278,7 @@ export function EmployeePayroll({ emp }: {
 }) {
   const canReadSalary = usePermission(P.PAYROLL_STRUCTURE_READ)
   const canReadBank = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
+  const canRuns = usePermission(P.PAYROLL_RUNS_READ)
 
   if (!canReadSalary && !canReadBank) {
     return (
@@ -300,21 +302,7 @@ export function EmployeePayroll({ emp }: {
           <BankTab employeeId={emp.id} />
         </SubSection>
       )}
-      {/* Payslips are the obvious next thing to want here and deliberately are
-          not faked: the only cross-run payslip rollup, GET /v1/payroll/payslips/me,
-          takes its employee id from the JWT, and GET /v1/payroll/runs has no
-          employeeId filter — so listing this employee's payslips would mean one
-          request per payroll run. */}
-      <div className="flex gap-3" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
-        <Info size={15} className="text-text-tertiary shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-text-primary">Payslip history isn’t shown here yet</p>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Payslips can only be fetched one payroll run at a time for another employee.
-            Open a run under Payroll → Runs to download a payslip.
-          </p>
-        </div>
-      </div>
+      {canRuns && <EmployeePayslips employeeId={emp.id} />}
     </div>
   )
 }

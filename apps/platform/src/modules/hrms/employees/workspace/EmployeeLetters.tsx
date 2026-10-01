@@ -69,7 +69,7 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
             { key: 'action', header: '', render: (l) => (
               <button
                 onClick={() => navigate(`/hrms/letters/generated/${l.id}`)}
-                className="text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
+                className="text-xs font-semibold text-[var(--u-brt)] hover:underline transition-colors"
               >
                 View
               </button>

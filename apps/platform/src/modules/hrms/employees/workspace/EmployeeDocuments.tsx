@@ -14,7 +14,6 @@
  */
 
 import React, { useState } from 'react'
-import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { FileText, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
@@ -28,7 +27,7 @@ import {
   type DocumentCategory,
   type EmployeeDocumentV2,
 } from '../../api/useDocument'
-import { SectionState, SubSection } from './shared'
+import { SectionState, SubSection, useWsToast } from './shared'
 
 const CATEGORY_TONE: Record<string, PillTone> = {
   CONTRACT: 'purple', ID_PROOF: 'blue', CERTIFICATE: 'teal',
@@ -53,6 +52,7 @@ function expiryState(expiryDate?: string): { tone: PillTone; label: string } | n
 }
 
 export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
 
@@ -166,7 +166,7 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
                             href={d.fileUrl}
                             target="_blank"
                             rel="noreferrer noopener"
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--u-brt)] hover:underline transition-colors"
                           >
                             Open <ExternalLink size={11} />
                           </a>

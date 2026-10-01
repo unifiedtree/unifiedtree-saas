@@ -13,7 +13,7 @@
 
 import React, { useState } from 'react'
 import { format } from 'date-fns'
-import { SectionState, SubSection, InfoRow, WsEmpty, Facts } from './shared'
+import { SectionState, SubSection, InfoRow, WsEmpty, Facts, useWsToast } from './shared'
 import type {
   EmployeeAddress, EmployeeIdentityResponse, EmployeeBankAccountResponse,
   EmployeeEducation, EmployeeExperience, EmployeeDependent, EmergencyContact,
@@ -32,11 +32,11 @@ import {
 } from '../../api/useEmployeeProfile'
 import { Button, Field, Input, TableSkeleton, CardSkeleton } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
+import { greetingName } from '@/shared/hooks/greetingName'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { Calendar, FileText, Mail, Phone, Plus, Trash2, User as UserIcon, XCircle } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
-import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeesByIds } from '../../api/useWorkforce'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -44,6 +44,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 // ── Tab: Contact ─────────────────────────────────────────────────────────────
 
 function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
+  const toast = useWsToast()
   const [open, setOpen] = useState(false)
   const { data = [], isLoading, error, refetch } = useEmployeeAddresses(employeeId)
   const createMut = useCreateAddress(employeeId)
@@ -80,7 +81,7 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
       ) : (
         <div className="space-y-2">
           {data.map((addr) => (
-            <div key={addr.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <div key={addr.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
               <div>
                 <div className="mb-1"><HrStatusPill tone="info">{addr.addressType}</HrStatusPill></div>
                 <p className="text-sm text-text-primary">
@@ -127,7 +128,8 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
 
 // ── Tab: Identity (PII) ───────────────────────────────────────────────────────
 
-function IdentityTab({ employeeId }: { employeeId: string }) {
+function IdentityTab({ employeeId, self }: { employeeId: string; self?: boolean }) {
+  const toast = useWsToast()
   const [showPan, setShowPan]           = useState(false)
   const [showAadhaar, setShowAadhaar]   = useState(false)
   const [showPassport, setShowPassport] = useState(false)
@@ -164,10 +166,25 @@ function IdentityTab({ employeeId }: { employeeId: string }) {
   if (isLoading) return <TableSkeleton rows={6} cols={2} />
   if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
+  // Your own record (BW-99): the server sends every number masked to its last four.
+  if (self) {
+    if (!identity) return <WsEmpty icon={FileText} title="No identity details on record" hint="HR adds your PAN, Aadhaar, UAN and passport details." />
+    return (
+      <Facts>
+        <InfoRow label="PAN" value={identity.pan || 'Not on record'} />
+        <InfoRow label="Aadhaar" value={identity.aadhaarLast4 ? maskAadhaar(identity.aadhaarLast4) : 'Not on record'} />
+        <InfoRow label="UAN" value={identity.uan || 'Not on record'} />
+        <InfoRow label="ESIC number" value={identity.esicNumber || 'Not applicable'} />
+        <InfoRow label="Passport number" value={identity.passportNumber || 'Not on record'} />
+        <InfoRow label="Passport expiry" value={identity.passportExpiry ? format(new Date(identity.passportExpiry), 'd MMM yyyy') : '—'} />
+      </Facts>
+    )
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-lg space-y-4">
       {identity && (
-        <div className="space-y-3 mb-4" style={{ padding: 14, borderRadius: 12, background: '#f8fafc' }}>
+        <div className="space-y-3 mb-4" style={{ padding: 14, borderRadius: 12, background: 'var(--u-sf2,#F7F9F8)' }}>
           <h4 className="text-[13px] font-bold text-text-primary">Current Values</h4>
           {identity.pan && (
             <PiiField label="PAN" masked={maskPan(identity.pan)} full={identity.pan} show={showPan} onToggle={() => setShowPan((v) => !v)} />
@@ -206,6 +223,7 @@ function IdentityTab({ employeeId }: { employeeId: string }) {
 // ── Tab: Education ────────────────────────────────────────────────────────────
 
 function EducationTab({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const [open, setOpen] = useState(false)
   const { data = [], isLoading, error, refetch } = useEmployeeEducation(employeeId)
   const addMut    = useAddEducation(employeeId)
@@ -241,7 +259,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeEducation[]).map((edu) => (
-            <div key={edu.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <div key={edu.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{edu.degree}{edu.fieldOfStudy ? ` · ${edu.fieldOfStudy}` : ''}</p>
@@ -288,6 +306,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
 // ── Tab: Experience ───────────────────────────────────────────────────────────
 
 function ExperienceTab({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const [open, setOpen] = useState(false)
   const { data = [], isLoading, error, refetch } = useEmployeeExperience(employeeId)
   const addMut    = useAddExperience(employeeId)
@@ -324,7 +343,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeExperience[]).map((exp) => (
-            <div key={exp.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <div key={exp.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{exp.companyName}</p>
@@ -373,6 +392,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
 // ── Tab: Dependents ───────────────────────────────────────────────────────────
 
 function DependentsTab({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const [open, setOpen] = useState(false)
   const { data = [], isLoading, error, refetch } = useEmployeeDependents(employeeId)
   const addMut    = useAddDependent(employeeId)
@@ -390,7 +410,7 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
       toast.success('Dependent added')
       reset()
       setOpen(false)
-    } catch { toast.error('Failed to add dependent') }
+    } catch (e) { toast.error('Couldn’t add the dependent', { description: (e as Error)?.message }) }
   }
 
   if (isLoading) return <TableSkeleton rows={3} cols={3} />
@@ -404,12 +424,16 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
         </div>
       </Can>
 
+      {(data as EmployeeDependent[]).some((d) => d.nominee && d.nomineePercentage) && (() => {
+        const total = (data as EmployeeDependent[]).reduce((n, d) => n + (d.nominee && d.nomineePercentage ? d.nomineePercentage : 0), 0)
+        return <p className="upf-note" style={{ marginBottom: 10, color: total > 100 ? 'var(--u-rdt,#B42318)' : undefined }}>Nominee shares: {total}% of 100%{total < 100 ? ` · ${100 - total}% not assigned` : total > 100 ? ' · over 100%, lower one before adding another nominee' : ''}</p>
+      })()}
       {data.length === 0 ? (
         <WsEmpty icon={FileText} title="No dependents" hint="Add family members or dependents." />
       ) : (
         <div className="space-y-2">
           {(data as EmployeeDependent[]).map((dep) => (
-            <div key={dep.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <div key={dep.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{dep.name}</p>
@@ -462,6 +486,7 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
 // ── Tab: Emergency Contacts ───────────────────────────────────────────────────
 
 function EmergencyTab({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const [open, setOpen] = useState(false)
   const { data = [], isLoading, error, refetch } = useEmergencyContacts(employeeId)
   const addMut    = useAddEmergencyContact(employeeId)
@@ -497,7 +522,7 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmergencyContact[]).map((c) => (
-            <div key={c.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <div key={c.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{c.name}</p>
@@ -541,11 +566,14 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
  * than rendered empty — an empty "Identity" heading implies the employee has no
  * identity documents, which is a different claim from "you may not see them".
  */
-export function EmployeePersonal({ emp }: {
+export function EmployeePersonal({ emp, self }: {
   emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']>
+  /** My profile: your own sections, read-only (BW-99), with your identity masked by the server. */
+  self?: boolean
 }) {
-  const canReadPii = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ)
-  const canReadIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
+  const canReadPii = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ) || !!self
+  const canReadIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ) || !!self
+  const call = greetingName(emp.firstName, emp.lastName) || emp.firstName
 
   if (!canReadPii && !canReadIdentity) {
     return (
@@ -560,7 +588,7 @@ export function EmployeePersonal({ emp }: {
   return (
     <div className="flex flex-col gap-3">
       {canReadPii && (
-        <SubSection title="Contact & addresses">
+        <SubSection title="Contact & addresses" hint={self ? 'How to reach you' : `How to reach ${call}`}>
           {/* Date of birth and gender live here rather than on the Overview.
               They were on the old Overview's contact card, and the 5A rewrite
               dropped them — while EmployeeForm still WRITES both, so an admin
@@ -591,16 +619,16 @@ export function EmployeePersonal({ emp }: {
       {canReadIdentity && (
         <SubSection
           title="Identity documents"
-          hint="Masked by default. Visible only with the identity-read permission."
+          hint={self ? 'Masked. HR keeps the full numbers.' : 'Masked by default. Visible only with the identity-read permission.'}
         >
-          <IdentityTab employeeId={emp.id} />
+          <IdentityTab employeeId={emp.id} self={self} />
         </SubSection>
       )}
       {canReadPii && (
         <>
           <SubSection title="Education"><EducationTab employeeId={emp.id} /></SubSection>
           <SubSection title="Work experience"><ExperienceTab employeeId={emp.id} /></SubSection>
-          <SubSection title="Dependents"><DependentsTab employeeId={emp.id} /></SubSection>
+          <SubSection title="Dependents" hint="Nominee shares can add up to 100% at most."><DependentsTab employeeId={emp.id} /></SubSection>
           <SubSection title="Emergency contacts"><EmergencyTab employeeId={emp.id} /></SubSection>
         </>
       )}
