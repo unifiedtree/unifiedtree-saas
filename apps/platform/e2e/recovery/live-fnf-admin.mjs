@@ -93,7 +93,9 @@ try {
   readerUser = (await request('/v1/workspace/users')).find(user => user.email === 'reader@unifiedtree.demo')
   assert.ok(readerUser)
   paymentRole = await request('/v1/rbac/roles', 'POST', { code: `QA_FNF_PAY_${stamp}`, displayName: 'Local FnF payment verification', description: 'Temporary least-privilege payment role; removed after test' })
-  await request(`/v1/rbac/roles/${paymentRole.id}/permissions`, 'PUT', ['hrms.fnf.read', 'hrms.fnf.pay'])
+  // hrms.fnf.pay is a HIGH-risk money permission; the API refuses to attach it
+  // without acknowledgeRisk=true (RoleAdminService#setPermissions, AccessPolicy).
+  await request(`/v1/rbac/roles/${paymentRole.id}/permissions?acknowledgeRisk=true`, 'PUT', ['hrms.fnf.read', 'hrms.fnf.pay'])
   await request(`/v1/rbac/users/${readerUser.userId}/roles/${paymentRole.id}`, 'POST')
   const payer = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   payer.on('pageerror', error => errors.push(error.message))
