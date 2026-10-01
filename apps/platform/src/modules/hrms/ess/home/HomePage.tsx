@@ -318,7 +318,7 @@ export function HomePage() {
               onRetry={() => teamDash.refetch()} onOpen={() => go('/team')} />
           )}
           {!team && canCheckIn && (
-            <CalendarCard month={month} monthWord={monthWord(today)} days={calDays} sub={calendarSub(presentSoFar, workingSoFar, toFix.size)}
+            <CalendarCard month={month} monthWord={monthWord(today)} days={calDays} sub={calendarSub(presentSoFar, workingSoFar, [...toFix].filter((d) => monthOf(d) === month).length)}
               loading={history.isLoading} error={history.error} onRetry={() => history.refetch()} onOpen={() => go('/hrms/attendance?tab=my')} />
           )}
           <div className="uh-pair">
