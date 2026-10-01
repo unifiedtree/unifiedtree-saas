@@ -328,7 +328,7 @@ export function EmployeeDetail() {
         // faceErrorText turns the server's `CODE:sentence` into plain English —
         // without it a person with no login yet gets the raw FACE_NO_LOGIN: line.
         onReset: async () => {
-          try { await resetFaceEnrollment(emp.id) } catch (err) { throw new Error(faceErrorText(err, false)) }
+          try { await resetFaceEnrollment(emp.id) } catch (err) { throw new Error(faceErrorText(err, false), { cause: err }) }
           await empQ.refetch(); void faceQ.refetch()
           return `Face enrollment cleared — ${first} must enroll again before face punch-in works.`
         },
