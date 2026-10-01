@@ -138,24 +138,13 @@
 .ut-topbar__searchicon { display: none; }
 .ut-bell__n {
   position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
-  border-radius: 999px; background: var(--u-gd, #C8912E); color: var(--u-onbr, #fff);
+  border-radius: 999px; background: var(--u-gd, #C8912E);
+  /* Dark ink on the gold (6.3:1 light, 7.7:1 dark): white on gold is under 3:1 in both themes. */
+  color: var(--u-ink, #0E1B16);
   font-size: 10px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums;
   box-shadow: 0 0 0 2px var(--u-sf, #fff);
 }
-/* Today's search field, kept in the new top bar until its dialog is rebuilt, in the design's pill look. */
-.ut-topbar__search > div { flex: 1 1 auto; max-width: none !important; }
-.ut-topbar__search > div > div:first-child {
-  height: 42px !important; padding: 0 8px 0 14px !important;
-  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 13px !important;
-  background: var(--u-sf2, #F7F9F8) !important; box-shadow: none !important;
-  transition: border-color .25s, box-shadow .25s, background .25s;
-}
-.ut-topbar__search > div > div:first-child:hover,
-.ut-topbar__search > div > div:first-child:focus-within {
-  border-color: var(--u-brl, #BFDFD1); background: var(--u-sf, #fff) !important;
-  box-shadow: 0 0 0 4px var(--u-brs, #E8F3EE) !important;
-}
-.ut-topbar__search > div > div:first-child > svg { color: var(--u-brt, #0F6E56); }
+[data-theme='dark'] .ut-bell__n { color: var(--u-bg, #0A110E); }
 
 /* ── The open module's pages: tabs along the top bar (ModuleTabs) ──────────── */
 /* The first level of navigation: the module's name, then its pages as outlined pills with the page on
