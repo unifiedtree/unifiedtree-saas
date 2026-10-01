@@ -11,13 +11,13 @@ export function PayslipDrawerView({ v }: { v: any }) {
       <HrDrawer title={v.title} onClose={v.close} footer={v.footer} width="max-w-md">
         {v.ready ? (
           <>
-            <div style={{display: "grid", gap: "18px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+            <div style={{display: "grid", gap: "18px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
               <div style={{display: "flex", alignItems: "flex-start", gap: "12px"}}>
-                <span aria-hidden="true" style={{flex: "0 0 48px", width: "48px", height: "48px", borderRadius: "14px", background: "#0f6e56", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800", letterSpacing: "-.02em"}}>
+                <span aria-hidden="true" style={{flex: "0 0 48px", width: "48px", height: "48px", borderRadius: "14px", background: "#0f6e56", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "800", letterSpacing: "-.02em"}}>
                   {txt(v.initials)}
                 </span>
                 <div style={{flex: "1", minWidth: "0", display: "grid", gap: "2px"}}>
-                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "18px", fontWeight: "700", letterSpacing: "-.01em"}}>
+                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "18px", fontWeight: "700", letterSpacing: "-.01em"}}>
                     {txt(v.name)}
                   </h3>
                   <p style={{margin: "0", fontSize: "13px", color: "#475569"}}>
@@ -113,7 +113,7 @@ export function PayslipDrawerView({ v }: { v: any }) {
                   <strong style={{fontSize: "14px", color: "#065f46"}}>
                     {"Net pay"}
                   </strong>
-                  <strong style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "26px", fontWeight: "800", letterSpacing: "-.02em", color: "#0f6e56", fontVariantNumeric: "tabular-nums"}}>
+                  <strong style={{fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "26px", fontWeight: "800", letterSpacing: "-.02em", color: "#0f6e56", fontVariantNumeric: "tabular-nums"}}>
                     {txt(v.netLabel)}
                   </strong>
                 </div>

@@ -1,26 +1,36 @@
-// Date ranges for the "Upcoming milestones" lists (birthdays, work
+// Date ranges for the "Upcoming events" lists (holidays, birthdays, work
 // anniversaries, retirements): the presets, the custom range's 12-month cap,
 // labels, and the "View all" link. Business dates are IST (see dates.ts).
-import { addDays, dt, isoOf, fmtShort, MON } from './dates'
+import { addDays, dt, isoOf, fmtShort, MON, WD } from './dates'
 
+/** The people lists (GET /v1/hrms/milestones). */
 export type MilestoneKind = 'birthdays' | 'anniversaries' | 'retirements'
+/** Every dated list in "Upcoming events": the company's holidays and the people lists. */
+export type EventKind = MilestoneKind | 'holidays'
 export type RangePreset = 'default' | 'this-month' | 'next-month' | 'next-3' | 'next-6' | 'this-year' | 'custom'
 /** What a list shows: a preset, or a custom range with its own dates. */
 export interface RangeChoice { preset: RangePreset; from?: string; to?: string }
 /** yyyy-MM-dd, both ends included. */
 export interface DateRange { from: string; to: string }
 
-/** Each list's look-ahead until someone picks a range: the card's windows before ranges existed. */
-export const DEFAULT_WINDOW: Record<MilestoneKind, { label: string; days?: number; months?: number }> = {
+/**
+ * Each list's look-ahead until someone picks a range: the people lists keep the card's windows from
+ * before ranges existed; holidays look three months ahead (a quarter's holidays, the usual planning view).
+ */
+export const DEFAULT_WINDOW: Record<EventKind, { label: string; days?: number; months?: number }> = {
   birthdays: { label: 'Next 14 days', days: 14 },
   anniversaries: { label: 'Next 31 days', days: 31 },
   retirements: { label: 'Next 6 months', months: 6 },
+  holidays: { label: 'Next 3 months', months: 3 },
 }
 export const DEFAULT_CHOICE: RangeChoice = { preset: 'default' }
 
-const NOUN: Record<MilestoneKind, string> = { birthdays: 'birthdays', anniversaries: 'work anniversaries', retirements: 'retirements' }
-/** The directory's milestone filter for each list (/hrms/employees?filter=…). */
+const NOUN: Record<EventKind, string> = { birthdays: 'birthdays', anniversaries: 'work anniversaries', retirements: 'retirements', holidays: 'holidays' }
+/** The directory's milestone filter for each people list (/hrms/employees?filter=…). */
 const FILTER: Record<MilestoneKind, string> = { birthdays: 'birthday', anniversaries: 'anniversary', retirements: 'retirement' }
+
+/** Where the holidays list's "View all" goes: the Leave page's Holidays view (shown only to people who can open it). */
+export const HOLIDAYS_PATH = '/hrms/leave?tab=holidays'
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
@@ -45,15 +55,17 @@ export interface RangeReach { min?: string; max?: string }
  * server drops the rest): birthdays and work anniversaries within 12 months
  * either side of today, retirements from today to 60 months on. Retirements
  * from retirement due (`retirementDue`: people who can read employee records,
- * one company) have no such limit.
+ * one company) have no such limit, and neither do holidays (the company's
+ * holiday list, open to everyone signed in).
  */
-export function rangeReach(kind: MilestoneKind, today: string, retirementDue = false): RangeReach {
+export function rangeReach(kind: EventKind, today: string, retirementDue = false): RangeReach {
+  if (kind === 'holidays') return {}
   if (kind !== 'retirements') return { min: addMonths(today, -12), max: addMonths(today, 12) }
   return retirementDue ? {} : { min: today, max: addMonths(today, 60) }
 }
 
 /** The line under a custom range: its length, and how far it reaches when that is limited. */
-export function reachNote(kind: MilestoneKind, reach: RangeReach): string {
+export function reachNote(kind: EventKind, reach: RangeReach): string {
   if (!reach.min && !reach.max) return 'Up to 12 months.'
   return kind === 'retirements' ? 'Up to 12 months, from today to 5 years ahead.' : 'Up to 12 months, within a year of today.'
 }
@@ -69,7 +81,7 @@ export function isValidRange(from?: string | null, to?: string | null): boolean 
 }
 
 /** The dates a preset covers, counted from today. Presets look ahead: "This month" is today to the month's end. */
-export function presetRange(kind: MilestoneKind, preset: RangePreset, today: string): DateRange {
+export function presetRange(kind: EventKind, preset: RangePreset, today: string): DateRange {
   switch (preset) {
     case 'this-month': return { from: today, to: endOfMonth(today) }
     case 'next-month': { const first = addMonths(today.slice(0, 8) + '01', 1); return { from: first, to: endOfMonth(first) } }
@@ -84,19 +96,25 @@ export function presetRange(kind: MilestoneKind, preset: RangePreset, today: str
 }
 
 /** The dates a list covers now; a custom range without usable dates falls back to the list's window. */
-export function rangeOf(kind: MilestoneKind, choice: RangeChoice, today: string): DateRange {
+export function rangeOf(kind: EventKind, choice: RangeChoice, today: string): DateRange {
   if (choice.preset === 'custom') return isValidRange(choice.from, choice.to) ? { from: choice.from!, to: choice.to! } : presetRange(kind, 'default', today)
   return presetRange(kind, choice.preset, today)
 }
 
-/** The range to ask the server for; null while a list shows its own window (the server's default). */
+/**
+ * The range to ask the milestones list for; null while a people list shows its own window (the server's
+ * default). Holidays have no server window: they always ask for their dates (rangeOf).
+ */
 export function serverRange(kind: MilestoneKind, choice: RangeChoice, today: string): DateRange | null {
   if (choice.preset === 'default' || (choice.preset === 'custom' && !isValidRange(choice.from, choice.to))) return null
   return rangeOf(kind, choice, today)
 }
 
-/** The choices for one list, in menu order. Retirements' own window is "Next 6 months". */
-export function rangeOptions(kind: MilestoneKind): { value: RangePreset; label: string }[] {
+/** The preset a list's own window stands in for in its menu (it isn't listed twice). */
+const OWN_REPLACES: Partial<Record<EventKind, RangePreset>> = { retirements: 'next-6', holidays: 'next-3' }
+
+/** The choices for one list, in menu order. Retirements' own window is "Next 6 months", holidays' "Next 3 months". */
+export function rangeOptions(kind: EventKind): { value: RangePreset; label: string }[] {
   const presets: { value: RangePreset; label: string }[] = [
     { value: 'this-month', label: 'This month' },
     { value: 'next-month', label: 'Next month' },
@@ -105,11 +123,12 @@ export function rangeOptions(kind: MilestoneKind): { value: RangePreset; label: 
     { value: 'this-year', label: 'This year' },
   ]
   const own = { value: 'default' as RangePreset, label: DEFAULT_WINDOW[kind].label }
-  const list = kind === 'retirements' ? presets.map((p) => (p.value === 'next-6' ? own : p)) : [own, ...presets]
+  const replaced = OWN_REPLACES[kind]
+  const list = replaced ? presets.map((p) => (p.value === replaced ? own : p)) : [own, ...presets]
   return [...list, { value: 'custom', label: 'Custom range' }]
 }
 
-export const choiceLabel = (kind: MilestoneKind, choice: RangeChoice) =>
+export const choiceLabel = (kind: EventKind, choice: RangeChoice) =>
   rangeOptions(kind).find((o) => o.value === choice.preset)?.label || DEFAULT_WINDOW[kind].label
 
 const dayMon = (iso: string) => `${dt(iso).getDate()} ${MON[dt(iso).getMonth()]}`
@@ -123,7 +142,7 @@ export function rangeLabel(r: DateRange): string {
 }
 
 /** What an empty list says, in the words of its range. */
-export function emptyText(kind: MilestoneKind, choice: RangeChoice): string {
+export function emptyText(kind: EventKind, choice: RangeChoice): string {
   const n = NOUN[kind]
   switch (choice.preset) {
     case 'this-month': return `No ${n} in the rest of this month.`
@@ -143,9 +162,14 @@ export function viewAllPath(kind: MilestoneKind, choice: RangeChoice, today: str
   return r ? `${base}&from=${r.from}&to=${r.to}` : base
 }
 
+/** "in 3 days", "Tomorrow", "Today", "2 days ago". */
+function daysFrom(date: string, today: string): number {
+  return Math.round((dt(date).getTime() - dt(today).getTime()) / 86400000)
+}
+
 /** The row's two labels (the same wording as before ranges), including dates already past in a custom range. */
 export function rowLabels(kind: MilestoneKind, date: string, years: number | null, today: string): { when: string; sub: string } {
-  const days = Math.round((dt(date).getTime() - dt(today).getTime()) / 86400000)
+  const days = daysFrom(date, today)
   const ago = (n: number) => (n > 45 ? `${Math.round(n / 30)} months ago` : `${n} days ago`)
   const when = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days === -1 ? 'Yesterday'
     : kind === 'retirements' ? fmtShort(date) : days < 0 ? `${-days} days ago` : `in ${days} days`
@@ -154,4 +178,12 @@ export function rowLabels(kind: MilestoneKind, date: string, years: number | nul
     : kind === 'retirements' ? (days < 0 ? ago(-days) : days > 45 ? `in ${Math.round(days / 30)} months` : `in ${days} days`)
       : fmtShort(date).slice(0, -5)
   return { when, sub }
+}
+
+/** A holiday row: its weekday and date ("Fri, 2 Oct"), and how far off it is ("in 9 days", "Tomorrow", "Today"). */
+export function holidayLabels(date: string, today: string): { when: string; day: string } {
+  const days = daysFrom(date, today)
+  const when = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days === -1 ? 'Yesterday'
+    : days < 0 ? `${-days} days ago` : days > 45 ? `in ${Math.round(days / 30)} months` : `in ${days} days`
+  return { when, day: `${WD[dt(date).getDay()]}, ${dayMon(date)}` }
 }

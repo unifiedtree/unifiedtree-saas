@@ -18,7 +18,7 @@
   animation: uko-fade .2s cubic-bezier(.2, .8, .2, 1) both;
 }
 .uko-panel, .uko-dialog, .uko-pop, .uko-toast, .uko-dd, .uko-field, .uko-toggle, .uko-check, .uko-appr, .uko-apprc, .uko-btn {
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
@@ -346,7 +346,7 @@
 .uko-input {
   display: block; width: 100%; height: 44px; margin: 0; padding: 0 14px; box-sizing: border-box;
   border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff);
-  color: var(--u-ink, #0E1B16); font: inherit; font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  color: var(--u-ink, #0E1B16); font: inherit; font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   font-size: 14px; font-weight: 400; outline: none; transition: border-color .15s, box-shadow .15s;
 }
 .uko-input::placeholder { color: var(--u-ink3, #6A7A73); opacity: 1; }

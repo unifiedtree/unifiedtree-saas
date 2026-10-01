@@ -11,7 +11,7 @@ import './WorkforceAnalytics.view.css'
 export function WorkforceAnalyticsView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "flex", flexDirection: "column", gap: "14px", fontFamily: "'Plus Jakarta Sans',sans-serif", color: "#0f172a", minWidth: "0", fontVariantNumeric: "tabular-nums"}}>
+      <div style={{display: "flex", flexDirection: "column", gap: "14px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a", minWidth: "0", fontVariantNumeric: "tabular-nums"}}>
         {v.allowed ? (
           <>
             <HrPageHeader crumb="Reports & Analytics" title="Workforce Analytics" subtitle="Headcount, diversity, and attrition across your organization" actions={v.headerActions} className="!mb-0" />
@@ -258,7 +258,7 @@ export function WorkforceAnalyticsView({ v }: { v: any }) {
                       </>
                     ) : null}
                     <div style={{display: "flex", justifyContent: "flex-end", marginTop: "auto", paddingTop: "10px"}}>
-                      <button type="button" onClick={v.openHeadcount} style={{border: "0", background: "transparent", padding: "4px 2px", font: "700 12.5px 'Plus Jakarta Sans',sans-serif", color: "#0f6e56", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"}} className="dc-workforce-analytics-2">
+                      <button type="button" onClick={v.openHeadcount} style={{border: "0", background: "transparent", padding: "4px 2px", font: "700 12.5px var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f6e56", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"}} className="dc-workforce-analytics-2">
                         {"Open Headcount Report"}
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M5 12h14M12 5l7 7-7 7" />
@@ -349,7 +349,7 @@ export function WorkforceAnalyticsView({ v }: { v: any }) {
                       </>
                     ) : null}
                     <div style={{display: "flex", justifyContent: "flex-end", marginTop: "auto", paddingTop: "10px"}}>
-                      <button type="button" onClick={v.openDiversity} style={{border: "0", background: "transparent", padding: "4px 2px", font: "700 12.5px 'Plus Jakarta Sans',sans-serif", color: "#0f6e56", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"}} className="dc-workforce-analytics-2">
+                      <button type="button" onClick={v.openDiversity} style={{border: "0", background: "transparent", padding: "4px 2px", font: "700 12.5px var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f6e56", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"}} className="dc-workforce-analytics-2">
                         {"Open Diversity Report"}
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M5 12h14M12 5l7 7-7 7" />
@@ -475,7 +475,7 @@ export function WorkforceAnalyticsView({ v }: { v: any }) {
                     </>
                   ) : null}
                   <div style={{display: "flex", justifyContent: "flex-end", paddingTop: "10px"}}>
-                    <button type="button" onClick={v.openAttrition} style={{border: "0", background: "transparent", padding: "4px 2px", font: "700 12.5px 'Plus Jakarta Sans',sans-serif", color: "#0f6e56", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"}} className="dc-workforce-analytics-2">
+                    <button type="button" onClick={v.openAttrition} style={{border: "0", background: "transparent", padding: "4px 2px", font: "700 12.5px var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f6e56", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"}} className="dc-workforce-analytics-2">
                       {"Open Attrition Report"}
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M5 12h14M12 5l7 7-7 7" />

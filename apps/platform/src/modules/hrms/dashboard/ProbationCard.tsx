@@ -52,7 +52,7 @@ export function ProbationCard({ rows, isPast, sel, canDecide, canReadConfig, loa
       actions={<Button variant="plain" size={32} trailingIcon="arrowRight" onClick={() => onNavigate('/hrms/employees?status=PROBATION')}>View all</Button>}
       body="list" style={style} loading={loading} error={error} onRetry={onRetry}
       empty={!rows.length ? { title: isPast ? `None ending in the 30 days after ${fmtShort(sel)}` : 'None ending in the next 30 days', icon: 'calendarClock' } : undefined}>
-      <div role="list" aria-label="Probations ending soon">
+      <div role="list" aria-label="Probations ending soon" className="ud-prob-list">
         {rows.map((r) => (
           <div key={r.employeeId} role="listitem" className="ud-prob-row">
             <button type="button" className="ud-link-row" onClick={() => onNavigate(`/hrms/employees/${r.employeeId}`)}

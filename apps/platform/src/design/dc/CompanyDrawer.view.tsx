@@ -9,7 +9,7 @@ export function CompanyDrawerView({ v }: { v: any }) {
   return (
     <>
       <HrDrawer title={v.title} onClose={v.close} footer={v.footer} width="max-w-lg">
-        <div style={{display: "grid", gap: "14px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+        <div style={{display: "grid", gap: "14px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
           <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
             {"Company name *"}
             <input value={v.f?.name} onChange={v.setName} onBlur={v.touch} maxLength={120} placeholder="e.g. Acme Technologies" style={{font: "inherit", fontWeight: "400", padding: "9px 12px", border: "1px solid #cbd5e1", borderRadius: "8px", color: "#0f172a", outline: "none", background: "#fff", width: "100%", boxSizing: "border-box"}} className="dc-company-drawer-0" />
@@ -48,7 +48,7 @@ export function CompanyDrawerView({ v }: { v: any }) {
             </label>
           </div>
           <section style={{display: "grid", gap: "12px", padding: "14px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc"}}>
-            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
+            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
               {"Statutory details"}
             </h3>
             <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
@@ -73,7 +73,7 @@ export function CompanyDrawerView({ v }: { v: any }) {
             <>
               <section style={{display: "grid", gap: "12px", padding: "14px", border: "1px solid #a7f3d0", borderRadius: "12px", background: "#f0fdf4"}}>
                 <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
-                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
+                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
                     {"Employee ID auto-generation"}
                   </h3>
                   <HrButton variant="ghost" size="sm" onClick={v.saveFormat} disabled={v.formatInvalid}>

@@ -10,14 +10,14 @@ import './DashCalendar.view.css'
 export function DashCalendarView({ v }: { v: any }) {
   return (
     <>
-      <div ref={v.rootRef} role="dialog" aria-modal="true" aria-label="Choose dashboard date" tabIndex={-1} onKeyDown={v.onKey} style={{display: "flex", flexWrap: "wrap", background: "var(--u-sf,#fff)", border: "1px solid var(--u-ln,#E3E9E6)", borderRadius: "16px", boxShadow: "var(--u-shp,0 24px 60px -20px rgba(14,27,22,.35))", overflow: "hidden", outline: "none", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "var(--u-ink,#0E1B16)"}}>
+      <div ref={v.rootRef} role="dialog" aria-modal="true" aria-label="Choose dashboard date" tabIndex={-1} onKeyDown={v.onKey} style={{display: "flex", flexWrap: "wrap", background: "var(--u-sf,#fff)", border: "1px solid var(--u-ln,#E3E9E6)", borderRadius: "16px", boxShadow: "var(--u-shp,0 24px 60px -20px rgba(14,27,22,.35))", overflow: "hidden", outline: "none", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "var(--u-ink,#0E1B16)"}}>
         <div style={{flex: "1 1 300px", minWidth: "0", padding: "16px 16px 14px", display: "grid", gap: "12px", alignContent: "start"}}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
             <div>
               <p style={{margin: "0", fontSize: "11px", fontWeight: "600", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--u-brt,#0F6E56)"}}>
                 {"Dashboard date · IST"}
               </p>
-              <h3 aria-label={v.monthLabel} style={{margin: "2px 0 0 0", display: "flex", alignItems: "center", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "17px", fontWeight: "600", letterSpacing: "-.01em"}}>
+              <h3 aria-label={v.monthLabel} style={{margin: "2px 0 0 0", display: "flex", alignItems: "center", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "17px", fontWeight: "600", letterSpacing: "-.01em"}}>
                 <CalChip label={v.monthChip} active={v.isMonths} onClick={v.showMonths} ariaLabel={v.isMonths ? 'Back to days' : 'Choose month'} />
                 <CalChip label={v.yearChip} active={v.isYears} onClick={v.showYears} ariaLabel={v.isYears ? 'Close year list' : 'Choose year'} />
               </h3>
@@ -184,7 +184,7 @@ export function DashCalendarView({ v }: { v: any }) {
             <p style={{margin: "0 0 4px", fontSize: "11px", fontWeight: "600", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--u-ink3,#6A7A73)"}}>
               {"Selected day"}
             </p>
-            <h4 style={{margin: "0 0 8px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "16px", fontWeight: "600", lineHeight: "1.3"}}>
+            <h4 style={{margin: "0 0 8px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "600", lineHeight: "1.3"}}>
               {txt(v.panel?.title)}
             </h4>
             <HrStatusPill tone={v.panel?.tone}>
@@ -195,7 +195,7 @@ export function DashCalendarView({ v }: { v: any }) {
             <>
               <div style={{display: "grid", gap: "6px"}}>
                 <div style={{display: "flex", alignItems: "baseline", gap: "8px"}}>
-                  <span style={{fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "28px", fontWeight: "600", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
+                  <span style={{fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "28px", fontWeight: "600", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
                     {txt(v.panel?.rate)}
                   </span>
                   <span style={{fontSize: "12px", color: "var(--u-ink3,#6A7A73)"}}>

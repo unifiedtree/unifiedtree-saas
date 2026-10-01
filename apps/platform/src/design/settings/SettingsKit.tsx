@@ -17,7 +17,7 @@ import { StatusPill } from '@/design/kit/StatusPill'
 import '@/design/module/ModuleKit.css'
 import './SettingsKit.css'
 
-const FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
+const FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
 
 export interface SettingsNavItem { key: string; label: string; state: 'on' | 'off' | 'soon' | 'none'; errors?: number; meta?: string }
 

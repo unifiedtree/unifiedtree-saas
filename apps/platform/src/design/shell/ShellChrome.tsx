@@ -1,6 +1,7 @@
 // Shell pieces shared by the desktop and phone chrome: the workspace tile (rail top block, phone bar,
-// drawer), the phone navigation drawer (the expanded rail plus More), and the hover tooltip for
-// `data-tip` attributes. The rail, Pages panel, top bar and More panel are their own files.
+// drawer), the phone navigation drawer (the open module's pages, the expanded rail, then More), and the
+// hover tooltip for `data-tip` attributes. The rail, the top bar (and its module tabs) and More panel
+// are their own files.
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
 import { useEscape, useFocusTrap, useLayer } from '@/design/kit/overlayCore'
@@ -9,7 +10,7 @@ import { MoreContent, type MoreContentProps } from './MorePanel'
 import { ShellIcon } from './shellIcons'
 import './shell.css'
 
-export const CHROME_FONT = "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"
+export const CHROME_FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
 
 /**
  * The workspace's mark in the design's white tile (white label: never the vendor's). Its uploaded mark,
@@ -30,11 +31,23 @@ export function WorkspaceTile() {
   )
 }
 
+/** The open module's pages, for the phone drawer (the same list as the top bar's tabs). */
+export interface DrawerPages {
+  /** The module's key (or Settings'). */
+  key: string
+  /** Its name ("Workforce", "My pay", "Settings"): the list is "<name> pages". */
+  label: string
+  items: { label: string; href: string; active: boolean }[]
+}
+
 export interface MobileDrawerProps extends MoreContentProps {
   groups: RailGroupView[]
   workspaceName: string | null
   onClose: () => void
   onItem: (key: string) => void
+  /** The open module's pages, listed first (a module with one page lists none). */
+  pages?: DrawerPages | null
+  onPage?: (href: string) => void
 }
 
 function inApp(e: MouseEvent, go: () => void) {
@@ -43,8 +56,11 @@ function inApp(e: MouseEvent, go: () => void) {
   go()
 }
 
-/** The phone's navigation: the rail expanded (every group, nothing overflows) with More's content under it. Mount only while open. */
-export function MobileDrawer({ groups, workspaceName, onClose, onItem, ...more }: MobileDrawerProps) {
+/**
+ * The phone's navigation: the open module's pages first (where you are, and the pages next to it), then
+ * the rail expanded (every group, nothing overflows) with More's content under it. Mount only while open.
+ */
+export function MobileDrawer({ groups, workspaceName, onClose, onItem, pages, onPage, ...more }: MobileDrawerProps) {
   const ref = useRef<HTMLDivElement>(null)
   const isTop = useLayer(true)
   useEscape(true, isTop, onClose)
@@ -61,6 +77,17 @@ export function MobileDrawer({ groups, workspaceName, onClose, onItem, ...more }
               <ShellIcon name="x" size={20} strokeWidth={2} />
             </button>
           </div>
+          {pages && pages.items.length > 1 && (
+            <nav aria-label={`${pages.label} pages`} className="ut-drawer__pages">
+              <div className="ut-drawer__label ut-drawer__label--pages" aria-hidden="true">{pages.label}</div>
+              {pages.items.map((p) => (
+                <a key={p.href} href={p.href} className="ut-drawer__page" aria-current={p.active ? 'page' : undefined}
+                  onClick={(e) => inApp(e, () => onPage?.(p.href))}>
+                  <span className="ut-drawer__pagelabel">{p.label}</span>
+                </a>
+              ))}
+            </nav>
+          )}
           <nav aria-label="Primary" className="ut-drawer__nav">
             {groups.map((g, gi) => (
               <div key={g.key} role="group" aria-label={g.label} className="ut-drawer__grp">

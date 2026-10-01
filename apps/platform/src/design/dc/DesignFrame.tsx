@@ -25,7 +25,7 @@ const SELF_SERVICE = /^\/(me|team|hrms\/ess)(\/|$)/
 export function DesignFrame({ children, width }: { children: ReactNode; /** Overrides the width picked from the address. */ width?: 'wide' | 'narrow' }) {
   const narrow = width ? width === 'narrow' : typeof window !== 'undefined' && SELF_SERVICE.test(window.location.pathname)
   return (
-    <div data-frame={narrow ? 'narrow' : 'wide'} style={{ maxWidth: narrow ? 1320 : 1440, margin: '0 auto', padding: '28px clamp(16px,2.4vw,36px) 56px', minWidth: 0, boxSizing: 'border-box', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>
+    <div data-frame={narrow ? 'narrow' : 'wide'} style={{ maxWidth: narrow ? 1320 : 1440, margin: '0 auto', padding: '28px clamp(16px,2.4vw,36px) 56px', minWidth: 0, boxSizing: 'border-box', fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)" }}>
       {children}
     </div>
   )
