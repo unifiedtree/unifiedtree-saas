@@ -162,7 +162,6 @@ function SelfReviewCard({ review, cycle, today }: { review: PerformanceReview; c
       toast.success(first ? `Self-review sent to ${manager}` : 'Self-review sent')
     } catch (e) { setError(errorText(e, 'Couldn’t send the self-review.')) }
   }
-  const m = cycle.milestones
   return (
     <Section title="Your self-review">
       {sent ? (

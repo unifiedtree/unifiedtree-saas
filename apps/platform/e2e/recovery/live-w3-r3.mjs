@@ -225,9 +225,14 @@ try {
     await o.getByRole('button', { name: 'Cancel' }).first().click()
   } else check('program edit: an open program to try', false, `status ${progs.status}`)
 
-  await o.goto(base + '/hrms/learning?view=certifications'); await settle(o)
+  // P-GROW: Certifications is now the company list; a certification is recorded on the person's
+  // skill in Skill matrix (Add a skill → Certified), with the same date fields.
+  await o.goto(base + '/hrms/learning?view=skills'); await settle(o)
   await o.getByLabel('Find employee').fill('Reader')
   await o.getByRole('button', { name: /Reader User/ }).click(); await settle(o)
+  await o.getByRole('button', { name: 'Add a skill' }).click()
+  const skp = o.getByRole('dialog', { name: 'Add a skill' })
+  await skp.getByLabel('Certified', { exact: true }).check()
   const on = o.locator('#sk-on')
   await on.click()
   const tomorrow = addDays(today, 1)
@@ -239,6 +244,7 @@ try {
   await pickDay(o, on, certOn)
   await pickDay(o, o.locator('#sk-exp'), certExp)
   check('certification: Certified on / Expires on take picked dates', (await text(on)).includes(shortText(certOn)) && (await text(o.locator('#sk-exp'))).includes(shortText(certExp)))
+  await skp.getByRole('button', { name: 'Cancel' }).click()
 
   // Policies: the Manage form (Effective date) only renders for someone who can write policies but
   // not read them; every demo role that writes also reads (and gets the Master page), so it isn't

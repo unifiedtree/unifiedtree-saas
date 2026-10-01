@@ -13,7 +13,7 @@ import { chromium } from '@playwright/test'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const browser = await chromium.launch()
@@ -38,7 +38,8 @@ try {
   const o = await session('owner@unifiedtree.demo')
   await o.page.goto(base + '/hrms/learning'); await settle(o.page)
   const ov = await viewNames(o.page)
-  check('owner: four views', JSON.stringify(ov) === JSON.stringify(['Programs', 'My training', 'Skill matrix', 'Certifications']), ov.join(' | '))
+  // Skill approvals (V143.21) is the owner's fifth view; the redesign keeps the names and order.
+  check('owner: five views', JSON.stringify(ov) === JSON.stringify(['Programs', 'My training', 'Skill matrix', 'Certifications', 'Skill approvals']), ov.join(' | '))
   await o.page.getByRole('button', { name: /New program/ }).click()
   await o.page.locator('#lp-title').fill(title)
   await o.page.locator('#lp-cap').fill('5')
@@ -49,8 +50,9 @@ try {
   check('owner: status reads "Planned"', (await row.getByRole('combobox').inputValue()) === 'PLANNED' && (await row.getByRole('option', { name: 'Planned' }).count()) === 1)
   await row.getByRole('button', { name: 'Roster' }).click(); await settle(o.page)
   check('owner: roster opens', (await o.page.getByText(/^Roster · 0 enrolled/).count()) === 1)
+  await o.page.getByRole('dialog', { name: 'Enroll people' }).getByRole('button', { name: 'Close', exact: true }).click()
   await o.page.locator('[aria-label="Learning views"]').getByRole('button', { name: /^Skill matrix/ }).click(); await settle(o.page)
-  check('owner: skill matrix asks whose record', (await o.page.getByText('Whose skills?', { exact: true }).count()) === 1)
+  check('owner: skill matrix asks whose record', (await o.page.getByText('Whose record?', { exact: true }).count()) === 1)
   check('owner: no refused API calls or page errors', !o.failed.length && !o.errors.length, o.failed[0] || o.errors[0] || '')
   await o.ctx.close()
 
@@ -68,8 +70,9 @@ try {
   check('employee: no roster or status controls', (await rrow.getByRole('button', { name: 'Roster' }).count()) === 0 && (await rrow.getByRole('combobox').count()) === 0)
   await r.page.locator('[aria-label="Learning views"]').getByRole('button', { name: /^My training/ }).click(); await settle(r.page)
   check('employee: the program is under My training', (await r.page.getByText(title, { exact: true }).count()) === 1)
-  r.page.once('dialog', (d) => d.accept())
-  await r.page.locator('div').filter({ has: r.page.getByText(title, { exact: true }) }).filter({ has: r.page.getByRole('button', { name: 'Leave' }) }).last().getByRole('button', { name: 'Leave' }).click()
+  // Leave is confirmed in a kit dialog now (it was window.confirm).
+  await r.page.locator('article').filter({ hasText: title }).getByRole('button', { name: 'Leave', exact: true }).click()
+  await r.page.getByRole('dialog').getByRole('button', { name: 'Leave program' }).click()
   await r.page.getByText(/You’ve left/).waitFor({ timeout: 15000 }).catch(() => {})
   const st = sql(`select e.status from learning_mgmt.training_enrollments e join learning_mgmt.training_programs p on p.id=e.program_id where p.title='${title}'`)
   check('employee: leaves the program', st === 'DROPPED', `status=${st}`)
@@ -79,7 +82,8 @@ try {
   const m = await session('mgr@unifiedtree.demo')
   await m.page.goto(base + '/hrms/learning'); await settle(m.page)
   const mv = await viewNames(m.page)
-  check('manager: Programs and My training', JSON.stringify(mv) === JSON.stringify(['Programs', 'My training']), mv.join(' | '))
+  // DEPT_MANAGER also approves their team's skill levels (V143.21).
+  check('manager: Programs, My training and Skill approvals', JSON.stringify(mv) === JSON.stringify(['Programs', 'My training', 'Skill approvals']), mv.join(' | '))
   check('manager: no refused API calls or page errors', !m.failed.length && !m.errors.length, m.failed[0] || m.errors[0] || '')
   await m.ctx.close()
 } catch (e) {

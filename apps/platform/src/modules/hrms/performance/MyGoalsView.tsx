@@ -132,7 +132,7 @@ function ProgressPanel({ goal, onClose }: { goal: Goal; onClose: () => void }) {
     <SidePanel open onClose={() => { if (!update.isPending) onClose() }} busy={update.isPending} width={560}
       title={editable ? 'Update progress' : 'Goal history'} sub={goal.title}
       footer={editable ? <>
-        <PanelButton variant="secondary" size="lg" onClick={onClose} disabled={update.isPending}>Close</PanelButton>
+        <PanelButton variant="secondary" size="lg" onClick={onClose} disabled={update.isPending}>Done</PanelButton>
         <PanelButton variant="primary" size="lg" busy={update.isPending} blockedReason={dirty ? null : 'Move the slider or add a note first'} onClick={save}>Save</PanelButton>
       </> : undefined}>
       <div className="grw-form">
