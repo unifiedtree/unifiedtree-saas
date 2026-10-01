@@ -145,7 +145,9 @@ export interface EligibleList { scope: 'TEAM' | 'ANY' | (string & {}); employees
 
 export function useAssistedPunchEligible(enabled: boolean, q = '') {
   return useAvailableQuery<EligibleList>({
-    queryKey: [...HOME_KEYS.eligible, q],
+    // Its own key under the shared prefix: AssistedPunchDialog caches the raw list at [...eligible, q],
+    // and this hook caches an Availability wrapper, so the two must never share an entry.
+    queryKey: [...HOME_KEYS.eligible, 'home', q],
     queryFn: () => asAvailable(() => apiJson<EligibleList>(`/v1/attendance/assisted-punch/eligible${q ? `?q=${encodeURIComponent(q)}` : ''}`)),
     enabled,
     staleTime: 30_000,
