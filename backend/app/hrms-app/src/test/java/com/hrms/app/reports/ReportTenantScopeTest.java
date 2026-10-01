@@ -88,7 +88,13 @@ class ReportTenantScopeTest {
         verify(jdbc).queryForList(sql.capture(), args.capture());
         assertTenantScoped(sql.getValue(), args.getValue());
         assertThat(sql.getValue()).contains(ReportService.STATUS_ON).contains(ReportService.EMPLOYED_ON);
+        assertWellJoined(sql.getValue());
         assertThat(args.getValue()).containsExactly(TENANT, D, TENANT, D, D, TENANT, TENANT, CO, D, D);
+    }
+
+    /** The shared fragments join with a space: no keyword runs into the next word (a text block drops trailing spaces). */
+    private static void assertWellJoined(String sql) {
+        assertThat(sql).contains("AND e.date_of_joining <= ?").doesNotContainPattern("(?i)\\b(AND|WITH)(e\\.|status_on)");
     }
 
     @Test
@@ -101,6 +107,7 @@ class ReportTenantScopeTest {
         assertTenantScoped(q, args.getValue());
         // Same status-history CTEs and the same "employed on" rule as the headcount report…
         assertThat(q).contains(ReportService.STATUS_ON).contains(ReportService.EMPLOYED_ON);
+        assertWellJoined(q);
         assertThat(q).contains("hrms.employee_status_history");
         // …and exactly its active + on notice + probation people (suspended and others are not counted).
         assertThat(q).contains("l.employee_id IS NOT NULL")

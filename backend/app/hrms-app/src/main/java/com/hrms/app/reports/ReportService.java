@@ -89,9 +89,10 @@ public class ReportService {
     /**
      * Who is employed on asOf: joined by then, and not gone by then (an exit
      * only ends employment once the status says so and the last working day
-     * has passed). Takes two parameters: asOf, asOf.
+     * has passed). Takes two parameters: asOf, asOf. Starts with a space: a
+     * text block drops the trailing space of the "AND " it is appended to.
      */
-    static final String EMPLOYED_ON = """
+    static final String EMPLOYED_ON = " " + """
             e.date_of_joining <= ?
                   AND NOT (
                         e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
