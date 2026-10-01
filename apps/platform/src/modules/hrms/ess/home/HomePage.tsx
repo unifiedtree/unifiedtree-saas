@@ -8,7 +8,9 @@ import { useQuery } from '@tanstack/react-query'
 import { P, useAnyPermission, usePermission, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson } from '@/core/api/client'
-import { Button, PageFrame, PageHeader, QuickActionGrid, QuickActionTile, SectionHeading, type QuickIconKind } from '@/design/kit/display'
+import {
+  Button, PageFrame, PageHeader, QuickActionGrid, QuickActionTile, SectionHeading, StatCard, StatGrid, type QuickIconKind, type StatCardProps,
+} from '@/design/kit/display'
 import { DateChip } from '@/design/kit/data'
 import { useToast } from '@/design/kit/overlays'
 import { errorText } from '@/design/kit/EmptyState'
@@ -16,7 +18,7 @@ import { MON, WD, addDays, dt, istHour, istToday } from '@/design/dc/dates'
 import { useHome } from '@/design/shell/useHome'
 import { READY_PAGES } from '@/shared/navigation/pageRegistry'
 import { greetingName } from '@/shared/hooks/greetingName'
-import { useAttendanceHistory, useTeamDashboard } from '../../api/useAttendance'
+import { useAttendanceHistory, useAttendanceTrend, useTeamDashboard } from '../../api/useAttendance'
 import { useLeaveTypes, useMyBalances, useMyLeaves } from '../../api/useLeave'
 import { useMyInterviews } from '../../api/useHiring'
 import { useMyWfhRequests } from '../../api/useWfh'
@@ -26,7 +28,8 @@ import { usePaySchedule } from '../../api/shared/usePaySchedule'
 import { useApprovalsInbox } from '../../api/shared/useApprovalsInbox'
 import { useTeamSummary } from '../../api/shared/useTeamSummary'
 import type { ApprovalsInbox, InboxTab } from '../../api/shared/contracts'
-import { dayBuckets } from '../../attendance/attendanceBuckets'
+import { dayBuckets, trendBuckets, type DayBuckets } from '../../attendance/attendanceBuckets'
+import { clockIst, workingWindow } from '../../dashboard/dashboardModel'
 import { WebPunchDialog } from '../../attendance/webpunch/WebPunchDialog'
 import { AttendanceHistory } from '../AttendanceHistory'
 import { TimeEntries } from '../TimeEntries'
@@ -36,8 +39,8 @@ import {
 } from './HomeBlocks'
 import { AssistedPunchPanel, MessageTeamDialog, TeamPunchEntry, TodaysTeam, WaitingForYou } from './TeamBlocks'
 import {
-  calendarDays, calendarSub, greetingWord, hm, latestPayslip, leaveDays, liveActiveMinutes, longWeekendTip, mainBalance, money, monthName,
-  monthOf, monthWord, num, relDay, shiftMinutes, things, weeklyOffSet, wfhDaysInMonth,
+  calendarDays, calendarSub, greetingWord, hm, lateDaysNote, lateSeries, latestPayslip, leaveDays, leaveNote, liveActiveMinutes, longWeekendTip,
+  mainBalance, money, monthName, monthOf, monthWord, num, presentSeries, relDay, shiftMinutes, things, weeklyOffSet, wfhDaysInMonth,
 } from './homeModel'
 import './home.css'
 
@@ -114,6 +117,7 @@ export function HomePage() {
   const paySchedule = usePaySchedule({ enabled: canPayslips })
   const inbox = useApprovalsInbox({ tab: 'all', size: 4 }, { enabled: team })
   const teamDash = useTeamDashboard(today, undefined, team && canTeamToday)
+  const trend = useAttendanceTrend(addDays(today, -30), today, undefined, team && canTeamToday)
   const summary = useTeamSummary({ enabled: team && canMessage })
 
   // ── Your day ──
@@ -206,6 +210,44 @@ export function HomePage() {
     ...(canLetters ? [{ key: 'letters', label: 'Letters', kind: 'mail' as const, hint: 'From HR', path: '/hrms/letters/my' }] : []),
   ]
 
+  // ── the four cards under the greeting (real figures only; no sparkline where there is no series) ──
+  const card = (props: StatCardProps) => <StatCard key={props.label} variant="live" {...props} />
+  const histDays = history.data ?? []
+  const lateNow = histDays.filter((d) => d.date <= today && d.status === 'LATE').length
+  const teamCards = (() => {
+    if (!team || !canTeamToday) return []
+    const staff = teamDash.data?.staffStatuses ?? []
+    const daily: Record<string, DayBuckets> = {}
+    for (const r of trend.data ?? []) daily[r.date] = trendBuckets(r, today)
+    if (counts) daily[today] = counts
+    const win = workingWindow(daily, today)
+    const series = (k: keyof DayBuckets) => (win.length >= 2 ? win.map((d) => Number(daily[d][k]) || 0) : null)
+    const eff = (x: (typeof staff)[number]) => x.effectiveStatus || (x.checkInAt ? (x.status === 'LATE' ? 'LATE' : 'PRESENT') : x.onLeave ? 'ON_LEAVE' : 'NOT_MARKED')
+    const first = (st: string) => staff.find((x) => eff(x) === st)
+    const onLeave = first('ON_LEAVE'), late = first('LATE'), none = first('NOT_MARKED')
+    const loading = teamDash.isLoading
+    return [
+      card({ label: 'Team working today', aniIcon: 'present', accent: 'present', loading, value: counts ? `${counts.present} of ${sched}` : null,
+        note: counts ? `${Math.max(0, counts.present - counts.wfh)} in office · ${counts.late} late` : undefined, spark: series('present'), onClick: () => go('/team') }),
+      card({ label: 'On leave', aniIcon: 'leave', accent: 'leave', loading, value: counts?.onLeave ?? null,
+        note: onLeave ? `${onLeave.fullName}${counts && counts.onLeave > 1 ? ` and ${counts.onLeave - 1} more` : ''}` : 'Nobody today', spark: series('onLeave'), onClick: () => go('/team') }),
+      card({ label: 'Late today', aniIcon: 'late', accent: 'late', loading, value: counts?.late ?? null,
+        note: late ? `${late.fullName} · in at ${clockIst(late.checkInAt)}` : 'Nobody late', spark: series('late'), onClick: () => go('/team') }),
+      card({ label: 'Not in yet', aniIcon: 'none', accent: 'none', loading, value: counts?.notMarked ?? null,
+        note: none ? `${none.fullName} · no punch yet` : 'Everyone is in', spark: series('notMarked'), onClick: () => go('/team') }),
+    ]
+  })()
+  const myCards = team ? [] : [
+    ...(canCheckIn ? [card({ label: 'Present days', aniIcon: 'present', accent: 'present', loading: history.isLoading, value: history.data ? presentSoFar : null,
+      note: `of ${workingSoFar} working ${workingSoFar === 1 ? 'day' : 'days'}`, spark: history.data ? presentSeries(histDays, today) : null, onClick: () => go('/hrms/attendance?tab=my') })] : []),
+    ...(canLeave && main ? [card({ label: 'Leave left', aniIcon: 'leave', accent: 'leave', value: num(main.available), note: leaveNote(main, bal), onClick: () => go('/hrms/leave') })] : []),
+    ...(canCheckIn ? [card({ label: 'Late marks', aniIcon: 'late', accent: 'late', loading: history.isLoading, value: history.data ? lateNow : null,
+      note: lateDaysNote(histDays, today) ?? `None in ${monthWord(today)}`, spark: history.data && lateNow ? lateSeries(histDays, today) : null, onClick: () => go('/hrms/attendance?tab=my') })] : []),
+    ...(canWfh ? [card({ label: 'Work from home', aniIcon: 'wfh', accent: 'wfh', loading: wfh.isLoading, value: wfh.data ? wfhThisMonth.length : null,
+      note: `days in ${monthWord(today)}`, onClick: () => go('/me/wfh') })] : []),
+  ]
+  const statCards = team ? teamCards : myCards
+
   // ── today's other /me entry points, kept reachable ──
   const shortcuts: Shortcut[] = [
     ...(team && canWfh ? [{ key: 'wfh', title: 'Work from home', sub: 'Ask to work from home on some days', icon: 'home', path: '/me/wfh' }] : []),
@@ -239,6 +281,8 @@ export function HomePage() {
         </>} />
 
       {team && canAssist && <TeamPunchEntry onOpen={() => setAssistOpen(true)} />}
+
+      {statCards.length > 0 && <StatGrid min={230} label={team ? 'Your team today' : 'Your month at a glance'}>{statCards}</StatGrid>}
 
       {tiles.length > 0 && (
         <section aria-label="Quick actions" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

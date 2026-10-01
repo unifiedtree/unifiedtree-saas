@@ -91,7 +91,8 @@ async function greetingOn(page, path) {
   await page.goto(base + path)
   const h = page.getByRole('heading', { level: 1 }).filter({ hasText: GREETING }).first()
   await h.waitFor({ timeout: 30_000 })
-  return (await h.innerText()).trim()
+  // The waving hand after a greeting (PageHeader wave) is decoration, not part of the name.
+  return (await h.innerText()).replace(/\s*\u{1F44B}\s*$/u, '').trim()
 }
 
 const restore = []
@@ -166,6 +167,10 @@ try {
     if (who === 'dept manager') {
       const g = await greetingOn(s.page, '/team')
       check('dept manager: My team greeting shows the first name ("Dept")', /, Dept\b/.test(g) && !/Dept Manager/.test(g), g)
+      // P-HOME: a manager's Home is /me with the team blocks; the greeting uses the shared name rule
+      // (first name today, the full name once Release 1.1 changes the rule), so either is accepted.
+      const hg = await greetingOn(s.page, '/me')
+      check('dept manager: Home (/me) greets them by name ("Dept" or "Dept Manager")', /, Dept( Manager)?(\s|$)/.test(hg), hg)
     }
     check(`${who}: no page errors`, s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
     check(`${who}: no failed API calls`, s.failedApi.length === 0, s.failedApi.slice(0, 4).join(' | '))

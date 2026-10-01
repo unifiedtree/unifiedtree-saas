@@ -82,7 +82,7 @@
 .uh-pay__net { margin-top: 2px; font-size: 26px; line-height: 1.15; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 
 /* Shortcuts list (today's /me entry points) */
-.uh-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 4px 12px; }
+.uh-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 4px 12px; }
 
 @media (max-width: 520px) {
   .uh-day { gap: 8px 12px; }

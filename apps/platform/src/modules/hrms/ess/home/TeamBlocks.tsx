@@ -35,7 +35,7 @@ export function TeamPunchEntry({ onOpen }: { onOpen: () => void }) {
         <span className="uh-punch__title">Punch for a team member</span>
         <span className="uh-punch__sub">Check someone in or out with their face when they can’t do it themselves.</span>
       </span>
-      <Button variant="primary" size={38} icon="userCheck" onClick={onOpen}>Punch for a team member</Button>
+      <Button variant="primary" size={38} icon="users" onClick={onOpen}>Choose a person</Button>
     </div>
   )
 }
