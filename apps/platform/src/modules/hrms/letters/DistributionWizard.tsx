@@ -75,7 +75,7 @@ export function DistributionWizard({ onClose, onCreated, onScheduled }: {
   const today = todayIso()
   const [sendOn, setSendOn] = useState(nextDay(today))
 
-  const selected = picked[filterType] ?? new Set<string>()
+  const selected = useMemo(() => picked[filterType] ?? new Set<string>(), [picked, filterType])
   const toggle = (v: string) => setPicked((all) => {
     const next = new Set(all[filterType] ?? [])
     if (next.has(v)) next.delete(v); else next.add(v)

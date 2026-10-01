@@ -1,45 +1,102 @@
-// My assets (/me/assets): the company equipment handed to the signed-in
-// employee and what they have returned (GET /v1/me/assets,
-// hrms.onboarding.asset.self). Always the caller's own record.
-import { HrStatusPill } from '@/shared/components/hr'
-import { ModulePage, StatRow, SubHeading, RowList, Row, State, Note, dmy } from '@/design/module/ModuleKit'
-import { useMyAssets, type MyAsset } from './api/useOnboarding'
+// My assets (/me/assets), as cards (P-DOCS; prototype EmpDocs `e-assets`): the
+// company equipment handed to the signed-in employee (GET /v1/me/assets,
+// hrms.onboarding.asset.self; always the caller's own record). A new hand-over
+// waits for "Yes, I have it" (gold ring); "Report a problem" tells the people who
+// manage assets (lost, damaged, not working, something else). Returned items
+// are listed after, with their dates and note. Confirm and Report come from
+// P-HIRE's BW-70 endpoints; until they are switched on, nothing asks to be
+// confirmed and the actions say so.
+import { useMemo, useState } from 'react'
+import { Callout, EmptyState, ErrorState, ListRow, ListRows, PageFrame, PageHeader, Section, SkeletonBlock, StatusPill, IconTile } from '@/design/kit/display'
+import { ActionCard, ActionCardGrid } from '@/design/kit/data'
+import { Dialog, PanelButton, Select, Textarea, useToast } from '@/design/kit/overlays'
+import { useMyAssets } from './api/useOnboarding'
+import { PROBLEM_KINDS, useConfirmMyAsset, useReportAssetProblem, type AssetProblemKind, type MyAssetCare } from './myAssetsApi'
+import { assetCard, assetsBanner, day } from '../vault/vaultModel'
+import '../letters/components/letters.css'
 
-const meta = (a: MyAsset) => [a.assetType, `Tag ${a.assetTag}`, a.serialNo ? `Serial ${a.serialNo}` : null].filter(Boolean).join(' · ')
+const meta = (a: MyAssetCare) => [a.assetType, a.serialNo ? `Serial ${a.serialNo}` : null].filter(Boolean).join(' · ')
 
 export function MyAssets() {
+  const toast = useToast()
   const q = useMyAssets()
-  const list = q.data ?? []
+  const confirm = useConfirmMyAsset()
+  const [reporting, setReporting] = useState<MyAssetCare | null>(null)
+  const list = useMemo(() => (q.data ?? []) as MyAssetCare[], [q.data])
   const withMe = list.filter((a) => a.withMe)
   const returned = list.filter((a) => !a.withMe)
+  const banner = assetsBanner(withMe)
+
+  const yes = (a: MyAssetCare) => confirm.mutate(a.assetId, {
+    onSuccess: (done) => done ? toast.success(`Confirmed: ${a.assetName}`) : toast.info('Confirming assets isn’t switched on yet.'),
+    onError: (e) => toast.error('Couldn’t confirm it', { detail: (e as Error)?.message }),
+  })
+
   return (
-    <ModulePage crumb="My workspace" title="My assets" subtitle="Company equipment handed to you, and what you’ve returned.">
-      {q.isLoading ? <State kind="loading" height={200} />
-        : q.error ? <State kind="error" title="Couldn’t load your assets" description={(q.error as Error).message} onRetry={() => q.refetch()} />
-          : list.length === 0 ? <State kind="empty" icon="briefcase" title="No equipment recorded for you" description="When HR hands you a laptop, ID card or anything else, it shows up here." />
+    <PageFrame label="My assets" width="narrow" className="lt-page">
+      <PageHeader title="My assets" sub="Company equipment you have. Confirm new items when you get them." />
+      {q.isLoading ? <SkeletonBlock style={{ height: 200 }} label="Loading your assets" />
+        : q.error ? <ErrorState title="Couldn’t load your assets" error={q.error} onRetry={() => q.refetch()} />
+          : list.length === 0 ? <EmptyState icon="laptop" title="No equipment recorded for you" hint="When HR hands you a laptop, ID card or anything else, it shows up here." />
             : (
-              <div style={{ display: 'grid', gap: 16 }}>
-                <StatRow min={180} tiles={[
-                  { icon: 'briefcase', color: 'blue', label: 'With you', value: String(withMe.length), sub: 'Look after these' },
-                  { icon: 'checkCircle', color: 'green', label: 'Returned', value: String(returned.length), sub: 'Handed back to HR' },
-                ]} />
-                <SubHeading>With you</SubHeading>
-                {withMe.length === 0 ? <Note>You don’t hold any company equipment right now.</Note> : (
-                  <RowList>
-                    {withMe.map((a) => <Row key={`${a.assetId}-${a.assignedAt}`} title={a.assetName} meta={meta(a)}
-                      trail={<><span style={{ fontSize: 12.5, color: '#64748b' }}>{`Since ${dmy(a.assignedAt)}`}</span><HrStatusPill tone="info">With you</HrStatusPill></>} />)}
-                  </RowList>
+              <div className="lt-stack">
+                {banner && <Callout tone="warning" icon="alert">{banner}</Callout>}
+                {withMe.length === 0 ? <Callout tone="neutral">You don’t hold any company equipment right now.</Callout> : (
+                  <ActionCardGrid label="With you">
+                    {withMe.map((a, i) => {
+                      const c = assetCard(a)
+                      return (
+                        <ActionCard key={`${a.assetId}-${a.assignedAt}`} index={i} icon="laptop" title={a.assetName} sub={c.sub} status={c.state} tone={c.tone}
+                          primary={c.confirm ? { label: 'Yes, I have it', onClick: () => yes(a), loading: confirm.isPending && confirm.variables === a.assetId, ariaLabel: `Yes, I have the ${a.assetName}` } : undefined}
+                          secondary={!a.openIssue ? { label: 'Report a problem', onClick: () => setReporting(a), ariaLabel: `Report a problem with the ${a.assetName}` } : undefined} />
+                      )
+                    })}
+                  </ActionCardGrid>
                 )}
-                {returned.length > 0 && <>
-                  <SubHeading>Returned</SubHeading>
-                  <RowList>
-                    {returned.map((a) => <Row key={`${a.assetId}-${a.assignedAt}-${a.returnedAt}`} muted title={a.assetName} meta={`${meta(a)} · Had it ${dmy(a.assignedAt)} to ${dmy(a.returnedAt)}`}
-                      note={a.returnNotes || undefined} trail={<HrStatusPill tone="gray">Returned</HrStatusPill>} />)}
-                  </RowList>
-                </>}
-                <Note>Something missing or wrong here? Tell HR, who keep this list.</Note>
+                <p className="lt-foot">Lost or broken something? Report it the same day.</p>
+                {returned.length > 0 && (
+                  <Section title="Returned" count={returned.length} body="list" cardClass={false}>
+                    <ListRows>
+                      {returned.map((a) => (
+                        <ListRow key={`${a.assetId}-${a.assignedAt}-${a.returnedAt}`} leading={<IconTile icon="laptop" />}
+                          title={a.assetName} sub={[a.assetTag, meta(a), `Had it ${day(a.assignedAt)} to ${day(a.returnedAt)}`, a.returnNotes].filter(Boolean).join(' · ')}
+                          end={<StatusPill tone="neutral">Returned</StatusPill>} />
+                      ))}
+                    </ListRows>
+                  </Section>
+                )}
               </div>
             )}
-    </ModulePage>
+      {reporting && <ReportProblem asset={reporting} onClose={() => setReporting(null)} />}
+    </PageFrame>
+  )
+}
+
+function ReportProblem({ asset, onClose }: { asset: MyAssetCare; onClose: () => void }) {
+  const toast = useToast()
+  const report = useReportAssetProblem()
+  const [kind, setKind] = useState<AssetProblemKind>('NOT_WORKING')
+  const [note, setNote] = useState('')
+  const submit = () => report.mutate({ assetId: asset.assetId, kind, note }, {
+    onSuccess: (done) => {
+      if (done) toast.success('Reported. The people who look after assets have been told.')
+      else toast.info('Reporting problems isn’t switched on yet.')
+      onClose()
+    },
+    onError: (e) => toast.error('Couldn’t report it', { detail: (e as Error)?.message }),
+  })
+  return (
+    <Dialog open onClose={onClose} busy={report.isPending} icon="alertTriangle" tone="warning" title="Report a problem"
+      sub={`${asset.assetName}${asset.assetTag ? ` · ${asset.assetTag}` : ''}. HR is told straight away.`}
+      footer={<>
+        <PanelButton onClick={onClose} disabled={report.isPending}>Cancel</PanelButton>
+        <PanelButton variant="primary" busy={report.isPending} onClick={submit}>Report it</PanelButton>
+      </>}>
+      <div className="lt-stack">
+        <Select label="What’s wrong" full value={kind} onChange={(e) => setKind(e.target.value as AssetProblemKind)} options={PROBLEM_KINDS} />
+        <Textarea label="Anything else HR should know (optional)" full rows={3} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder="e.g. The screen flickers since Monday" />
+      </div>
+    </Dialog>
   )
 }

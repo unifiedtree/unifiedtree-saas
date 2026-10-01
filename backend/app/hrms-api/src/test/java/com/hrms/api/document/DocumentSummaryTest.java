@@ -82,6 +82,17 @@ class DocumentSummaryTest {
         assertEquals(0, new DocumentSummaryController(new FakeJdbc().jdbc).mine(jwt(null, "hrms.document.read.self")).onFile());
     }
 
+    @Test void onePersonsSummaryCarriesTheirDepartment() {
+        UUID person = UUID.randomUUID();
+        FakeJdbc db = new FakeJdbc().on("count(*) AS on_file", List.of(counts(6, 1, 0, 0, 0)))
+                .on("expiry_date >= ? AND expiry_date <= ?", List.of("Passport"))
+                .on("hrms.departments", List.of("Engineering"));
+        var s = new DocumentSummaryController(db.jdbc).employee(person);
+        assertEquals("Engineering", s.departmentName());
+        assertEquals(List.of("Passport"), s.expiringTitles());
+        assertEquals(List.of(tenant, person), db.callsContaining("hrms.departments").get(0).args());
+    }
+
     @Test void rejectedDocumentsDoNotCountAsExpiringOrExpired() {
         FakeJdbc db = new FakeJdbc().on("count(*) AS on_file", List.of(counts(1, 0, 0, 0, 1)));
         new DocumentSummaryController(db.jdbc).employee(UUID.randomUUID());

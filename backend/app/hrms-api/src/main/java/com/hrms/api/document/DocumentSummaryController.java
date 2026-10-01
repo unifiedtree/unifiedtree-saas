@@ -50,9 +50,11 @@ public class DocumentSummaryController {
      * documents on file (workspace only). {@code waitingForReview}: only for
      * people who review documents (null otherwise). The title lists name the
      * soonest-expiring and the expired documents, at most five each.
+     * {@code departmentName}: the person's department (one person's summary only).
      */
     public record Summary(long onFile, long expiringSoon, long expired, Long people, Long waitingForReview,
-                          long waitingForHr, long rejected, List<String> expiringTitles, List<String> expiredTitles) {}
+                          long waitingForHr, long rejected, List<String> expiringTitles, List<String> expiredTitles,
+                          String departmentName) {}
 
     /** The review queue's counts. */
     public record ReviewSummary(long waiting, long verifiedThisWeek, long rejectedThisWeek) {}
@@ -74,7 +76,7 @@ public class DocumentSummaryController {
                 Long.class, tenant);
         Long waiting = has(jwt, "hrms.document.verify") ? s.waitingForHr() : null;
         return new Summary(s.onFile(), s.expiringSoon(), s.expired(), people, waiting, s.waitingForHr(), s.rejected(),
-                s.expiringTitles(), s.expiredTitles());
+                s.expiringTitles(), s.expiredTitles(), null);
     }
 
     @Operation(summary = "Counts across my own documents")
@@ -83,7 +85,7 @@ public class DocumentSummaryController {
     @Transactional(readOnly = true)
     public Summary mine(@AuthenticationPrincipal Jwt jwt) {
         UUID me = employeeId(jwt);
-        if (me == null) return new Summary(0, 0, 0, null, null, 0, 0, List.of(), List.of());
+        if (me == null) return new Summary(0, 0, 0, null, null, 0, 0, List.of(), List.of(), null);
         return summarise(TenantContext.requireTenantId(), me);
     }
 
@@ -92,7 +94,14 @@ public class DocumentSummaryController {
     @PreAuthorize("hasAuthority('hrms.document.read')")
     @Transactional(readOnly = true)
     public Summary employee(@PathVariable UUID employeeId) {
-        return summarise(TenantContext.requireTenantId(), employeeId);
+        UUID tenant = TenantContext.requireTenantId();
+        Summary s = summarise(tenant, employeeId);
+        List<String> dept = jdbc.queryForList("""
+                SELECT d.name FROM hrms.employees e
+                  JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                 WHERE e.tenant_id = ? AND e.id = ?""", String.class, tenant, employeeId);
+        return new Summary(s.onFile(), s.expiringSoon(), s.expired(), null, null, s.waitingForHr(), s.rejected(),
+                s.expiringTitles(), s.expiredTitles(), dept.isEmpty() ? null : dept.get(0));
     }
 
     @Operation(summary = "The review queue: waiting, verified this week, rejected this week")
@@ -150,7 +159,7 @@ public class DocumentSummaryController {
                    AND expiry_date IS NOT NULL AND coalesce(verification_status, '') <> 'REJECTED'
                    AND expiry_date < ?
                  ORDER BY expiry_date DESC, title LIMIT ?""", String.class, concat(nameArgs, today, NAMES));
-        return new Summary(c[0], c[1], c[2], null, null, c[3], c[4], expiring, expired);
+        return new Summary(c[0], c[1], c[2], null, null, c[3], c[4], expiring, expired, null);
     }
 
     private static Object[] concat(Object[] a, Object... b) {

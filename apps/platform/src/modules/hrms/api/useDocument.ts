@@ -213,12 +213,13 @@ export function useDocumentTypes(includeInactive = false) {
   })
 }
 
-export function useMyMissingDocuments() {
+export function useMyMissingDocuments(enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'document', 'my', 'missing'],
     queryFn: () => apiJson<Array<{ id: string; code: string; displayName: string; allowedFormats: string; maxSizeMb: number; expiryTracked: boolean }>>(
       '/v1/document/my/missing',
     ),
+    enabled,
     staleTime: 30_000,
   })
 }
@@ -336,6 +337,8 @@ export interface DocumentSummary {
   rejected: number
   expiringTitles: string[]
   expiredTitles: string[]
+  /** The person's department (one person's summary only). */
+  departmentName?: string | null
 }
 
 export interface ReviewSummary { waiting: number; verifiedThisWeek: number; rejectedThisWeek: number }
