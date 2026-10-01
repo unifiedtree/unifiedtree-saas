@@ -42,6 +42,7 @@ async function session(email) {
 const settle = async (page) => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(700) }
 // A past weekday 20–60 days back with no attendance record for the employee.
 let day = ''
+const startedAt = sql('select now()')
 for (let back = 20; back < 60 && !day; back++) {
   const d = new Date(Date.now() - back * 864e5)
   if (d.getDay() === 0 || d.getDay() === 6) continue
@@ -57,8 +58,10 @@ try {
   await o.page.getByRole('button', { name: /Download muster/ }).click()
   const dl = await downloading
   check('muster: CSV downloads', /^muster-roll-\d{4}-\d{2}-\d{2}\.csv$/.test(dl.suggestedFilename()) && !(await dl.failure()), dl.suggestedFilename())
-  const recorded = await o.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('ut.recentDownloads') || '[]')[0]?.report } catch { return null } })
-  check('muster: export is recorded for the Reports Center', recorded === 'Muster roll', String(recorded))
+  // The Reports Center reads the server's export log (hrms.report_exports); the day register logs itself there.
+  await o.page.waitForTimeout(800)
+  const recorded = sql(`select coalesce(string_agg(report_label, ','), '') from hrms.report_exports where report = 'muster-roll' and created_at >= '${startedAt}'`)
+  check('muster: export is recorded for the Reports Center', recorded.split(',').includes('Muster roll'), recorded)
   const yesterday = localIso(new Date(Date.now() - 864e5))
   await o.page.goto(base + `/hrms/muster-roll?date=${yesterday}`); await settle(o.page)
   check('muster: ?date= opens that day', (await dateValue(o.page)) === yesterday)
@@ -97,6 +100,7 @@ try {
       sql(`delete from attendance.records where employee_id='${readerId}' and attendance_date='${day}' and manual_entry`)
     }
   } catch { /* the audit table may not reference zones this way */ }
+  try { sql(`delete from hrms.report_exports where report = 'muster-roll' and created_at >= '${startedAt}'`) } catch { /* nothing logged */ }
   const leftPunch = day ? sql(`select count(*) from attendance.records where employee_id='${readerId}' and attendance_date='${day}'`) : '0'
   check('cleanup: QA punch removed', leftPunch === '0', `punch=${leftPunch}`)
   await browser.close()
