@@ -14,25 +14,11 @@ import {
   type ReportSchedule, type ScheduleFrequency, type ScheduleInput,
 } from '@/modules/hrms/api/useReportExports'
 import { useReportToast } from './ReportKit'
+import { FIRST_RUN, WEEKDAYS, hh, ordinal, scheduleWhen } from './reportModel'
 import type { useReportCompany } from './useReportCompany'
 
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const day = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${d} ${MON[m - 1]} ${y}` }
-const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
-/** The first run of the day: 07:05 India time, shown as 07:00. */
-const FIRST_RUN = 7
-/** "Every Monday, 09:00", "Every weekday, 11:00", "1st of every month, 07:00". */
-export const scheduleWhen = (s: Pick<ReportSchedule, 'frequency' | 'dayOfWeek' | 'dayOfMonth' | 'sendHour'>) => {
-  const at = hh(s.sendHour ?? FIRST_RUN)
-  switch (s.frequency) {
-    case 'DAILY': return `Every day, ${at}`
-    case 'WEEKDAYS': return `Every weekday, ${at}`
-    case 'WEEKLY': return `Every ${WEEKDAYS[(s.dayOfWeek || 1) - 1]}, ${at}`
-    default: return `${ordinal(s.dayOfMonth || 1)} of every month, ${at}`
-  }
-}
 const COVERS: Record<ScheduleFrequency, string> = {
   DAILY: 'the day before', WEEKDAYS: 'the days since the previous weekday (Monday’s covers Friday to Sunday)',
   WEEKLY: 'the seven days before it', MONTHLY: 'the previous month',

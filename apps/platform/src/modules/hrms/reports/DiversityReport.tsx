@@ -2,11 +2,12 @@
 // company-wide and per department, in the Workforce Analytics design's report
 // layout (ReportKit). People without a recorded gender are counted as "Not
 // specified" rather than left out.
+import { useSearchParams } from 'react-router-dom'
 import { useReportCompany } from './useReportCompany'
 import { useDiversityReport } from '@/modules/hrms/api/useReports'
 import { StatusPill } from '@/design/kit/display'
 import { donutSvg, stackedBarsSvg } from '@/shared/export/charts'
-import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, DonutChart, BarsChart, ReportTable, downloadChart, num, pctOf, sortKey, slug, type Kpi } from './ReportKit'
+import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, DonutChart, BarsChart, ReportTable, DateFilter, downloadChart, num, pctOf, sortKey, slug, type Kpi } from './ReportKit'
 
 const GENDERS: { key: string; label: string; color: string }[] = [
   { key: 'FEMALE', label: 'Women', color: 'var(--u-br,#0F6E56)' },
@@ -17,9 +18,15 @@ const GENDERS: { key: string; label: string; color: string }[] = [
 ]
 
 export function DiversityReport() {
+  const [params, setParams] = useSearchParams()
   const co = useReportCompany()
-  const today = longDate(todayIso())
-  const q = useDiversityReport(co.company || null)
+  const TODAY = todayIso()
+  // ?asOf= (a past day, e.g. from the dashboard): the people employed that day (BW-86). None: today's report, as before.
+  const rawAsOf = params.get('asOf') || ''
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(rawAsOf) && rawAsOf < TODAY ? rawAsOf : null
+  const setAsOf = (v: string) => setParams((p) => { const n = new URLSearchParams(p); if (v && v < TODAY) n.set('asOf', v); else n.delete('asOf'); return n }, { replace: true })
+  const today = longDate(asOf ?? TODAY)
+  const q = useDiversityReport(co.company || null, { asOf })
   const raw = q.data ?? []
   const byDept = new Map<string, { id: string; deptId: string | null; dept: string; none: boolean; counts: Record<string, number> }>()
   for (const r of raw) {
@@ -45,7 +52,7 @@ export function DiversityReport() {
     { label: 'Men', value: `${pctOf(totals.MALE || 0, people)}%`, sub: `${num(totals.MALE || 0)} people`, color: 'teal', icon: KPI_ICON.check },
     { label: 'Gender recorded', value: `${pctOf(recorded, people)}%`, sub: totals.NOT_SPECIFIED ? `${num(totals.NOT_SPECIFIED)} without a gender on file` : 'Everyone has one on file', color: 'orange', icon: KPI_ICON.pie },
   ]
-  const fileBase = `diversity-${slug(co.companyName)}-${todayIso()}`
+  const fileBase = `diversity-${slug(co.companyName)}-${asOf ?? TODAY}`
   const donut = () => donutSvg({ title: 'Gender split', subtitle: `${co.companyName} · ${today}`, parts: series.map((g) => ({ label: g.label, value: totals[g.key] || 0, color: g.color })) })
   const bars = () => stackedBarsSvg({ title: 'Gender by department', subtitle: co.companyName, bars: depts.map((d) => ({ label: d.dept, parts: series.map((g) => d.counts[g.key] || 0) })), series: series.map((g) => [g.label, g.color] as [string, string]) })
   const HEAD = ['Department', ...series.map((g) => g.label), 'Total', 'Women %']
@@ -55,9 +62,10 @@ export function DiversityReport() {
 
   return (
     <ReportPage title="Diversity report" subtitle="Gender split of the current workforce, company-wide and by department" report="diversity" co={co} note={`Data as of ${today}`}
+      filters={<DateFilter label="As of" value={asOf ?? TODAY} max={TODAY} onChange={setAsOf} />}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{
-        fileBase, csvParams: {},
+        fileBase, csvParams: asOf ? { asOf } : {},
         sheets: () => [{ name: 'Summary', widths: [26, 34], rows: [['Diversity report', ''], ['Company', co.companyName], ['As of', today], ...kpis.map((k) => [k.label, k.value])] }, { name: 'By department', widths: [28, ...series.map(() => 12), 10, 10], rows: [HEAD, ...table(), foot] }],
       }}>
       <KpiRow items={kpis} />
@@ -74,7 +82,7 @@ export function DiversityReport() {
         </ReportSection>
       </div>
       <ReportTable<Row>
-        title="By department" subtitle="Everyone currently employed, including probation and notice"
+        title="By department" subtitle={asOf ? `Everyone employed on ${today}, including probation and notice` : "Everyone currently employed, including probation and notice"}
         rows={depts.map((d) => ({ ...d, sT: sortKey(tot(d)), sW: sortKey(pctOf(d.counts.FEMALE || 0, tot(d))) }))}
         columns={[
           { key: 'dept', header: 'Department', sortable: true, render: (d) => <span className={d.none ? 'rp-italic' : 'rp-brand'}>{d.dept}</span> },
