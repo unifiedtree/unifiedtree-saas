@@ -214,7 +214,7 @@ return {live,headcount:live.length,dept,deptTotal,branch:cnt('branch'),desig:cnt
 }
 const NAV=[
 {id:'workforce',l:'Workforce Directory',icon:'users',t:'blue',desc:'Employees, contractor agencies and the rules that classify every worker.',items:[{id:'employees',l:'Employee Master',icon:'id-card'},{id:'contractors',l:'Contractor Master',icon:'hard-hat'},{id:'classes',l:'Classification Rules',icon:'tags'}]},
-{id:'org',l:'Organization Setup',icon:'building-2',t:'teal',desc:'Legal entities, locations and the reporting structure people sit in.',items:[{id:'companies',l:'Companies',icon:'landmark'},{id:'branches',l:'Branches',icon:'map-pin'},{id:'departments',l:'Departments',icon:'network'},{id:'designations',l:'Designations',icon:'award'},{id:'grades',l:'Grades & Bands',icon:'layers'}]},
+{id:'org',l:'Organization Setup',icon:'building-2',t:'teal',desc:'Legal entities, locations and the reporting structure people sit in.',items:[{id:'companies',l:'Companies',icon:'landmark'},{id:'branches',l:'Branches',icon:'map-pin'},{id:'departments',l:'Departments',icon:'network'},{id:'designations',l:'Designations',icon:'award'},{id:'grades',l:'Grades & Bands',icon:'layers'},{id:'orgchart',l:'Org chart',icon:'git-branch'}]},
 {id:'rules',l:'Rules & Policies',icon:'scroll-text',t:'amber',desc:'Shift timings, leave entitlements and the documents employees acknowledge.',items:[{id:'shifts',l:'Shift Rules',icon:'clock'},{id:'leaves',l:'Leave Rules',icon:'calendar-check'},{id:'policies',l:'Policy Documents',icon:'file-text'}]},
 {id:'payroll',l:'Payroll Configuration',icon:'wallet',t:'violet',desc:'The earnings, deductions and statutory contributions payroll computes.',items:[{id:'components',l:'Salary Components',icon:'rupee'},{id:'statutory',l:'Statutory Settings',icon:'shield-check'}]}];
 function TopTabs(){const {route,go,group,nav}=useApp();return <div className="stabs" role="navigation" aria-label="Master sections"><button className={'stab'+(route.p==='overview'?' on':'')} onClick={()=>go('overview')}><Icon name="layout-grid" size={16}/>Overview</button>{nav.map(g=><button key={g.id} className={'stab'+(group&&group.id===g.id?' on':'')} onClick={()=>go(g.items[0].id)}><Icon name={g.icon} size={16}/>{g.l}</button>)}</div>}
@@ -694,4 +694,4 @@ return <>
 </>
 }
 const PAGES={overview:OverviewPage,employees:EmployeesPage,contractors:ContractorsPage,classes:ClassesPage,companies:CompaniesPage,branches:BranchesPage,departments:DepartmentsPage,designations:DesignationsPage,grades:GradesPage,shifts:ShiftsPage,leaves:LeavesPage,policies:PoliciesPage,components:ComponentsPage,statutory:StatutoryPage};
-export { AppCtx, NAV, TopTabs, PAGES, Toasts, Icon, ICONS, Empty, tone, deriveDB, STATUS_TONE, TYPE_TONE }
+export { AppCtx, NAV, TopTabs, PAGES, Toasts, Icon, ICONS, Empty, Hero, tone, deriveDB, STATUS_TONE, TYPE_TONE }
