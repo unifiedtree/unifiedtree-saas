@@ -284,6 +284,19 @@ try {
   if (readerHadToday || !workerUp) {
     check('reader: the web punch steps ran', false, readerHadToday ? 'reader@ already has attendance today in this database' : 'port 8091 is in use, so the stand-in worker could not start')
   } else {
+    // The dialog on a phone, dark (before reader@ checks in), then the real punch at 1440.
+    for (const [width, theme] of [[390, 'dark'], [390, 'light'], [1440, 'dark']]) {
+      const s = await session('reader@unifiedtree.demo', { width, theme })
+      await s.go('/hrms/attendance?tab=my')
+      await s.page.getByRole('button', { name: 'Check in', exact: true }).click()
+      const d = s.page.getByRole('dialog', { name: 'Check in with your face' })
+      await d.waitFor({ timeout: 10_000 }).catch(() => {})
+      await s.page.waitForFunction(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.trim() === 'Verify and check in'); return !!b && !b.disabled }, null, { timeout: 20_000 }).catch(() => {})
+      const overflow = await s.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+      await s.shot(`reader-webpunch-${width}-${theme}`)
+      check(`web punch dialog ${width} ${theme}: camera and Verify shown, no sideways scroll`, (await d.locator('video').count()) === 1 && overflow <= 1 && !s.errors.length, `overflow ${overflow}`)
+      await s.ctx.close()
+    }
     await r.go('/hrms/attendance?tab=my')
     await r.page.getByRole('button', { name: 'Check in', exact: true }).click()
     const dlg = r.page.getByRole('dialog', { name: 'Check in with your face' })
@@ -460,19 +473,6 @@ try {
       check(`${name} ${width} ${theme}: renders, no sideways scroll${theme === 'dark' ? ', dark theme on' : ''}`, overflow <= 1 && (theme !== 'dark' || dark === 'dark') && !s.errors.length, `overflow ${overflow} · theme ${dark}`)
       await s.ctx.close()
     }
-  }
-  // The dialog on a phone, dark.
-  {
-    const s = await session('reader@unifiedtree.demo', { width: 390, theme: 'dark' })
-    await s.go('/hrms/attendance?tab=my')
-    const can = await s.page.getByRole('button', { name: 'Check in', exact: true }).count()
-    if (can) {
-      await s.page.getByRole('button', { name: 'Check in', exact: true }).click()
-      await s.page.getByRole('dialog').first().waitFor({ timeout: 8000 }).catch(() => {})
-      await s.page.waitForTimeout(2500)
-      await s.shot('reader-webpunch-390-dark')
-    }
-    await s.ctx.close()
   }
 } catch (e) {
   check('script completed', false, String(e.message || e).split('\n')[0].slice(0, 300))
