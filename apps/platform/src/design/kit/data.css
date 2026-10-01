@@ -15,7 +15,7 @@
 
 :is(.uk-sgrid, .uk-wg, .uk-wg-legend, .uk-acard, .uk-acards, .uk-drop-wrap, .uk-drop, .uk-file, .uk-checks, .uk-amtoggle,
   .uk-dchip, .uk-tl, .uk-pager, .uk-bulk) {
-  font-family: var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif);
   line-height: normal;
   box-sizing: border-box;
 }

@@ -28,12 +28,12 @@ export function GeofenceMapView({ v }: { v: any }) {
             <div style={{position: "absolute", inset: "0", zIndex: "650", cursor: "not-allowed"}} />
           </>
         ) : null}
-        <span style={{position: "absolute", right: "10px", bottom: "10px", zIndex: "640", display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", borderRadius: "999px", background: "#0f6e56", color: "#fff", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "12px", fontWeight: "700", fontVariantNumeric: "tabular-nums", boxShadow: "0 4px 12px -4px rgba(10,82,64,.6)"}}>
+        <span style={{position: "absolute", right: "10px", bottom: "10px", zIndex: "640", display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", borderRadius: "999px", background: "#0f6e56", color: "#fff", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "12px", fontWeight: "700", fontVariantNumeric: "tabular-nums", boxShadow: "0 4px 12px -4px rgba(10,82,64,.6)"}}>
           {txt(v.radiusLabel)}
         </span>
         {v.editable ? (
           <>
-            <span style={{position: "absolute", left: "52px", top: "10px", zIndex: "640", padding: "4px 10px", borderRadius: "8px", background: "#fff", border: "1px solid #e2e8f0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "12px", color: "#475569", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(15,23,42,.08)"}}>
+            <span style={{position: "absolute", left: "52px", top: "10px", zIndex: "640", padding: "4px 10px", borderRadius: "8px", background: "#fff", border: "1px solid #e2e8f0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "12px", color: "#475569", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(15,23,42,.08)"}}>
               {"Click the map to move the pin"}
             </span>
           </>

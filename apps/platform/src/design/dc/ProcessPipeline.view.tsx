@@ -8,7 +8,7 @@ import './ProcessPipeline.view.css'
 export function ProcessPipelineView({ v }: { v: any }) {
   return (
     <>
-      <div ref={v.rootRef} role="group" aria-label={v.label} style={{minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div ref={v.rootRef} role="group" aria-label={v.label} style={{minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
         <ol style={{listStyle: "none", margin: "0", padding: "0", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "16px", minWidth: "0"}}>
           {arr(v.tiles).map((t: any, $index: number) => (
             <Fragment key={$index}>

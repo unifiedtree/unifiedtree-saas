@@ -1,3 +1,4 @@
+/* global URL, console, document, process, window */
 // Wave 3 — greeting name rule + no "My Attendance" for owners and admins.
 // Browser acceptance against a running backend + web app:
 //  - Owner (OWNER) and admin@ (SUPER_ADMIN): Daily Tracking has no My Attendance
@@ -5,9 +6,9 @@
 //    My Attendance anywhere on the page, and search doesn't offer it.
 //  - reader@ (EMPLOYEE), mgr@ (DEPT_MANAGER) and hrm@ (HR_MANAGER) still see
 //    the tab and open it with ?tab=my; search still offers it to them.
-//  - Greeting: the owner's normal greeting still shows the first name. With a
-//    one-letter first name ("A" / "R.") the dashboards show the full name. The
-//    two names are changed in the database for the check and put back after.
+//  - Greeting: the full name, first and last (the client's rule of 1 Oct 2026),
+//    for the owner's normal name and with a one-letter first name ("A" / "R.")
+//    too. The two names are changed in the database for the check and put back after.
 //
 // Run from apps/platform:  node e2e/recovery/live-w3-greeting-myatt.mjs
 //   env: RECOVERY_APP_URL (default http://demo.localhost:3012),
@@ -123,7 +124,8 @@ try {
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-tab-my.png` })
 
     const g = await greetingOn(s.page, '/dashboard')
-    check(`owner: dashboard greeting shows the first name ("${ownerFirst}")`, new RegExp(`, ${esc(ownerFirst)}(\\s|$)`).test(g) && !(ownerLast && g.includes(`${ownerFirst} ${ownerLast}`)), g)
+    const ownerName = `${ownerFirst} ${ownerLast}`.trim()
+    check(`owner: dashboard greeting shows the full name ("${ownerName}")`, new RegExp(`, ${esc(ownerName)}(\\s|$)`).test(g), g)
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-dashboard.png` })
 
     check('owner: no page errors', s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
@@ -169,10 +171,9 @@ try {
       await s.page.goto(base + '/team')
       const ok = await s.page.getByRole('heading', { level: 1, name: 'Team today' }).waitFor({ timeout: 30_000 }).then(() => true, () => false)
       check('dept manager: My team shows "Team today" (the greeting moved to Home)', ok)
-      // P-HOME: a manager's Home is /me with the team blocks; the greeting uses the shared name rule
-      // (first name today, the full name once Release 1.1 changes the rule), so either is accepted.
+      // P-HOME: a manager's Home is /me with the team blocks; the greeting shows the full name (Release 1.1).
       const hg = await greetingOn(s.page, '/me')
-      check('dept manager: Home (/me) greets them by name ("Dept" or "Dept Manager")', /, Dept( Manager)?(\s|$)/.test(hg), hg)
+      check('dept manager: Home (/me) greets them by the full name ("Dept Manager")', /, Dept Manager\b/.test(hg), hg)
     }
     check(`${who}: no page errors`, s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
     check(`${who}: no failed API calls`, s.failedApi.length === 0, s.failedApi.slice(0, 4).join(' | '))

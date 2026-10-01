@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import type { HolidayType } from './useSettings'
 
 /**
  * Upcoming people milestones — birthdays, work anniversaries, retirements.
@@ -151,5 +152,36 @@ export function useRetirementsBetween(range: MilestoneRange | null, options?: { 
     },
     staleTime: STALE_MS,
     enabled: !!range && (options?.enabled ?? true),
+  })
+}
+
+/** One of the company's holidays (GET /v1/settings/holidays). */
+export interface UpcomingHoliday {
+  id: string
+  /** yyyy-MM-dd */
+  holidayDate: string
+  holidayName: string
+  holidayType: HolidayType
+  description?: string | null
+}
+
+/**
+ * The company's holidays inside a chosen range (both ends included), soonest
+ * first: the Holidays list of the dashboard's "Upcoming events". Backend:
+ * GET /v1/settings/holidays?companyId=&from=&to= (the existing holiday
+ * calendar endpoint, open to everyone signed in; active holidays only). Under
+ * the holiday calendar's query key, so adding or archiving a holiday refreshes
+ * it; HR adds holidays from the mobile app too, so it refetches on focus.
+ */
+export function useHolidaysBetween(companyId: string | undefined, range: MilestoneRange | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['hrms', 'settings', 'holidays', companyId ?? '', 'range', range?.from ?? '', range?.to ?? ''],
+    queryFn: () => {
+      const qs = new URLSearchParams({ companyId: companyId!, from: range!.from, to: range!.to })
+      return apiJson<UpcomingHoliday[]>(`/v1/settings/holidays?${qs}`)
+    },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: 'always',
+    enabled: !!companyId && !!range && (options?.enabled ?? true),
   })
 }

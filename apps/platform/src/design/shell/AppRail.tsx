@@ -33,7 +33,7 @@ export interface AppRailProps {
   onHome: () => void
   pinned: boolean
   onTogglePin: () => void
-  /** The rail takes 248px of room (pinned, and no Pages panel open). */
+  /** The rail takes 248px of room (pinned). */
   push: boolean
   /** Hover doesn't widen the rail (More is open over the page). */
   noExpand: boolean
