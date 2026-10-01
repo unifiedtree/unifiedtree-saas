@@ -1,29 +1,34 @@
 // hand-owned: rebuilt by hand for the redesign (P-DASH); no generator writes this file.
-// "Upcoming milestones" on the Company Admin Dashboard: birthdays, work
-// anniversaries and retirements. Each list has its own date range — its usual
-// window, a preset (This month, Next month, Next 3 / 6 months, This year) or a
-// custom range picked on the calendar (at most 12 months) — kept in this card's
-// state, and its "View all" opens the directory on the same range.
+// "Upcoming events" on the Company Admin Dashboard (the client's name for it, 1 Oct 2026; it was
+// "Upcoming milestones"): the company's notices on top (the dashboard passes its notices strip in), then
+// the dated lists: holidays, birthdays, work anniversaries and retirements. Each list has its own date
+// range — its usual window, a preset (This month, Next month, Next 3 / 6 months, This year) or a custom
+// range picked on the calendar (at most 12 months) — kept in this card's state, and its "View all" opens
+// the directory (people) or the Leave page's holidays on the same dates.
 //
-// Hand-built on the redesign kit (PgDashboard "Upcoming milestones": three columns, each with its range pill);
-// tokens only, so it follows dark mode. The range logic lives in milestoneRange.ts. The staff card
-// (modules/hrms/milestones/UpcomingMilestones.tsx) reuses the range menu, the custom range and the data hook.
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+// Every list comes from an endpoint that already exists: the milestones list (or retirement due) for the
+// people, the holiday calendar (GET /v1/settings/holidays?from=&to=) for holidays, the dashboard's notices
+// for the notices. Hand-built on the redesign kit (PgDashboard "Upcoming milestones": columns, each with
+// its range pill); tokens only, so it follows dark mode. The range logic lives in milestoneRange.ts. The
+// staff card (modules/hrms/milestones/UpcomingMilestones.tsx) reuses the range menu, the custom range and
+// the data hook.
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Avatar, Section } from '@/design/kit/display'
 import {
-  useMilestones, useMilestonesBetween, useRetirementsBetween, useRetirementsDue,
-  type Milestone, type RetirementDue,
+  useHolidaysBetween, useMilestones, useMilestonesBetween, useRetirementsBetween, useRetirementsDue,
+  type Milestone, type RetirementDue, type UpcomingHoliday,
 } from '@/modules/hrms/api/useMilestones'
+import type { HolidayType } from '@/modules/hrms/api/useSettings'
 import { DatePicker } from './DatePicker'
 import { dashIcon } from './icons'
 import { dt, istToday, MON } from './dates'
 import {
-  DEFAULT_CHOICE, choiceLabel, emptyText, lastTo, presetRange, rangeLabel, rangeOf, rangeOptions, rangeReach, reachNote, rowLabels, serverRange, viewAllPath,
-  type DateRange, type MilestoneKind, type RangeChoice, type RangePreset, type RangeReach,
+  DEFAULT_CHOICE, choiceLabel, emptyText, holidayLabels, lastTo, presetRange, rangeLabel, rangeOf, rangeOptions, rangeReach, reachNote, rowLabels, serverRange, viewAllPath,
+  type DateRange, type EventKind, type MilestoneKind, type RangeChoice, type RangePreset, type RangeReach,
 } from './milestoneRange'
 import './MilestonesCard.css'
 
-export type { MilestoneKind, RangeChoice } from './milestoneRange'
+export type { EventKind, MilestoneKind, RangeChoice } from './milestoneRange'
 export const INITIAL_CHOICES: Record<MilestoneKind, RangeChoice> = { birthdays: DEFAULT_CHOICE, anniversaries: DEFAULT_CHOICE, retirements: DEFAULT_CHOICE }
 
 // ── data ─────────────────────────────────────────────────────────────────────
@@ -39,9 +44,9 @@ const fromDue = (rows?: RetirementDue[]): Milestone[] => (rows ?? []).map((r) =>
 export const usesRetirementDue = (opts: { companyId?: string; canReadEmployees?: boolean }) => !!opts.canReadEmployees && !!opts.companyId
 
 /**
- * The three lists for the chosen ranges. A list on its own window reads the
- * request the dashboard already makes (same query, shared cache); a range asks
- * the server for that list only. With `canReadEmployees` and a company,
+ * The three people lists for the chosen ranges. A list on its own window reads
+ * the request the dashboard already makes (same query, shared cache); a range
+ * asks the server for that list only. With `canReadEmployees` and a company,
  * retirements come from retirement due for that company, as before.
  */
 export function useMilestoneColumns(
@@ -74,7 +79,7 @@ export function useMilestoneColumns(
 }
 
 // ── range menu ───────────────────────────────────────────────────────────────
-export type RangeTone = 'warn' | 'info' | 'ok'
+export type RangeTone = 'warn' | 'info' | 'ok' | 'holiday'
 /** Short dates for the menu: no year when the range sits in this year, only the end's year when it runs into the next. */
 function menuDates(r: DateRange, today: string): string {
   const dm = (iso: string) => `${dt(iso).getDate()} ${MON[dt(iso).getMonth()]}`
@@ -84,9 +89,12 @@ function menuDates(r: DateRange, today: string): string {
   return r.from.slice(0, 7) === r.to.slice(0, 7) ? `${dt(r.from).getDate()} – ${dm(r.to)}` : `${dm(r.from)} – ${dm(r.to)}`
 }
 
+/** The accessible name of a list ("work anniversaries" for the anniversaries). */
+const listName = (kind: EventKind) => (kind === 'anniversaries' ? 'work anniversaries' : kind)
+
 /** The pill that picks a list's range: presets with their dates, then "Custom range". */
 export function MilestoneRangeMenu({ kind, choice, today, tone = 'ok', onChange }: {
-  kind: MilestoneKind; choice: RangeChoice; today: string; tone?: RangeTone; onChange: (c: RangeChoice) => void
+  kind: EventKind; choice: RangeChoice; today: string; tone?: RangeTone; onChange: (c: RangeChoice) => void
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -127,7 +135,7 @@ export function MilestoneRangeMenu({ kind, choice, today, tone = 'ok', onChange 
     <div ref={rootRef} onKeyDown={onKey} style={{ position: 'relative', flexShrink: 0 }}>
       <button
         ref={btnRef} type="button" className={`ud-ms-pill ud-ms-pill--${tone}`} aria-haspopup="menu" aria-expanded={open}
-        aria-label={`Date range for ${kind === 'anniversaries' ? 'work anniversaries' : kind}: ${choiceLabel(kind, choice)}`}
+        aria-label={`Date range for ${listName(kind)}: ${choiceLabel(kind, choice)}`}
         onClick={() => setOpen((o) => !o)}
       >
         {choiceLabel(kind, choice)}
@@ -158,7 +166,7 @@ export function MilestoneRangeMenu({ kind, choice, today, tone = 'ok', onChange 
  * shows).
  */
 export function MilestoneCustomRange({ kind, value, today, reach = {}, onChange }: {
-  kind: MilestoneKind; value: DateRange; today: string; reach?: RangeReach; onChange: (r: DateRange) => void
+  kind: EventKind; value: DateRange; today: string; reach?: RangeReach; onChange: (r: DateRange) => void
 }) {
   const setFrom = (from: string) => {
     if (!from) return
@@ -189,8 +197,54 @@ const COLS: { kind: MilestoneKind; title: string; icon: string; tone: RangeTone 
   { kind: 'anniversaries', title: 'Work anniversaries', icon: 'award', tone: 'info' },
   { kind: 'retirements', title: 'Retirements', icon: 'star', tone: 'ok' },
 ]
-const ICON_COLOR: Record<RangeTone, string> = { warn: 'var(--u-gdt,#8A5A10)', info: 'color-mix(in oklab,var(--u-k-people,#3B6FD9) 80%,var(--u-ink,#0E1B16))', ok: 'var(--u-brt,#0F6E56)' }
-const AV_CLASS: Record<RangeTone, string> = { warn: 'ud-av--gold', info: 'ud-av--blue', ok: '' }
+const ICON_COLOR: Record<RangeTone, string> = {
+  warn: 'var(--u-gdt,#8A5A10)', info: 'color-mix(in oklab,var(--u-k-people,#3B6FD9) 80%,var(--u-ink,#0E1B16))', ok: 'var(--u-brt,#0F6E56)',
+  holiday: 'var(--u-holiday-text,#6B3DB8)',
+}
+const AV_CLASS: Record<RangeTone, string> = { warn: 'ud-av--gold', info: 'ud-av--blue', ok: '', holiday: '' }
+/** The holiday calendar's names for the holiday types (the Leave page's Holidays view). */
+const HOLIDAY_TYPE: Record<HolidayType, string> = { NATIONAL: 'National', FESTIVAL: 'Festival', RESTRICTED: 'Restricted', REGIONAL: 'Regional', OPTIONAL: 'Optional', COMPANY: 'Company' }
+
+/** A list's head: icon, title, count (once loaded) and its range pill; then its dates or the custom range. */
+function ColumnHead({ kind, title, icon, tone, choice, count, today, reach, onChoice }: {
+  kind: EventKind; title: string; icon: string; tone: RangeTone; choice: RangeChoice; count: number | null; today: string; reach: RangeReach
+  onChoice: (c: RangeChoice) => void
+}) {
+  const range = rangeOf(kind, choice, today)
+  return (
+    <>
+      <div className="ud-ms-col__head">
+        <p className="ud-ms-col__title">
+          <span style={{ display: 'inline-flex', flexShrink: 0, color: ICON_COLOR[tone] }} aria-hidden="true">{dashIcon(icon, 16)}</span>
+          <span>{title}</span>
+          {count != null && <span data-milestone-count className="ud-ms-col__n">{count}</span>}
+        </p>
+        <MilestoneRangeMenu kind={kind} choice={choice} today={today} tone={tone} onChange={onChoice} />
+      </div>
+      {choice.preset === 'custom'
+        ? <MilestoneCustomRange kind={kind} value={range} today={today} reach={reach} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
+        : <div data-milestone-range className="ud-ms-col__range">{rangeLabel(range)}</div>}
+    </>
+  )
+}
+
+function ListState({ title, loading, error, onRetry, empty, children }: {
+  title: string; loading: boolean; error: boolean; onRetry: () => void; empty: string | null; children: ReactNode
+}) {
+  if (loading) return (
+    <div role="status" aria-label={`Loading ${title.toLowerCase()}`} style={{ display: 'grid', gap: 10, padding: '4px 0' }}>
+      {[0, 1, 2].map((i) => <span key={i} className="uk-skel uk-skel--hv" style={{ height: 28, borderRadius: 8 }} />)}
+    </div>
+  )
+  if (error) return (
+    <p role="alert" className="ud-ms-note">
+      Couldn’t load {title.toLowerCase()}.{' '}
+      <button type="button" className="ud-ms-link ud-ms-link--quiet" onClick={onRetry} style={{ display: 'inline-flex' }}>Try again</button>
+    </p>
+  )
+  if (empty) return <p className="ud-ms-note">{empty}</p>
+  return <>{children}</>
+}
 
 function Column({ kind, title, icon, tone, choice, col, today, reach, onChoice, onNavigate }: {
   kind: MilestoneKind; title: string; icon: string; tone: RangeTone; choice: RangeChoice; col: MilestoneColumn; today: string
@@ -204,42 +258,24 @@ function Column({ kind, title, icon, tone, choice, col, today, reach, onChoice, 
   const viewAll = viewAllPath(kind, choice, today)
   return (
     <div data-milestone-list={kind} className="ud-ms-col">
-      <div className="ud-ms-col__head">
-        <p className="ud-ms-col__title">
-          <span style={{ display: 'inline-flex', flexShrink: 0, color: ICON_COLOR[tone] }} aria-hidden="true">{dashIcon(icon, 16)}</span>
-          <span>{title}</span>
-          {!col.isLoading && !col.isError && <span data-milestone-count className="ud-ms-col__n">{rows.length}</span>}
-        </p>
-        <MilestoneRangeMenu kind={kind} choice={choice} today={today} tone={tone} onChange={onChoice} />
-      </div>
-      {choice.preset === 'custom'
-        ? <MilestoneCustomRange kind={kind} value={range} today={today} reach={reach} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
-        : <div data-milestone-range className="ud-ms-col__range">{rangeLabel(range)}</div>}
-      <div style={{ display: 'grid', gap: 6, alignContent: 'start', ...(all && rows.length > MAX_ROWS ? { maxHeight: 440, overflowY: 'auto', padding: '0 6px', margin: '0 -6px' } : {}) }} aria-busy={col.isLoading || undefined}>
-        {col.isLoading ? (
-          <div role="status" aria-label={`Loading ${title.toLowerCase()}`} style={{ display: 'grid', gap: 10, padding: '4px 0' }}>
-            {[0, 1, 2].map((i) => <span key={i} className="uk-skel uk-skel--hv" style={{ height: 30, borderRadius: 8 }} />)}
-          </div>
-        ) : col.isError ? (
-          <p role="alert" className="ud-ms-note">
-            Couldn’t load {title.toLowerCase()}.{' '}
-            <button type="button" className="ud-ms-link ud-ms-link--quiet" onClick={col.refetch} style={{ display: 'inline-flex' }}>Try again</button>
-          </p>
-        ) : rows.length === 0 ? (
-          <p className="ud-ms-note">{emptyText(kind, choice)}</p>
-        ) : shown.map((m) => {
-          const l = rowLabels(kind, m.date, m.years, today)
-          return (
-            <button key={`${m.employeeId}-${m.date}`} type="button" className="ud-ms-row" onClick={() => onNavigate(`/hrms/employees/${m.employeeId}`)}>
-              <Avatar name={m.name} initials={m.initials} size={30} className={AV_CLASS[tone]} />
-              <span className="ud-ms-row__txt">
-                <span className="ud-ms-row__name" style={{ display: 'block' }}>{m.name}</span>
-                <span className="ud-ms-row__sub" style={{ display: 'block' }}>{l.sub}{m.department ? ` · ${m.department}` : ''}</span>
-              </span>
-              <span className="ud-ms-row__when">{l.when}</span>
-            </button>
-          )
-        })}
+      <ColumnHead kind={kind} title={title} icon={icon} tone={tone} choice={choice} today={today} reach={reach} onChoice={onChoice}
+        count={!col.isLoading && !col.isError ? rows.length : null} />
+      <div className="ud-ms-list" style={all && rows.length > MAX_ROWS ? { maxHeight: 400, overflowY: 'auto', padding: '0 6px', margin: '0 -6px' } : undefined} aria-busy={col.isLoading || undefined}>
+        <ListState title={title} loading={col.isLoading} error={col.isError} onRetry={col.refetch} empty={rows.length === 0 ? emptyText(kind, choice) : null}>
+          {shown.map((m) => {
+            const l = rowLabels(kind, m.date, m.years, today)
+            return (
+              <button key={`${m.employeeId}-${m.date}`} type="button" className="ud-ms-row" onClick={() => onNavigate(`/hrms/employees/${m.employeeId}`)}>
+                <Avatar name={m.name} initials={m.initials} size={28} className={AV_CLASS[tone]} />
+                <span className="ud-ms-row__txt">
+                  <span className="ud-ms-row__name" style={{ display: 'block' }}>{m.name}</span>
+                  <span className="ud-ms-row__sub" style={{ display: 'block' }}>{l.sub}{m.department ? ` · ${m.department}` : ''}</span>
+                </span>
+                <span className="ud-ms-row__when">{l.when}</span>
+              </button>
+            )
+          })}
+        </ListState>
       </div>
       {!col.isLoading && !col.isError && rows.length > MAX_ROWS && (
         <button type="button" className="ud-ms-link ud-ms-link--quiet" onClick={() => setAll((a) => !a)} aria-expanded={all}>
@@ -253,18 +289,83 @@ function Column({ kind, title, icon, tone, choice, col, today, reach, onChoice, 
   )
 }
 
-export function MilestonesCard({ today: todayProp, companyId, canReadEmployees, onNavigate, style }: {
-  today?: string; companyId?: string; canReadEmployees?: boolean; onNavigate?: (path: string) => void; style?: CSSProperties
+/** The company's holidays in the chosen range: a date tile, the name and type, and how far off it is. */
+function HolidaysColumn({ companyId, choice, today, viewAllHref, onChoice, onNavigate }: {
+  companyId: string; choice: RangeChoice; today: string; viewAllHref?: string | null; onChoice: (c: RangeChoice) => void; onNavigate: (path: string) => void
+}) {
+  const [all, setAll] = useState(false)
+  const range = rangeOf('holidays', choice, today)
+  useEffect(() => { setAll(false) }, [range.from, range.to])
+  const q = useHolidaysBetween(companyId, range)
+  const rows: UpcomingHoliday[] = q.data ?? []
+  const shown = all ? rows : rows.slice(0, MAX_ROWS)
+  return (
+    <div data-milestone-list="holidays" className="ud-ms-col">
+      <ColumnHead kind="holidays" title="Holidays" icon="sun" tone="holiday" choice={choice} today={today} reach={rangeReach('holidays', today)} onChoice={onChoice}
+        count={!q.isLoading && !q.isError ? rows.length : null} />
+      <div className="ud-ms-list" style={all && rows.length > MAX_ROWS ? { maxHeight: 400, overflowY: 'auto', padding: '0 6px', margin: '0 -6px' } : undefined} aria-busy={q.isLoading || undefined}>
+        <ListState title="Holidays" loading={q.isLoading} error={q.isError} onRetry={() => { q.refetch() }} empty={rows.length === 0 ? emptyText('holidays', choice) : null}>
+          <ul className="ud-ms-hols" aria-label="Holidays">
+            {shown.map((h) => {
+              const l = holidayLabels(h.holidayDate, today)
+              const d = dt(h.holidayDate)
+              return (
+                <li key={h.id} className="ud-ms-hol" title={h.description || undefined}>
+                  <span className="ud-ms-hol__date" aria-hidden="true">
+                    <b>{d.getDate()}</b>
+                    <span>{MON[d.getMonth()]}</span>
+                  </span>
+                  <span className="ud-ms-row__txt">
+                    <span className="ud-ms-row__name" style={{ display: 'block' }}>{h.holidayName}</span>
+                    <span className="ud-ms-row__sub" style={{ display: 'block' }}>{l.day}{HOLIDAY_TYPE[h.holidayType] ? ` · ${HOLIDAY_TYPE[h.holidayType]}` : ''}</span>
+                  </span>
+                  <span className="ud-ms-row__when">{l.when}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </ListState>
+      </div>
+      {!q.isLoading && !q.isError && rows.length > MAX_ROWS && (
+        <button type="button" className="ud-ms-link ud-ms-link--quiet" onClick={() => setAll((a) => !a)} aria-expanded={all}>
+          {all ? 'Show fewer' : `Show all ${rows.length}`}
+        </button>
+      )}
+      {viewAllHref && (
+        <button type="button" className="ud-ms-link" onClick={() => onNavigate(viewAllHref)}>
+          View all{dashIcon('arrowRight', 13)}
+        </button>
+      )}
+    </div>
+  )
+}
+
+export function MilestonesCard({ today: todayProp, companyId, canReadEmployees, holidaysHref, top, onNavigate, style }: {
+  today?: string; companyId?: string; canReadEmployees?: boolean
+  /** Where the holidays list's "View all" goes (the Leave page's Holidays view), when the viewer can open it. */
+  holidaysHref?: string | null
+  /** Shown above the lists: the company's notices (the dashboard's notices strip). */
+  top?: ReactNode
+  onNavigate?: (path: string) => void; style?: CSSProperties
 }) {
   const today = todayProp || istToday()
   const [choices, setChoices] = useState<Record<MilestoneKind, RangeChoice>>(INITIAL_CHOICES)
+  const [holidayChoice, setHolidayChoice] = useState<RangeChoice>(DEFAULT_CHOICE)
   const cols = useMilestoneColumns(choices, { today, companyId, canReadEmployees })
   const retirementDue = usesRetirementDue({ companyId, canReadEmployees })
   const go = (path: string) => onNavigate && onNavigate(path)
+  // The holiday calendar is per company; without one there is no Holidays list.
+  const showHolidays = !!companyId
+  const kinds = [top ? 'company notices' : '', showHolidays ? 'holidays' : '', 'birthdays', 'work anniversaries'].filter(Boolean)
+  const sub = `${kinds.join(', ')} and retirements`.replace(/^./, (ch) => ch.toUpperCase())
   return (
     <div data-milestones-card style={{ minWidth: 0, display: 'flex', ...style }}>
-      <Section variant="dashboard" level={3} title="Upcoming milestones" sub="Birthdays, work anniversaries and retirements" body="flush" style={{ flex: 1 }}>
-        <div className="ud-ms-grid">
+      <Section variant="dashboard" level={3} title="Upcoming events" sub={sub} body="flush" style={{ flex: 1 }}>
+        {top && <div className="ud-ev-top">{top}</div>}
+        <div className={showHolidays ? 'ud-ms-grid ud-ms-grid--4' : 'ud-ms-grid'}>
+          {showHolidays && (
+            <HolidaysColumn companyId={companyId!} choice={holidayChoice} today={today} viewAllHref={holidaysHref} onChoice={setHolidayChoice} onNavigate={go} />
+          )}
           {COLS.map((c) => (
             <Column
               key={c.kind} {...c} choice={choices[c.kind]} col={cols[c.kind]} today={today} reach={rangeReach(c.kind, today, retirementDue)} onNavigate={go}

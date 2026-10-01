@@ -25,6 +25,7 @@ import { PAGE_REGISTRY, MENU_RULES } from '@/shared/navigation/pageRegistry'
 import { useAccessContext } from '@/shared/navigation/useAccess'
 import { useToast } from '@/design/kit/overlays'
 import { istToday, istHour, addDays, fmtShort } from '@/design/dc/dates'
+import { HOLIDAYS_PATH } from '@/design/dc/milestoneRange'
 import { useCompanies } from '../api/useOrg'
 import { useTeamDashboard, useAttendanceTrend, type TeamDashboardResponse, type DailyAttendanceCounts } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
@@ -129,8 +130,8 @@ export function AdminDashboardContainer() {
   // Seats: the Billing & plan page's own rule (workspace.billing.manage), not a list of role names.
   const reg = (id: string) => PAGE_REGISTRY.find((e) => e.id === id)?.access
   const canBilling = canOpen(reg('s-billing'), ctx)
-  // The greeting's name: the first name, or the full name when it is just an initial.
-  const firstName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
+  // The greeting's name: the person's full name, first and last (greetingName.ts).
+  const greetName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
 
   // ── data (query keys as before) ────────────────────────────────────────────
   const { data: companies = [] } = useCompanies()
@@ -265,7 +266,7 @@ export function AdminDashboardContainer() {
 
     return {
       today, sel, isPast,
-      greeting: `${(() => { const h = istHour(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })()}, ${firstName || 'there'}`,
+      greeting: `${(() => { const h = istHour(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })()}, ${greetName || 'there'}`,
       greetSub: canReadTeam && team.data
         ? { inN: c.present, sched, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null }
         : { inN: null, sched: null, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null },
@@ -307,6 +308,8 @@ export function AdminDashboardContainer() {
       canManageNotices: canWriteCompany && !isPast,
       compliance: st && st.complianceDue != null ? { due: Number(st.complianceDue || 0), done: Number(st.complianceCompleted || 0) } : null,
       companyId, canReadEmployees,
+      // Upcoming events' holidays open the Leave page's Holidays view, for people who can open it.
+      holidaysHref: canOpen(reg('leave:holidays'), ctx) ? HOLIDAYS_PATH : null,
       showProbations: canSeeProbation && canReadEmployees, probations: probations.data ?? [], probationsLoading: probations.isLoading, probationsError: probations.error,
       canDecideProbation: canAddEmployee, canProbationConfig,
       // ── people ──
@@ -334,7 +337,7 @@ export function AdminDashboardContainer() {
   }, [team.data, team.isLoading, team.error, trend.data, trend.isLoading, trend.error, directory.data, directory.isLoading, stats.data, stats.isLoading, alerts.data, seats.data, holidays.data, headcount.data, headcount.isLoading, headcount.error,
     performers.data, performers.isLoading, performers.error, onboarding.data, onboarding.isLoading, onboarding.error, hiring.data, hiring.isLoading, hiring.error, projects.data, projects.isLoading, projects.error,
     runs.data, runs.isLoading, runs.error, activity.data, activity.isLoading, activity.error, notices.data, notices.isLoading, notices.isError, probations.data, probations.isLoading, probations.error,
-    inbox, sel, today, firstName, isPast, noticePage, noticePages, ctx, exporting, companies])
+    inbox, sel, today, greetName, isPast, noticePage, noticePages, ctx, exporting, companies])
 
   const refetch = {
     live: () => { team.refetch(); trend.refetch(); directory.refetch() }, trend: () => trend.refetch(), notices: () => notices.refetch(), probations: () => probations.refetch(),

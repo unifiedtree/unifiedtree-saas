@@ -1,11 +1,21 @@
-/* hand-owned: "Upcoming milestones" card (MilestonesCard.tsx), rebuilt for the redesign; tokens only. */
-.ud-ms-grid { position: relative; flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; padding: 0 18px 18px; }
-.ud-ms-col { min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: var(--u-sf2, #F7F9F8); border: 1px solid var(--u-ln2, #EDF1EF); }
+/* hand-owned: "Upcoming events" card (MilestonesCard.tsx; it was "Upcoming milestones"), rebuilt for the redesign; tokens only.
+   The color-mix() tints sit in an @supports block at the end, after their plain fallback (DECISIONS 14). */
+.ud-ev-top { position: relative; padding: 0 16px 12px; }
+/* The company notices strip, inside the card: the same quiet panel as the lists below it. */
+.ud-ev-top .ud-notices { background: var(--u-sf2, #F7F9F8); border-color: var(--u-ln2, #EDF1EF); box-shadow: none; }
+.ud-ev-top .ud-nchip { background: var(--u-sf, #fff); }
+.ud-ms-grid { position: relative; flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; padding: 0 16px 16px; }
+/* Four lists (holidays and the three people lists): four across, then two, then one. */
+.ud-ms-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .ud-ms-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .ud-ms-grid--4 { grid-template-columns: minmax(0, 1fr); } }
+.ud-ms-col { min-width: 0; display: flex; flex-direction: column; gap: 9px; padding: 12px 13px; border-radius: 13px; background: var(--u-sf2, #F7F9F8); border: 1px solid var(--u-ln2, #EDF1EF); }
 .ud-ms-col__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.ud-ms-col__title { margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
+.ud-ms-col__title { margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 500; }
 .ud-ms-col__title > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ud-ms-col__n { font-size: 12px; font-weight: 500; color: var(--u-ink3, #6A7A73); }
-.ud-ms-col__range { padding-bottom: 10px; font-size: 12px; color: var(--u-ink3, #6A7A73); box-shadow: inset 0 -1px 0 var(--u-ln, #E3E9E6); }
+.ud-ms-col__range { padding-bottom: 9px; font-size: 12px; color: var(--u-ink3, #6A7A73); box-shadow: inset 0 -1px 0 var(--u-ln, #E3E9E6); }
+.ud-ms-list { display: grid; gap: 4px; align-content: start; }
 .ud-ms-row { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; padding: 4px 6px; margin: 0 -6px; border: 0; border-radius: 9px; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .ud-ms-row:hover { background: var(--u-sf, #fff); }
 .ud-ms-row:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
@@ -13,14 +23,25 @@
 .ud-ms-row__name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ud-ms-row__sub { font-size: 12px; color: var(--u-ink3, #6A7A73); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ud-ms-row__when { flex-shrink: 0; font-size: 11.5px; font-weight: 500; color: var(--u-ink2, #4A5A54); white-space: nowrap; }
-.ud-ms-link { margin-top: auto; align-self: flex-start; height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--u-brt, #0F6E56); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+/* Holidays: a small date tile in the holiday purple, the name and type, how far off it is. */
+.ud-ms-hols { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ud-ms-hol { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 4px 0; }
+.ud-ms-hol__date {
+  width: 32px; height: 32px; flex-shrink: 0; box-sizing: border-box; border-radius: 9px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  background: var(--u-holiday-soft, #F1EAFB); color: var(--u-holiday-text, #6B3DB8); line-height: 1;
+}
+.ud-ms-hol__date b { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ud-ms-hol__date span { font-size: 9px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.ud-ms-link { margin-top: auto; align-self: flex-start; height: 26px; display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--u-brt, #0F6E56); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
 .ud-ms-link--quiet { margin-top: 0; height: 24px; color: var(--u-ink2, #4A5A54); font-size: 12.5px; }
 .ud-ms-link:hover { text-decoration: underline; }
 .ud-ms-note { margin: 0; font-size: 13px; line-height: 19px; color: var(--u-ink2, #4A5A54); }
 .ud-ms-pill { height: 26px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 10px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
-.ud-ms-pill--warn { border: 1px solid color-mix(in oklab, var(--u-gd, #C8912E) 40%, var(--u-sf, #fff)); background: color-mix(in oklab, var(--u-gd, #C8912E) 12%, var(--u-sf, #fff)); color: var(--u-gdt, #8A5A10); }
-.ud-ms-pill--info { border: 1px solid color-mix(in oklab, var(--u-k-people, #3B6FD9) 34%, var(--u-sf, #fff)); background: color-mix(in oklab, var(--u-k-people, #3B6FD9) 10%, var(--u-sf, #fff)); color: color-mix(in oklab, var(--u-k-people, #3B6FD9) 80%, var(--u-ink, #0E1B16)); }
+.ud-ms-pill--warn { border: 1px solid var(--u-gds, #FAF1E1); background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); }
+.ud-ms-pill--info { border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-hv, #F0F4F2); color: var(--u-ink2, #4A5A54); }
 .ud-ms-pill--ok { border: 1px solid var(--u-brl, #BFDFD1); background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.ud-ms-pill--holiday { border: 1px solid var(--u-holiday-soft, #F1EAFB); background: var(--u-holiday-soft, #F1EAFB); color: var(--u-holiday-text, #6B3DB8); }
 .ud-ms-pill:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
 .ud-ms-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: 268px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 6px; display: grid; gap: 2px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); border-radius: 14px; box-shadow: var(--u-shp, 0 24px 60px -20px rgba(14,27,22,.35)); }
 .ud-ms-opt { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--u-ink, #0E1B16); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer; }
@@ -31,6 +52,13 @@
 .ud-ms-custom { display: grid; gap: 8px; margin: 2px 0 4px; }
 .ud-ms-custom label, .ud-ms-custom > div > span { font-size: 11.5px; font-weight: 500; color: var(--u-ink2, #4A5A54); }
 .ud-ms-custom p { margin: 0; font-size: 11.5px; color: var(--u-ink3, #6A7A73); }
-.ud-av--gold { background: color-mix(in oklab, var(--u-gd, #C8912E) 18%, var(--u-sf, #fff)) !important; color: var(--u-gdt, #8A5A10) !important; }
-.ud-av--blue { background: color-mix(in oklab, var(--u-k-people, #3B6FD9) 14%, var(--u-sf, #fff)) !important; color: color-mix(in oklab, var(--u-k-people, #3B6FD9) 80%, var(--u-ink, #0E1B16)) !important; }
-
+.ud-av--gold { background: var(--u-gds, #FAF1E1) !important; color: var(--u-gdt, #8A5A10) !important; }
+.ud-av--blue { background: var(--u-hv, #F0F4F2) !important; color: var(--u-ink2, #4A5A54) !important; }
+/* The design's tints, where color-mix() works (the rules above are the plain fallback). */
+@supports (color: color-mix(in oklab, red, blue)) {
+  .ud-ms-pill--warn { border-color: color-mix(in oklab, var(--u-gd, #C8912E) 40%, var(--u-sf, #fff)); background: color-mix(in oklab, var(--u-gd, #C8912E) 12%, var(--u-sf, #fff)); }
+  .ud-ms-pill--info { border-color: color-mix(in oklab, var(--u-k-people, #3B6FD9) 34%, var(--u-sf, #fff)); background: color-mix(in oklab, var(--u-k-people, #3B6FD9) 10%, var(--u-sf, #fff)); color: color-mix(in oklab, var(--u-k-people, #3B6FD9) 80%, var(--u-ink, #0E1B16)); }
+  .ud-ms-pill--holiday { border-color: color-mix(in oklab, var(--u-holiday, #8B4FE0) 30%, var(--u-sf, #fff)); }
+  .ud-av--gold { background: color-mix(in oklab, var(--u-gd, #C8912E) 18%, var(--u-sf, #fff)) !important; }
+  .ud-av--blue { background: color-mix(in oklab, var(--u-k-people, #3B6FD9) 14%, var(--u-sf, #fff)) !important; color: color-mix(in oklab, var(--u-k-people, #3B6FD9) 80%, var(--u-ink, #0E1B16)) !important; }
+}

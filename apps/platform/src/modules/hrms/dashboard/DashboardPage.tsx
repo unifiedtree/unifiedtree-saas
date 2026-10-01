@@ -1,15 +1,18 @@
-// The admin dashboard page (PgDashboard.dc.html, default layout: outlined section pills in the top bar and the
-// quick-action tile row), composed from the redesign kit and tokens. Data and actions come from
-// AdminDashboardContainer; this file only lays them out, in the design's order:
+// The admin dashboard page (PgDashboard.dc.html, default layout: the section pills and the quick-action tile
+// row), composed from the redesign kit and tokens. Data and actions come from AdminDashboardContainer; this file
+// only lays them out, in the design's order:
 //   Overview (greeting, date chip, stat cards, quick actions, seats, Needs your action + Today's attendance),
-//   Attendance (weekly trend), Upcoming (notices, milestones, probation), People, Hiring & projects,
-//   Payroll & activity. A section the viewer has no permission for is hidden, and so is its pill.
-import { useRef, type CSSProperties } from 'react'
+//   Attendance (weekly trend), Upcoming (Upcoming events: notices, holidays, birthdays, anniversaries and
+//   retirements; probation), People, Hiring & projects, Payroll & activity. A section the viewer has no
+//   permission for is hidden, and so is its pill.
+// The section pills are the page's own sub-sections, so they sit in the page under the top bar (which shows the
+// module's pages, DECISIONS 21) and stay in view while the page scrolls. Release 1.1 made the page about 10%
+// tighter (the client: it felt too spacious): the same content and order, with less space (dashboard.css).
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
-  Button, PageFrame, PageHeader, QuickActionGrid, QuickActionTile, SectionHeading, StatCard, type QuickIconKind,
+  Button, PageFrame, PageHeader, PillTabs, QuickActionGrid, QuickActionTile, SectionHeading, StatCard, type QuickIconKind,
 } from '@/design/kit/display'
 import { SidePanel } from '@/design/kit/overlays'
-import { HeaderSections } from '@/design/shell/HeaderTabs'
 import { MilestonesCard } from '@/design/dc/MilestonesCard'
 import { fmtShort } from '@/design/dc/dates'
 import type { DayBuckets } from '../attendance/attendanceBuckets'
@@ -48,6 +51,8 @@ export interface DashboardVm {
   showNotices: boolean; notices: NoticeVm[]; noticeTotal: number; noticesLoading: boolean; noticesError: boolean; noticePage: number; noticePages: number; canManageNotices: boolean
   compliance: { due: number; done: number } | null
   companyId?: string; canReadEmployees: boolean
+  /** The Upcoming events holidays list's "View all" (the Leave page's Holidays view), when the viewer can open it. */
+  holidaysHref: string | null
   showProbations: boolean; probations: UpcomingProbation[]; probationsLoading: boolean; probationsError: unknown; canDecideProbation: boolean; canProbationConfig: boolean
   showDept: boolean; showPerformers: boolean; showOnboarding: boolean
   departments: { id: string | null; name: string; active: number }[]; deptLoading: boolean; deptError: unknown
@@ -76,11 +81,26 @@ export interface DashboardPageProps {
 
 const flex = (grow: number, basis: number): CSSProperties => ({ flex: `${grow} 1 ${basis}px`, minWidth: 0 })
 
+/** Whether the sticky element has left its place (it is stuck under the top bar): it then gets its edge. */
+function useStuck() {
+  const sentinel = useRef<HTMLSpanElement>(null)
+  const [stuck, setStuck] = useState(false)
+  useEffect(() => {
+    const el = sentinel.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { root: el.closest('#workspace-content'), threshold: 0 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return { sentinel, stuck }
+}
+
 export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, onNoticePage, onSaveNotice, onArchiveNotice, projectsOpen, onProjects }: DashboardPageProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const pills = sectionPills(vm.sections)
   const ready = !vm.liveLoading && !vm.noticesLoading
   const { active, jump } = useSectionSpy(rootRef, pills.map((p) => p.key), ready)
+  const { sentinel, stuck } = useStuck()
   const { sel, isPast, counts: c, stats: s } = vm
   const isToday = !isPast
   const day = isToday ? 'today' : `on ${fmtShort(sel).slice(0, -5)}`
@@ -123,11 +143,17 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
 
   return (
     <div ref={rootRef}>
-      {pills.length > 1 && (
-        <HeaderSections label="Dashboard sections" items={pills.map((p) => ({ key: p.key, label: p.label, icon: p.icon }))} active={active}
-          onSelect={(k) => jump(k as DashSection)} />
-      )}
-      <PageFrame gap={40} top={22} className="ud-page" label="Dashboard">
+      <PageFrame gap={34} top={14} className="ud-page" label="Dashboard">
+        {pills.length > 1 && (
+          <>
+            <span ref={sentinel} className="ud-secnav__mark" aria-hidden="true" />
+            <div className="ud-secnav" data-dash-nav data-stuck={stuck ? '' : undefined}>
+              <PillTabs label="Dashboard sections" semantics="nav" current="location" className="ud-secnav__bar"
+                items={pills.map((p) => ({ key: p.key, label: p.label, icon: p.icon }))} activeKey={active}
+                onSelect={(k) => jump(k as DashSection)} />
+            </div>
+          </>
+        )}
         {/* ── Overview ─────────────────────────────────────────────────── */}
         <section data-sec="overview" aria-label="Overview" className="ud-group">
           <PageHeader size="greeting" wave title={vm.greeting} sub={greetSub}
@@ -184,7 +210,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
 
         {/* ── Upcoming ─────────────────────────────────────────────────── */}
         <section data-sec="upcoming" aria-label="Upcoming" className="ud-group ud-group--sec">
-          <SectionHeading title="Upcoming" sub="Notices, milestones and probation reviews" icon="calendar"
+          <SectionHeading title="Upcoming" sub="Events, notices and probation reviews" icon="calendar"
             actions={vm.compliance ? (
               <button type="button" className="ud-compliance" style={{ border: 0, background: 'transparent', cursor: 'pointer', font: 'inherit' }} onClick={() => go('/hrms/compliance')}>
                 {vm.compliance.due
@@ -192,18 +218,17 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
                   : <>Compliance: nothing due {isToday ? 'this month' : `this month through ${fmtShort(sel)}`}</>}
               </button>
             ) : undefined} />
-          {vm.showNotices && (
-            <NoticesStrip notices={vm.notices} total={vm.noticeTotal} page={vm.noticePage} pages={vm.noticePages} isPast={isPast} sel={sel} today={vm.today}
-              canManage={vm.canManageNotices} loading={vm.noticesLoading} error={vm.noticesError} onRetry={refetch.notices} onPage={onNoticePage}
-              onSave={onSaveNotice} onArchive={onArchiveNotice} />
+          {/* Upcoming events: the company's notices on top, then holidays, birthdays, work anniversaries and retirements. */}
+          <MilestonesCard today={vm.today} companyId={vm.companyId} canReadEmployees={vm.canReadEmployees} holidaysHref={vm.holidaysHref} onNavigate={go}
+            top={vm.showNotices ? (
+              <NoticesStrip notices={vm.notices} total={vm.noticeTotal} page={vm.noticePage} pages={vm.noticePages} isPast={isPast} sel={sel} today={vm.today}
+                canManage={vm.canManageNotices} loading={vm.noticesLoading} error={vm.noticesError} onRetry={refetch.notices} onPage={onNoticePage}
+                onSave={onSaveNotice} onArchive={onArchiveNotice} />
+            ) : undefined} />
+          {vm.showProbations && (
+            <ProbationCard rows={vm.probations} isPast={isPast} sel={sel} canDecide={vm.canDecideProbation} canReadConfig={vm.canProbationConfig}
+              loading={vm.probationsLoading} error={vm.probationsError} onRetry={refetch.probations} onNavigate={go} />
           )}
-          <div className="ud-row">
-            <MilestonesCard today={vm.today} companyId={vm.companyId} canReadEmployees={vm.canReadEmployees} onNavigate={go} style={flex(8, 600)} />
-            {vm.showProbations && (
-              <ProbationCard rows={vm.probations} isPast={isPast} sel={sel} canDecide={vm.canDecideProbation} canReadConfig={vm.canProbationConfig}
-                loading={vm.probationsLoading} error={vm.probationsError} onRetry={refetch.probations} onNavigate={go} style={flex(4, 320)} />
-            )}
-          </div>
         </section>
 
         {/* ── People ───────────────────────────────────────────────────── */}
