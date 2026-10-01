@@ -202,10 +202,10 @@ export function HomePage() {
     { key: 'team-today', label: 'Team today', kind: 'user', hint: counts ? `${counts.present} of ${sched} working` : undefined, path: '/team' },
     ...(canTeamToday ? [{ key: 'team-schedule', label: 'Team schedule', kind: 'swap' as const, hint: 'Who works when', path: READY_PAGES.has('P-TEAM') ? '/team?view=schedule' : '/team' }] : []),
     ...(canMessage ? [{ key: 'message', label: 'Message team', kind: 'megaphone' as const, hint: teamLabel ? `Post to ${teamLabel}` : 'Post to your team', onClick: () => setMessageOpen(true) }] : []),
-    ...(canLeave ? [{ key: 'leave', label: 'Apply leave', kind: 'home' as const, hint: main ? `${num(main.available)} ${main.leaveTypeName.replace(/\s*leave$/i, '').toLowerCase()} days left` : undefined, path: '/hrms/leave?tab=apply' }] : []),
+    ...(canLeave ? [{ key: 'leave', label: 'Apply for leave', kind: 'home' as const, hint: main ? `${num(main.available)} ${main.leaveTypeName.replace(/\s*leave$/i, '').toLowerCase()} days left` : undefined, path: '/hrms/leave?tab=apply' }] : []),
     ...(canPayslips ? [{ key: 'payslip', label: 'Payslip', kind: 'download' as const, hint: slip ? `${monthName(slip.periodMonth)} is ready` : undefined, path: '/me/payslips' }] : []),
   ] : [
-    ...(canLeave ? [{ key: 'leave', label: 'Apply leave', kind: 'calendar' as const, hint: main ? `${num(main.available)} ${main.leaveTypeName.replace(/\s*leave$/i, '').toLowerCase()} days left` : undefined, path: '/hrms/leave?tab=apply' }] : []),
+    ...(canLeave ? [{ key: 'leave', label: 'Apply for leave', kind: 'calendar' as const, hint: main ? `${num(main.available)} ${main.leaveTypeName.replace(/\s*leave$/i, '').toLowerCase()} days left` : undefined, path: '/hrms/leave?tab=apply' }] : []),
     ...(canWfh ? [{ key: 'wfh', label: 'Work from home', kind: 'home' as const, hint: wfh.data ? `${daysWord(wfhThisMonth.length)} this month` : undefined, path: '/me/wfh' }] : []),
     ...(canShift ? [{ key: 'fix', label: 'Fix a punch', kind: 'clock' as const, hint: missed[0]?.detail ?? 'Ask to correct a punch', badge: missed.length, path: missed[0]?.link ?? '/hrms/attendance?tab=my' }] : []),
     ...(canPayslips ? [{ key: 'payslip', label: 'Payslip', kind: 'download' as const, hint: slip ? `${monthName(slip.periodMonth)} is ready` : undefined, path: '/me/payslips' }] : []),
