@@ -153,7 +153,7 @@ describe('the redesign rail: My work and More', () => {
     expect(litRail([{ key: 'hrsettings', tabs: 3 }], 'hrsettings', { morePage: true, overflow: none }).more).toBe(true)
   })
 
-  it('a module that moved into More lights More (its pages still show in the Pages panel)', () => {
+  it('a module that moved into More lights More (its pages still show as the top bar’s tabs)', () => {
     const r = litRail([{ key: 'reports', tabs: 2 }], null, { morePage: false, overflow: new Set(['reports']) })
     expect(r).toEqual({ key: undefined, module: 'reports', more: true })
     expect(litRail([{ key: 'reports', tabs: 2 }], null, { morePage: false, overflow: none })).toEqual({ key: 'reports', module: 'reports', more: false })
