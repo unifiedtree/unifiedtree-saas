@@ -103,7 +103,7 @@ const freeDay = (ids, fromBack, toBack) => {
     const d = sql(`select ('${today}'::date - ${back})::text`)
     if (Number(sql(`select extract(isodow from '${d}'::date)`)) >= 6) continue
     if (sql(`select count(*) from attendance.records where employee_id in (${ids.map((i) => `'${i}'`).join(',')}) and attendance_date='${d}'`) === '0'
-      && sql(`select count(*) from attendance.regularization_requests where employee_id in (${ids.map((i) => `'${i}'`).join(',')}) and requested_date='${d}'`) === '0') return d
+      && sql(`select count(*) from attendance.regularization_requests where employee_id in (${ids.map((i) => `'${i}'`).join(',')}) and missing_for_date='${d}'`) === '0') return d
   }
   return null
 }
@@ -353,7 +353,7 @@ try {
     await panel.getByPlaceholder('e.g. Forgot to punch out').fill(fixReason)
     await panel.getByRole('button', { name: 'Send request' }).click()
     check('reader: Fix a day sends the request', await toast(r.page, /Fix request sent/)
-      && sql(`select requested_date::text from attendance.regularization_requests where employee_id='${READER}' and reason='${fixReason}'`) === fixDay, fixDay)
+      && sql(`select missing_for_date::text from attendance.regularization_requests where employee_id='${READER}' and reason='${fixReason}'`) === fixDay, fixDay)
   } else check('reader: found a free past weekday for the fix request', false)
 
   // Timesheet: add time and submit the week.
