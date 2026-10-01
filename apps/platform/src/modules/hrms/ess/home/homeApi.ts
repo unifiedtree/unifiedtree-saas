@@ -6,6 +6,7 @@
 //   GET  /v1/attendance/assisted-punch/eligible   who a manager may punch for (V143.40)
 // The lists answer "not available" (404, or 503 FEATURE_NOT_READY) before their
 // backend is live; each block then hides instead of erroring (DECISIONS 18).
+import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import { asAvailable, defaultApi, useAvailableQuery, type ApiFetch, type SharedQueryOptions } from '../../api/shared/available'
 
@@ -149,4 +150,18 @@ export function useAssistedPunchEligible(enabled: boolean, q = '') {
     enabled,
     staleTime: 30_000,
   })
+}
+
+// ── Your own employee record (today's /v1/employees/me) ─────────────────────
+
+/** The fields Home, Work from home and Shift change read; the key is shared with today's pages. */
+export interface MeEmployee {
+  id: string
+  companyId: string
+  /** Own weekly offs, ISO days "6,7"; empty means the company's. */
+  weeklyOffDays?: string | null
+}
+
+export function useMeEmployee() {
+  return useQuery({ queryKey: ['employee', 'me'], queryFn: () => apiJson<MeEmployee>('/v1/employees/me'), staleTime: 60_000, retry: false })
 }

@@ -30,7 +30,7 @@ import { dayBuckets } from '../../attendance/attendanceBuckets'
 import { WebPunchDialog } from '../../attendance/webpunch/WebPunchDialog'
 import { AttendanceHistory } from '../AttendanceHistory'
 import { TimeEntries } from '../TimeEntries'
-import { useAroundMe, useBreak, useMyDay, useMyRequests, useNeedsYou, useUndoCheckOut } from './homeApi'
+import { useAroundMe, useBreak, useMeEmployee, useMyDay, useMyRequests, useNeedsYou, useUndoCheckOut } from './homeApi'
 import {
   CalendarCard, LeaveCard, MyRequestsCard, NeedsYouCard, PayCard, ShortcutsCard, UpcomingEventsCard, YourDay, type Shortcut,
 } from './HomeBlocks'
@@ -40,9 +40,6 @@ import {
   monthOf, monthWord, num, relDay, shiftMinutes, things, weeklyOffSet, wfhDaysInMonth,
 } from './homeModel'
 import './home.css'
-
-/** Today's /v1/employees/me (the key ShiftChangeRequest shares). */
-interface Me { id: string; companyId: string; weeklyOffDays?: string | null }
 
 /** Where "Review approvals" goes: the team's Approvals view once P-TEAM ships, else today's queue for the first kind waiting. */
 const TODAY_QUEUE: Record<Exclude<InboxTab, 'all'>, string> = {
@@ -96,7 +93,7 @@ export function HomePage() {
   const year = Number(today.slice(0, 4))
 
   // ── reads ──
-  const me = useQuery({ queryKey: ['employee', 'me'], queryFn: () => apiJson<Me>('/v1/employees/me'), staleTime: 60_000, retry: false })
+  const me = useMeEmployee()
   const companyId = me.data?.companyId ?? ''
   const day = useMyDay({ enabled: canCheckIn })
   const needs = useNeedsYou()
