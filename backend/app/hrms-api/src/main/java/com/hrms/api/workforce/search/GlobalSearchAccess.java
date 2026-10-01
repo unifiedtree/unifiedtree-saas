@@ -21,6 +21,8 @@ import java.util.Set;
  *   <li>Holidays: the company's holiday list (open to anyone signed in), for people who open the Leave page.</li>
  *   <li>Policies: authors see every status, readers only published ones
  *       (PolicyController.listPolicies).</li>
+ *   <li>Requests (work from home, shift changes, attendance fixes, advances, overtime): each as its
+ *       own list page shows it, see the cases below. "Team" is TeamEmployeeScope plus yourself.</li>
  * </ul>
  * "Own" and "team" need the caller's employee record; without one those types
  * return nothing.
@@ -29,7 +31,8 @@ public final class GlobalSearchAccess {
 
     private GlobalSearchAccess() {}
 
-    public enum Reach { NONE, OWN, TEAM, ALL, PUBLISHED }
+    /** ROUTED: rows routed to the caller as approver (Advances), plus their own when they may ask for one. */
+    public enum Reach { NONE, OWN, TEAM, ALL, PUBLISHED, ROUTED }
 
     public static Reach reach(SearchType type, Set<String> perms, boolean hasEmployee) {
         return switch (type) {
@@ -54,7 +57,29 @@ public final class GlobalSearchAccess {
             // the result links to the Leave page's Holidays tab, so it's offered to those who open that page.
             case HOLIDAY -> perms.contains("hrms.leave.read") || perms.contains("hrms.ess.read") || perms.contains("leave.request.self")
                     ? Reach.ALL : Reach.NONE;
+            // WfhController: /pending-approvals is tenant-wide with hrms.leave.approve.l2, else the approver's
+            // own people; /my is the caller's own.
+            case WFH -> perms.contains("wfh.approve") && perms.contains("hrms.leave.approve.l2") ? Reach.ALL
+                    : teamOrOwn(perms, hasEmployee, "wfh.approve", "wfh.request.self");
+            // ShiftController.approverScope(): attendance.workforce.admin sees everyone, other approvers their team.
+            case SHIFT_CHANGE -> perms.contains("attendance.regularization.approve") && perms.contains("attendance.workforce.admin") ? Reach.ALL
+                    : teamOrOwn(perms, hasEmployee, "attendance.regularization.approve", "attendance.checkin.self");
+            // AttendanceController /corrections/approvals: TeamEmployeeScope (company-wide for workforce admins).
+            case CORRECTION -> teamOrOwn(perms, hasEmployee, "attendance.regularization.approve", "attendance.checkin.self");
+            // AdvanceController: hrms.advance.disburse sees every advance; read/approve without it only those routed to them.
+            case ADVANCE -> perms.contains("hrms.advance.disburse") ? Reach.ALL
+                    : !hasEmployee ? Reach.NONE
+                    : perms.contains("hrms.advance.read") || perms.contains("hrms.advance.approve") ? Reach.ROUTED
+                    : perms.contains("hrms.advance.request.self") ? Reach.OWN : Reach.NONE;
+            // OvertimeRequestController: the team list needs attendance.team.read (TeamEmployeeScope); /my is your own.
+            case OVERTIME_REQUEST -> teamOrOwn(perms, hasEmployee, "attendance.team.read", "attendance.checkin.self");
         };
+    }
+
+    private static Reach teamOrOwn(Set<String> perms, boolean hasEmployee, String team, String self) {
+        if (!hasEmployee) return Reach.NONE;
+        if (perms.contains(team)) return Reach.TEAM;
+        return perms.contains(self) ? Reach.OWN : Reach.NONE;
     }
 
     private static Reach anyTeamOwn(Set<String> perms, boolean hasEmployee, String anyone, String team, String... self) {

@@ -1,7 +1,9 @@
 package com.hrms.api.workforce;
 
 import com.hrms.employee.workforce.dto.EmployeeSearchDtos.EmployeeSearchResponse;
+import com.hrms.api.workforce.search.PersonFactsQueries;
 import com.hrms.employee.workforce.service.WorkforceEmployeeService;
+import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * {@code GET /v1/search?q=…} — the ⌘K palette's entity search (Milestone 4C).
@@ -30,9 +35,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class SearchController {
 
     private final WorkforceEmployeeService employees;
+    private final PersonFactsQueries facts;
 
-    public SearchController(WorkforceEmployeeService employees) {
+    public SearchController(WorkforceEmployeeService employees, PersonFactsQueries facts) {
         this.employees = employees;
+        this.facts = facts;
     }
 
     /**
@@ -55,5 +62,19 @@ public class SearchController {
                     "q must be at least " + WorkforceEmployeeService.SEARCH_MIN_QUERY_CHARS + " characters");
         }
         return employees.search(q, limit);
+    }
+
+    /**
+     * Redesign BW-02: the preview facts (branch, manager, joining date, employment status) for the people
+     * a search returned. The same gate and visibility as the search itself; at most
+     * {@value PersonFactsQueries#MAX_IDS} ids, more is a 400.
+     */
+    @GetMapping("/people/facts")
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
+    public List<PersonFactsQueries.PersonFacts> facts(@RequestParam List<UUID> ids) {
+        if (ids.size() > PersonFactsQueries.MAX_IDS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ask for at most " + PersonFactsQueries.MAX_IDS + " people");
+        }
+        return facts.facts(TenantContext.getTenantId(), ids);
     }
 }

@@ -24,7 +24,14 @@ public enum SearchType {
     JOB("job", "Job openings", "hrms", List.of("job", "jobs", "opening", "openings", "requisition", "requisitions", "vacancy", "vacancies")),
     POLICY("policy", "Policies", "hrms", List.of("policy", "policies", "handbook")),
     // Redesign BW-04: the company's holidays this year and next (the Leave page's Holidays tab).
-    HOLIDAY("holiday", "Holidays", "hrms", List.of("holiday", "holidays", "festival", "festivals"));
+    HOLIDAY("holiday", "Holidays", "hrms", List.of("holiday", "holidays", "festival", "festivals")),
+    // Requests (the client asked to search "everything"): each as its own list page shows it.
+    WFH("wfh", "Work from home requests", "attendance", List.of("wfh", "remote", "request", "requests")),
+    SHIFT_CHANGE("shift_change", "Shift change requests", "attendance", List.of("shift", "shifts", "swap", "request", "requests")),
+    CORRECTION("correction", "Attendance fixes", "attendance",
+            List.of("correction", "corrections", "regularization", "regularisation", "regularize", "regularise", "fix", "fixes", "request", "requests")),
+    ADVANCE("advance", "Salary advances", "hrms", List.of("advance", "advances", "loan", "loans", "request", "requests")),
+    OVERTIME_REQUEST("overtime_request", "Overtime requests", "attendance", List.of("overtime", "ot", "request", "requests"));
 
     public final String key;
     public final String label;

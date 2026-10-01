@@ -288,4 +288,125 @@ public class GlobalSearchQueries {
         return jdbc.query(sql, p, (rs, i) -> new HolidayRow(
                 rs.getObject("id", UUID.class), rs.getString("holiday_name"), date(rs, "holiday_date"), rs.getString("holiday_type")));
     }
+
+    // ── Requests (redesign: the client's "search for everything") ─────────────
+    // Each reads only the people the type's own list page shows the caller (GlobalSearchAccess),
+    // fenced by tenant on every table.
+
+    public record WfhRow(UUID id, UUID employeeId, String employeeName, String employeeCode, LocalDate from, LocalDate to, String status) {}
+    public record ShiftChangeRow(UUID id, UUID employeeId, String employeeName, String employeeCode, String fromShift, String toShift,
+                                 LocalDate effective, String status) {}
+    public record CorrectionRow(UUID id, UUID employeeId, String employeeName, String employeeCode, LocalDate day, String status) {}
+    public record AdvanceRow(UUID id, UUID employeeId, String employeeName, String employeeCode, java.math.BigDecimal amount,
+                             Integer months, String status) {}
+    public record OvertimeRequestRow(UUID id, UUID employeeId, String employeeName, String employeeCode, LocalDate day, Integer minutes,
+                                     String status) {}
+
+    static final String PERSON_TEXT = "e.first_name, e.last_name, e.employee_code";
+    static final String WFH_TEXT = "concat_ws(' ', " + PERSON_TEXT + ", w.reason, w.status, to_char(w.from_date, 'FMMonth'))";
+    static final String SHIFT_CHANGE_TEXT = "concat_ws(' ', " + PERSON_TEXT + ", s.reason, s.status, cur.name, req.name)";
+    static final String CORRECTION_TEXT = "concat_ws(' ', " + PERSON_TEXT + ", r.reason, r.status, "
+            + "to_char(COALESCE(r.missing_for_date, r.request_date), 'FMMonth'))";
+    static final String ADVANCE_TEXT = "concat_ws(' ', " + PERSON_TEXT + ", a.reason, a.status)";
+    static final String OVERTIME_REQUEST_TEXT = "concat_ws(' ', " + PERSON_TEXT + ", q.reason, q.status, to_char(q.request_date, 'FMMonth'))";
+
+    public List<WfhRow> wfh(UUID tenant, Scope scope, List<String> words, int limit) {
+        if (scope.nobody()) return List.of();
+        MapSqlParameterSource p = params(tenant, words, limit);
+        String sql = """
+            SELECT w.id, w.employee_id, w.from_date, w.to_date, w.status, e.first_name, e.last_name, e.employee_code
+              FROM leave_mgmt.wfh_requests w
+              JOIN hrms.employees e ON e.id = w.employee_id AND e.tenant_id = w.tenant_id
+             WHERE w.tenant_id = :tenant""" + people("w.employee_id", scope, p) + wordClauses(WFH_TEXT, words.size()) + """
+
+             ORDER BY w.created_at DESC, w.id
+             LIMIT :limit""";
+        return jdbc.query(sql, p, (rs, i) -> new WfhRow(rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                name(rs.getString("first_name"), rs.getString("last_name")), rs.getString("employee_code"),
+                date(rs, "from_date"), date(rs, "to_date"), rs.getString("status")));
+    }
+
+    public List<ShiftChangeRow> shiftChanges(UUID tenant, Scope scope, List<String> words, int limit) {
+        if (scope.nobody()) return List.of();
+        MapSqlParameterSource p = params(tenant, words, limit);
+        String sql = """
+            SELECT s.id, s.employee_id, s.status, COALESCE(s.applied_effective_date, s.requested_effective_date) AS effective,
+                   cur.name AS from_shift, req.name AS to_shift, e.first_name, e.last_name, e.employee_code
+              FROM attendance.shift_change_requests s
+              JOIN hrms.employees e ON e.id = s.employee_id AND e.tenant_id = s.tenant_id
+              LEFT JOIN attendance.shift_policies cur ON cur.id = s.current_shift_policy_id AND cur.tenant_id = s.tenant_id
+              LEFT JOIN attendance.shift_policies req ON req.id = s.requested_shift_policy_id AND req.tenant_id = s.tenant_id
+             WHERE s.tenant_id = :tenant""" + people("s.employee_id", scope, p) + wordClauses(SHIFT_CHANGE_TEXT, words.size()) + """
+
+             ORDER BY s.created_at DESC, s.id
+             LIMIT :limit""";
+        return jdbc.query(sql, p, (rs, i) -> new ShiftChangeRow(rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                name(rs.getString("first_name"), rs.getString("last_name")), rs.getString("employee_code"),
+                rs.getString("from_shift"), rs.getString("to_shift"), date(rs, "effective"), rs.getString("status")));
+    }
+
+    public List<CorrectionRow> corrections(UUID tenant, Scope scope, List<String> words, int limit) {
+        if (scope.nobody()) return List.of();
+        MapSqlParameterSource p = params(tenant, words, limit);
+        String sql = """
+            SELECT r.id, r.employee_id, r.status, COALESCE(r.missing_for_date, r.request_date) AS day,
+                   e.first_name, e.last_name, e.employee_code
+              FROM attendance.regularization_requests r
+              JOIN hrms.employees e ON e.id = r.employee_id AND e.tenant_id = r.tenant_id
+             WHERE r.tenant_id = :tenant""" + people("r.employee_id", scope, p) + wordClauses(CORRECTION_TEXT, words.size()) + """
+
+             ORDER BY r.created_at DESC, r.id
+             LIMIT :limit""";
+        return jdbc.query(sql, p, (rs, i) -> new CorrectionRow(rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                name(rs.getString("first_name"), rs.getString("last_name")), rs.getString("employee_code"), date(rs, "day"),
+                rs.getString("status")));
+    }
+
+    /**
+     * @param routedTo the Advances list's approver rule: rows routed to this approver (plus {@code scope}'s own rows);
+     *                 null when {@code scope} alone decides.
+     */
+    public List<AdvanceRow> advances(UUID tenant, Scope scope, UUID routedTo, List<String> words, int limit) {
+        if (routedTo == null && scope.nobody()) return List.of();
+        MapSqlParameterSource p = params(tenant, words, limit);
+        String who;
+        if (routedTo != null) {
+            p.addValue("routed", routedTo);
+            String own = scope.limited() && !scope.nobody() ? " OR a.employee_id IN (:people)" : "";
+            if (!own.isEmpty()) p.addValue("people", scope.people());
+            who = "\n   AND (a.approver_id = :routed" + own + ")";
+        } else {
+            who = people("a.employee_id", scope, p);
+        }
+        String sql = """
+            SELECT a.id, a.employee_id, a.amount, a.repayment_months, a.status, e.first_name, e.last_name, e.employee_code
+              FROM advance_mgmt.advance_requests a
+              JOIN hrms.employees e ON e.id = a.employee_id AND e.tenant_id = a.tenant_id
+             WHERE a.tenant_id = :tenant""" + who + wordClauses(ADVANCE_TEXT, words.size()) + """
+
+             ORDER BY a.created_at DESC, a.id
+             LIMIT :limit""";
+        return jdbc.query(sql, p, (rs, i) -> new AdvanceRow(rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                name(rs.getString("first_name"), rs.getString("last_name")), rs.getString("employee_code"), rs.getBigDecimal("amount"),
+                rs.getObject("repayment_months") == null ? null : rs.getInt("repayment_months"), rs.getString("status")));
+    }
+
+    /** Overtime requests (V143.66). Nothing when the table isn't there yet (the feature isn't switched on). */
+    public List<OvertimeRequestRow> overtimeRequests(UUID tenant, Scope scope, List<String> words, int limit) {
+        if (scope.nobody()) return List.of();
+        Boolean ready = jdbc.getJdbcTemplate().queryForObject("SELECT to_regclass('attendance.overtime_requests') IS NOT NULL", Boolean.class);
+        if (!Boolean.TRUE.equals(ready)) return List.of();
+        MapSqlParameterSource p = params(tenant, words, limit);
+        String sql = """
+            SELECT q.id, q.employee_id, q.request_date, q.minutes, q.status, e.first_name, e.last_name, e.employee_code
+              FROM attendance.overtime_requests q
+              JOIN hrms.employees e ON e.id = q.employee_id AND e.tenant_id = q.tenant_id
+             WHERE q.tenant_id = :tenant""" + people("q.employee_id", scope, p) + wordClauses(OVERTIME_REQUEST_TEXT, words.size()) + """
+
+             ORDER BY q.created_at DESC, q.id
+             LIMIT :limit""";
+        return jdbc.query(sql, p, (rs, i) -> new OvertimeRequestRow(rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                name(rs.getString("first_name"), rs.getString("last_name")), rs.getString("employee_code"), date(rs, "request_date"),
+                rs.getObject("minutes") == null ? null : rs.getInt("minutes"), rs.getString("status")));
+    }
 }

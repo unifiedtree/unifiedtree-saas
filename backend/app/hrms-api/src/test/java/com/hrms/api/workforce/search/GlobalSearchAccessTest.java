@@ -3,6 +3,7 @@ package com.hrms.api.workforce.search;
 import com.hrms.api.workforce.search.GlobalSearchAccess.Reach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static com.hrms.api.workforce.search.GlobalSearchAccess.reach;
@@ -64,6 +65,7 @@ class GlobalSearchAccessTest {
     @Test
     void hrReachesEveryone() {
         for (SearchType t : SearchType.values()) {
+            if (List.of(GlobalSearchRequestsTest.REQUESTS).contains(t)) continue; // requests follow their own pages (GlobalSearchRequestsTest)
             assertThat(reach(t, HR, true)).as(t.key).isEqualTo(Reach.ALL);
         }
         // "Everyone" doesn't depend on having an employee record.
