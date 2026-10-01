@@ -1,3 +1,4 @@
+/* global process, console, fetch, URL, URLSearchParams, document, localStorage, getComputedStyle */
 // Live check of P-REPORTS (redesign BW-86 … BW-89): the Reports center, the six
 // report pages and Workforce analytics, against a running server and its database.
 //
@@ -22,7 +23,7 @@
 //   env: RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_APP_URL, RECOVERY_DB, PHASE, SHOTS_DIR
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3150'
@@ -59,7 +60,7 @@ async function session(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (res.status >= 500 && !(allowNotReady && json?.errorCode === 'FEATURE_NOT_READY')) surprises.push(`${method} ${path} → ${res.status} ${text.slice(0, 200)}`)
     if (json?.errorCode === 'FEATURE_NOT_READY' && !allowNotReady) surprises.push(`${method} ${path} → FEATURE_NOT_READY outside the rename step`)
@@ -120,8 +121,7 @@ async function apiPhase() {
   const fin = await session('fin@unifiedtree.demo')
   const mgr = await session('mgr@unifiedtree.demo')
   const reader = await session('reader@unifiedtree.demo')
-  makeCustomRole()
-  // The fixture person is employed now; every SQL count below includes them, like the API does.
+  // The fixture person (made before the phases) is employed now; every SQL count below includes them, like the API does.
   const custom = await session(fxEmail)
 
   // 1. The summary, per role, against its reports and SQL.
@@ -258,11 +258,188 @@ async function apiPhase() {
 
 // ── UI phase ────────────────────────────────────────────────────────────────
 async function uiPhase() {
-  const { uiChecks } = await import('./live-rd-p-reports-ui.mjs')
-  await uiChecks({ base, company, today, sql, num, check, shots, employedSql })
+  const { chromium } = await import('@playwright/test')
+  const browser = await chromium.launch()
+  const fmt = (n) => Number(n).toLocaleString('en-IN')
+  const ownerUser = sql(`select id from auth.user_credentials where tenant_id='${tenant}' and email='owner@unifiedtree.demo'`)
+  const started = sql('select now()')
+  const ui = async (email, { width = 1440, theme = 'light' } = {}) => {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 }, acceptDownloads: true })
+    await ctx.addInitScript((t) => { try { localStorage.setItem('ut.theme', t) } catch { /* private mode */ } }, theme)
+    const page = await ctx.newPage()
+    const errors = [], failed = [], calls = []
+    page.on('pageerror', (e) => errors.push(String(e.message || e)))
+    page.on('response', (r) => {
+      const u = r.url()
+      if (!u.includes('/api/')) return
+      calls.push(u.split('/api')[1])
+      if (r.status() >= 400 && !u.includes('/canonical-auth/refresh')) failed.push(`${r.status()} ${r.request().method()} ${u.split('/api')[1]}`)
+    })
+    await page.goto(base + '/login')
+    await page.locator('input[type=email]').fill(email)
+    await page.locator('input[type=password]').fill(password)
+    await page.locator('button[type=submit]').click()
+    await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+    errors.length = 0; failed.length = 0; calls.length = 0
+    return { ctx, page, errors, failed, calls }
+  }
+  const settle = async (page) => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(700) }
+  const shot = async (page, name) => { if (shots) await page.screenshot({ path: `${shots}/rd-p-reports-${name}.png`, fullPage: true }) }
+  const noSideways = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  const clean = (s, where) => { check(`${where}: no page errors or failed API calls`, !s.errors.length && !s.failed.length, s.errors[0] || s.failed[0] || ''); s.errors.length = 0; s.failed.length = 0 }
+  const employed = num(employedSql(today))
+  const exitsThisMonth = num(`select count(*) from hrms.employees e where e.tenant_id='${tenant}' and e.company_id='${company}' and e.employment_status in ('EXITED','TERMINATED','RESIGNED') and coalesce(e.last_working_day, e.date_of_termination) between '${monthStart(today)}' and '${today}'`)
+  const divNow = num(`select count(*) from hrms.employees where tenant_id='${tenant}' and company_id='${company}' and employment_status in ('ACTIVE','PROBATION','NOTICE_PERIOD')`)
+  const mstat = (page, label) => page.locator('.uk-mstat').filter({ has: page.locator('.uk-mstat__label', { hasText: new RegExp(`^${label}$`) }) }).locator('.uk-mstat__value').first()
+
+  try {
+    // ── owner, light, 1440: Reports center ──
+    const o = await ui('owner@unifiedtree.demo')
+    await o.page.goto(`${base}/hrms/reports?co=${company}`); await settle(o.page)
+    check('center: page title "Reports"', (await o.page.getByRole('heading', { name: 'Reports', exact: true }).count()) === 1)
+    const heroHead = await o.page.locator('.rp-hero [data-hero="Headcount"] .rp-hero__v').innerText().catch(() => '')
+    check('center: hero headcount = SQL', heroHead === fmt(employed), `hero ${heroHead}, sql ${employed}`)
+    check('center: hero shows the change this month, attrition and women', (await o.page.locator('.rp-hero [data-hero="Headcount"] .rp-hero__d').innerText().catch(() => '')).includes('this month')
+      && (await o.page.locator('.rp-hero [data-hero="Attrition"]').count()) === 1 && (await o.page.locator('.rp-hero [data-hero="Women"] .rp-hero__d').innerText().catch(() => '')).includes('since'))
+    check('center: six report tiles, each with its live chart', (await o.page.locator('.rp-tile').count()) === 6
+      && (await o.page.locator('.rp-tile').evaluateAll((els) => els.every((e) => e.querySelector('[role="img"], .rp-mini-empty')))), String(await o.page.locator('.rp-tile').count()))
+    check('center: tiles say Live', (await o.page.locator('.rp-tile').filter({ hasText: 'Live' }).count()) === 6)
+    await o.page.getByRole('tab', { name: /^Time/ }).click()
+    check('center: Time shows the three time reports', (await o.page.locator('.rp-tile').count()) === 3 && (await o.page.getByText('3 of 6 reports').count()) === 1)
+    await o.page.getByRole('tab', { name: /^All/ }).click()
+    await shot(o.page, 'center-light-1440')
+    // A schedule set up and deleted in the panel.
+    await o.page.getByRole('button', { name: 'Schedule', exact: true }).click()
+    const panel = o.page.getByRole('dialog', { name: 'New scheduled email' })
+    await panel.waitFor({ timeout: 10_000 })
+    await panel.getByLabel('Report').selectOption('headcount')
+    await panel.getByLabel('How often').selectOption('WEEKDAYS')
+    await panel.getByLabel('Send at').selectOption('11')
+    await panel.locator('label.rp-people__row', { hasText: 'hrm@unifiedtree.demo' }).locator('input').check()
+    await shot(o.page, 'schedule-panel-light-1440')
+    await panel.getByRole('button', { name: 'Save' }).click()
+    const row = o.page.locator('.rp-sched', { hasText: 'Every weekday, 11:00' })
+    const made = await row.first().waitFor({ timeout: 10_000 }).then(() => true, () => false)
+    check('center: a weekday email at 11:00 is set up in the panel', made && num(`select count(*) from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}' and frequency='WEEKDAYS' and send_hour=11`) === 1)
+    for (const id of sql(`select id from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}'`).split('\n').filter(Boolean)) fx.schedules.push(id)
+    await row.first().getByRole('button', { name: /More actions for the headcount/ }).click()
+    await o.page.getByRole('menuitem', { name: /Delete/ }).click()
+    const confirm = o.page.getByRole('dialog', { name: 'Delete this scheduled email?' })
+    await confirm.getByRole('button', { name: 'Delete' }).click()
+    await row.first().waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {})
+    check('center: the email is deleted from the row menu', (await row.count()) === 0 && num(`select count(*) from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}'`) === 0)
+    await o.page.getByRole('button', { name: 'Attrition report' }).click()
+    await o.page.waitForURL((u) => u.pathname === '/hrms/reports/attrition', { timeout: 15_000 }).catch(() => {})
+    check('center: a tile opens its report on the same company', new URL(o.page.url()).searchParams.get('co') === company)
+    clean(o, 'center (owner)')
+
+    // ── the six report pages ──
+    for (const [key, title, table] of [['headcount', 'Headcount report', 'Departments'], ['attrition', 'Attrition report', 'Months'], ['diversity', 'Diversity report', 'By department'],
+      ['attendance-summary', 'Attendance summary', 'People'], ['late-marks', 'Late marks report', 'Late marks'], ['leave-balance', 'Leave balance report', 'Balances']]) {
+      await o.page.goto(`${base}/hrms/reports/${key}?co=${company}`); await settle(o.page)
+      const ok = (await o.page.getByRole('heading', { name: title, exact: true }).count()) === 1
+      const empty = (await o.page.getByText('No data for this period').count()) > 0
+      check(`${key}: renders on the kit${empty ? ' (no data in range)' : ''}`, ok && (empty || (await o.page.getByRole('table', { name: table }).count()) === 1))
+      if (key === 'headcount') check('headcount page: total = SQL', (await mstat(o.page, 'Total headcount').innerText()).trim() === fmt(employed))
+      await shot(o.page, `report-${key}-light-1440`)
+      clean(o, key)
+    }
+
+    // ── Workforce analytics ──
+    await o.page.goto(`${base}/hrms/workforce-analytics?co=${company}`); await settle(o.page)
+    check('analytics: Headcount is the first view', (await o.page.getByRole('tab', { name: 'Headcount', selected: true }).count()) === 1)
+    check('analytics: headcount = SQL', (await mstat(o.page, 'Headcount').innerText()).trim() === fmt(employed))
+    const trendLi = o.page.locator('figure[aria-label="Headcount · last 6 months"] li')
+    check('analytics: six-month trend ends on today’s headcount', (await trendLi.count()) === 6 && (await trendLi.last().innerText()).includes(`: ${employed} people`), await trendLi.last().innerText().catch(() => ''))
+    await o.page.getByRole('button', { name: 'Download' }).click()
+    const [x1] = await Promise.all([o.page.waitForEvent('download', { timeout: 20_000 }), o.page.getByRole('menuitem', { name: /Headcount workbook/ }).click()])
+    check('analytics: headcount workbook downloads', x1.suggestedFilename().endsWith('.xlsx'), x1.suggestedFilename())
+    await shot(o.page, 'wfa-headcount-light-1440')
+    await o.page.getByRole('tab', { name: 'Attrition' }).click(); await settle(o.page)
+    check('analytics: the view is in the URL (?tab=attrition)', new URL(o.page.url()).searchParams.get('tab') === 'attrition')
+    check('analytics: period is this financial year', (await o.page.getByLabel('Period').inputValue()) === 'fy')
+    const exitsLi = o.page.locator('figure[aria-label="Exits per month"] li')
+    check('analytics: this month’s exits = SQL', (await exitsLi.last().innerText()).endsWith(`: ${exitsThisMonth} exits`), await exitsLi.last().innerText().catch(() => ''))
+    await o.page.getByRole('button', { name: 'Download' }).click()
+    const [x2] = await Promise.all([o.page.waitForEvent('download', { timeout: 20_000 }), o.page.getByRole('menuitem', { name: /Raw rows/ }).click()])
+    check('analytics: attrition raw CSV downloads from the server', x2.suggestedFilename().startsWith('attrition-') && x2.suggestedFilename().endsWith('.csv'), x2.suggestedFilename())
+    await shot(o.page, 'wfa-attrition-light-1440')
+    await o.page.getByRole('tab', { name: 'Diversity' }).click(); await settle(o.page)
+    check('analytics: diversity counts everyone currently employed', (await o.page.getByText(`${fmt(divNow)} people`, { exact: true }).count()) > 0, `sql ${divNow}`)
+    await o.page.getByRole('button', { name: 'Download' }).click()
+    const [x3] = await Promise.all([o.page.waitForEvent('download', { timeout: 20_000 }), o.page.getByRole('menuitem', { name: /Dashboard snapshot/ }).click()])
+    check('analytics: dashboard snapshot PDF downloads', x3.suggestedFilename().endsWith('.pdf'), x3.suggestedFilename())
+    await shot(o.page, 'wfa-diversity-light-1440')
+    clean(o, 'analytics (owner)')
+    await o.ctx.close()
+
+    // ── dark ──
+    const dk = await ui('owner@unifiedtree.demo', { theme: 'dark' })
+    for (const [p, name] of [[`/hrms/reports?co=${company}`, 'center'], [`/hrms/workforce-analytics?co=${company}&tab=headcount`, 'wfa-headcount'], [`/hrms/workforce-analytics?co=${company}&tab=attrition`, 'wfa-attrition'],
+      [`/hrms/workforce-analytics?co=${company}&tab=diversity`, 'wfa-diversity'], [`/hrms/reports/headcount?co=${company}`, 'report-headcount']]) {
+      await dk.page.goto(base + p); await settle(dk.page)
+      const dark = await dk.page.evaluate(() => {
+        const el = document.querySelector('.rp-page .ut-card, .rp-page section') || document.body
+        const [r, g, b] = (getComputedStyle(el).backgroundColor.match(/\d+/g) || [255, 255, 255]).map(Number)
+        return document.documentElement.getAttribute('data-theme') === 'dark' && (0.2126 * r + 0.7152 * g + 0.0722 * b) < 80
+      })
+      check(`dark ${name}: cards are dark`, dark)
+      await shot(dk.page, `${name}-dark-1440`)
+    }
+    clean(dk, 'dark')
+    await dk.ctx.close()
+
+    // ── phones ──
+    for (const theme of ['light', 'dark']) {
+      const m = await ui('owner@unifiedtree.demo', { width: 390, theme })
+      for (const [p, name] of [[`/hrms/reports?co=${company}`, 'center'], [`/hrms/workforce-analytics?co=${company}&tab=headcount`, 'wfa-headcount'], [`/hrms/workforce-analytics?co=${company}&tab=attrition`, 'wfa-attrition'],
+        [`/hrms/workforce-analytics?co=${company}&tab=diversity`, 'wfa-diversity'], [`/hrms/reports/leave-balance?co=${company}`, 'report-leave-balance'], [`/hrms/reports/late-marks?co=${company}`, 'report-late-marks']]) {
+        await m.page.goto(base + p); await settle(m.page)
+        const over = await noSideways(m.page)
+        check(`390 ${theme} ${name}: no sideways scroll`, over <= 1, `overflow=${over}`)
+        await shot(m.page, `${name}-${theme}-390`)
+      }
+      clean(m, `390 ${theme}`)
+      await m.ctx.close()
+    }
+
+    // ── roles ──
+    const f = await ui('fin@unifiedtree.demo')
+    await f.page.goto(`${base}/hrms/reports?co=${company}`); await settle(f.page)
+    check('fin: six tiles and the hero, no scheduled reports (no schedule permission)', (await f.page.locator('.rp-tile').count()) === 6 && (await f.page.locator('.rp-hero').count()) === 1
+      && (await f.page.getByRole('heading', { name: 'Scheduled reports' }).count()) === 0 && (await f.page.getByRole('button', { name: /^Scheduled/ }).count()) === 0)
+    await f.page.goto(`${base}/hrms/workforce-analytics?co=${company}`); await settle(f.page)
+    check('fin: all three analytics views', (await f.page.getByRole('tab').filter({ hasText: /^(Headcount|Attrition|Diversity)$/ }).count()) === 3)
+    clean(f, 'fin')
+    await f.ctx.close()
+    const c = await ui(fxEmail)
+    await c.page.goto(`${base}/hrms/reports?co=${company}`); await settle(c.page)
+    const titles = await c.page.locator('.rp-tile .rp-tile__title').allInnerTexts()
+    check('custom role: only Headcount, Attendance summary and Late marks tiles', titles.join('|') === 'Headcount|Attendance summary|Late marks', titles.join('|'))
+    check('custom role: hero shows headcount only', (await c.page.locator('.rp-hero [data-hero]').count()) === 1 && (await c.page.locator('.rp-hero [data-hero="Headcount"]').count()) === 1)
+    check('custom role: no attrition, diversity or leave figures were fetched', !c.calls.some((u) => /\/v1\/reports\/(attrition|diversity|leave-balance)/.test(u)), c.calls.filter((u) => /attrition|diversity|leave/.test(u)).join(' '))
+    await c.page.goto(`${base}/hrms/workforce-analytics?co=${company}&tab=diversity`); await settle(c.page)
+    check('custom role: analytics shows only Headcount (a diversity link falls back to it)', (await c.page.getByRole('tab').filter({ hasText: /^(Headcount|Attrition|Diversity)$/ }).count()) === 1
+      && (await c.page.getByRole('tab', { name: 'Headcount', selected: true }).count()) === 1)
+    await shot(c.page, 'wfa-custom-role-light-1440')
+    clean(c, 'custom role')
+    await c.ctx.close()
+    for (const who of ['mgr@unifiedtree.demo', 'reader@unifiedtree.demo']) {
+      const s = await ui(who)
+      for (const p of ['/hrms/reports', '/hrms/workforce-analytics', '/hrms/reports/headcount']) {
+        await s.page.goto(base + p); await settle(s.page)
+        check(`${who.split('@')[0]}: ${p} stays closed`, (await s.page.getByRole('heading', { name: /^(Reports|Workforce analytics|Headcount report)$/ }).count()) === 0)
+      }
+      check(`${who.split('@')[0]}: no report API was called`, !s.calls.some((u) => u.startsWith('/v1/reports/')), s.calls.filter((u) => u.startsWith('/v1/reports/')).join(' '))
+      await s.ctx.close()
+    }
+  } finally {
+    await browser.close()
+  }
 }
 
 try {
+  makeCustomRole()
   if (phase === 'api' || phase === 'all') await apiPhase()
   if (phase === 'ui' || phase === 'all') await uiPhase()
 } catch (e) {
