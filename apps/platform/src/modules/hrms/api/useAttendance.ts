@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import type { PageResponse } from './useWorkforce'
+import { SHARED_KEYS } from './shared/contracts'
 
 export interface AttendanceDto {
   id: string
@@ -462,7 +463,12 @@ export function useDecideCorrection() {
         method: 'POST',
         body: JSON.stringify({ status, comment }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance'] }),
+    // The decision can be taken back (Undo, BW-06) and leaves the approvals inbox (C0 rule).
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['hrms', 'attendance'] }),
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions }),
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox }),
+    ]),
   })
 }
 

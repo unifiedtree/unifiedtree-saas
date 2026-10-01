@@ -98,17 +98,20 @@ const readerHadEnrollment = sql(`select count(*) from attendance.face_enrollment
 const hrConfigRows = sql(`select count(*) from settings.hr_configuration where tenant_id='${tenant}' and company_id='${company}'`)
 const webWas = hrConfigRows === '0' ? null : sql(`select allow_web_punch from settings.hr_configuration where tenant_id='${tenant}' and company_id='${company}'`)
 const monday = sql(`select date_trunc('week', '${today}'::date)::date::text`)
-const freeDay = (ids, fromBack, toBack) => {
+const freeDay = (ids, fromBack, toBack, openPayrollOnly = false) => {
   for (let back = fromBack; back < toBack; back++) {
     const d = sql(`select ('${today}'::date - ${back})::text`)
     if (Number(sql(`select extract(isodow from '${d}'::date)`)) >= 6) continue
+    // Undo is refused once payroll is locked or paid for the day's month (DECISIONS 15).
+    if (openPayrollOnly && sql(`select count(*) from payroll.runs where tenant_id='${tenant}' and period_year = extract(year from '${d}'::date)
+        and period_month = extract(month from '${d}'::date) and status in ('LOCKED','PAID')`) !== '0') continue
     if (sql(`select count(*) from attendance.records where employee_id in (${ids.map((i) => `'${i}'`).join(',')}) and attendance_date='${d}'`) === '0'
       && sql(`select count(*) from attendance.regularization_requests where employee_id in (${ids.map((i) => `'${i}'`).join(',')}) and missing_for_date='${d}'`) === '0') return d
   }
   return null
 }
 const bulkDay = freeDay([FIN], 20, 60)
-const fixDay = freeDay([READER], 2, 9)
+const fixDay = freeDay([READER], 1, 45, true)
 let createdEnrollment = false
 const fixReason = `RD att-day UI check ${Date.now() % 100000}`
 const timeNote = `RD att-day timesheet ${Date.now() % 100000}`
