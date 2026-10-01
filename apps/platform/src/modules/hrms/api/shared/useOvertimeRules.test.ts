@@ -4,7 +4,7 @@ import type { OvertimeRules } from './contracts'
 import { answers, expectSharedMapping, fakeApi, spyQueryClient } from './testing'
 
 const CO = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-const rules: OvertimeRules = { companyId: CO, countsAfterMinutes: 30, monthlyCapMinutes: 2400, updatedByName: 'Owner', updatedAt: '2026-09-27T04:00:00Z' }
+const rules: OvertimeRules = { companyId: CO, minimumMinutes: 60, minimumIsDefault: true, defaultMinimumMinutes: 60, monthlyCapMinutes: 2400, updatedByName: 'Owner', updatedAt: '2026-09-27T04:00:00Z' }
 
 describe('useOvertimeRules (BW-29)', () => {
   it('reads one company\'s rules', async () => {
@@ -19,22 +19,22 @@ describe('useOvertimeRules (BW-29)', () => {
     const { api, calls } = fakeApi(() => rules)
     const { qc, invalidated } = spyQueryClient()
     const m = saveOvertimeRulesMutation(qc, CO, api)
-    const body = { countsAfterMinutes: 30, monthlyCapMinutes: 2400 }
+    const body = { minimumMinutes: 90, monthlyCapMinutes: 2400 }
     const r = await m.mutationFn(body)
     expect(calls[0]).toEqual({ path: `/v1/attendance/overtime-rules?companyId=${CO}`, method: 'PUT', body })
     await m.onSuccess?.(r, body)
     expect(qc.getQueryData(['attendance', 'overtime-rules', CO])).toEqual({ available: true, value: rules })
     expect(invalidated).toEqual([['attendance', 'overtime']])
-    await m.mutationFn({ countsAfterMinutes: null, monthlyCapMinutes: null })
-    expect(calls[1].body).toEqual({ countsAfterMinutes: null, monthlyCapMinutes: null })
+    await m.mutationFn({ minimumMinutes: null, monthlyCapMinutes: null })
+    expect(calls[1].body).toEqual({ minimumMinutes: null, monthlyCapMinutes: null })
   })
 
   it('is not available while the table is missing; a bad value stays an error', async () => {
     const { qc } = spyQueryClient()
     await expectSharedMapping((api) => overtimeRulesQuery(CO, api).queryFn())
-    await expectSharedMapping((api) => saveOvertimeRulesMutation(qc, CO, api).mutationFn({ countsAfterMinutes: 30, monthlyCapMinutes: null }))
+    await expectSharedMapping((api) => saveOvertimeRulesMutation(qc, CO, api).mutationFn({ minimumMinutes: 30, monthlyCapMinutes: null }))
     const bad = answers.refused('VALIDATION_FAILED', 'Minutes can’t be negative.')
-    await expect(saveOvertimeRulesMutation(qc, CO, fakeApi(() => { throw bad }).api).mutationFn({ countsAfterMinutes: -5, monthlyCapMinutes: null }))
+    await expect(saveOvertimeRulesMutation(qc, CO, fakeApi(() => { throw bad }).api).mutationFn({ minimumMinutes: -5, monthlyCapMinutes: null }))
       .rejects.toBe(bad)
   })
 })

@@ -1,13 +1,13 @@
-// A company's overtime rules: when extra time starts to count, and a monthly cap.
+// A company's overtime rules: the minimum overtime (a threshold, 1 hour by default) and a monthly cap.
 //
 // Contract C0 · BW-29 · owner P-ATT-PLAN (migration V143_54, attendance.overtime_rules)
 //   GET /v1/attendance/overtime-rules?companyId=   → OvertimeRules
 //       Permission: attendance.team.read.
-//   PUT /v1/attendance/overtime-rules?companyId=  { countsAfterMinutes, monthlyCapMinutes }   → OvertimeRules
+//   PUT /v1/attendance/overtime-rules?companyId=  { minimumMinutes, monthlyCapMinutes }   → OvertimeRules
 //       Permission: attendance.policy.manage.
-//   No row gives nulls, which is today's behaviour exactly. The Overtime list
-//   and its approve/reject apply the rules (minutes count only past
-//   countsAfter; approval stops at the cap). Stored overtime minutes and work
+//   No row gives the default minimum (60) and no cap. The Overtime list and its
+//   approve/reject apply the rules (extra time under the minimum doesn't count;
+//   from the minimum on, all of it does; approval stops at the cap). Stored overtime minutes and work
 //   hours never change, and overtime is still recorded, not paid.
 //   Not available: 404 until P-ATT-PLAN ships it; 503 FEATURE_NOT_READY while
 //   the table is missing (hide the card and the HR configuration section).

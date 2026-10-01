@@ -221,13 +221,17 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
   it('a page or tab of a package not shipped yet stays out of the app (READY_PAGES)', () => {
     const pending = ALL_PAGE_ENTRIES.filter((e) => e.pkg && !READY_PAGES.has(e.pkg)).map((e) => e.id)
     for (const id of pending) expect(PAGE_REGISTRY.some((e) => e.id === id), id).toBe(false)
-    // My team (P-TEAM) has shipped; the other packages' new tabs are still out, today's pages are all in.
-    expect([...READY_PAGES]).toEqual(['P-TEAM'])
-    expect(pending.sort()).toEqual(['att-analytics:punctuality', 'att-daily:timesheet', 'exit:exited', 'exit:notice', 'exit:terminated', 'leave:all-balances',
+    // My team (P-TEAM) and Attendance analytics / Shifts (P-ATT-PLAN) have shipped; the other packages' new tabs are still out.
+    expect([...READY_PAGES]).toEqual(['P-TEAM', 'P-ATT-PLAN'])
+    expect(pending.sort()).toEqual(['att-daily:timesheet', 'exit:exited', 'exit:notice', 'exit:terminated', 'leave:all-balances',
       'workforce-analytics:attrition', 'workforce-analytics:diversity', 'workforce-analytics:headcount'])
     expect(PAGE_REGISTRY.length + pending.length).toBe(ALL_PAGE_ENTRIES.length)
     const hr = ids(ctx([...HR_MANAGER, 'hrms.leave.employee.read']))
-    expect(hr.has('leave:all-balances') || hr.has('att-analytics:punctuality') || hr.has('exit:notice')).toBe(false)
+    expect(hr.has('leave:all-balances') || hr.has('exit:notice')).toBe(false)
+    // Punctuality (P-ATT-PLAN) is live for whoever reads the team's attendance, and only for them.
+    expect(hr.has('att-analytics:punctuality')).toBe(true)
+    expect(ids(ctx(DEPT_MANAGER)).has('att-analytics:punctuality')).toBe(true)
+    expect(ids(ctx(EMPLOYEE)).has('att-analytics:punctuality')).toBe(false)
     // The shipped package's views are live: Team schedule and Approvals for a department manager.
     expect(ids(ctx(DEPT_MANAGER)).has('team:approvals') && ids(ctx(DEPT_MANAGER)).has('team:schedule')).toBe(true)
     expect(ids(ctx(EMPLOYEE)).has('team:approvals')).toBe(false)
