@@ -11,31 +11,91 @@ import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   inr, useAdvance, useAdvanceDecision, useAdvanceRecovery, useAdvanceRecoveryAction, useCompanyAdvances, useDisburseAdvance,
-  type AdvanceRequest, type AdvanceStatus, type RecoveryAction,
+  useAdvancesSummary,
+  type AdvanceRequest, type AdvanceStatus, type RecoveryAction, type AdvancePhase, type DisburseBody,
 } from '../api/useAdvance'
+import { useDepartments } from '../api/useOrg'
 
 export const ADVANCE_STATUS_TONE: Record<AdvanceStatus, PillTone> = {
   REQUESTED: 'warn', APPROVED: 'ok', REJECTED: 'red', DISBURSED: 'teal', CLOSED: 'gray',
 }
 const date = (value?: string, pattern = 'd MMM yyyy') => value ? format(new Date(value.length === 10 ? `${value}T00:00:00` : value), pattern) : '—'
 const statusLabel = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
+
+/**
+ * Readable ledger labels (BW-62). The server's entry types are DB enums; the
+ * design shows "Disbursed · NEFT HDFCN2605050021", "Recovered · May payroll"
+ * and similar — the entry type plus the attached reference. Fall back to a
+ * humanised statusLabel for any new type we don't yet have copy for.
+ */
+export const LEDGER_LABELS: Record<string, string> = {
+  DISBURSED: 'Disbursed',
+  RECOVERED: 'Recovered',
+  SKIP_MONTH: 'Deferred',
+  FORECLOSE: 'Closed early',
+  WRITE_OFF: 'Written off',
+  REPAID: 'Repaid',
+}
+export function ledgerLabel(entryType: string) {
+  return LEDGER_LABELS[entryType] || statusLabel(entryType)
+}
 export const advanceLabel = (advance: AdvanceRequest) => advance.status === 'DISBURSED' && Number(advance.outstandingAmount) === 0 ? 'Repaid' : statusLabel(advance.status)
 
-export function AdvanceAdmin({ companyWide }: { companyWide: boolean }) {
+export function AdvanceAdmin({ companyWide, companyId }: { companyWide: boolean; companyId?: string }) {
   const [page, setPage] = useState(0)
+  // Status (REQUESTED/APPROVED/DISBURSED/CLOSED/REJECTED) and phase
+  // (RECOVERING/REPAID) are separate server filters (BW-62): a status narrows
+  // the lifecycle; a phase narrows DISBURSED into "still being recovered" or
+  // "fully repaid". A department scopes rows to that department.
   const [status, setStatus] = useState<AdvanceStatus | ''>('')
+  const [phase, setPhase] = useState<AdvancePhase | ''>('')
+  const [departmentId, setDepartmentId] = useState<string>('')
   const [selected, setSelected] = useState<string>()
-  const query = useCompanyAdvances(page, status || undefined)
+  const departments = useDepartments(companyId || '')
+  const query = useCompanyAdvances(page, {
+    status: status || undefined,
+    phase: phase || undefined,
+    departmentId: departmentId || undefined,
+  })
+  const summary = useAdvancesSummary(companyWide)
+  const s = summary.data
   useClampedPage(page, query.data?.totalPages, setPage)
   const rows = query.data?.content ?? []
+  const resetPage = () => setPage(0)
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-base font-semibold text-text-primary">{companyWide ? 'Company advances' : 'Assigned advances'}</h2>
         <p className="mt-1 text-sm text-text-secondary">{companyWide ? 'Track each request from approval to its final recovery.' : 'Requests routed to you, including completed requests.'}</p></div>
-      <label className="flex items-center gap-2 text-sm text-text-secondary">Status
-        <select aria-label="Advance status" className="ut-select min-w-[170px]" value={status} onChange={e => { setStatus(e.target.value as AdvanceStatus | ''); setPage(0) }}>
+    </div>
+    {companyWide && s && (
+      <div role="group" aria-label="Advances summary" style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,200px),1fr))' }}>
+        <SummaryTile label="Requested" value={String(s.requested.count)} sub={`${inr(s.requested.amount)} waiting for a decision`} tone="warn" />
+        <SummaryTile label="Not disbursed" value={String(s.approvedNotDisbursed.count)} sub={`${inr(s.approvedNotDisbursed.amount)} approved, not paid`} tone="info" />
+        <SummaryTile label="Still to repay" value={inr(s.outstanding)} sub={`${s.recoveringPeople} ${s.recoveringPeople === 1 ? 'person' : 'people'} · recovered in payroll`} tone="ok" />
+        <SummaryTile label={`Repaid in ${s.financialYear}`} value={inr(s.repaidThisFinancialYear)} sub="This financial year" tone="gray" />
+      </div>
+    )}
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="flex flex-col gap-1 text-xs text-text-secondary">Status
+        <select aria-label="Advance status" className="ut-select min-w-[170px]" value={status} onChange={e => { setStatus(e.target.value as AdvanceStatus | ''); resetPage() }}>
           <option value="">All statuses</option>{Object.keys(ADVANCE_STATUS_TONE).map(s => <option key={s} value={s}>{s === 'DISBURSED' ? 'Disbursed / repaid' : statusLabel(s)}</option>)}
-        </select></label>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-text-secondary">Phase
+        <select aria-label="Advance phase" className="ut-select min-w-[170px]" value={phase} onChange={e => { setPhase(e.target.value as AdvancePhase | ''); resetPage() }}>
+          <option value="">All phases</option>
+          <option value="RECOVERING">Recovering</option>
+          <option value="REPAID">Repaid</option>
+        </select>
+      </label>
+      {companyId && (
+        <label className="flex flex-col gap-1 text-xs text-text-secondary">Department
+          <select aria-label="Department" className="ut-select min-w-[170px]" value={departmentId} onChange={e => { setDepartmentId(e.target.value); resetPage() }}>
+            <option value="">All departments</option>
+            {departments.data?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </label>
+      )}
     </div>
     {query.isError ? <AdvanceError message="Unable to load advances." retry={() => query.refetch()} /> : <TableCard
       footer={query.data && hrPaginationFooter({ page, pageSize: 20, totalElements: query.data.totalElements, totalPages: query.data.totalPages, onPageChange: setPage })}>
@@ -58,17 +118,42 @@ export function AdvanceError({ message, retry }: { message: string; retry: () =>
   return <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{message} <button className="ml-2 font-semibold underline" onClick={retry}>Try again</button></div>
 }
 
+/**
+ * One tile of the company advances summary — plain, token-safe, dark-mode
+ * friendly. The design's StatRow has colour tones per card; we use quiet tones
+ * so this row sits above the filters without competing with the status pills.
+ */
+function SummaryTile({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: 'warn' | 'info' | 'ok' | 'gray' }) {
+  const dot = tone === 'warn' ? 'var(--u-gdt,#8A5A10)' : tone === 'info' ? 'var(--u-brt,#0F6E56)' : tone === 'ok' ? 'var(--u-br,#0F6E56)' : 'var(--u-ink3,#6A7A73)'
+  return (
+    <div style={{ background: 'var(--u-sf,#fff)', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 14, padding: 14, display: 'grid', gap: 4 }}>
+      <span style={{ fontSize: 12, color: 'var(--u-ink3,#6A7A73)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span aria-hidden="true" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: dot }} />
+        {label}
+      </span>
+      <strong style={{ fontSize: 20, fontWeight: 600, color: 'var(--u-ink,#0E1B16)', fontVariantNumeric: 'tabular-nums' }}>{value}</strong>
+      <span style={{ fontSize: 12, color: 'var(--u-ink3,#6A7A73)' }}>{sub}</span>
+    </div>
+  )
+}
+
 export function AdvanceDecisionActions({ advance }: { advance: AdvanceRequest }) {
   const canApprove = usePermission('hrms.advance.approve')
   const canDisburse = usePermission('hrms.advance.disburse')
   let employeeId: string | undefined
   try { employeeId = jwtDecode<{ employee_id?: string }>(getAccessToken() || '').employee_id } catch { /* Server retains the identity check. */ }
   const { toast } = useToast()
-  const confirm = useConfirmDialog()
   const decide = useAdvanceDecision()
   const disburse = useDisburseAdvance()
   const [rejecting, setRejecting] = useState(false)
+  const [disbursing, setDisbursing] = useState(false)
   const [comment, setComment] = useState('')
+  // The server defaults the first deduction month to the one after payout
+  // (AdvanceController.firstDeductionMonth). The drawer lets finance pick a
+  // later start — up to eleven months ahead — along with the payment reference
+  // the ledger shows.
+  const [paymentReference, setPaymentReference] = useState('')
+  const [firstDeductionMonth, setFirstDeductionMonth] = useState('')
   const isOwn = employeeId === advance.employeeId
   const busy = decide.isPending || disburse.isPending
   const act = async (approved: boolean) => {
@@ -77,21 +162,47 @@ export function AdvanceDecisionActions({ advance }: { advance: AdvanceRequest })
       setRejecting(false); setComment(''); toast(approved ? 'Advance approved' : 'Advance rejected', 'success')
     } catch (e) { toast(e instanceof Error ? e.message : 'Unable to save decision', 'error') }
   }
-  const markDisbursed = async () => {
-    if (!await confirm({ title: `Record ${inr(advance.amount)} as disbursed?`, body: `Confirm the payment to ${advance.employeeName || 'this employee'} has already been made. This records the payment and starts recovery next month; it does not transfer money.`, confirmLabel: 'Record disbursement', tone: 'danger' })) return
-    try { await disburse.mutateAsync(advance.id); toast('Disbursement and recovery schedule saved', 'success') }
-    catch (e) { toast(e instanceof Error ? e.message : 'Unable to record disbursement', 'error') }
+  const openDisburse = () => { setPaymentReference(''); setFirstDeductionMonth(''); setDisbursing(true) }
+  const submitDisburse = async () => {
+    const body: DisburseBody = {
+      paymentReference: paymentReference.trim() || undefined,
+      firstDeductionMonth: firstDeductionMonth.trim() || null,
+    }
+    try {
+      await disburse.mutateAsync({ id: advance.id, body })
+      setDisbursing(false)
+      toast('Disbursement and recovery schedule saved', 'success')
+    } catch (e) { toast(e instanceof Error ? e.message : 'Unable to record disbursement', 'error') }
   }
   return <>
     <div className="flex flex-wrap items-center gap-2">
       {advance.status === 'REQUESTED' && canApprove && <><HrButton size="sm" disabled={busy || isOwn} onClick={() => act(true)}><Check size={14} />Approve</HrButton><HrButton size="sm" variant="ghost" disabled={busy || isOwn} onClick={() => setRejecting(true)}><X size={14} />Reject</HrButton></>}
-      {advance.status === 'APPROVED' && canDisburse && <HrButton size="sm" disabled={busy || isOwn} onClick={markDisbursed}><Banknote size={14} />Record disbursement</HrButton>}
+      {advance.status === 'APPROVED' && canDisburse && <HrButton size="sm" disabled={busy || isOwn} onClick={openDisburse}><Banknote size={14} />Record disbursement</HrButton>}
       {isOwn && ['REQUESTED', 'APPROVED'].includes(advance.status) && <p className="text-xs text-text-secondary">Another approver must process your request.</p>}
     </div>
     {rejecting && <HrDrawer title="Reject advance" onClose={() => { if (!busy) setRejecting(false) }} footer={<><HrButton variant="ghost" disabled={busy} onClick={() => setRejecting(false)}>Cancel</HrButton><HrButton disabled={busy} onClick={() => act(false)}>{busy ? 'Saving…' : 'Confirm rejection'}</HrButton></>}>
       <p className="mb-4 text-sm text-text-secondary">{advance.employeeName || 'Employee'} · {inr(advance.amount)}</p>
       <label className="text-sm font-medium">Reason (optional)<textarea className="ut-input mt-2" rows={4} maxLength={2000} value={comment} onChange={e => setComment(e.target.value)} /></label>
     </HrDrawer>}
+    {disbursing && (
+      <HrDrawer title={`Record ${inr(advance.amount)} as disbursed`}
+        onClose={() => { if (!busy) setDisbursing(false) }}
+        footer={<><HrButton variant="ghost" disabled={busy} onClick={() => setDisbursing(false)}>Cancel</HrButton><HrButton disabled={busy} onClick={submitDisburse}>{busy ? 'Saving…' : 'Record disbursement'}</HrButton></>}>
+        <p className="mb-4 text-sm text-text-secondary">{advance.employeeName || 'Employee'} · {advance.repaymentMonths} monthly installments. This records the payment; it does not transfer money.</p>
+        <div className="grid gap-4">
+          <label className="text-sm font-medium">Payment reference / UTR
+            <input className="ut-input mt-2" maxLength={100} value={paymentReference} onChange={e => setPaymentReference(e.target.value)}
+              placeholder="e.g. HDFCN2609100021" aria-describedby="advance-disburse-ref-hint" />
+            <span id="advance-disburse-ref-hint" className="mt-1 block text-xs text-text-secondary">Shows on the ledger beside the disbursement entry. Up to 100 characters, optional.</span>
+          </label>
+          <label className="text-sm font-medium">First deduction month
+            <input type="month" className="ut-input mt-2" value={firstDeductionMonth}
+              onChange={e => setFirstDeductionMonth(e.target.value)} aria-describedby="advance-first-month-hint" />
+            <span id="advance-first-month-hint" className="mt-1 block text-xs text-text-secondary">Leave blank to recover from the month after payout. Up to eleven months ahead.</span>
+          </label>
+        </div>
+      </HrDrawer>
+    )}
   </>
 }
 
@@ -152,6 +263,6 @@ function RecoveryDetails({ advance }: { advance: AdvanceRequest }) {
       {mutate.isError && <p role="alert" className="text-sm text-danger">{mutate.error instanceof Error ? mutate.error.message : 'Unable to save recovery action.'}</p>}
       <div className="flex gap-2"><HrButton disabled={!reason.trim() || mutate.isPending} onClick={submit}>{mutate.isPending ? 'Saving…' : 'Review and confirm'}</HrButton><HrButton variant="ghost" disabled={mutate.isPending} onClick={() => setAction(undefined)}>Cancel</HrButton></div>
     </div>}
-    <div><h4 className="mb-3 font-semibold">Payment and recovery history</h4>{ledger.length === 0 ? <p className="text-sm text-text-secondary">No ledger entries yet.</p> : <ol className="divide-y divide-border-default rounded-lg border border-border-default">{ledger.map(row => <li key={row.id} className="p-4"><div className="flex flex-wrap justify-between gap-2"><span className="text-sm font-semibold">{statusLabel(row.entryType)}</span><span className="text-sm tabular-nums">{inr(row.amount)}</span></div><p className="mt-1 text-xs text-text-secondary">{date(row.createdAt, 'd MMM yyyy, h:mm a')} · Balance {inr(row.balanceAfter)}</p>{row.notes && <p className="mt-2 whitespace-pre-wrap text-sm">{row.notes}</p>}{row.payrollRunId && <p className="mt-1 break-all text-xs text-text-secondary">Payroll reference: {row.payrollRunId}</p>}</li>)}</ol>}</div>
+    <div><h4 className="mb-3 font-semibold">Payment and recovery history</h4>{ledger.length === 0 ? <p className="text-sm text-text-secondary">No ledger entries yet.</p> : <ol className="divide-y divide-border-default rounded-lg border border-border-default">{ledger.map(row => <li key={row.id} className="p-4"><div className="flex flex-wrap justify-between gap-2"><span className="text-sm font-semibold">{ledgerLabel(row.entryType)}{row.reference ? ` · ${row.reference}` : ''}</span><span className="text-sm tabular-nums">{inr(row.amount)}</span></div><p className="mt-1 text-xs text-text-secondary">{date(row.createdAt, 'd MMM yyyy, h:mm a')} · Balance {inr(row.balanceAfter)}</p>{row.notes && <p className="mt-2 whitespace-pre-wrap text-sm">{row.notes}</p>}{row.payrollRunId && <p className="mt-1 break-all text-xs text-text-secondary">Payroll reference: {row.payrollRunId}</p>}</li>)}</ol>}</div>
   </section>
 }

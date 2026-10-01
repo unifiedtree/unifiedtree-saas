@@ -99,12 +99,29 @@ export function useExpenseClaim(id: string | undefined) {
  */
 export const EXPENSE_APPROVALS_PAGE_SIZE = 20
 
-export function usePendingExpenseApprovals(page = 0, enabled = true, pageSize = EXPENSE_APPROVALS_PAGE_SIZE) {
+/**
+ * The approvals queue, optionally filtered to a single status.
+ *
+ * The backend accepts a comma-separated `status` parameter and limits it to
+ * SUBMITTED and APPROVED (BW-60); without it, both come back as before. We
+ * pass each status one at a time: the design shows "All waiting" (no filter),
+ * "Pending approval" (SUBMITTED only) and "To be paid" (APPROVED only).
+ */
+export type ExpenseApprovalFilter = 'ALL' | 'SUBMITTED' | 'APPROVED'
+
+export function usePendingExpenseApprovals(
+  page = 0,
+  enabled = true,
+  pageSize = EXPENSE_APPROVALS_PAGE_SIZE,
+  filter: ExpenseApprovalFilter = 'ALL',
+) {
+  const query = filter === 'ALL' ? '' : `&status=${filter}`
   return useQuery({
     // `page` is part of the key: without it react-query would hand page 2 the
-    // cached page-1 rows and the queue would never appear to advance.
-    queryKey: ['hrms', 'expense', 'approvals', page, pageSize],
-    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=${pageSize}`),
+    // cached page-1 rows and the queue would never appear to advance. The
+    // filter joins the key too, so switching tabs refetches cleanly.
+    queryKey: ['hrms', 'expense', 'approvals', page, pageSize, filter],
+    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=${pageSize}${query}`),
     staleTime: 15_000,
     enabled,
   })
@@ -125,6 +142,28 @@ export function useSubmitClaim() {
       apiJson<ExpenseClaim>('/v1/expense/claims', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
   })
+}
+
+/**
+ * HR / finance raise a claim in an employee's name
+ * (hrms.expense.claim.others). Same body as /claims, same category caps and
+ * approver chain; filed under the employee's own company. Mirrors
+ * useRequestAdvanceOnBehalf.
+ */
+export function useSubmitClaimOnBehalf() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ employeeId, ...data }: SubmitClaimPayload & { employeeId: string }) =>
+      apiJson<ExpenseClaim>(`/v1/expense/claims/for/${employeeId}`, { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
+  })
+}
+
+/** Upload a receipt against another employee while raising a claim for them. */
+export function uploadReceiptForEmployee(employeeId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return apiJson<StoredReceipt>(`/v1/expense/receipts/for/${employeeId}`, { method: 'POST', body })
 }
 
 // ── Receipts (V143.13) ─────────────────────────────────────────────────────
