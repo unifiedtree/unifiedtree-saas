@@ -133,7 +133,8 @@ export function EmployeeDetail() {
 
   const tabParam = params.get('tab') || 'overview'
   const setTab = (k: string) => { const n = new URLSearchParams(params); if (k === 'overview') n.delete('tab'); else n.set('tab', k); setParams(n, { replace: true }) }
-  const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/hrms/employees'))
+  // People who can't open the directory (a manager on their report) go back to where they came from, else My team.
+  const back = () => (window.history.length > 1 ? navigate(-1) : navigate(canRead ? '/hrms/employees' : '/team'))
 
   const view = useMemo(() => {
     if (!emp) return null
@@ -449,7 +450,7 @@ export function EmployeeDetail() {
     <>
       <ProfileFrame
         screenLabel="Employee profile"
-        back={{ label: 'Workforce directory', onClick: back }}
+        back={{ label: canRead ? 'Workforce directory' : 'Back', onClick: back }}
         avatar={{ name: v.name, src: emp.profilePhotoUrl, checkedIn: v.checkedIn }}
         name={v.name}
         status={{ label: v.stLabel, tone: v.stTone }}
