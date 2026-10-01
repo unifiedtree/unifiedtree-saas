@@ -18,12 +18,15 @@
 //
 //   node e2e/recovery/live-w2h.mjs
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8097/api'
 const db = process.env.RECOVERY_DB || 'unifiedtree_recovery'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
-const PSQL = `${process.env.LOCALAPPDATA}/UnifiedTreeRecovery/pgsql/bin/psql.exe`
+// The recovery bundle's psql when it is there, else the installed PostgreSQL (or PSQL=…).
+const PSQL_LOCAL = `${process.env.LOCALAPPDATA}/UnifiedTreeRecovery/pgsql/bin/psql.exe`
+const PSQL = process.env.PSQL || (existsSync(PSQL_LOCAL) ? PSQL_LOCAL : 'C:/Program Files/PostgreSQL/18/bin/psql.exe')
 const U = { owner: '66666666-6666-6666-6666-666666666666', admin: '11111111-1111-1111-1111-111111111111', hrm: '33333333-3333-3333-3333-333333333333', mgr: '44444444-4444-4444-4444-444444444444', fin: '55555555-5555-5555-5555-555555555555', reader: '22222222-2222-2222-2222-222222222222' }
 const sql = (q) => execFileSync(PSQL, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []

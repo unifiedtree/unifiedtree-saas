@@ -268,12 +268,12 @@ async function uiPhase() {
     const ctx = await browser.newContext({ viewport: { width, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce' })
     await ctx.addInitScript((t) => { try { localStorage.setItem('ut.theme', t) } catch { /* private mode */ } }, theme)
     const page = await ctx.newPage()
-    const errors = [], failed = [], calls = []
+    const errors = [], failed = [], calls = [], net = []
     page.on('pageerror', (e) => errors.push(String(e.message || e)))
     page.on('response', (r) => {
       const u = r.url()
       if (!u.includes('/api/')) return
-      calls.push(u.split('/api')[1])
+      calls.push(u.split('/api')[1]); net.push(`${r.request().method()} ${r.status()} ${u.split('/api')[1]}`)
       if (r.status() >= 400 && !u.includes('/canonical-auth/refresh')) failed.push(`${r.status()} ${r.request().method()} ${u.split('/api')[1]}`)
     })
     await page.goto(base + '/login')
@@ -282,7 +282,7 @@ async function uiPhase() {
     await page.locator('button[type=submit]').click()
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
     errors.length = 0; failed.length = 0; calls.length = 0
-    return { ctx, page, errors, failed, calls }
+    return { ctx, page, errors, failed, calls, net }
   }
   const settle = async (page) => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(700) }
   const shot = async (page, name) => { if (shots) await page.screenshot({ path: `${shots}/rd-p-reports-${name}.png`, fullPage: true }) }
@@ -340,7 +340,11 @@ async function uiPhase() {
     ])
     await row.first().waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {})
     await confirm.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {})
-    if ((await row.count()) > 0) await shot(o.page, 'debug-delete-failed')
+    if ((await row.count()) > 0) {
+      await shot(o.page, 'debug-delete-failed')
+      console.log('debug: schedule calls', o.net.filter((u) => u.includes('/schedules')).join(' | '), '· failed', o.failed.join(' | '),
+        '· toasts', (await o.page.locator('[role="status"], [role="alert"]').allInnerTexts()).join(' / ').slice(0, 300))
+    }
     check('center: the email is deleted from the row menu', (await row.count()) === 0 && num(`select count(*) from hrms.report_schedules where tenant_id='${tenant}' and created_by='${ownerUser}' and created_at >= '${started}'`) === 0)
     await o.page.getByRole('button', { name: 'Attrition report' }).click()
     await o.page.waitForURL((u) => u.pathname === '/hrms/reports/attrition', { timeout: 15_000 }).catch(() => {})
