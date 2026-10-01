@@ -1,3 +1,4 @@
+/* global console, process */
 // Live check of the Master data design against the local API.
 //
 //   node e2e/recovery/live-design-master.mjs

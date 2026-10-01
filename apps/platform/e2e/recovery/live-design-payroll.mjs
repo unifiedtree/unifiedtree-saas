@@ -1,3 +1,4 @@
+/* global console, process */
 // Live check of the redesigned Payroll module against the local API.
 //
 //   node e2e/recovery/live-design-payroll.mjs

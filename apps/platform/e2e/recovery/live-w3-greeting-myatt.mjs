@@ -1,3 +1,4 @@
+/* global URL, console, document, process, window */
 // Wave 3 — greeting name rule + no "My Attendance" for owners and admins.
 // Browser acceptance against a running backend + web app:
 //  - Owner (OWNER) and admin@ (SUPER_ADMIN): Daily Tracking has no My Attendance
