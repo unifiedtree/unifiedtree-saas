@@ -782,7 +782,7 @@ public class WorkforceEmployeeService {
                        SELECT MAX((regexp_replace(e.employee_code, '^' || cfg.employee_code_prefix || '-', ''))::bigint)
                          FROM hrms.employees e
                         WHERE e.company_id = cfg.company_id
-                          AND e.employee_code ~ ('^' || cfg.employee_code_prefix || '-[0-9]+$')
+                          AND e.employee_code ~ ('^' || cfg.employee_code_prefix || '-[0-9]{1,18}$')
                      ), 0) + 1
                    )
                  WHERE cfg.company_id = ?

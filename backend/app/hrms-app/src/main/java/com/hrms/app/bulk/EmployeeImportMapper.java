@@ -56,6 +56,14 @@ public final class EmployeeImportMapper {
     static final Pattern ACCOUNT = Pattern.compile("^\\d{9,18}$");
     static final Pattern IFSC = Pattern.compile("^[A-Z]{4}0[A-Z\\d]{6}$");
 
+    /**
+     * An employee code ending in more than 18 digits. The employee-code counter casts that tail to
+     * bigint (HrConfigurationService.previewNextEmployeeCode, WorkforceEmployeeService.incrementAndFetch),
+     * which stops at 19 digits, so importing one used to make the whole company's Add employee page
+     * answer 500. Refused at import instead.
+     */
+    static final Pattern LONG_NUMERIC_TAIL = Pattern.compile(".*?[0-9]{19,}$");
+
     /** A person a row may report to. */
     public record Manager(UUID id, String code, String email) {}
 
@@ -182,6 +190,11 @@ public final class EmployeeImportMapper {
         if (code != null) {
             String k = code.toLowerCase(Locale.ROOT);
             if (code.length() > 50) row.addProblem("employee_code", "employee_code is longer than 50 characters");
+            // A numeric tail longer than 18 digits overflows the bigint cast the employee-code
+            // counter uses, which used to answer 500 on the whole company's Add employee page.
+            else if (LONG_NUMERIC_TAIL.matcher(code).matches()) {
+                row.addProblem("employee_code", "employee_code ends in more than 18 digits, which is too long to number: " + code);
+            }
             else if (codesInUse.contains(k)) row.addProblem("employee_code", "employee_code already in use: " + code);
             else if (codesInFile.containsKey(k)) {
                 row.addProblem("employee_code", "employee_code appears more than once in this file (also row " + codesInFile.get(k) + "): " + code);

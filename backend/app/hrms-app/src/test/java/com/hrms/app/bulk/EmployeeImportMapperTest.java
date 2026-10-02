@@ -156,6 +156,25 @@ class EmployeeImportMapperTest {
     }
 
     @Test
+    void aCodeEndingInTooManyDigitsIsRefused() {
+        // 20 digits: the counter casts the tail to bigint (19 digits max), so letting this in used
+        // to make the whole company's Add employee page answer 500.
+        BulkImportRow tooLong = row(2, "A", "B", "a@example.com");
+        tooLong.setEmployeeCode("EMP-12345678901234567890");
+        // 18 digits still fits, and so does a code with no numeric tail at all.
+        BulkImportRow fits = row(3, "C", "D", "c@example.com");
+        fits.setEmployeeCode("EMP-123456789012345678");
+        BulkImportRow plain = row(4, "E", "F", "e@example.com");
+        plain.setEmployeeCode("EMP-0007");
+        var mapped = map(tooLong, fits, plain);
+        assertThat(tooLong.getProblems()).extracting(BulkImportProblem::message)
+                .containsExactly("employee_code ends in more than 18 digits, which is too long to number: EMP-12345678901234567890");
+        assertThat(fits.getProblems()).isEmpty();
+        assertThat(plain.getProblems()).isEmpty();
+        assertThat(mapped).extracting(EmployeeImportMapper.Mapped::row).containsExactly(3, 4);
+    }
+
+    @Test
     void identityAndBankFormatsAreTheAddEmployeeForms() {
         BulkImportRow good = row(2, "A", "B", "a@example.com");
         good.setPan("abcde1234f");

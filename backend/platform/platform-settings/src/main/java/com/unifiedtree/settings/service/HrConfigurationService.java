@@ -139,11 +139,16 @@ public class HrConfigurationService {
         String prefix  = cfg.getEmployeeCodePrefix();
         int padding    = cfg.getEmployeeCodePadding();
         long counter   = cfg.getEmployeeCodeNextNumber();
+        // {1,18} digits, not +: the match is cast to bigint, which stops at 19 digits. An imported
+        // code with a longer numeric tail used to raise 22003 (numeric_value_out_of_range), which
+        // nothing translates, so this read answered 500 and the Add employee page broke for that
+        // whole company. Codes this generator issues can't reach 18 digits (padding is capped at 8
+        // by ck_hr_config_emp_padding), so a longer tail was never ours and is right to ignore.
         Long dbHighest = jdbc.queryForObject("""
             SELECT COALESCE(MAX((regexp_replace(e.employee_code, '^' || ? || '-', ''))::bigint), 0)
               FROM hrms.employees e
              WHERE e.company_id = ?
-               AND e.employee_code ~ ('^' || ? || '-[0-9]+$')
+               AND e.employee_code ~ ('^' || ? || '-[0-9]{1,18}$')
             """, Long.class, prefix, companyId, prefix);
         long effectiveNext = Math.max(counter, (dbHighest == null ? 0 : dbHighest) + 1);
         return new NextEmployeeCodeResponse(
