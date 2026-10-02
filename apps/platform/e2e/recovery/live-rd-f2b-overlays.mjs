@@ -7,10 +7,11 @@
 // Owner: Documents → "Add a document" (HrDrawer): a named modal dialog, square panel with a 1px
 //   left border, the blurred gradient backdrop as a SIBLING of the panel (never on it), "Close
 //   panel"; Escape closes the date picker first, then the drawer, and focus goes back to the
-//   button; full width at 390px. Dashboard → "Add notice" (ui-kit Modal): named, 12px radius,
-//   the same backdrop, Escape closes it.
-// Reader (employee): My attendance → Fix requests → "New request" (HrDrawer "Ask for a fix"),
-//   Cancel closes it.
+//   button; full width at 390px. Dashboard → "Add notice": the redesigned dashboard (P-DASH) opens
+//   "New notice" in the kit SidePanel (it was a ui-kit Modal before), so it is checked as a panel:
+//   named, square with a 1px left border, the blurred backdrop beside it, Escape closes it.
+// Reader (employee): My attendance → Fix requests → "New request" (the side panel, "Fix a day" since
+//   Daily tracking was rebuilt; "Ask for a fix" before), Cancel closes it.
 // Both: no page errors and no failed API calls.
 /* global process, console, document, getComputedStyle */
 import { chromium } from '@playwright/test'
@@ -91,21 +92,19 @@ try {
   check('drawer: "Close panel" closes it', (await drawer.count()) === 0)
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  // ui-kit Modal: the dashboard's "Add notice".
+  // The dashboard's "Add notice": the kit SidePanel "New notice" (Upcoming events, P-DASH).
   await page.goto(base + '/dashboard'); await o.settle()
   const addNotice = page.getByRole('button', { name: /Add notice/ }).first()
   if (await addNotice.count()) {
     await addNotice.click()
     const modal = page.getByRole('dialog', { name: 'New notice' })
     await modal.waitFor({ timeout: 10000 })
-    const m = await modal.evaluate((el) => {
-      const overlay = [...document.querySelectorAll('div')].find((d) => d !== el && getComputedStyle(d).position === 'fixed' && /linear-gradient/.test(getComputedStyle(d).backgroundImage))
-      return { radius: getComputedStyle(el).borderTopLeftRadius, filter: getComputedStyle(el).backdropFilter, overlay: overlay ? getComputedStyle(overlay).backdropFilter : 'missing' }
-    })
-    check('modal: "New notice" has the 12px radius and the blurred backdrop beside it', m.radius === '12px' && m.filter === 'none' && /blur\(4px\)/.test(m.overlay), JSON.stringify(m))
+    const m = await panelLook(modal)
+    check('panel: "New notice" opens as a named modal dialog', (await modal.getAttribute('aria-modal')) === 'true')
+    check('panel: "New notice" is the kit side panel, the blurred backdrop beside it, none on the panel', m.radius === '0px' && m.borderLeft === '1px' && m.ownFilter === 'none' && /blur\(4px\)/.test(m.backdropFilter), JSON.stringify(m))
     await page.screenshot({ path: `${shots}/rd-f2b-modal-1440.png` }).catch(() => {})
     await page.keyboard.press('Escape'); await page.waitForTimeout(400)
-    check('modal: Escape closes it', (await modal.count()) === 0)
+    check('panel: Escape closes "New notice"', (await modal.count()) === 0)
   } else check('owner: dashboard shows "Add notice"', false, 'button not found')
 
   check('owner: no page errors', o.errors.length === 0, o.errors.slice(0, 2).join(' | '))
@@ -115,10 +114,10 @@ try {
   const me = await signIn('reader@unifiedtree.demo')
   await me.page.goto(base + '/hrms/attendance?tab=corrections'); await me.settle()
   await me.page.getByRole('button', { name: /New request/ }).first().click()
-  const fix = me.page.getByRole('dialog', { name: 'Ask for a fix' })
+  const fix = me.page.getByRole('dialog', { name: /^(Ask for a fix|Fix a day)$/ })
   await fix.waitFor({ timeout: 10000 })
   const fl = await panelLook(fix)
-  check('reader: "Ask for a fix" opens with the side-panel look', fl.radius === '0px' && fl.borderLeft === '1px' && /blur\(4px\)/.test(fl.backdropFilter), JSON.stringify(fl))
+  check('reader: the fix request ("Fix a day") opens with the side-panel look', fl.radius === '0px' && fl.borderLeft === '1px' && /blur\(4px\)/.test(fl.backdropFilter), JSON.stringify(fl))
   check('reader: Tab stays inside the drawer', await (async () => {
     for (let i = 0; i < 8; i++) { await me.page.keyboard.press('Tab'); if (!(await fix.evaluate((el) => el.contains(document.activeElement)))) return false }
     return true
