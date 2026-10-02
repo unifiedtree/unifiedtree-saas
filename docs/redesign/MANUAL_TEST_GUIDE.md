@@ -96,12 +96,42 @@ Report crashes, wrong data or access problems. **Do not** report that they look 
 
 ---
 
-## 3. What changed recently, so look twice here
+## 3. What changed, release by release
 
-These are new or changed in this release. They are the most likely place to find something.
+The redesign went out in stages. Everything below is new since the old HRMS, so all of it is worth testing.
+If you have used the old system, expect **everything to look different**; that is the point.
 
-1. **A module's pages are now tabs along the top**, not a panel on the left. Check that every tab opens the
-   right page, that the one you are on is highlighted, and that the tabs scroll sideways when there are many.
+### Release 1 (live since 30 Sep) — the look and the frame around every page
+- **A whole new look:** new colours, new cards, tables, pop-ups, menus and form fields, on every page.
+- **Dark mode**, switched on from the **More** menu. Every page should work in both.
+- **A new left side bar:** items grouped, it widens when you hover, you can pin it open, and anything that
+  does not fit moves into **More**.
+- **A new More menu:** your profile, My space, settings, light/dark, help and sign out.
+- **Where you land after signing in depends on your role:** admins, HR and finance get the Dashboard;
+  managers and employees get Home.
+- **A redesigned dashboard:** greeting, the number cards, quick actions, "needs your action", attendance,
+  upcoming, people, hiring and payroll.
+
+### Release 1.1 (live since 2 Oct) — the client's first round of changes
+- **The font went back** to the previous one.
+- **A module's pages are now tabs along the top.** The panel that used to list them on the left is gone.
+  A page's own sub-sections now sit inside the page.
+- **The dashboard is about 10% tighter**, same content and order.
+- **Greetings use the full name**, not just the first name.
+- **"Upcoming milestones" is now "Upcoming events"**, and it now also shows holidays and company notices.
+
+### Release 2 (the one you are testing now) — the rest of the HRMS
+This is the big one. Every area in the "finished" list in section 2 was rebuilt here, and this is the first
+release that changes the backend as well as the screens. Section 3.1 below lists the parts most worth
+a second look.
+
+## 3.1 Look twice at these
+
+These are new behaviour, not just a new look. They are the most likely place to find something.
+
+1. **The side bar and the top tabs** (Releases 1 and 1.1). Check that every tab opens the right page, that the
+   one you are on is highlighted, that the tabs scroll sideways when there are many, and that the side bar's
+   hover, pin and More overflow all behave.
 2. **Search (the box at the top).** It now finds people, leave, payslips, documents, pages, holidays, and
    requests (work from home, shift changes, attendance fixes, advances, overtime).
    **Test this hard as a department manager and as an employee:** you must only find things you are allowed to see.
@@ -120,7 +150,10 @@ These are new or changed in this release. They are the most likely place to find
 11. **Org chart:** everyone can see it. An employee should see their own line upwards and everyone below them;
     someone with full people access sees the whole company.
 12. **"Upcoming milestones" is now "Upcoming events"** and includes holidays and company notices.
-13. **Greetings now use the full name**, and the font changed back to the previous one.
+13. **Dark mode** (Release 1). Go through every finished page with it on. This is where unreadable text and
+    stray white boxes hide, and it is easy to miss because most people never switch it on.
+14. **Where each role lands after signing in** (Release 1): admins, HR and finance on the Dashboard;
+    managers and employees on Home.
 
 ---
 
