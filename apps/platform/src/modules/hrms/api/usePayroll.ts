@@ -220,6 +220,8 @@ export interface PayrollDashboardKpis {
   totalPayrollCost: number
   averageSalary: number
   pendingDisbursals: number
+  /** Rupees waiting to be sent to the bank (P-PAY-CORE BW-54; redesign). */
+  pendingDisbursalAmount?: number | null
   tdsLiability: number
   currentPeriodLabel: string
   currentPeriodMonth: number

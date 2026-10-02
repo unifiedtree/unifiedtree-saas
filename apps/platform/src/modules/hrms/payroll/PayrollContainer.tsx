@@ -40,6 +40,7 @@ import type { PageResponse, WorkforceEmployee } from '../api/useWorkforce'
 import { AdvanceDecisionActions, AdvanceDetail } from '../advance/AdvanceAdmin'
 import { AllAwardsTab, Pli } from '../Pli'
 import { Advance } from '../Advance'
+import { AskPayrollQueue } from './my/AskPayrollAdminQueue'
 
 type St = 'live' | 'loading' | 'error'
 const stateOf = (...qs: { isLoading: boolean; isError: boolean }[]): St => (qs.some((q) => q.isError) ? 'error' : qs.some((q) => q.isLoading) ? 'loading' : 'live')
@@ -268,7 +269,10 @@ export function PayrollContainer() {
     const data: PayDashData = {
       companyName, monthLabel: `${MON[m - 1]} ${y}`, monthShort: MON[m - 1],
       current: cur ? { id: cur.id, label: runLabel(cur), short: MON[cur.periodMonth - 1], status: STATUS[cur.status] || 'draft', net: cur.status === 'DRAFT' ? null : num(cur.totalNet), gross: cur.status === 'DRAFT' ? null : num(cur.totalGross), employees: cur.status === 'DRAFT' ? null : cur.employeeCount, eligible: dashEligibleQ.data ? dashEligibleQ.data.length : null, bankFile: (allBatchesQ.data ?? []).some((b) => b.runId === cur.id && (b.status === 'DRAFT' || b.status === 'POSTED')) } : null,
-      prevGross: prev ? num(prev.totalGross) : null, pendingDisb: kpisQ.data ? kpisQ.data.pendingDisbursals : null, bars,
+      prevGross: prev ? num(prev.totalGross) : null,
+      pendingDisb: kpisQ.data ? kpisQ.data.pendingDisbursals : null,
+      pendingDisbAmount: kpisQ.data ? kpisQ.data.pendingDisbursalAmount ?? null : null,
+      bars,
       dues: [...computedDues, ...ledgerDues].sort((a, b) => a.sort.localeCompare(b.sort)).slice(0, 3).map(({ sort: _s, ...d }) => d),
       recent: sorted.filter((r) => r.status === 'PAID' && r.id !== cur?.id).slice(0, 3).map((r) => ({ id: r.id, label: runLabel(r), employees: r.employeeCount, paidOn: dayOf(paidAt.get(r.id)), net: num(r.totalNet) })),
       hasRuns: runs.length > 0,
@@ -544,6 +548,12 @@ export function PayrollContainer() {
         </HrDrawer>
       )}
       {recoveryFor && <AdvanceDetail id={recoveryFor} onClose={() => setRecoveryFor(null)} />}
+      {/* Ask payroll: the payroll team's answer queue sits on the dashboard, under the KPIs (BW-59). */}
+      {section === 'dashboard' && canRuns && (
+        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 clamp(16px,2.4vw,36px) 56px', marginTop: -24 }}>
+          <AskPayrollQueue />
+        </div>
+      )}
     </DesignFrame>
   )
 }
