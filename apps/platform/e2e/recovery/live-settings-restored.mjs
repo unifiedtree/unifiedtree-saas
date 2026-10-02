@@ -21,7 +21,7 @@
 //   RECOVERY_APP_URL=<app under test> node e2e/recovery/live-settings-restored.mjs
 //   SETTINGS_ONLY=owner,hrm            runs only those accounts
 //   SETTINGS_BASELINE=<file.json>      another baseline (same shape)
-/* global console, process, URL, document, location, getComputedStyle */
+/* global console, process, URL, document, location, getComputedStyle, window */
 import { chromium } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
@@ -354,9 +354,11 @@ try {
         await s.page.goto(base + '/profile#st-face'); await settle(s.page)
         const face = s.page.locator('#st-face')
         const shown = await face.getByRole('heading', { name: 'Face enrollment', exact: true }).isVisible().catch(() => false)
-        const top = shown ? await face.evaluate((el) => el.getBoundingClientRect().top) : Infinity
+        // In view: its heading sits inside the window (it is the last card, so the page may stop scrolling before it reaches the top).
+        const top = shown ? await face.getByRole('heading', { name: 'Face enrollment', exact: true }).evaluate((el) => el.getBoundingClientRect().top) : Infinity
+        const vh = await s.page.evaluate(() => window.innerHeight)
         const onOverview = (await s.page.getByRole('tab', { name: 'Overview', exact: true }).getAttribute('aria-selected').catch(() => null)) === 'true'
-        check(`${tag}: /profile#st-face opens My profile's Overview with Face enrollment scrolled into view`, shown && onOverview && top < 400, `shown ${shown}, overview ${onOverview}, top ${Math.round(top)}`)
+        check(`${tag}: /profile#st-face opens My profile's Overview with Face enrollment scrolled into view`, shown && onOverview && top >= 0 && top < vh - 40, `shown ${shown}, overview ${onOverview}, top ${Math.round(top)} of ${vh}`)
       }
       // ── the hub's addresses open the original page ──
       for (const [hub, page] of HUB) {
