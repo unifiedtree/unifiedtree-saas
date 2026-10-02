@@ -1,3 +1,4 @@
+/* global console, process, fetch, Buffer */
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -131,12 +132,15 @@ try {
   customRole = await request('/v1/rbac/roles', 'POST', { code: `QA_ACCESS_${Date.now()}`, displayName: 'Local access toggle check', description: 'Temporary role with no permissions; removed by verification' })
   await page.goto(ui + '/users')
   await page.getByRole('row').filter({ hasText: 'reader@unifiedtree.demo' }).getByRole('button', { name: 'Manage access' }).click()
-  const toggle = page.getByText(customRole.displayName, { exact: true }).locator('..').getByRole('switch')
-  await expect(toggle).toHaveAttribute('aria-checked', 'false')
-  await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-checked', 'true')
-  await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  // The redesigned drawer nests the role name inside its row, so the switch is found by its own
+  // accessible name: "Give <role>" while it isn't granted, "Remove <role>" once it is.
+  const giveToggle = page.getByRole('switch', { name: `Give ${customRole.displayName}`, exact: true })
+  const removeToggle = page.getByRole('switch', { name: `Remove ${customRole.displayName}`, exact: true })
+  await expect(giveToggle).toHaveAttribute('aria-checked', 'false')
+  await giveToggle.click()
+  await expect(removeToggle).toHaveAttribute('aria-checked', 'true')
+  await removeToggle.click()
+  await expect(giveToggle).toHaveAttribute('aria-checked', 'false')
   console.log('PASS: system-role permissions read-only; grant/revoke refresh the open user access drawer')
   const slipRoute = `**/v1/payroll/runs/${run.id}/employees/*/payslip`
   await page.route(slipRoute, route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Verification of unavailable payslip state' }) }))

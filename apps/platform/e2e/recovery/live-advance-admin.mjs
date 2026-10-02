@@ -1,3 +1,4 @@
+/* global console, process, fetch */
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
@@ -69,10 +70,23 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL(url => !url.pathname.includes('login'))
   await page.goto(ui + '/hrms/advances')
-  await expect(page.getByRole('heading', { name: 'Company advances', exact: true })).toBeVisible()
-  // Status filter is still the Status select; the redesign adds Phase and Department.
-  await page.getByLabel('Advance status', { exact: true }).selectOption('DISBURSED')
-  await page.getByRole('row').filter({ hasText: '3,210.45' }).first().getByRole('button', { name: /View advance/ }).click()
+  // The redesigned page (PayAdvances) is headed "Advances & Loans"; its status filter is the
+  // table's own select ("All statuses"), where a disbursed advance with a balance left reads
+  // "Active deduction". The row's View opens the summary drawer, and "Recovery options" there
+  // opens the recovery ledger that Defer month lives on.
+  // First paint can take a few seconds on a cold backend, so the heading gets a longer wait
+  // than expect's 5s default. The check itself is unchanged.
+  await expect(page.getByRole('heading', { name: 'Advances & Loans', exact: true })).toBeVisible({ timeout: 30000 })
+  await page.getByLabel('All statuses', { exact: true }).selectOption('ACTIVE')
+  // Amounts render rounded (₹3,210), so this run's advance is found by its own reason, which the
+  // list shows as the loan type. The exact 3,210.45 rounding stays checked against the API above.
+  const advanceRow = page.getByRole('row').filter({ hasText: browserAdvance.reason.slice(0, 40) }).first()
+  await advanceRow.waitFor({ timeout: 20000 })
+  await expect(advanceRow).toContainText('3,210')
+  await advanceRow.getByRole('button', { name: 'View', exact: true }).click()
+  const summary = page.getByRole('dialog').filter({ hasText: 'Recovery plan' })
+  await expect(summary).toBeVisible()
+  await summary.getByRole('button', { name: 'Recovery options', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Salary recovery' })).toBeVisible()
   await page.getByRole('button', { name: 'Defer month', exact: true }).first().click()
   await page.getByLabel('Reason / payment reference').fill('Deferred through the admin screen')
