@@ -24,6 +24,10 @@ on:
       # Without this, editing the workflow itself matches no path and the
       # gate silently does not run — a change here looks green by not running.
       - '.github/workflows/attendance-leave-it.yml'
+      # test-init.sql creates the DB roles and grants every IT depends on, and
+      # was likewise missing here: a commit touching only it did not run the
+      # gate, which reads as "no result" rather than as a skip.
+      - 'backend/app/hrms-app/src/test/resources/**'
   pull_request:
     branches: [main, develop]
     paths:
