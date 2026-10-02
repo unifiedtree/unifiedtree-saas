@@ -230,10 +230,14 @@ try {
       const body = res.ok() ? await res.json().catch(() => ({})) : {}
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...body, passportExpiry: '2031-03-15' }) })
     })
+    // Wait for the (intercepted) identity answer itself before reading the field: on a busy machine the
+    // field can be drawn a moment before its loaded value is filled in.
+    const identityLoaded = page.waitForResponse((r) => r.url().includes(`/v1/employees/${EMP_PROBATION}/profile/identity`) && r.request().method() === 'GET', { timeout: 30000 }).catch(() => null)
     await page.goto(base + `/hrms/employees/${EMP_PROBATION}?tab=personal`)
     const pass = page.getByLabel('Passport Expiry')
     await pass.waitFor({ timeout: 15000 })
-    check('identity: loaded passport expiry shows in the field', await shows(pass, '15 Mar 2031'), await textOf(pass))
+    await identityLoaded
+    check('identity: loaded passport expiry shows in the field', await shows(pass, '15 Mar 2031', 10000), await textOf(pass))
     const saveId = page.getByRole('button', { name: 'Save Identity' })
     check('identity: Save starts disabled', await saveId.isDisabled())
     await pickViaYear(pass, '2033-08-20')
