@@ -295,7 +295,7 @@ public class ReportScheduleService {
     public int sendDue(LocalDate today, int hour) {
         UUID t = tenant();
         List<Map<String, Object>> due = tx.execute(s -> normalized(jdbc.queryForList(
-                "SELECT * FROM hrms.report_schedules WHERE tenant_id = ? AND active AND next_run_on <= ? ORDER BY next_run_on, created_at", t, today)));
+                "SELECT " + columns(optionsReady()) + " FROM hrms.report_schedules WHERE tenant_id = ? AND active AND next_run_on <= ? ORDER BY next_run_on, created_at", t, today)));
         int sent = 0;
         for (Map<String, Object> r : due == null ? List.<Map<String, Object>>of() : due) {
             UUID id = (UUID) r.get("id");
@@ -573,10 +573,21 @@ public class ReportScheduleService {
         return out;
     }
 
+    /**
+     * The columns a send or a change reads, named (never SELECT *): a pooled
+     * connection's cached plan for SELECT * breaks when a column is added or
+     * renamed while the app runs (V143.62 is applied by hand). send_hour only
+     * once it exists.
+     */
+    static String columns(boolean ready) {
+        return "id, tenant_id, company_id, report, frequency, day_of_week, day_of_month, recipient_user_ids, active, next_run_on,"
+                + " last_run_at, last_status, last_message, created_by, created_at, updated_at" + (ready ? ", send_hour" : "");
+    }
+
     private Map<String, Object> row(UUID id) {
         UUID t = tenant();
         List<Map<String, Object>> rows = tx.execute(s -> normalized(jdbc.queryForList(
-                "SELECT * FROM hrms.report_schedules WHERE id = ? AND tenant_id = ?", id, t)));
+                "SELECT " + columns(optionsReady()) + " FROM hrms.report_schedules WHERE id = ? AND tenant_id = ?", id, t)));
         if (rows == null || rows.isEmpty()) throw new ResourceNotFoundException("Report email not found");
         return rows.get(0);
     }

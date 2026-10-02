@@ -184,6 +184,12 @@ class ReportScheduleOptionsTest {
     }
 
     @Test
+    void sendsAndChangesReadNamedColumnsWithTheHourOnlyOnceItExists() {
+        assertThat(ReportScheduleService.columns(false)).doesNotContain("*").doesNotContain("send_hour").contains("next_run_on", "recipient_user_ids");
+        assertThat(ReportScheduleService.columns(true)).endsWith(", send_hour");
+    }
+
+    @Test
     void csvMatchesTheDownloadFormat() {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("name", "Rao, Asha");
