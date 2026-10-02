@@ -7,6 +7,7 @@
 // settlement is processed for them from the page; both are deleted afterwards.
 //
 // Run from apps/platform:  node e2e/recovery/live-fnf-tabs.mjs
+/* global console, process, fetch, document, URL, URLSearchParams */
 import { chromium } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -87,7 +88,10 @@ try {
     check('Settled badge = PAID count', (await tabBadge('Settled')) === String(beforeCounts.PAID), `${await tabBadge('Settled')} vs ${beforeCounts.PAID}`)
     check('All badge = server total', (await tabBadge('All')) === String(before.totalElements), `${await tabBadge('All')} vs ${before.totalElements}`)
   } else {
-    check('multi-page ledger hides page-only badges', (await tabBadge('Settled')) === '', 'ledger spans several pages')
+    // tabBadge() reports "no badge" as '0' (a zero count draws no badge either), so that is what
+    // the hidden badge reads as here. The behaviour checked is unchanged: on a multi-page ledger
+    // the tabs carry no count, because a page-only count would misstate the whole ledger.
+    check('multi-page ledger hides page-only badges', (await tabBadge('Settled')) === '0', 'ledger spans several pages')
   }
   await view('Settled').click()
   await page.waitForURL((u) => u.searchParams.get('tab') === 'settled')
@@ -103,13 +107,17 @@ try {
   await page.goto(base + '/hrms/exit')
   await page.getByRole('heading', { name: 'Resignation & exit' }).waitFor({ timeout: 30_000 })
   await view('Exited', 'Exit views').click()
-  await page.getByPlaceholder('Search name, code, email…').fill(fixtureName)
+  // Redesigned exit page (P-GROW): the search box reads "Name, code or department", and the row's
+  // hand-off is a "Settlement" button that navigates (it was an <a href>). The behaviour checked is
+  // the same: for a leaver with no settlement yet it opens Create settlement for that employee.
+  await page.getByPlaceholder('Name, code or department').fill(fixtureName)
   const exitRow = page.getByRole('row').filter({ hasText: fixtureName })
   await exitRow.waitFor({ timeout: 15_000 })
-  const href = await exitRow.getByRole('link').filter({ hasText: 'F&F' }).getAttribute('href')
-  check('Exited row F&F links to the create tab for that employee', href === `/hrms/fnf?tab=create&employeeId=${fixture.id}`, href)
   const notice = await call('/v1/hrms/employees?status=NOTICE_PERIOD&page=0&size=1')
-  await exitRow.getByRole('link').filter({ hasText: 'F&F' }).click()
+  await exitRow.getByRole('button', { name: 'Settlement', exact: true }).click()
+  await page.waitForURL((u) => u.pathname === '/hrms/fnf', { timeout: 15_000 })
+  check('Exited row Settlement opens the create tab for that employee',
+    new URL(page.url()).searchParams.get('tab') === 'create' && new URL(page.url()).searchParams.get('employeeId') === fixture.id, page.url())
   await page.waitForURL((u) => u.pathname === '/hrms/fnf' && u.searchParams.get('employeeId') === fixture.id)
   check('Create settlement tab is selected from the link', (await view('Create settlement').getAttribute('aria-pressed')) === 'true')
   const banner = page.getByText(`Selected: ${fixtureName} (${fixture.employeeCode})`)

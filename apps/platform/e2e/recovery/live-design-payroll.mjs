@@ -39,6 +39,7 @@ const bar = (page) => page.getByRole('navigation', { name: 'Payroll pages' })
 const dialogButton = (page, name) => page.getByRole('dialog').getByRole('button', { name })
 
 let testRunId = ''
+let pliTargetId = ''
 try {
   const hr = await signIn('owner@unifiedtree.demo')
   const { page } = hr
@@ -74,13 +75,15 @@ try {
   await page.getByRole('tab', { name: /Employees/ }).first().click().catch(async () => { await page.getByRole('button', { name: /^Employees/ }).first().click() })
   await hr.settle()
   // The HrTable in the redesign kit draws rows as divs with no <tr>/<tbody>.
-  // Fall back to a visible rows locator and the global button role, so the
-  // selector works for both the legacy and the redesigned table.
-  // Wait for the Payslip button list to be stable before clicking the first one.
-  await page.getByRole('button', { name: /Payslip/ }).first().waitFor({ timeout: 15000 }).catch(() => {})
-  const empRows = Math.max(await page.locator('tbody tr').count(), await page.getByRole('button', { name: /Payslip/ }).count())
+  // Fall back to a visible rows locator, so the count works for both tables.
+  // Scope to the employees table: the run header's crumb button reads
+  // "Processing & Payslips" and would otherwise match /Payslip/ first — clicking
+  // it goes back to all runs instead of opening the drawer.
+  const payslipButtons = page.locator('table').getByRole('button', { name: /^\s*Payslip$/ })
+  await payslipButtons.first().waitFor({ timeout: 15000 }).catch(() => {})
+  const empRows = Math.max(await page.locator('tbody tr').count(), await payslipButtons.count())
   check('employees tab lists the payslips', empRows > 0, `${empRows} rows`)
-  await page.getByRole('button', { name: /Payslip/ }).first().click()
+  await payslipButtons.first().click()
   // Dialog opens async with the payslip payload; wait up to 20s for either marker.
   await page.locator('[role=dialog]').last().waitFor({ timeout: 20000 }).catch(() => {})
   await page.locator('[role=dialog]').last().getByText(/Preview|Rupees .* only/).first().waitFor({ timeout: 20000 }).catch(() => {})
@@ -112,8 +115,11 @@ try {
   await page.getByRole('button', { name: /^Employees/ }).first().click().catch(() => {})
   await page.getByRole('tab', { name: /Employees/ }).first().click().catch(() => {})
   await hr.settle()
-  await page.getByRole('button', { name: /Payslip/ }).first().click()
-  await page.getByRole('button', { name: /Download PDF/ }).waitFor({ timeout: 10000 })
+  // Same ambiguity as the employees tab above: the run header's crumb reads
+  // "Processing & Payslips" and would match /Payslip/ first, navigating away.
+  // Scope to the employees table and match the row button's exact name.
+  await page.locator('table').getByRole('button', { name: /^\s*Payslip$/ }).first().click()
+  await page.getByRole('button', { name: /Download PDF/ }).waitFor({ timeout: 15000 })
   const [pdf] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), page.getByRole('button', { name: /Download PDF/ }).click()])
   check('payslip PDF downloads', !!pdf && /\.pdf$/.test(pdf.suggestedFilename()), pdf ? pdf.suggestedFilename() : 'no download')
   await page.keyboard.press('Escape')
@@ -143,6 +149,11 @@ try {
   await page.waitForTimeout(300)
   check('discard clears the change', (await page.getByText(/change · used by runs/).count()) === 0)
 
+  // The PLI page lists the CURRENT month, and the seed's only target is pinned to an older
+  // month, so on any later month the page legitimately shows its empty state and the
+  // "Manage awards" link is absent. Seed a disposable target for this month; it is deleted
+  // again in the cleanup below.
+  pliTargetId = sql(`insert into pli_mgmt.pli_targets (id, tenant_id, company_id, title, owner_type, owner_id, period, metric, target_value, actual_value, weight_percent, payout_amount, status, created_at, updated_at, created_by, updated_by, version) values (gen_random_uuid(), 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'E2E disposable PLI target', 'EMPLOYEE', '22222222-2222-2222-2222-222222222222', to_char(now(), 'YYYY-MM'), 'On-time delivery %', 95.00, 91.00, 40.00, 0.00, 'ACTIVE', now(), now(), '66666666-6666-6666-6666-666666666666', '66666666-6666-6666-6666-666666666666', 0) returning id`).split(String.fromCharCode(10))[0].trim()
   await page.goto(base + '/hrms/pli'); await hr.settle()
   await page.getByRole('button', { name: /Manage awards/ }).click()
   await page.getByText('PLI awards').first().waitFor({ timeout: 10000 })
@@ -167,12 +178,15 @@ try {
   // ── employee keeps self-service ──
   const me = await signIn('reader@unifiedtree.demo')
   await me.page.goto(base + '/hrms/advances'); await me.settle()
-  check('employee sees their own advances page', await me.page.getByText(/My Advances|Request Advance/).count() > 0)
+  // The redesigned self-service tabs read "My advances" / "Request an advance" (sentence case),
+  // so the match is case-insensitive now. The check is the same: the employee keeps these pages.
+  check('employee sees their own advances page', await me.page.getByText(/My advances|Request an advance/i).count() > 0)
   check('employee: no page errors', me.errors.length === 0, me.errors.slice(0, 2).join(' | '))
 } catch (e) {
   check('script completed', false, String(e.message || e).slice(0, 240))
 } finally {
   if (testRunId) { try { sql(`delete from payroll.runs where id = '${testRunId}' and period_year = 2027 and period_month = 6`); console.log('cleanup: test run deleted') } catch (e) { console.log('cleanup failed: ' + e.message) } }
+  if (pliTargetId) { try { sql(`delete from pli_mgmt.pli_targets where id = '${pliTargetId}'`); console.log('cleanup: disposable PLI target deleted') } catch (e) { console.log('PLI cleanup failed: ' + e.message) } }
   await browser.close()
   const passed = results.filter((r) => r.ok).length
   console.log(`\n${passed}/${results.length} checks passed`)

@@ -9,6 +9,7 @@
 // records; the policy fixture is deleted.
 //
 // Run from apps/platform:  node e2e/recovery/live-money-modals.mjs
+/* global console, process, fetch, URL */
 import { chromium } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -135,12 +136,17 @@ try {
 
   // ── Advance: reject through the drawer ──────────────────────────────────
   await page.goto(base + '/hrms/advances')
-  await tabButton(page, 'Approvals').click({ timeout: 30_000 })
-  // The redesign renders pending advances as DecisionCards (<article>), not <tr>.
-  const advRow = page.locator('article').filter({ hasText: inr(advanceAmount) }).filter({ hasText: 'Requested' }).first()
-  await advRow.waitFor({ timeout: 15_000 })
-  check('requested advance pill reads "Requested" (not REQUESTED)', !(await advRow.innerText()).includes('REQUESTED'))
-  await advRow.getByRole('button', { name: 'Reject' }).click()
+  // The redesigned Advances & Loans page (T03) is one list: there is no Approvals tab, and a
+  // waiting advance is decided from its own View drawer. The checks are unchanged — the pill
+  // still reads "Pending approval" in plain words, and Reject still asks for a reason.
+  const advRow = page.getByRole('row').filter({ hasText: inr(advanceAmount) }).first()
+  await advRow.waitFor({ timeout: 30_000 })
+  check('requested advance pill reads plain words (not REQUESTED)',
+    /Pending approval/.test(await advRow.innerText()) && !(await advRow.innerText()).includes('REQUESTED'), (await advRow.innerText()).replace(/\s+/g, ' ').slice(0, 80))
+  await advRow.getByRole('button', { name: 'View', exact: true }).click()
+  const advView = page.getByRole('dialog').filter({ hasText: 'Recovery plan' })
+  await advView.waitFor({ timeout: 15_000 })
+  await advView.getByRole('button', { name: 'Reject' }).click()
   const advDrawer = page.getByRole('dialog', { name: 'Reject advance' })
   await advDrawer.waitFor({ timeout: 10_000 })
   await advDrawer.getByLabel('Reason (optional)').fill(advanceReason)
