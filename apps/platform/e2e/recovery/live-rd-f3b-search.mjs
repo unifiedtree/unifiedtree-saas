@@ -202,6 +202,8 @@ try {
   await mpage.getByRole('button', { name: 'Search', exact: true }).first().click()
   const sheet = dialog(mpage)
   check('phone: the search icon opens the dialog', await visible(sheet, 10_000))
+  // The sheet scales in; measure once its opening animation has finished.
+  await sheet.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})))).catch(() => {})
   const box = await sheet.boundingBox()
   check('phone: the dialog fills the screen', !!box && box.width >= 388 && box.x <= 1, JSON.stringify(box))
   check('phone: quick-action tiles show', (await sheet.locator('.ut-sd__tile').count()) > 0)
