@@ -73,16 +73,24 @@ try {
   check('processing calculates the run', (sql(`select status from payroll.runs where id='${testRunId}'`)) === 'PROCESSING')
   await page.getByRole('tab', { name: /Employees/ }).first().click().catch(async () => { await page.getByRole('button', { name: /^Employees/ }).first().click() })
   await hr.settle()
-  const empRows = await page.locator('tbody tr').count()
+  // The HrTable in the redesign kit draws rows as divs with no <tr>/<tbody>.
+  // Fall back to a visible rows locator and the global button role, so the
+  // selector works for both the legacy and the redesigned table.
+  // Wait for the Payslip button list to be stable before clicking the first one.
+  await page.getByRole('button', { name: /Payslip/ }).first().waitFor({ timeout: 15000 }).catch(() => {})
+  const empRows = Math.max(await page.locator('tbody tr').count(), await page.getByRole('button', { name: /Payslip/ }).count())
   check('employees tab lists the payslips', empRows > 0, `${empRows} rows`)
-  await page.locator('tbody').getByRole('button', { name: /Payslip/ }).first().click()
-  await page.locator('[role=dialog]').last().getByText(/Rupees .* only/).waitFor({ timeout: 15000 }).catch(() => {})
+  await page.getByRole('button', { name: /Payslip/ }).first().click()
+  // Dialog opens async with the payslip payload; wait up to 20s for either marker.
+  await page.locator('[role=dialog]').last().waitFor({ timeout: 20000 }).catch(() => {})
+  await page.locator('[role=dialog]').last().getByText(/Preview|Rupees .* only/).first().waitFor({ timeout: 20000 }).catch(() => {})
   const drawerText = (await page.locator('[role=dialog]').last().innerText().catch(() => '')).replace(/\s+/g, ' ')
-  check('payslip drawer shows the real payslip', /Preview/.test(drawerText) && /Rupees .* only/.test(drawerText), drawerText.slice(0, 120))
+  check('payslip drawer shows the real payslip', /Preview/.test(drawerText) && /Rupees .* only/.test(drawerText), drawerText.slice(0, 160))
   await page.keyboard.press('Escape'); await page.waitForTimeout(300)
   if (await page.locator('[role=dialog]').count()) await page.getByRole('button', { name: 'Close' }).last().click().catch(() => {})
 
-  await page.getByRole('button', { name: /^Lock$/ }).first().click()
+  // Lock became "Lock run" in the redesigned PayrollRunPage (same action).
+  await page.getByRole('button', { name: /^Lock( run)?$/ }).first().click()
   await dialogButton(page, 'Lock run').click()
   await page.getByText('Payroll locked · payslips are final').first().waitFor({ timeout: 15000 })
   await hr.settle()
@@ -104,7 +112,7 @@ try {
   await page.getByRole('button', { name: /^Employees/ }).first().click().catch(() => {})
   await page.getByRole('tab', { name: /Employees/ }).first().click().catch(() => {})
   await hr.settle()
-  await page.locator('tbody').getByRole('button', { name: /Payslip/ }).first().click()
+  await page.getByRole('button', { name: /Payslip/ }).first().click()
   await page.getByRole('button', { name: /Download PDF/ }).waitFor({ timeout: 10000 })
   const [pdf] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), page.getByRole('button', { name: /Download PDF/ }).click()])
   check('payslip PDF downloads', !!pdf && /\.pdf$/.test(pdf.suggestedFilename()), pdf ? pdf.suggestedFilename() : 'no download')
