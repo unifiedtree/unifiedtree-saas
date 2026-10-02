@@ -208,7 +208,7 @@ export function WorkforceAnalytics() {
         <CompanyFilter co={co} />
         {tab === 'headcount' && <DateFilter label="As of" value={asOf} max={todayIso} onChange={(v) => setParam('asOf', v === todayIso ? null : v)} />}
         {tab === 'attrition' && period && (
-          <div style={{ flex: '0 1 250px', minWidth: 0 }}>
+          <div style={{ flex: '0 1 300px', minWidth: 0 }}>
             <Select aria-label="Period" size="md" value={period.value} options={periods.map((p) => ({ value: p.value, label: p.label }))} onChange={(e) => setParam('period', e.target.value)} />
           </div>
         )}

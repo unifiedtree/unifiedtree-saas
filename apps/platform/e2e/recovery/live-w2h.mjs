@@ -1,3 +1,4 @@
+/* global process, console, fetch, Buffer */
 // Live API check of the reports & audit batch (w2h, V143_27). No browser.
 //  - Server PDFs of every report page and the Workforce Analytics snapshot,
 //    each behind its own report permission, each written to the export log.
@@ -39,7 +40,7 @@ async function login(email) {
   const headers = { 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { ...headers, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
   const raw = async (path) => {
@@ -57,7 +58,7 @@ const created = { schedules: [], notices: [], employee: null, direct: null }
 const since = (extra = '') => `tenant_id='${tenant}' and created_at >= '${startedAt}'${extra}`
 
 try {
-  const [owner, admin, hrm, mgr, fin, reader] = await Promise.all(['owner', 'admin', 'hrm', 'mgr', 'fin', 'reader'].map((u) => login(`${u}@unifiedtree.demo`)))
+  const [owner, , hrm, mgr, fin, reader] = await Promise.all(['owner', 'admin', 'hrm', 'mgr', 'fin', 'reader'].map((u) => login(`${u}@unifiedtree.demo`)))
   check('fixture: a company to report on', !!company, company)
 
   // ── 1. report PDFs ──────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ try {
   check('audit: an unknown email matches nothing', nobody.status === 200 && nobody.json.meta.total === 0)
 
   const full = await owner.raw(`/v1/audit/events/export.csv?resource=report_schedule&from=${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}`)
-  const lines = full.buf.toString('utf8').replace(/^﻿/, '').trim().split(/\r?\n/)
+  const lines = full.buf.toString('utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/)
   const expected = Number(sql(`select count(*) from audit.events where tenant_id='${tenant}' and entity_type='report_schedule' and occurred_at >= now() - interval '1 day'`))
   check('audit export: full filtered trail as CSV', full.status === 200 && full.type.includes('text/csv') && lines[0].startsWith('When (IST),Who,Email,Action') && lines.length - 1 === expected, `${lines.length - 1} rows, DB ${expected}`)
   check('audit export: rows name the record', lines.slice(1).some((l) => l.includes(' email')), lines[1]?.slice(0, 120))
