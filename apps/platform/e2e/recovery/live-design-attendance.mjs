@@ -3,9 +3,9 @@
 //
 //   node e2e/recovery/live-design-attendance.mjs
 //
-// Owner (HR): Daily tracking (rebuilt by P-ATT-DAY: its views are inline pills;
-// the module's sections are the shell's) and the analytics and shifts pages
-// (still with their own section bar), tiles add up to the table, a status tile
+// Owner (HR): the module's three sections are the shell's top tabs (the pages' own
+// section bar is gone); Daily tracking (P-ATT-DAY: its views are inline pills) and
+// the analytics and shifts pages (P-ATT-PLAN), tiles add up to the table, a status tile
 // filters, "Fix this day" opens manual entry for that person, a shift is added → edited → deleted,
 // rejecting overtime without a note is stopped before any call is made.
 // Reader (employee): only their own tabs; asks for a fix, which the owner then
@@ -33,7 +33,8 @@ async function signIn(email) {
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(500) }
   return { page, errors, failed, sent, settle }
 }
-const sections = (page) => page.getByRole('navigation', { name: 'Attendance sections' })
+// The module's sections: the shell's top tabs (ModuleTabs) since the pages' own bar was removed.
+const sections = (page) => page.getByRole('navigation', { name: 'Attendance & time pages' })
 // Daily tracking's own views (inline pill tabs since the P-ATT-DAY rebuild).
 const views = (page) => page.getByRole('tablist', { name: 'Daily tracking views' })
 const isOpen = async (tab) => (await tab.count()) > 0 && (await tab.first().getAttribute('aria-selected')) === 'true'
@@ -46,7 +47,7 @@ try {
   const hr = await signIn('owner@unifiedtree.demo')
   const { page } = hr
 
-  // The analytics page keeps its section bar with all three sections; Daily tracking is the shell's.
+  // The top tabs show all three sections on every page of the module.
   await page.goto(base + '/hrms/att-analytics'); await hr.settle()
   const secText = (await sections(page).innerText().catch(() => '')).replace(/\s+/g, ' ')
   check('section bar shows the three sections', /Attendance Analytics/.test(secText) && /Daily Tracking/.test(secText) && /Shifts & Overtime/.test(secText), secText)
@@ -81,43 +82,54 @@ try {
   await page.goto(base + '/hrms/att-analytics'); await hr.settle()
   const who = (await page.getByText(/^All \d+ people, grouped/).first().innerText().catch(() => '')).match(/All (\d+) people/)
   const people = who ? Number(who[1]) : NaN
-  const mixText = await page.locator('text=/^\\d+%$/').allInnerTexts().catch(() => [])
+  // The who's-where list (P-ATT-PLAN's overview), once it is drawn: its own percentages only.
+  const mixList = page.locator('.apl-mix__list')
+  await mixList.waitFor({ timeout: 30_000 }).catch(() => {})
+  const mixText = await mixList.locator('.apl-mix__pct').allInnerTexts().catch(() => [])
   check('overview renders today and this month', await page.getByText('Attendance trend').count() > 0 && await page.getByText('Everyone’s month').count() > 0)
-  const pct = mixText.slice(0, 8).map((t) => Number(t.replace('%', ''))).reduce((a, b) => a + b, 0)
-  check('who’s-where percentages add up to ~100%', people > 0 && pct >= 97 && pct <= 103, `${people} people · ${pct}%`)
+  const pct = mixText.map((t) => Number(t.replace('%', ''))).reduce((a, b) => a + b, 0)
+  const mixLine = (await mixList.innerText().catch(() => '')).replace(/\s+/g, ' ')
+  check('who’s-where percentages add up to ~100%', people > 0 && pct >= 97 && pct <= 103, `${people} people · ${pct}% · ${mixLine}`)
   await page.getByRole('button', { name: /Open the full report/ }).first().click(); await hr.settle()
   check('"Open the full report" keeps this month', /\/hrms\/reports\/attendance-summary\?.*from=\d{4}-\d{2}-01.*to=\d{4}-\d{2}-\d{2}/.test(page.url()), page.url().replace(base, ''))
 
-  // Shifts: add → edit → delete a test shift.
+  // Shifts: add → edit → delete a test shift (P-ATT-PLAN: a table row per shift, the form in a side panel).
   await page.goto(base + '/hrms/shifts?tab=schedules'); await hr.settle()
   await page.getByRole('button', { name: /^Add shift$/ }).first().click()
-  await page.getByPlaceholder('e.g. Early morning').fill(shiftName)
-  await page.getByRole('button', { name: /^Add shift$/ }).last().click()
+  const shiftPanel = page.getByRole('dialog', { name: 'Add a shift' })
+  await shiftPanel.waitFor({ timeout: 10000 })
+  await shiftPanel.getByPlaceholder('e.g. Early morning').fill(shiftName)
+  await shiftPanel.getByRole('button', { name: /^Add shift$/ }).click()
   await page.getByText(`${shiftName} shift added`).first().waitFor({ timeout: 10000 }).catch(() => {})
   await hr.settle()
-  const card = page.locator('article').filter({ hasText: shiftName })
-  check('new shift is saved and shows as a card', await card.count() === 1)
-  await card.getByRole('button', { name: /Edit/ }).click()
-  await page.locator('select').filter({ hasText: '30 min' }).first().selectOption('30')
-  await page.getByRole('button', { name: 'Save changes' }).click()
+  const card = page.getByRole('row').filter({ hasText: shiftName })
+  check('new shift is saved and shows as a row', await card.count() === 1)
+  await page.getByRole('button', { name: `Edit shift ${shiftName}` }).click()
+  const editPanel = page.getByRole('dialog', { name: `Edit ${shiftName}` })
+  await editPanel.waitFor({ timeout: 10000 })
+  await editPanel.getByLabel('Grace (minutes)').fill('30')
+  await editPanel.getByRole('button', { name: 'Save changes' }).click()
   await page.getByText(`${shiftName} shift updated`).first().waitFor({ timeout: 10000 }).catch(() => {})
   await hr.settle()
-  const edited = (await page.locator('article').filter({ hasText: shiftName }).innerText().catch(() => '')).replace(/\s+/g, ' ')
-  check('edited grace time is saved', /Late after 9:30 AM/.test(edited), edited.slice(0, 140))
-  await page.locator('article').filter({ hasText: shiftName }).getByRole('button', { name: /Delete/ }).click()
-  await page.getByRole('button', { name: 'Delete shift' }).click()
+  const edited = (await page.getByRole('row').filter({ hasText: shiftName }).innerText().catch(() => '')).replace(/\s+/g, ' ')
+  check('edited grace time is saved', /\b30 min\b/.test(edited), edited.slice(0, 140))
+  await page.getByRole('button', { name: `Delete shift ${shiftName}` }).click()
+  // The confirm's own button (each row's Delete is named "Delete shift <name>").
+  await page.getByRole('dialog', { name: `Delete ${shiftName}?` }).getByRole('button', { name: 'Delete shift', exact: true }).click()
   await page.getByText(`${shiftName} deleted`).first().waitFor({ timeout: 10000 }).catch(() => {})
   await hr.settle()
-  check('test shift deletes', (await page.locator('article').filter({ hasText: shiftName }).count()) === 0)
+  check('test shift deletes', (await page.getByRole('row').filter({ hasText: shiftName }).count()) === 0)
 
-  // Overtime: rejecting without a note is stopped here (the API requires one).
+  // Overtime: rejecting without a note is stopped here (the API requires one): it asks for the note first.
   await page.goto(base + '/hrms/shifts?tab=overtime'); await hr.settle()
-  const pendingOt = page.locator('article').filter({ has: page.getByRole('button', { name: 'Approve overtime' }) })
+  const pendingOt = page.locator('article').filter({ has: page.getByRole('button', { name: 'Approve', exact: true }) })
   if (await pendingOt.count()) {
     const before = hr.sent.length
-    await pendingOt.first().getByRole('button', { name: 'Reject' }).click(); await page.waitForTimeout(600)
-    check('overtime reject without a note is blocked', hr.sent.length === before && await page.getByText('Add a note saying why before rejecting').count() > 0)
-  } else check('overtime tab renders (nothing pending)', await page.getByText('Recorded, not paid.').count() > 0)
+    await pendingOt.first().getByRole('button', { name: 'Reject', exact: true }).click(); await page.waitForTimeout(600)
+    const ask = page.getByRole('dialog', { name: /overtime\?$/ })
+    check('overtime reject without a note is blocked', hr.sent.length === before && await ask.count() > 0)
+    if (await ask.count()) await ask.getByRole('button', { name: 'Cancel' }).click()
+  } else check('overtime tab renders (nothing pending)', await page.getByText('All caught up').count() > 0)
 
   check('HR: no page errors', hr.errors.length === 0, hr.errors.slice(0, 2).join(' | '))
   check('HR: no failed API calls', hr.failed.length === 0, hr.failed.slice(0, 4).join(' | '))
