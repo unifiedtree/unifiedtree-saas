@@ -66,6 +66,8 @@ class CanonicalProdAuthIT {
                     .withDatabaseName("unifiedtree_canonical_prod_it")
                     .withUsername("ut_test")
                     .withPassword("ut_test")
+                    // ut_app / hrms_app exist in production; the canonical migrations grant to them.
+                    .withInitScript("sql/canonical-init.sql")
                     .withReuse(false);
 
     @BeforeAll  static void startContainer() { POSTGRES.start(); }
