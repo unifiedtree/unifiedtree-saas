@@ -1,3 +1,4 @@
+/* global URL, console, document, process, window */
 // Wave 3 — greeting name rule + no "My Attendance" for owners and admins.
 // Browser acceptance against a running backend + web app:
 //  - Owner (OWNER) and admin@ (SUPER_ADMIN): Daily Tracking has no My Attendance
@@ -5,9 +6,9 @@
 //    My Attendance anywhere on the page, and search doesn't offer it.
 //  - reader@ (EMPLOYEE), mgr@ (DEPT_MANAGER) and hrm@ (HR_MANAGER) still see
 //    the tab and open it with ?tab=my; search still offers it to them.
-//  - Greeting: the owner's normal greeting still shows the first name. With a
-//    one-letter first name ("A" / "R.") the dashboards show the full name. The
-//    two names are changed in the database for the check and put back after.
+//  - Greeting: the full name, first and last (the client's rule of 1 Oct 2026),
+//    for the owner's normal name and with a one-letter first name ("A" / "R.")
+//    too. The two names are changed in the database for the check and put back after.
 //
 // Run from apps/platform:  node e2e/recovery/live-w3-greeting-myatt.mjs
 //   env: RECOVERY_APP_URL (default http://demo.localhost:3012),
@@ -72,15 +73,16 @@ async function openDaily(page, query = '') {
   return { tabs, selected, heading }
 }
 
-/** Search the ⌘K palette and return the text of every result row. */
+/** Search in the ⌘K dialog and return the text of every result row. */
 async function search(page, text) {
   await page.keyboard.press('Control+k')
-  const input = page.locator('input[aria-controls="global-search-results"]')
+  const input = page.locator('input[aria-controls="top-search-results"]')
   await input.waitFor({ timeout: 10_000 })
   await input.fill(text)
-  await page.locator('#global-search-results [role=option], #global-search-results [role=status]').first().waitFor({ timeout: 10_000 }).catch(() => {})
+  await page.locator('#top-search-results [role=option], #top-search-results [role=status]').first().waitFor({ timeout: 10_000 }).catch(() => {})
+  await page.getByTestId('top-search-loading').waitFor({ state: 'detached', timeout: 20_000 }).catch(() => {})
   await page.waitForTimeout(700)
-  const rows = await page.locator('#global-search-results [role=option]').allInnerTexts()
+  const rows = await page.locator('#top-search-results [role=option]').allInnerTexts()
   await page.keyboard.press('Escape')
   await page.waitForTimeout(200)
   return rows.map((r) => r.replace(/\s+/g, ' ').trim())
@@ -91,7 +93,8 @@ async function greetingOn(page, path) {
   await page.goto(base + path)
   const h = page.getByRole('heading', { level: 1 }).filter({ hasText: GREETING }).first()
   await h.waitFor({ timeout: 30_000 })
-  return (await h.innerText()).trim()
+  // The waving hand after a greeting (PageHeader wave) is decoration, not part of the name.
+  return (await h.innerText()).replace(/\s*\u{1F44B}\s*$/u, '').trim()
 }
 
 const restore = []
@@ -117,12 +120,13 @@ try {
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-daily.png` })
 
     const f = await openDaily(s.page, '?tab=my')
-    check('owner: ?tab=my opens the first tab they have (Daily Logs)', /Daily Logs/.test(f.selected) && /Daily Logs/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
+    check('owner: ?tab=my opens the first tab they have (Daily Logs)', /Daily Logs/.test(f.selected) && /^Today$/.test(f.heading) /* Daily Logs' title is the design's "Today" (P-ATT-DAY) */, `selected="${f.selected}" heading="${f.heading}"`)
     check('owner: ?tab=my shows no My Attendance tab', !f.tabs.some((t) => /My Attendance/i.test(t)), f.tabs.join(', '))
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-tab-my.png` })
 
     const g = await greetingOn(s.page, '/dashboard')
-    check(`owner: dashboard greeting shows the first name ("${ownerFirst}")`, new RegExp(`, ${esc(ownerFirst)}(\\s|$)`).test(g) && !(ownerLast && g.includes(`${ownerFirst} ${ownerLast}`)), g)
+    const ownerName = `${ownerFirst} ${ownerLast}`.trim()
+    check(`owner: dashboard greeting shows the full name ("${ownerName}")`, new RegExp(`, ${esc(ownerName)}(\\s|$)`).test(g), g)
     await s.page.screenshot({ path: `${shots}/greeting-myatt-owner-dashboard.png` })
 
     check('owner: no page errors', s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
@@ -161,11 +165,16 @@ try {
     const d = await openDaily(s.page)
     check(`${who}: Daily Tracking still has the My Attendance tab`, d.tabs.some((t) => /My Attendance/.test(t)), d.tabs.join(', '))
     const f = await openDaily(s.page, '?tab=my')
-    check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /My Attendance/.test(f.heading), `selected="${f.selected}" heading="${f.heading}"`)
+    check(`${who}: ?tab=my opens My Attendance`, /My Attendance/.test(f.selected) && /^Attendance$/.test(f.heading) /* the design's title (P-ATT-DAY) */, `selected="${f.selected}" heading="${f.heading}"`)
     if (who === 'employee') await s.page.screenshot({ path: `${shots}/greeting-myatt-employee-tab-my.png` })
     if (who === 'dept manager') {
-      const g = await greetingOn(s.page, '/team')
-      check('dept manager: My team greeting shows the first name ("Dept")', /, Dept\b/.test(g) && !/Dept Manager/.test(g), g)
+      // P-TEAM: My team's title is "Team today"; the manager's greeting moved to Home (AUDIT §5.14), where P-HOME checks it.
+      await s.page.goto(base + '/team')
+      const ok = await s.page.getByRole('heading', { level: 1, name: 'Team today' }).waitFor({ timeout: 30_000 }).then(() => true, () => false)
+      check('dept manager: My team shows "Team today" (the greeting moved to Home)', ok)
+      // P-HOME: a manager's Home is /me with the team blocks; the greeting shows the full name (Release 1.1).
+      const hg = await greetingOn(s.page, '/me')
+      check('dept manager: Home (/me) greets them by the full name ("Dept Manager")', /, Dept Manager\b/.test(hg), hg)
     }
     check(`${who}: no page errors`, s.errors.length === 0, s.errors.slice(0, 3).join(' | '))
     check(`${who}: no failed API calls`, s.failedApi.length === 0, s.failedApi.slice(0, 4).join(' | '))

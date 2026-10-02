@@ -1,39 +1,55 @@
-import React, { useMemo, useState } from 'react'
-import { X, ChevronRight, ChevronLeft, AlertTriangle, Loader2, Send } from 'lucide-react'
-import { clsx } from 'clsx'
-import { useToast } from '@/shared/hooks/useToast'
+// New distribution, as a kit side panel with steps (P-DOCS; prototype PgTalent
+// `ldist`): one letter to many people.
+//   1 Letter      the template, and a preview of it (the client's preview before saving)
+//   2 Recipients  everyone, or by department, branch (BW-72), designation, employment type, or picked people
+//   3 Message     the name, the email subject and a message above the attachment
+//   4 Send        now, or on a later date (BW-73: it starts at 9:00 India time that day)
+// The count of people is worked out here from the directory; the server picks the
+// recipients again when it sends (and refuses none or more than 500).
+import { useMemo, useState } from 'react'
+import { Callout, FilterPills, KeyValueGrid, SegmentedControl } from '@/design/kit/display'
+import { FieldGrid, Input, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { todayIso } from '@/design/module/ModuleKit'
 import { useLetterTemplates } from './api/useLetters'
-import { useCompanies, useDepartments, useDesignations } from '../api/useOrg'
+import { useBranches, useCompanies, useDepartments, useDesignations } from '../api/useOrg'
 import { useEmployeeDirectory } from '../api/useWorkforce'
-import { useCreateDistribution, type RecipientFilterType, type CreateDistributionRequest } from './api/useDistribution'
+import {
+  useCreateDistribution, useScheduleDistribution, useScheduledDistributions,
+  type CreateDistributionRequest, type RecipientFilterType,
+} from './api/useDistribution'
 import { RecipientPicker } from './components/RecipientPicker'
-
-type Step = 1 | 2 | 3 | 4
+import { LetterPreviewPane } from './components/LetterPreviewPane'
+import { RECIPIENT_FILTERS, dayText, nextDay, recipientsText } from './lettersModel'
 
 // The backend BY_EMPLOYMENT_TYPE filter resolves values via the WorkforceEmployee
 // EmploymentType enum, so offer exactly those values.
 const EMPLOYMENT_TYPES = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'] as const
-const FILTERS: { value: RecipientFilterType; label: string }[] = [
-  { value: 'ALL_EMPLOYEES', label: 'All employees' },
-  { value: 'BY_DEPARTMENT', label: 'By department' },
-  { value: 'BY_DESIGNATION', label: 'By designation' },
-  { value: 'BY_EMPLOYMENT_TYPE', label: 'By employment type' },
-  { value: 'CUSTOM_LIST', label: 'Custom list' },
-]
+const typeLabel = (t: string) => t.replace('_', ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())
 
-function Chip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function Chips({ options, selected, onToggle, empty, label }: {
+  options: { value: string; label: string }[]; selected: Set<string>; onToggle: (v: string) => void; empty: string; label: string
+}) {
+  if (!options.length) return <p className="lt-muted lt-small">{empty}</p>
   return (
-    <button onClick={onClick}
-      className={clsx('px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-        active ? 'bg-[#059669] border-[#059669] text-white' : 'bg-white border-border text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]')}>
-      {label}
-    </button>
+    <div className="lt-chips" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" className="lt-chip" aria-pressed={selected.has(o.value)} onClick={() => onToggle(o.value)}>{o.label}</button>
+      ))}
+    </div>
   )
 }
 
-export function DistributionWizard({ onClose, onCreated }: { onClose: () => void; onCreated: (jobId: string) => void }) {
-  const { toast } = useToast()
+export function DistributionWizard({ onClose, onCreated, onScheduled }: {
+  onClose: () => void
+  onCreated: (jobId: string) => void
+  /** A send kept for a later date (stays on the list, as Scheduled). */
+  onScheduled?: () => void
+}) {
+  const toast = useToast()
   const create = useCreateDistribution()
+  const schedule = useScheduleDistribution()
+  const scheduled = useScheduledDistributions()
+  const canSchedule = !scheduled.notAvailable
 
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
@@ -41,221 +57,160 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
   const templates = (templatesPage?.content ?? []).filter((t) => t.active)
   const { data: departments = [] } = useDepartments(companyId)
   const { data: designations = [] } = useDesignations(companyId)
-  // Fetch tenant-wide (no companyId): the backend resolves ALL_EMPLOYEES /
-  // BY_EMPLOYMENT_TYPE across the whole tenant, so the client-side recipient
-  // count must too, or it diverges once there's more than one company.
-  // BY_DEPARTMENT / BY_DESIGNATION still narrow by the (company-scoped) dept/
-  // desig ids selected, so a tenant-wide source is correct for every filter type.
+  const { data: branches = [] } = useBranches(companyId)
+  // Tenant-wide, as the backend resolves ALL_EMPLOYEES / BY_EMPLOYMENT_TYPE across the
+  // whole workspace; department, designation and branch narrow by the ids picked.
   const { data: empPage } = useEmployeeDirectory({ pageSize: 500 })
-  const employees = empPage?.content ?? []
+  const employees = useMemo(() => empPage?.content ?? [], [empPage])
 
-  const [step, setStep] = useState<Step>(1)
+  const [step, setStep] = useState(0)
   const [templateId, setTemplateId] = useState('')
   const [filterType, setFilterType] = useState<RecipientFilterType>('ALL_EMPLOYEES')
-  const [deptIds, setDeptIds] = useState<Set<string>>(new Set())
-  const [desigIds, setDesigIds] = useState<Set<string>>(new Set())
-  const [empTypes, setEmpTypes] = useState<Set<string>>(new Set())
+  const [picked, setPicked] = useState<Record<string, Set<string>>>({})
   const [customIds, setCustomIds] = useState<Set<string>>(new Set())
   const [title, setTitle] = useState('')
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
+  const [when, setWhen] = useState<'now' | 'later'>('now')
+  const today = todayIso()
+  const [sendOn, setSendOn] = useState(nextDay(today))
 
-  const selectedTemplate = templates.find((t) => t.id === templateId)
+  const selected = useMemo(() => picked[filterType] ?? new Set<string>(), [picked, filterType])
+  const toggle = (v: string) => setPicked((all) => {
+    const next = new Set(all[filterType] ?? [])
+    if (next.has(v)) next.delete(v); else next.add(v)
+    return { ...all, [filterType]: next }
+  })
+  const template = templates.find((t) => t.id === templateId)
 
-  // Resolve targeted employees client-side for the live count + no-email warning.
+  const optionsFor: Record<string, { value: string; label: string }[]> = {
+    BY_DEPARTMENT: departments.map((d) => ({ value: d.id, label: d.name })),
+    BY_DESIGNATION: designations.map((d) => ({ value: d.id, label: d.title })),
+    BY_BRANCH: branches.filter((b) => b.active !== false).map((b) => ({ value: b.id, label: b.name })),
+    BY_EMPLOYMENT_TYPE: EMPLOYMENT_TYPES.map((t) => ({ value: t, label: typeLabel(t) })),
+  }
+
+  // Who it reaches, worked out from the directory for the count and the no-email warning.
   const targeted = useMemo(() => {
     switch (filterType) {
       case 'ALL_EMPLOYEES': return employees
-      case 'BY_DEPARTMENT': return employees.filter((e) => e.departmentId && deptIds.has(e.departmentId))
-      case 'BY_DESIGNATION': return employees.filter((e) => e.designationId && desigIds.has(e.designationId))
-      case 'BY_EMPLOYMENT_TYPE': return employees.filter((e) => e.employmentType && empTypes.has(e.employmentType))
+      case 'BY_DEPARTMENT': return employees.filter((e) => e.departmentId && selected.has(e.departmentId))
+      case 'BY_DESIGNATION': return employees.filter((e) => e.designationId && selected.has(e.designationId))
+      case 'BY_BRANCH': return employees.filter((e) => e.branchId && selected.has(e.branchId))
+      case 'BY_EMPLOYMENT_TYPE': return employees.filter((e) => e.employmentType && selected.has(e.employmentType))
       case 'CUSTOM_LIST': return employees.filter((e) => customIds.has(e.id))
       default: return []
     }
-  }, [filterType, employees, deptIds, desigIds, empTypes, customIds])
+  }, [filterType, employees, selected, customIds])
   const noEmail = targeted.filter((e) => !e.email).length
+  const sendable = targeted.length - noEmail
 
   const buildFilter = (): CreateDistributionRequest['recipientFilter'] => {
-    switch (filterType) {
-      case 'BY_DEPARTMENT': return { type: 'BY_DEPARTMENT', values: [...deptIds] }
-      case 'BY_DESIGNATION': return { type: 'BY_DESIGNATION', values: [...desigIds] }
-      case 'BY_EMPLOYMENT_TYPE': return { type: 'BY_EMPLOYMENT_TYPE', values: [...empTypes] }
-      case 'CUSTOM_LIST': return { type: 'CUSTOM_LIST', employeeIds: [...customIds] }
-      default: return { type: 'ALL_EMPLOYEES' }
-    }
+    if (filterType === 'ALL_EMPLOYEES') return { type: 'ALL_EMPLOYEES' }
+    if (filterType === 'CUSTOM_LIST') return { type: 'CUSTOM_LIST', employeeIds: [...customIds] }
+    return { type: filterType, values: [...selected] }
   }
+  const pickedNames = filterType === 'CUSTOM_LIST' ? [...customIds]
+    : (optionsFor[filterType] ?? []).filter((o) => selected.has(o.value)).map((o) => o.label)
 
-  const canNext = step === 1 ? !!templateId : step === 2 ? targeted.length > 0 : step === 3 ? !!title.trim() : true
-
-  const toggle = (set: Set<string>, id: string, setter: (s: Set<string>) => void) => {
-    const next = new Set(set)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    setter(next)
-  }
-
-  const handleSend = async () => {
+  const busy = create.isPending || schedule.isPending
+  const later = canSchedule && when === 'later'
+  const finish = async () => {
+    const req = { templateId, title: title.trim(), customMessage: message || undefined, subjectOverride: subject.trim() || undefined, recipientFilter: buildFilter() }
     try {
-      const job = await create.mutateAsync({
-        templateId,
-        title: title.trim(),
-        customMessage: message || undefined,
-        subjectOverride: subject.trim() || undefined,
-        recipientFilter: buildFilter(),
-      })
-      toast('Distribution started', 'success')
-      onCreated(job.id)
-    } catch (err) {
-      toast((err as Error)?.message ?? 'Failed to start distribution', 'error')
+      if (later) {
+        await schedule.mutateAsync({ ...req, sendOn })
+        toast.success(`Scheduled for ${dayText(sendOn)}, 9:00`)
+        onScheduled?.()
+        onClose()
+      } else {
+        const job = await create.mutateAsync(req)
+        toast.success('Distribution started')
+        onCreated(job.id)
+      }
+    } catch (e) {
+      toast.error(later ? 'Couldn’t schedule it' : 'Failed to start distribution', { detail: (e as Error)?.message })
     }
   }
 
-  const STEPS = ['Template', 'Recipients', 'Message', 'Confirm']
+  const steps = [
+    {
+      label: 'Letter', title: 'Which letter', sub: 'Each person gets their own copy, with their details filled in.', icon: 'fileText',
+      blocker: !templateId ? 'Choose a letter template' : null,
+      content: (
+        <div className="lt-stack">
+          <FieldGrid columns={1}>
+            <Select label="Letter template" full value={templateId} onChange={(e) => setTemplateId(e.target.value)}
+              options={[{ value: '', label: templates.length === 0 ? 'No active templates — create one first' : 'Choose a template…' },
+                ...templates.map((t) => ({ value: t.id, label: t.name }))]}
+              hint={template ? `Subject: ${template.subject}` : undefined} />
+          </FieldGrid>
+          {template && <LetterPreviewPane title="Preview" request={{ templateId: template.id }} ready
+            sub="How one copy will look, filled in for you (or for someone you pick). Nothing is sent yet." />}
+        </div>
+      ),
+    },
+    {
+      label: 'Recipients', title: 'Who gets it', sub: 'Only active employees. People without an email are skipped.', icon: 'users',
+      blocker: targeted.length === 0 ? 'Choose who gets it' : null,
+      content: (
+        <div className="lt-stack">
+          <FilterPills label="Recipients" value={filterType} onChange={(v) => setFilterType(v as RecipientFilterType)}
+            options={RECIPIENT_FILTERS.map((f) => ({ value: f.value, label: f.label }))} />
+          {filterType !== 'ALL_EMPLOYEES' && filterType !== 'CUSTOM_LIST' && (
+            <Chips label={RECIPIENT_FILTERS.find((f) => f.value === filterType)?.label ?? ''} options={optionsFor[filterType] ?? []} selected={selected} onToggle={toggle}
+              empty={filterType === 'BY_BRANCH' ? 'No branches.' : filterType === 'BY_DEPARTMENT' ? 'No departments.' : 'No designations.'} />
+          )}
+          {filterType === 'CUSTOM_LIST' && <RecipientPicker employees={employees} selected={customIds} onChange={setCustomIds} />}
+          <Callout tone={targeted.length ? 'brand' : 'neutral'}>
+            {`This goes to ${targeted.length} ${targeted.length === 1 ? 'employee' : 'employees'}.`}
+            {noEmail > 0 && ` ${noEmail} have no email on file and will be skipped.`}
+          </Callout>
+        </div>
+      ),
+    },
+    {
+      label: 'Message', title: 'The email', sub: 'The letter goes as a PDF attachment.', icon: 'mail',
+      blocker: !title.trim() ? 'Give it a name' : null,
+      content: (
+        <FieldGrid columns={1}>
+          <Input label="Name" required value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Diwali bonus 2026" />
+          <Input label="Email subject (optional)" value={subject} maxLength={500} onChange={(e) => setSubject(e.target.value)} placeholder="Defaults to a standard subject" />
+          <Textarea label="Message to recipients" rows={5} value={message} onChange={(e) => setMessage(e.target.value)}
+            placeholder="e.g. Please find attached your letter." hint="Shown in the email above the attached letter." />
+        </FieldGrid>
+      ),
+    },
+    {
+      label: 'Send', title: later ? 'Schedule it' : 'Send it', sub: 'Check it, then send it now or on a later date.', icon: 'calendarClock',
+      blocker: sendable < 1 ? 'No one with an email to send to' : later && (!sendOn || sendOn <= today) ? 'Pick a date after today' : null,
+      content: (
+        <div className="lt-stack">
+          <KeyValueGrid items={[
+            { label: 'Letter', value: template?.name },
+            { label: 'Recipients', value: `${recipientsText(filterType, pickedNames)} · ${targeted.length} ${targeted.length === 1 ? 'person' : 'people'}${noEmail ? ` (${noEmail} without email, skipped)` : ''}` },
+            { label: 'Name', value: title },
+            { label: 'Message', value: message ? (message.length > 80 ? `${message.slice(0, 80)}…` : message) : '' },
+          ]} />
+          {canSchedule && (
+            <SegmentedControl label="When" semantics="radio" value={when} onChange={(v) => setWhen(v as 'now' | 'later')}
+              options={[{ value: 'now', label: 'Send now' }, { value: 'later', label: 'Send on a date' }]} />
+          )}
+          {later
+            ? <>
+              <Input label="Send on" type="date" value={sendOn} min={nextDay(today)} onChange={(e) => setSendOn(e.target.value)}
+                hint="It starts at 9:00 India time that day, to the people who match then." />
+              <Callout tone="info">{`Nothing is sent before ${dayText(sendOn)}. You can cancel it until then.`}</Callout>
+            </>
+            : <Callout tone="warning" icon="alertTriangle">{`This sends ${sendable} ${sendable === 1 ? 'email' : 'emails'} now. It can’t be undone.`}</Callout>}
+        </div>
+      ),
+    },
+  ]
 
   return (
-    <>
-      <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-xl flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-text-primary font-semibold">New Distribution</h3>
-          <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg"><X size={16} /></button>
-        </div>
-
-        <div className="flex gap-1 px-5 py-3 border-b border-border">
-          {STEPS.map((label, i) => (
-            <div key={label} className={clsx('flex-1 text-center text-xs font-medium py-1.5 rounded-full',
-              step === i + 1 ? 'bg-[#059669] text-white' : i + 1 < step ? 'text-[#047857]' : 'text-text-secondary')}>
-              {i + 1}. {label}
-            </div>
-          ))}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Step 1 — Template */}
-          {step === 1 && (
-            <>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Letter template</label>
-              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}
-                className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30">
-                <option value="">{templates.length === 0 ? 'No active templates — create one first' : 'Select a template…'}</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-              {selectedTemplate && (
-                <div className="mt-3 p-3 bg-bg-base border border-border rounded-xl text-sm">
-                  <p className="text-text-secondary text-xs">Subject preview</p>
-                  <p className="text-text-primary mt-0.5">{selectedTemplate.subject}</p>
-                  <p className="text-text-secondary text-xs mt-2">Merge fields like {'{{employee.firstName}}'} are filled per recipient.</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Step 2 — Recipients */}
-          {step === 2 && (
-            <>
-              <div className="flex flex-wrap gap-2">
-                {FILTERS.map((f) => <Chip key={f.value} active={filterType === f.value} label={f.label} onClick={() => setFilterType(f.value)} />)}
-              </div>
-
-              {filterType === 'BY_DEPARTMENT' && (
-                <div className="flex flex-wrap gap-2">
-                  {departments.length === 0 ? <p className="text-sm text-text-secondary">No departments.</p> :
-                    departments.map((d) => <Chip key={d.id} active={deptIds.has(d.id)} label={d.name} onClick={() => toggle(deptIds, d.id, setDeptIds)} />)}
-                </div>
-              )}
-              {filterType === 'BY_DESIGNATION' && (
-                <div className="flex flex-wrap gap-2">
-                  {designations.length === 0 ? <p className="text-sm text-text-secondary">No designations.</p> :
-                    designations.map((d) => <Chip key={d.id} active={desigIds.has(d.id)} label={d.title} onClick={() => toggle(desigIds, d.id, setDesigIds)} />)}
-                </div>
-              )}
-              {filterType === 'BY_EMPLOYMENT_TYPE' && (
-                <div className="flex flex-wrap gap-2">
-                  {EMPLOYMENT_TYPES.map((t) => <Chip key={t} active={empTypes.has(t)} label={t.replace('_', ' ')} onClick={() => toggle(empTypes, t, setEmpTypes)} />)}
-                </div>
-              )}
-              {filterType === 'CUSTOM_LIST' && (
-                <RecipientPicker employees={employees} selected={customIds} onChange={setCustomIds} />
-              )}
-
-              <div className="p-3 bg-[#ECFDF5] border border-[#6EE7B7] rounded-xl text-sm text-[#047857]">
-                This will send to <strong>{targeted.length}</strong> employee{targeted.length === 1 ? '' : 's'}.
-                {noEmail > 0 && <span className="text-amber-700"> {noEmail} have no email on file and will be skipped.</span>}
-              </div>
-            </>
-          )}
-
-          {/* Step 3 — Message */}
-          {step === 3 && (
-            <>
-              <div>
-                <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Title <span className="text-danger">*</span></label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. November 2026 Salary Slips"
-                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30" />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Email subject (optional)</label>
-                <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Defaults to a standard subject"
-                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30" />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Message to recipients</label>
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5}
-                  placeholder="e.g. Please find attached your salary slip for November 2026."
-                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 resize-none" />
-                <p className="text-xs text-text-secondary mt-1">Sent in the email body above the attached document.</p>
-              </div>
-            </>
-          )}
-
-          {/* Step 4 — Confirm */}
-          {step === 4 && (
-            <>
-              <div className="space-y-2 text-sm">
-                <Row label="Template" value={selectedTemplate?.name ?? '—'} />
-                <Row label="Recipients" value={`${targeted.length} employee${targeted.length === 1 ? '' : 's'}${noEmail > 0 ? ` (${noEmail} skipped — no email)` : ''}`} />
-                <Row label="Title" value={title} />
-                {message && <Row label="Message" value={message.length > 80 ? message.slice(0, 80) + '…' : message} />}
-              </div>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-2.5">
-                <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800">
-                  This will send <strong>{targeted.length - noEmail}</strong> email{targeted.length - noEmail === 1 ? '' : 's'} immediately. This cannot be undone.
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="flex gap-3 p-5 border-t border-border">
-          {step > 1 && (
-            <button onClick={() => setStep((s) => (s - 1) as Step)}
-              className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm flex items-center gap-1">
-              <ChevronLeft size={14} /> Back
-            </button>
-          )}
-          {step < 4 ? (
-            <button onClick={() => setStep((s) => (s + 1) as Step)} disabled={!canNext}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white font-medium rounded-xl text-sm">
-              Next <ChevronRight size={14} />
-            </button>
-          ) : (
-            <button onClick={handleSend} disabled={create.isPending || targeted.length - noEmail < 1}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white font-medium rounded-xl text-sm">
-              {create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Send to {targeted.length - noEmail} employee{targeted.length - noEmail === 1 ? '' : 's'}
-            </button>
-          )}
-        </div>
-      </div>
-    </>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 py-1.5 border-b border-border/50">
-      <span className="text-text-secondary">{label}</span>
-      <span className="text-text-primary font-medium text-right">{value}</span>
-    </div>
+    <SidePanel open onClose={() => { if (!busy) onClose() }} title="New distribution" sub="One letter to many people in a single action."
+      width={760} steps={steps} step={step} onStepChange={setStep} busy={busy} closeLabel="Close panel"
+      onFinish={finish} finishLabel={later ? `Schedule for ${dayText(sendOn)}` : `Send to ${sendable} ${sendable === 1 ? 'employee' : 'employees'}`} />
   )
 }

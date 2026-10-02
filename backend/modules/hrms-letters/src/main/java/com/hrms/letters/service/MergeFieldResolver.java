@@ -32,6 +32,24 @@ public class MergeFieldResolver {
             Branch branch,
             Employee manager,
             Map<String, String> overrides) {
+        return buildContext(employee, company, department, designation, branch, manager, overrides, null);
+    }
+
+    /**
+     * As above, dated {@code issueDate} (redesign BW-74): the {@code today},
+     * {@code today:long} and {@code today:iso} fields print the issue date, and
+     * the context keeps it as {@code letter.issueDate} (yyyy-MM-dd). A null issue
+     * date dates the letter today, as before.
+     */
+    public Map<String, String> buildContext(
+            Employee employee,
+            Company company,
+            Department department,
+            Designation designation,
+            Branch branch,
+            Employee manager,
+            Map<String, String> overrides,
+            LocalDate issueDate) {
 
         Map<String, String> ctx = new LinkedHashMap<>();
 
@@ -76,11 +94,7 @@ public class MergeFieldResolver {
             put(ctx, "company.signatoryDesignation", null);
         }
 
-        // Date
-        LocalDate today = LocalDate.now();
-        put(ctx, "today",       formatDate(today, SHORT_FMT));
-        put(ctx, "today:long",  formatDate(today, LONG_FMT));
-        put(ctx, "today:iso",   formatDate(today, ISO_FMT));
+        putDates(ctx, issueDate);
 
         // Caller overrides win
         if (overrides != null) {
@@ -88,6 +102,38 @@ public class MergeFieldResolver {
         }
 
         return ctx;
+    }
+
+    /**
+     * The catalogue's example values, dated {@code issueDate} (else today): the
+     * merge fields of a preview when the viewer may not see any employee's record.
+     */
+    public Map<String, String> sampleContext(LocalDate issueDate) {
+        Map<String, String> ctx = new LinkedHashMap<>();
+        for (MergeFieldEntry e : catalogue()) ctx.put(e.key(), e.example());
+        ctx.put("employee.ctcWords", ctx.get("employee.ctc:words"));
+        putDates(ctx, issueDate);
+        return ctx;
+    }
+
+    /** The merge fields in {@code template} that {@code context} has no value for, in order, once each. */
+    public List<String> unresolvedKeys(String template, Map<String, String> context) {
+        Set<String> out = new LinkedHashSet<>();
+        if (template == null) return List.of();
+        Matcher m = FIELD_PATTERN.matcher(template);
+        while (m.find()) {
+            String key = m.group(1).trim();
+            if (context.get(key) == null) out.add(key);
+        }
+        return List.copyOf(out);
+    }
+
+    private static void putDates(Map<String, String> ctx, LocalDate issueDate) {
+        LocalDate day = issueDate != null ? issueDate : LocalDate.now();
+        put(ctx, "today",       formatDate(day, SHORT_FMT));
+        put(ctx, "today:long",  formatDate(day, LONG_FMT));
+        put(ctx, "today:iso",   formatDate(day, ISO_FMT));
+        if (issueDate != null) put(ctx, "letter.issueDate", formatDate(issueDate, ISO_FMT));
     }
 
     public String resolve(String template, Map<String, String> context) {

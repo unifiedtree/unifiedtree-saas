@@ -31,7 +31,7 @@ export function litRailKey(active: readonly ActiveRailItem[], via?: string | nul
 export interface LitRail {
   /** The rail item to light, when it shows on the rail. */
   key: string | undefined
-  /** The module the page belongs to, even when it sits in More (its Pages panel). */
+  /** The module the page belongs to, even when it sits in More (its pages still show as the top bar's tabs). */
   module: string | undefined
   /** Light More instead: a page reached through More, or a module that moved into More. */
   more: boolean

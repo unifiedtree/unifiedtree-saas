@@ -130,6 +130,74 @@ public class LetterTemplateService {
         return mergeFieldResolver.resolve(template.getBodyHtml(), ctx);
     }
 
+    /**
+     * A letter as it would come out, before anything is saved (redesign: the
+     * template preview). {@code sample} is true when the merge fields were filled
+     * with the catalogue's example values because no employee was given;
+     * {@code unresolved} lists the fields that had no value.
+     */
+    public record RenderedDraft(String subject, String bodyHtml, UUID companyId, String companyName,
+                                UUID employeeId, String employeeName, boolean sample, List<String> unresolved) {}
+
+    /**
+     * Fill {@code subjectTemplate} and {@code bodyTemplate} for {@code employeeId}
+     * (or with the catalogue's examples when null), dated {@code issueDate}
+     * (today when null). The company is {@code companyId}'s, else the employee's.
+     * Reads only; the caller decides who may see which employee.
+     */
+    @Transactional(readOnly = true)
+    public RenderedDraft renderDraft(String subjectTemplate, String bodyTemplate, UUID companyId, UUID employeeId,
+                                     java.time.LocalDate issueDate) {
+        String subjectTpl = subjectTemplate == null ? "" : subjectTemplate;
+        String bodyTpl = bodyTemplate == null ? "" : bodyTemplate;
+        Map<String, String> ctx;
+        Employee employee = null;
+        Company company = companyId != null ? companyRepo.findById(companyId).orElse(null) : null;
+        if (employeeId != null) {
+            employee = employeeRepo.findById(employeeId)
+                    .orElseThrow(() -> new HrmsException("Employee not found", HttpStatus.NOT_FOUND, "EMPLOYEE_NOT_FOUND"));
+            if (company == null && employee.getCompanyId() != null) {
+                company = companyRepo.findById(employee.getCompanyId()).orElse(null);
+            }
+            Department department = employee.getDepartmentId() != null
+                    ? departmentRepo.findById(employee.getDepartmentId()).orElse(null) : null;
+            Branch branch = employee.getBranchId() != null
+                    ? branchRepo.findById(employee.getBranchId()).orElse(null) : null;
+            Employee manager = employee.getManagerId() != null
+                    ? employeeRepo.findById(employee.getManagerId()).orElse(null) : null;
+            Designation designation = null;
+            if (employee.getJobTitle() != null) {
+                designation = new Designation();
+                designation.setTitle(employee.getJobTitle());
+            }
+            ctx = mergeFieldResolver.buildContext(employee, company, department, designation, branch, manager, Map.of(), issueDate);
+        } else {
+            ctx = mergeFieldResolver.sampleContext(issueDate);
+            if (company != null) {
+                // The template's own company is known: print its real details, not the examples.
+                ctx.put("company.name", company.getName());
+                ctx.put("company.legalName", company.getLegalName());
+                ctx.put("company.cin", company.getRegistrationNumber());
+                ctx.put("company.pan", company.getPanNumber());
+                ctx.put("company.gstin", company.getGstin());
+                ctx.put("company.signatoryName", null);
+                ctx.put("company.signatoryDesignation", null);
+            }
+        }
+        List<String> unresolved = new java.util.ArrayList<>(mergeFieldResolver.unresolvedKeys(subjectTpl, ctx));
+        for (String k : mergeFieldResolver.unresolvedKeys(bodyTpl, ctx)) if (!unresolved.contains(k)) unresolved.add(k);
+        String employeeName = employee == null ? null
+                : java.util.stream.Stream.of(employee.getFirstName(), employee.getLastName())
+                        .filter(v -> v != null && !v.isBlank()).collect(java.util.stream.Collectors.joining(" "));
+        // The subject is plain text: an unresolved field's red marker is HTML, so it is dropped there.
+        return new RenderedDraft(
+                mergeFieldResolver.resolve(subjectTpl, ctx).replaceAll("<[^>]*>", ""),
+                mergeFieldResolver.resolve(bodyTpl, ctx),
+                company != null ? company.getId() : companyId,
+                company != null ? company.getName() : null,
+                employeeId, employeeName, employee == null, List.copyOf(unresolved));
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private LetterTemplate requireTemplate(UUID id) {

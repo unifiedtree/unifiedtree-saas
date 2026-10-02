@@ -157,7 +157,7 @@ public class GlobalSearchService {
         return switch (reach) {
             case ALL, PUBLISHED -> Scope.EVERYONE;
             case TEAM -> Scope.only(team.withSelf());
-            case OWN -> Scope.only(caller.employeeId() == null ? List.of() : List.of(caller.employeeId()));
+            case OWN, ROUTED -> Scope.only(caller.employeeId() == null ? List.of() : List.of(caller.employeeId()));
             case NONE -> Scope.only(List.of());
         };
     }
@@ -176,6 +176,14 @@ public class GlobalSearchService {
             case OFFER -> queries.offers(tenant, words, limit).stream().map(GlobalSearchService::offerHit).toList();
             case JOB -> queries.jobs(tenant, words, limit).stream().map(GlobalSearchService::jobHit).toList();
             case POLICY -> queries.policies(tenant, reach != Reach.ALL, words, limit).stream().map(r -> policyHit(r, reach)).toList();
+            case HOLIDAY -> queries.holidays(tenant, c.employeeId(), LocalDate.now().getYear(), words, limit).stream().map(GlobalSearchService::holidayHit).toList();
+            case WFH -> queries.wfh(tenant, scope(reach, c, team), words, limit).stream().map(r -> wfhHit(r, c)).toList();
+            case SHIFT_CHANGE -> queries.shiftChanges(tenant, scope(reach, c, team), words, limit).stream().map(r -> shiftChangeHit(r, c)).toList();
+            case CORRECTION -> queries.corrections(tenant, scope(reach, c, team), words, limit).stream().map(r -> correctionHit(r, c)).toList();
+            case ADVANCE -> queries.advances(tenant,
+                    reach == Reach.ROUTED && !c.has("hrms.advance.request.self") ? Scope.only(List.of()) : scope(reach, c, team),
+                    reach == Reach.ROUTED ? c.employeeId() : null, words, limit).stream().map(r -> advanceHit(r, c)).toList();
+            case OVERTIME_REQUEST -> queries.overtimeRequests(tenant, scope(reach, c, team), words, limit).stream().map(r -> overtimeRequestHit(r, c)).toList();
         };
     }
 
@@ -288,6 +296,86 @@ public class GlobalSearchService {
                 r.effective() == null ? null : "effective " + day(r.effective()));
         return new SearchHit(SearchType.POLICY.key, r.id().toString(), r.title(), sub, url,
                 reach == Reach.ALL && !"ACTIVE".equals(r.status()) ? tab : null);
+    }
+
+    /** "Diwali", "Thu, 12 Nov 2026 · National holiday"; opens the Leave page's Holidays tab. */
+    static SearchHit holidayHit(GlobalSearchQueries.HolidayRow r) {
+        String when = r.on() == null ? null
+                : r.on().getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + ", " + day(r.on());
+        String kind = r.type() == null || r.type().isBlank() ? "Holiday" : pretty(r.type()) + " holiday";
+        return new SearchHit(SearchType.HOLIDAY.key, r.id().toString(), r.name(), joinNonBlank(" · ", when, kind),
+                "/hrms/leave?tab=holidays", null);
+    }
+
+    // ── requests ────────────────────────────────────────────────────────────
+    // Your own request opens your self-service page; someone else's opens the page where it's decided.
+
+    private static boolean mine(UUID employeeId, Caller c) {
+        return employeeId != null && employeeId.equals(c.employeeId());
+    }
+
+    /** "Work from home", or "Ravi Kumar · Work from home"; opens My WFH or the Leave page's Approvals. */
+    static SearchHit wfhHit(GlobalSearchQueries.WfhRow r, Caller c) {
+        boolean own = mine(r.employeeId(), c);
+        return new SearchHit(SearchType.WFH.key, r.id().toString(),
+                own ? "Work from home" : r.employeeName() + " · Work from home",
+                own ? range(r.from(), r.to()) : joinNonBlank(" · ", range(r.from(), r.to()), r.employeeCode()),
+                own ? "/me/wfh" : "/hrms/leave?tab=approvals", pretty(r.status()));
+    }
+
+    /** "Shift change to Night", with the move and when it starts; opens My shift change or Shifts › Requests. */
+    static SearchHit shiftChangeHit(GlobalSearchQueries.ShiftChangeRow r, Caller c) {
+        boolean own = mine(r.employeeId(), c);
+        String what = r.toShift() == null || r.toShift().isBlank() ? "Shift change" : "Shift change to " + r.toShift();
+        String move = r.fromShift() == null || r.toShift() == null ? null : r.fromShift() + " → " + r.toShift();
+        String from = r.effective() == null ? null : "from " + day(r.effective());
+        return new SearchHit(SearchType.SHIFT_CHANGE.key, r.id().toString(),
+                own ? what : r.employeeName() + " · " + what,
+                own ? joinNonBlank(" · ", move, from) : joinNonBlank(" · ", move, from, r.employeeCode()),
+                own ? "/me/shift-change" : "/hrms/shifts?tab=requests", pretty(r.status()));
+    }
+
+    /** "Attendance fix · 24 Sep 2026"; opens Attendance › Regularization (it lists yours, or your team's to decide). */
+    static SearchHit correctionHit(GlobalSearchQueries.CorrectionRow r, Caller c) {
+        boolean own = mine(r.employeeId(), c);
+        return new SearchHit(SearchType.CORRECTION.key, r.id().toString(),
+                own ? "Attendance fix" + (r.day() == null ? "" : " · " + day(r.day())) : r.employeeName() + " · Attendance fix",
+                own ? null : joinNonBlank(" · ", day(r.day()), r.employeeCode()),
+                "/hrms/attendance?tab=corrections", pretty(r.status()));
+    }
+
+    /** "Salary advance · ₹25,000", with the months to repay; opens My advances or Advances & loans. */
+    static SearchHit advanceHit(GlobalSearchQueries.AdvanceRow r, Caller c) {
+        boolean own = mine(r.employeeId(), c);
+        String amount = rupees(r.amount());
+        String months = r.months() == null ? null : r.months() + (r.months() == 1 ? " month" : " months");
+        return new SearchHit(SearchType.ADVANCE.key, r.id().toString(),
+                own ? "Salary advance" + (amount == null ? "" : " · " + amount) : r.employeeName() + " · Salary advance",
+                own ? months : joinNonBlank(" · ", amount, months, r.employeeCode()),
+                own ? "/hrms/advances?tab=my" : "/hrms/advances", pretty(r.status()));
+    }
+
+    /** "Overtime · 24 Sep 2026", with the time asked for; opens Shifts & overtime (Overtime for approvers, My shift otherwise). */
+    static SearchHit overtimeRequestHit(GlobalSearchQueries.OvertimeRequestRow r, Caller c) {
+        boolean own = mine(r.employeeId(), c);
+        String time = minutes(r.minutes());
+        String url = c.has("attendance.team.read") ? "/hrms/shifts?tab=overtime" : "/hrms/shifts?tab=myshift";
+        return new SearchHit(SearchType.OVERTIME_REQUEST.key, r.id().toString(),
+                own ? "Overtime" + (r.day() == null ? "" : " · " + day(r.day())) : r.employeeName() + " · Overtime",
+                own ? time : joinNonBlank(" · ", time, day(r.day()), r.employeeCode()),
+                url, pretty(r.status()));
+    }
+
+    /** ₹25,000 (Indian grouping, whole rupees). */
+    static String rupees(java.math.BigDecimal amount) {
+        return amount == null ? null : com.hrms.api.approvals.Money.format("INR", amount);
+    }
+
+    /** "1 h 20 m", "45 m". */
+    static String minutes(Integer m) {
+        if (m == null) return null;
+        int h = m / 60, r = m % 60;
+        return h == 0 ? r + " m" : r == 0 ? h + " h" : h + " h " + r + " m";
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

@@ -1,0 +1,43 @@
+/* The notifications popover (HrmsPlatform.dc.html L74). Tokens only; the kit Popover gives the
+   radius, hairline border, shadow and pop-in. */
+.uko-pop.ut-bellpop {
+  display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  color: var(--u-ink, #0E1B16);
+}
+.ut-bellpop__head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 12px; flex-shrink: 0; }
+.ut-bellpop__heading { flex: 1; font-size: 15px; font-weight: 500; }
+.ut-bellpop__new {
+  font-size: 12px; font-weight: 500; line-height: 22px; padding: 0 9px; border-radius: 999px;
+  color: var(--u-brt, #0F6E56); background: var(--u-brs, #E8F3EE); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ut-bellpop__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.ut-bellpop__list { list-style: none; margin: 0; padding: 0 8px 8px; display: flex; flex-direction: column; }
+.ut-bellpop__row {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 10px 8px; border: 0; border-radius: 10px;
+  background: transparent; text-align: left; cursor: pointer; font: inherit; color: inherit;
+}
+.ut-bellpop__row:hover { background: var(--u-hv, #F0F4F2); }
+.ut-bellpop__row:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs2, #D2EADF)); }
+.ut-bellpop__icon {
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+}
+.ut-bellpop__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ut-bellpop__title { font-size: 13.5px; font-weight: 500; line-height: 1.4; }
+/* One clamped line of the text (it carries details such as a rejection reason). */
+.ut-bellpop__body { font-size: 12.5px; line-height: 1.4; color: var(--u-ink2, #4A5A54); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ut-bellpop__meta { font-size: 12px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
+.ut-bellpop__dot { width: 8px; height: 8px; margin-top: 6px; flex-shrink: 0; border-radius: 50%; background: var(--u-gd, #C8912E); }
+.ut-bellpop__state { padding: 4px 16px 16px; }
+.ut-bellpop__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0;
+  padding: 10px 16px; box-shadow: inset 0 1px 0 var(--u-ln2, #EDF1EF);
+}
+.ut-bellpop__all {
+  padding: 0; border: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 500;
+  color: var(--u-brt, #0F6E56); cursor: pointer;
+}
+.ut-bellpop__all:hover { text-decoration: underline; }
+.ut-bellpop__all:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs2, #D2EADF)); }
+.ut-bellpop__span { margin-left: auto; font-size: 12px; color: var(--u-ink3, #6A7A73); }

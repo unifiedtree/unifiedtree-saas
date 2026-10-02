@@ -8,7 +8,7 @@
 // and shows the reason. What the backend can't store stays on screen as
 // "Coming soon" — docs/Designs/STATIC-UI-TO-BUILD.md §6.
 import '@/design/master/master.css'
-import { useCallback, useMemo, useRef, useState, type ComponentType, type Context } from 'react'
+import { Suspense, lazy, useCallback, useMemo, useRef, useState, type ComponentType, type Context } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { usePermission, P } from '@unifiedtree/sdk'
@@ -34,7 +34,9 @@ import { saveAndRecord } from '@/shared/export/fileExport'
 import { isValidRange, rangeLabel, type DateRange } from '@/design/dc/milestoneRange'
 
 // The generated design module is untyped JavaScript; these are the pieces used here.
-const { NAV, TopTabs, Toasts, ICONS, deriveDB } = Design as any
+const { NAV, TopTabs, Toasts, ICONS, deriveDB, Hero } = Design as any
+// The Org chart sub-tab (P-ORG): its own chunk, loaded when the tab opens.
+const OrgChartSection = lazy(() => import('../orgchart/OrgChartPage').then((m) => ({ default: m.OrgChartSection })))
 const AppCtx = Design.AppCtx as unknown as Context<any>
 const PAGES = Design.PAGES as unknown as Record<string, ComponentType>
 const Empty = Design.Empty as unknown as ComponentType<{ icon?: string; title: string; body?: string; action?: React.ReactNode }>
@@ -45,6 +47,7 @@ export const MASTER_ROUTES: Record<string, string> = {
   companies: '/hrms/master/companies', branches: '/hrms/master/branches', departments: '/hrms/master/departments', designations: '/hrms/master/designations',
   grades: '/hrms/master/grades', shifts: '/hrms/master/shift-rules', leaves: '/hrms/master/leave-rules', policies: '/hrms/policies',
   components: '/hrms/payroll/components', statutory: '/hrms/master/statutory',
+  orgchart: '/hrms/master/org-chart',
 }
 const PAGE_AT: Record<string, string> = Object.fromEntries(Object.entries(MASTER_ROUTES).map(([k, v]) => [v, k]))
 /** The design's tweak defaults (its "Top tabs" layout). */
@@ -58,6 +61,7 @@ const NEEDS: Record<string, string[]> = {
   branches: ['branches', 'companies', 'employees'], departments: ['depts', 'employees', 'desigs'], designations: ['desigs', 'depts', 'grades', 'employees'],
   grades: ['grades', 'desigs', 'employees'], shifts: ['shifts', 'employees'], leaves: ['leaves', 'classes'], policies: ['policies', 'employees'],
   components: ['components'], statutory: ['statutory', 'components'],
+  orgchart: [],
 }
 
 interface ScheduleRow { employeeId: string; shiftName?: string | null }
@@ -136,6 +140,8 @@ export function MasterContainer() {
   const visible: Record<string, boolean> = {
     employees: canEmpRead, contractors: canContrRead, classes: canEmpRead,
     companies: orgSetup && canCoRead, branches: orgSetup && canCoRead, departments: orgSetup && canDeptRead, designations: orgSetup && canDesRead, grades: orgSetup,
+    // The org chart reads GET /v1/hrms/org-chart (open to everyone signed in); here it sits with the rest of the setup.
+    orgchart: orgSetup,
     shifts: canShiftAdmin || canPolicyWrite, leaves: canLeaveWrite || canPolicyWrite, policies: canPolicyWrite && canPolicyRead,
     components: canCompRead, statutory: canSetRead,
   }
@@ -359,7 +365,9 @@ export function MasterContainer() {
   const body = !allowed ? <div className="card"><Empty icon="lock" title="You don’t have access to this section" body="Ask an admin if you need it." /></div>
     : failed ? <div className="card"><Empty icon="alert-triangle" title="This page couldn’t load" body={errText(failed)} action={<button className="btn sm" onClick={retry}>Try again</button>} /></div>
       : loading ? <PageSkeleton path={location.pathname} bare />
-        : <Page key={`${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}|${route.archived}`} />
+        : page === 'orgchart'
+          ? <Suspense fallback={<PageSkeleton path={location.pathname} bare />}><OrgChartSection renderHero={(sub: string) => <Hero title="Org chart" sub={sub} />} /></Suspense>
+          : <Page key={`${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}|${route.archived}`} />
   return (
     <div className="utm" data-master-page={page}>
       <AppCtx.Provider value={ctx}>

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { SHARED_KEYS } from './shared/contracts'
 
 // Mirrors backend com.hrms.expense.enums
 export type ExpenseCategory =
@@ -190,7 +191,12 @@ export function useExpenseDecision() {
         method: 'POST',
         body: JSON.stringify({ approved, comment }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
+      // Every decision changes the Approvals inbox and the Undo offers (approval Undo, BW-06).
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox }),
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions }),
+    ]),
   })
 }
 

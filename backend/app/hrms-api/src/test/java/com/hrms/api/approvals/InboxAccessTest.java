@@ -31,16 +31,18 @@ import static org.mockito.Mockito.*;
  */
 class InboxAccessTest {
 
-    // The built-in roles' approval permissions (rbac.role_permissions, 27 Sep 2026).
+    // The built-in roles' approval permissions (rbac.role_permissions, 27 Sep 2026; hrms.timesheet.approve from V143_65).
     private static final String[] OWNER = {"hrms.leave.approve.l1", "hrms.leave.approve.l2", "wfh.approve",
             "attendance.regularization.approve", "hrms.expense.claim.approve", "hrms.expense.reimbursement",
-            "attendance.workforce.admin", "attendance.team.read"};
+            "attendance.workforce.admin", "attendance.team.read", "hrms.timesheet.approve"};
     private static final String[] HR_MANAGER = {"hrms.leave.approve.l1", "hrms.leave.approve.l2", "wfh.approve",
             "attendance.regularization.approve", "hrms.expense.claim.approve", "attendance.workforce.admin",
-            "attendance.team.read"};
+            "attendance.team.read", "hrms.timesheet.approve"};
     private static final String[] FINANCE_LEAD = {"wfh.approve", "hrms.expense.reimbursement", "attendance.team.read"};
     private static final String[] DEPT_MANAGER = {"hrms.leave.approve.l1", "wfh.approve", "attendance.regularization.approve",
-            "hrms.expense.claim.approve", "attendance.team.read"};
+            "hrms.expense.claim.approve", "attendance.team.read", "hrms.timesheet.approve"};
+    // A custom role that may only approve timesheets.
+    private static final String[] TIMESHEETS_ONLY = {"hrms.timesheet.approve"};
     private static final String[] EMPLOYEE = {"leave.request.self", "attendance.checkin.self"};
 
     private static final UUID ME = UUID.randomUUID();
@@ -115,6 +117,45 @@ class InboxAccessTest {
         // work from home needs a reason to reject, nothing else does
         assertTrue(InboxAccess.rejectNeedsReason(DecisionKind.WFH));
         assertFalse(InboxAccess.rejectNeedsReason(DecisionKind.LEAVE));
+    }
+
+    @Test void timesheetWeeksSitUnderRequestsForTheirTeamOnly() {
+        assertEquals(List.of("all", "requests"), accessOf(TIMESHEETS_ONLY).tabs());
+        assertTrue(accessOf(TIMESHEETS_ONLY).any());
+        assertTrue(accessOf(TIMESHEETS_ONLY).timesheetsIn("requests"));
+        assertTrue(accessOf(TIMESHEETS_ONLY).timesheetsIn("all"));
+        assertFalse(accessOf(TIMESHEETS_ONLY).timesheetsIn("leave"));
+        assertEquals(List.of(), accessOf(TIMESHEETS_ONLY).kinds("all"));
+        assertFalse(accessOf(FINANCE_LEAD).timesheetsIn("requests"));
+        UUID inTeam = UUID.randomUUID();
+        InboxAccess mgr = accessOf(DEPT_MANAGER);
+        assertTrue(mgr.canDecideTimesheet(inTeam, Set.of(inTeam)));
+        assertFalse(mgr.canDecideTimesheet(UUID.randomUUID(), Set.of(inTeam)));
+        assertFalse(mgr.canDecideTimesheet(ME, Set.of(ME)));
+        assertFalse(accessOf(FINANCE_LEAD).canDecideTimesheet(inTeam, Set.of(inTeam)));
+    }
+
+    @Test void timesheetWeeksAreTheTeamsSubmittedOnesAndNothingBeforeTheirTableExists() {
+        UUID tenant = UUID.randomUUID();
+        UUID member = UUID.randomUUID();
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(contains("to_regclass('hrms.timesheet_weeks')"), eq(Boolean.class))).thenReturn(true);
+        new InboxQueries(jdbc).timesheets(tenant, accessOf(DEPT_MANAGER), Set.of(member));
+        List<Object> args = new java.util.ArrayList<>();
+        String sql = sqlOf(jdbc, args);
+        assertTrue(sql.contains("w.status = 'SUBMITTED'"));
+        assertTrue(sql.contains("w.employee_id <> ?"));
+        assertTrue(sql.contains("w.employee_id = ANY(CAST(? AS uuid[]))"));
+        assertEquals(List.of(tenant, ME, "{" + member + "}"), args);
+
+        JdbcTemplate missing = mock(JdbcTemplate.class);
+        when(missing.queryForObject(anyString(), eq(Boolean.class))).thenReturn(false);
+        assertEquals(List.of(), new InboxQueries(missing).timesheets(tenant, accessOf(DEPT_MANAGER), Set.of(member)));
+        verify(missing, never()).query(anyString(), any(RowCallbackHandler.class), any(Object[].class));
+
+        JdbcTemplate noTeam = mock(JdbcTemplate.class);
+        assertEquals(List.of(), new InboxQueries(noTeam).timesheets(tenant, accessOf(DEPT_MANAGER), Set.of()));
+        verifyNoInteractions(noTeam);
     }
 
     // ── each source uses its own list endpoint's scope ───────────────────────
@@ -245,6 +286,46 @@ class InboxAccessTest {
                 () -> service.inbox("expenses", 0, 20, token(FINANCE_LEAD), auth(FINANCE_LEAD))).getErrorCode());
         assertEquals("INBOX_TAB_INVALID", assertThrows(com.hrms.core.exception.HrmsException.class,
                 () -> service.inbox("overtime", 0, 20, token(DEPT_MANAGER), auth(DEPT_MANAGER))).getErrorCode());
+    }
+
+    @Test void submittedTimesheetWeeksCountUnderRequestsAndCarryNoUndoKind() {
+        UUID tenant = UUID.randomUUID();
+        TenantContext.setTenantId(tenant);
+        InboxQueries q = mock(InboxQueries.class);
+        TeamEmployeeScope scope = mock(TeamEmployeeScope.class);
+        UUID a = UUID.randomUUID();
+        Employee ea = new Employee();
+        ea.setId(a);
+        when(scope.resolve(any(), isNull())).thenReturn(List.of(ea));
+        java.time.Instant t0 = java.time.Instant.parse("2026-09-28T05:00:00Z");
+        InboxQueries.Row week = new InboxQueries.Row(InboxQueries.TIMESHEET, false, UUID.randomUUID(), a, "Name", null, null,
+                t0.plusSeconds(300), "Timesheet", LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 27), null, null, null, null);
+        when(q.timesheets(eq(tenant), any(), any())).thenReturn(List.of(week));
+        when(q.leave(eq(tenant), any())).thenReturn(List.of(row(DecisionKind.LEAVE, a, t0)));
+        PermissionChecker perm = mock(PermissionChecker.class);
+        when(perm.check(anyString())).thenAnswer(inv -> Arrays.asList(DEPT_MANAGER).contains(inv.getArgument(0, String.class)));
+        DecisionUndoService undo = mock(DecisionUndoService.class);
+        when(undo.recentOrEmpty(any())).thenReturn(List.of());
+        PlatformTransactionManager tm = mock(PlatformTransactionManager.class);
+        when(tm.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        ApprovalsInboxService service = new ApprovalsInboxService(q, scope, perm, undo, tm);
+
+        ApprovalsInboxService.Inbox all = service.inbox("all", 0, 20, token(DEPT_MANAGER), auth(DEPT_MANAGER));
+        assertEquals(1, all.counts().get("requests"));
+        assertEquals(2, all.counts().get("all"));
+        assertEquals("TIMESHEET", all.rows().get(0).kind);
+        assertTrue(all.rows().get(0).canDecide);
+        assertFalse(all.rows().get(0).rejectNeedsReason);
+        ApprovalsInboxService.Inbox requests = service.inbox("requests", 0, 20, token(DEPT_MANAGER), auth(DEPT_MANAGER));
+        assertEquals(List.of("TIMESHEET"), requests.rows().stream().map(r -> r.kind).toList());
+        assertEquals(0, service.inbox("leave", 0, 20, token(DEPT_MANAGER), auth(DEPT_MANAGER)).rows().stream()
+                .filter(r -> "TIMESHEET".equals(r.kind)).count());
+        // without the permission the source isn't read at all
+        reset(q);
+        PermissionChecker finance = mock(PermissionChecker.class);
+        when(finance.check(anyString())).thenAnswer(inv -> Arrays.asList(FINANCE_LEAD).contains(inv.getArgument(0, String.class)));
+        new ApprovalsInboxService(q, scope, finance, undo, tm).inbox("all", 0, 20, token(FINANCE_LEAD), auth(FINANCE_LEAD));
+        verify(q, never()).timesheets(any(), any(), any());
     }
 
     private static InboxQueries.Row row(DecisionKind kind, UUID employee, java.time.Instant at) {

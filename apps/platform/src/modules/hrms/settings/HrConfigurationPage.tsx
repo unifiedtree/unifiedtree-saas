@@ -20,6 +20,8 @@ import { useCompanies } from '../api/useOrg'
 import { useHrConfig, useUpdateHrConfig, type HrConfigResponse } from '../api/useSettings'
 import { useProbationConfig, useUpdateProbationConfig, useProbationReminders, useTriggerProbationScan } from '../api/useProbation'
 import { useAttendancePolicy, useSaveAttendancePolicy, type AttendancePolicy, type AllowancePeriod, type AfterAllowance } from '../api/useAttendanceReview'
+import { useSaveWebPunchSetting, useWebPunchSetting } from '../api/shared/useWebPunchSetting'
+import type { WebPunchSetting } from '../api/shared/contracts'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']] as const
 const DAY_NAME: Record<number, string> = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' }
@@ -33,6 +35,8 @@ interface Form {
   weekStart: string; weekend: number[]
   grace: string; start: string; halfDayLate: string; allowance: string; period: AllowancePeriod; after: AfterAllowance
   geofence: boolean; wfh: boolean; fullDayHours: string; halfDayHours: string; earlyLeave: string
+  /** "Allow web check-in" (V143.53, on by default); null while the server doesn't offer it. */
+  webPunch: boolean | null
   fiscal: string
 }
 const num = (v: string) => (v === '' ? NaN : Number(v))
@@ -44,7 +48,7 @@ const AFTER: { value: AfterAllowance; label: string }[] = [
 ]
 const AFTER_WORD: Record<AfterAllowance, string> = { KEEP_LATE: 'late', HALF_DAY: 'a half day', LOSS_OF_PAY: 'loss of pay' }
 
-function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined): Form {
+function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined, w?: WebPunchSetting): Form {
   const pad = c?.employeeCodePadding ?? 4
   return {
     prefix: c?.employeeCodePrefix ?? 'EMP', next: String(c?.employeeCodeNextNumber ?? 1).padStart(pad, '0'),
@@ -54,7 +58,7 @@ function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number
     grace: String(a?.graceMinutes ?? c?.lateGraceMinutes ?? ''), start: (a?.defaultStartTime || '09:15').slice(0, 5),
     halfDayLate: a?.halfDayLateMinutes != null ? String(a.halfDayLateMinutes) : '', allowance: String(a?.lateAllowanceCount ?? 0),
     period: a?.lateAllowancePeriod || 'MONTH', after: a?.afterAllowanceAction || 'KEEP_LATE',
-    geofence: !!c?.enforceGeofencingForMobile, wfh: !!c?.allowWorkFromHome,
+    geofence: !!c?.enforceGeofencingForMobile, wfh: !!c?.allowWorkFromHome, webPunch: w ? w.allowWebPunch : null,
     fullDayHours: a?.fullDayMinHours != null ? String(a.fullDayMinHours) : '', halfDayHours: a?.halfDayMinHours != null ? String(a.halfDayMinHours) : '',
     earlyLeave: String(a?.earlyLeaveMinutes ?? 0),
     fiscal: (c?.fiscalYearStart || 'APRIL').toUpperCase(),
@@ -74,15 +78,18 @@ export function HrConfigurationPage() {
   const reminders = useProbationReminders(canReminders)
   const scan = useTriggerProbationScan()
   const policyQ = useAttendancePolicy(co || undefined)
+  // Web check-in switch (P-ATT-DAY BW-24): anyone signed in reads it; settings.hrconfig.write or attendance.policy.manage changes it.
+  const webQ = useWebPunchSetting(co || undefined)
+  const saveWeb = useSaveWebPunchSetting(co)
   const saveHr = useUpdateHrConfig(), saveProb = useUpdateProbationConfig(), savePolicy = useSaveAttendancePolicy()
   const { toast, show, dismiss } = useSettingsToast()
 
-  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data), [hrQ.data, probQ.data, policyQ.data])
+  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data, webQ.data), [hrQ.data, probQ.data, policyQ.data, webQ.data])
   const [edit, setEdit] = useState<Form | null>(null)
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
   useEffect(() => { setEdit(null); setTried(false) }, [co])
-  const hrEdit = canHrWrite, probEdit = canProbWrite, polEdit = canPolicy && !!policyQ.data
+  const hrEdit = canHrWrite, probEdit = canProbWrite, polEdit = canPolicy && !!policyQ.data, webEdit = (canHrWrite || canPolicy) && !!webQ.data
   const f = edit || saved
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setEdit((cur) => ({ ...(cur || saved), [k]: v }))
 
@@ -151,7 +158,10 @@ export function HrConfigurationPage() {
       if (probEdit && changed.some((k) => probKeys.includes(k))) {
         await saveProb.mutateAsync({ reminderDaysBefore: Number(f.reminderDays), autoExtendEnabled: f.autoExtend, autoExtendDays: f.autoExtend ? Number(f.autoExtendDays) : Number(saved.autoExtendDays || 0) })
       }
-      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch()])
+      if (webEdit && changed.includes('webPunch') && f.webPunch != null) {
+        await saveWeb.mutateAsync({ allowWebPunch: f.webPunch })
+      }
+      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch(), webQ.refetch()])
       setEdit(null); setTried(false); show('ok', 'HR settings saved')
     } catch (e) {
       show('error', 'Couldn’t save HR settings', `${e instanceof Error && e.message ? 'Server: “' + e.message + '” ' : ''}Your changes are still here.`)
@@ -159,7 +169,7 @@ export function HrConfigurationPage() {
   }
 
   const readableHr = canHrWrite || canSettingsRead || !!hrQ.data
-  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
+  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit || webEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
   const status: 'loading' | 'error' | 'live' = (co && (hrQ.isLoading || policyQ.isLoading)) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
   const preview = !E.prefix && !E.next ? `${f.prefix.toUpperCase()}-${f.next}` : '—'
   const weekendText = f.weekend.length ? f.weekend.map((d) => DAY_NAME[d]).join(' & ') : 'None'
@@ -283,8 +293,9 @@ export function HrConfigurationPage() {
           {policyQ.data?.updatedAt && <SettingsNote>Last changed {new Date(policyQ.data.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{policyQ.data.updatedByName ? ` by ${policyQ.data.updatedByName}` : ''}.</SettingsNote>}
         </SettingsSection>
 
-        <SettingsSection id="attendance" icon="mapPin" title="Attendance rules" summary={`Geofencing on mobile ${f.geofence ? 'required' : 'not required'} · work from home ${f.wfh ? 'allowed' : 'not allowed'} · ${hoursSummary}`}>
+        <SettingsSection id="attendance" icon="mapPin" title="Attendance rules" summary={`Geofencing on mobile ${f.geofence ? 'required' : 'not required'} · work from home ${f.wfh ? 'allowed' : 'not allowed'}${f.webPunch == null ? '' : ` · web check-in ${f.webPunch ? 'on' : 'off'}`} · ${hoursSummary}`}>
           <SettingsToggleRow label="Require geofencing on mobile" detail="Mobile check-ins outside the branch’s zone (or the person’s own zone) are refused. When off, they’re accepted and listed for review." on={f.geofence} onToggle={() => set('geofence', !f.geofence)} readOnly={ro} />
+          {f.webPunch != null && <SettingsToggleRow label="Allow web check-in" detail="People can check in and out from the browser with a face scan and their location, under the same zone rules as the mobile app. When off, they use the mobile app." on={f.webPunch} onToggle={() => set('webPunch', !f.webPunch)} readOnly={!webEdit} />}
           <SettingsToggleRow label="Allow work from home" detail="People can request work-from-home days. When off, nobody in this company can request one." on={f.wfh} onToggle={() => set('wfh', !f.wfh)} readOnly={ro} />
           <SettingsGrid>
             <SettingsInput label="Minimum hours for a full day" value={f.fullDayHours} onChange={(v) => set('fullDayHours', hoursIn(v))} readOnly={pol} error={shown('fullDayHours')} suffix="hours" inputMode="decimal" placeholder="Off" hint="Fewer hours between check-in and check-out is a half day." />

@@ -23,7 +23,8 @@ for(const role of roleRows){
    // My team (redesign P-TEAM). '*' = anyone signed in (the caller's own rows).
    ['/v1/team/summary',['attendance.team.read','hrms.leave.approve.l1']],
    ['/v1/team/time-off?from=2026-09-21&to=2026-09-27',['attendance.team.read','hrms.leave.approve.l1','wfh.approve']],
-   ['/v1/team/approvals',['hrms.leave.approve.l1','wfh.approve','attendance.regularization.approve','hrms.expense.claim.approve']],
+   // the inbox lists submitted timesheet weeks too (BW-36), so a timesheet approver may open it
+   ['/v1/team/approvals',['hrms.leave.approve.l1','wfh.approve','attendance.regularization.approve','hrms.expense.claim.approve','hrms.timesheet.approve']],
    ['/v1/team/probation?days=30',['attendance.team.read']],
    ['/v1/attendance/reminders?date=2026-09-27',['attendance.team.read']],
    ['/v1/approvals/recent-decisions',['*']],

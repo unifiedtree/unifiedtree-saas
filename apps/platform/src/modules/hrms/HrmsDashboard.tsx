@@ -290,7 +290,7 @@ export const RoleDashboard: React.FC = () => {
   // `pendingApprovals > 0` dropped an approver with a clear queue onto "my".
   const leaveTarget = canApproveLeaves ? '/hrms/leave?tab=approvals' : '/hrms/leave?tab=my'
 
-  // The greeting's name: the first name, or the full name when it is just an initial.
+  // The greeting's name: the person's full name, first and last (greetingName.ts).
   const firstName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
   const clock = useLiveClock()
 

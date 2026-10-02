@@ -44,13 +44,15 @@ public class PerformanceInsightService {
     private final PerformanceTeamScope teamScope;
     private final KpiService kpiService;
     private final GoalService goalService;
+    private final CompanyKpiService companyKpis;
 
     public PerformanceInsightService(JdbcTemplate jdbc, PerformanceTeamScope teamScope,
-                                     KpiService kpiService, GoalService goalService) {
+                                     KpiService kpiService, GoalService goalService, CompanyKpiService companyKpis) {
         this.jdbc = jdbc;
         this.teamScope = teamScope;
         this.kpiService = kpiService;
         this.goalService = goalService;
+        this.companyKpis = companyKpis;
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -212,6 +214,58 @@ public class PerformanceInsightService {
         String t = note.trim();
         if (t.isEmpty()) return null;
         return t.length() > MAX_NOTE ? t.substring(0, MAX_NOTE) : t;
+    }
+
+    // ── My goals: due date and last update (redesign BW-84) ───────────────────
+
+    /**
+     * The caller's goals with their due date and their last progress update (its
+     * note, when, and the value before it), plus the company KPI each counts towards
+     * (BW-83, empty until V143.61 is applied). One query each, never per goal.
+     */
+    @Transactional(readOnly = true)
+    public List<GoalResponse> withExtras(UUID tenantId, UUID employeeId, List<GoalResponse> goals) {
+        if (goals.isEmpty() || employeeId == null) return goals;
+        java.util.Map<UUID, java.time.LocalDate> due = new java.util.HashMap<>();
+        jdbc.query("SELECT id, due_date FROM performance_mgmt.goals WHERE tenant_id = ? AND employee_id = ? AND due_date IS NOT NULL",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> due.put(rs.getObject("id", UUID.class),
+                        rs.getDate("due_date").toLocalDate()), tenantId, employeeId);
+        java.util.Map<UUID, Object[]> last = new java.util.HashMap<>();
+        jdbc.query("""
+                SELECT DISTINCT ON (u.goal_id) u.goal_id, u.notes, u.updated_at, u.previous_value
+                  FROM performance_mgmt.kpi_progress_updates u
+                  JOIN performance_mgmt.goals g ON g.id = u.goal_id AND g.tenant_id = u.tenant_id
+                 WHERE u.tenant_id = ? AND g.employee_id = ?
+                 ORDER BY u.goal_id, u.updated_at DESC
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                    java.sql.Timestamp at = rs.getTimestamp("updated_at");
+                    last.put(rs.getObject("goal_id", UUID.class), new Object[] { rs.getString("notes"),
+                            at == null ? null : at.toInstant(), rs.getBigDecimal("previous_value") });
+                }, tenantId, employeeId);
+        java.util.Map<UUID, Object[]> kpis = companyKpis == null ? java.util.Map.of() : companyKpis.linksOf(tenantId, employeeId);
+        return goals.stream().map(g -> {
+            Object[] l = last.get(g.id());
+            Object[] k = kpis.get(g.id());
+            return g.with(due.get(g.id()), l == null ? null : (String) l[0], l == null ? null : (java.time.Instant) l[1],
+                    l == null ? null : (BigDecimal) l[2], k == null ? null : (UUID) k[0], k == null ? null : (String) k[1]);
+        }).toList();
+    }
+
+    /**
+     * Add one of your own goals (the rules stay in {@link GoalService#createGoal}).
+     * The due date is written with JDBC after the goal is saved ({@code goals.due_date}
+     * isn't mapped by the entity); a company KPI link goes through {@link CompanyKpiService}.
+     */
+    @Transactional
+    public GoalResponse createMyGoal(UUID tenantId, UUID employeeId, com.hrms.performance.dto.GoalRequest req, UUID actorUserId) {
+        if (req.companyKpiId() != null && companyKpis != null) companyKpis.requireLinkable(tenantId, employeeId, req.companyKpiId());
+        GoalResponse created = goalService.createGoal(employeeId, req);
+        if (req.dueDate() != null) {
+            jdbc.update("UPDATE performance_mgmt.goals SET due_date = ? WHERE tenant_id = ? AND id = ? AND employee_id = ?",
+                    java.sql.Date.valueOf(req.dueDate()), tenantId, created.id(), employeeId);
+        }
+        if (req.companyKpiId() != null && companyKpis != null) companyKpis.link(tenantId, created.id(), req.companyKpiId(), actorUserId);
+        return withExtras(tenantId, employeeId, List.of(created)).get(0);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

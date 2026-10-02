@@ -14,7 +14,7 @@ import './PaySalary.view.css'
 export function PaySalaryView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
         <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
           <span aria-hidden="true" style={{position: "absolute", right: "-60px", top: "-150px", width: "380px", height: "320px", borderRadius: "999px", background: "rgba(16,185,129,.10)", filter: "blur(60px)", pointerEvents: "none"}} />
           <div style={{position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px 24px", padding: "clamp(18px,2.4vw,26px) clamp(18px,2.6vw,30px)"}}>
@@ -22,7 +22,7 @@ export function PaySalaryView({ v }: { v: any }) {
               <p style={{margin: "0", fontSize: "12.5px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#0f6e56"}}>
                 {"Payroll / Salary Structure"}
               </p>
-              <h1 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "clamp(22px,2.4vw,28px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
+              <h1 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "clamp(22px,2.4vw,28px)", fontWeight: "800", letterSpacing: "-.02em", lineHeight: "1.2"}}>
                 {"Salary Structure"}
               </h1>
               <p style={{margin: "0", fontSize: "14px", lineHeight: "1.5", color: "#475569", textWrap: "pretty"}}>
@@ -198,7 +198,7 @@ export function PaySalaryView({ v }: { v: any }) {
       {v.drawerOpen ? (
         <>
           <HrDrawer title={v.dTitle} onClose={v.closeDrawer} footer={v.dFooter} width="max-w-md">
-            <div style={{display: "grid", gap: "16px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+            <div style={{display: "grid", gap: "16px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
               <div style={{display: "grid", gap: "2px"}}>
                 <strong style={{fontSize: "16px"}}>
                   {txt(v.dName)}
@@ -257,7 +257,7 @@ export function PaySalaryView({ v }: { v: any }) {
         </>
       ) : null}
       <Modal open={v.bulkOpen} onOpenChange={v.setBulkOpen} title="Bulk revise CTC?" description="Raise monthly pay for a group of people from a chosen date." size="sm">
-        <div style={{display: "grid", gap: "14px", marginTop: "4px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+        <div style={{display: "grid", gap: "14px", marginTop: "4px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
           {" "}{txt(v.bModeBlock)}
           <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
             {txt(v.bValueLabel)}

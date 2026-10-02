@@ -206,8 +206,10 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
     expect(hr.has('leave:all-balances')).toBe(true)
     expect(hr.has('exit:notice') && hr.has('exit:exited') && hr.has('exit:terminated')).toBe(true)
     expect(hr.has('workforce-analytics:headcount')).toBe(true)
-    // Timesheet is personal, like My Attendance: not for admin roles.
-    expect(ids(OWNER).has('att-daily:timesheet')).toBe(false)
+    // Your own timesheet is personal, like My Attendance: not for admin roles; they get the tab only to approve their team's weeks.
+    expect(ids(OWNER).has('att-daily:timesheet')).toBe(true)
+    expect(ids(ctx(['attendance.checkin.self', 'attendance.team.read'], { adminRole: true })).has('att-daily:timesheet')).toBe(false)
+    expect(ids(ctx(['attendance.team.read', 'hrms.timesheet.approve'], { adminRole: true })).has('att-daily:timesheet')).toBe(true)
     // Each workforce analytics tab needs its own report.
     const headcountOnly = ids(ctx(['hrms.report.headcount']))
     expect(headcountOnly.has('workforce-analytics:headcount')).toBe(true)
@@ -221,17 +223,31 @@ describe('the redesign rail rules (DECISIONS 11, 12)', () => {
   it('a page or tab of a package not shipped yet stays out of the app (READY_PAGES)', () => {
     const pending = ALL_PAGE_ENTRIES.filter((e) => e.pkg && !READY_PAGES.has(e.pkg)).map((e) => e.id)
     for (const id of pending) expect(PAGE_REGISTRY.some((e) => e.id === id), id).toBe(false)
-    // Release 1 ships none of the page packages: every new tab is out, today's pages are all in.
-    expect(READY_PAGES.size).toBe(0)
-    expect(pending.sort()).toEqual(['att-analytics:punctuality', 'att-daily:timesheet', 'exit:exited', 'exit:notice', 'exit:terminated', 'leave:all-balances',
-      'team:approvals', 'team:schedule', 'workforce-analytics:attrition', 'workforce-analytics:diversity', 'workforce-analytics:headcount'])
+    // My team (P-TEAM), Daily tracking (P-ATT-DAY), Attendance analytics / Shifts (P-ATT-PLAN), Org chart (P-ORG), Growth's exit tabs (P-GROW) and Workforce analytics' views (P-REPORTS) are released; other new tabs are still out.
+    expect([...READY_PAGES]).toEqual(['P-TEAM', 'P-ATT-DAY', 'P-ATT-PLAN', 'P-ORG', 'P-GROW', 'P-REPORTS'])
+    expect(PAGE_REGISTRY.some((e) => e.id === 'att-daily:timesheet')).toBe(true)
+    // Org chart: every employee, and HR without an employee record; not someone with neither.
+    expect(ids(ctx(EMPLOYEE)).has('org-chart')).toBe(true)
+    expect(ids(ctx(HR_MANAGER, { self: false })).has('org-chart')).toBe(true)
+    expect(ids(ctx([], { self: false })).has('org-chart')).toBe(false)
+    expect(ids(ctx(EMPLOYEE)).has('m-org-chart')).toBe(false)
+    expect(pending.sort()).toEqual(['leave:all-balances'])
     expect(PAGE_REGISTRY.length + pending.length).toBe(ALL_PAGE_ENTRIES.length)
     const hr = ids(ctx([...HR_MANAGER, 'hrms.leave.employee.read']))
-    expect(hr.has('leave:all-balances') || hr.has('att-analytics:punctuality') || hr.has('exit:notice')).toBe(false)
-    expect(ids(ctx(DEPT_MANAGER)).has('team:approvals')).toBe(false)
-    // Listing a package brings its pages in.
+    expect(hr.has('leave:all-balances')).toBe(false)
+    // Resignation & exit's tabs (P-GROW) are live for whoever opens the exit centre.
+    expect(hr.has('exit:notice') && hr.has('exit:exited') && hr.has('exit:terminated')).toBe(true)
+    // Punctuality (P-ATT-PLAN) is live for whoever reads the team's attendance, and only for them.
+    expect(hr.has('att-analytics:punctuality')).toBe(true)
+    expect(ids(ctx(DEPT_MANAGER)).has('att-analytics:punctuality')).toBe(true)
+    expect(ids(ctx(EMPLOYEE)).has('att-analytics:punctuality')).toBe(false)
+    // The shipped package's views are live: Team schedule and Approvals for a department manager.
+    expect(ids(ctx(DEPT_MANAGER)).has('team:approvals') && ids(ctx(DEPT_MANAGER)).has('team:schedule')).toBe(true)
+    expect(ids(ctx(EMPLOYEE)).has('team:approvals')).toBe(false)
+    // Listing a package brings its pages in; one that isn't listed stays out.
     expect(isReadyPage({ pkg: 'P-TEAM' }, new Set(['P-TEAM']))).toBe(true)
-    expect(isReadyPage({ pkg: 'P-TEAM' })).toBe(false)
+    expect(isReadyPage({ pkg: 'P-TEAM' }, new Set())).toBe(false)
+    expect(isReadyPage({ pkg: 'P-LEAVE' })).toBe(false)
     expect(isReadyPage({})).toBe(true)
   })
 })

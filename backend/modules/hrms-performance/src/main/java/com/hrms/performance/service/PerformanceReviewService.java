@@ -76,6 +76,61 @@ public class PerformanceReviewService {
         return toPage(page);
     }
 
+    /**
+     * As {@link #listReviews(UUID, java.util.Set, Pageable)}, limited to the given
+     * statuses ({@code null} or empty = every status, today's behaviour). Redesign BW-81.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<PerformanceReviewResponse> listReviews(UUID cycleId, java.util.Set<UUID> employeeIds,
+                                                              java.util.Collection<ReviewStatus> statuses, Pageable pageable) {
+        if (statuses == null || statuses.isEmpty()) return listReviews(cycleId, employeeIds, pageable);
+        if (employeeIds != null && employeeIds.isEmpty()) return toPage(Page.empty(pageable));
+        Page<PerformanceReview> page;
+        if (employeeIds == null) {
+            page = cycleId != null
+                    ? reviewRepository.findByCycleIdAndStatusInOrderByCreatedAtDesc(cycleId, statuses, pageable)
+                    : reviewRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable);
+        } else {
+            page = cycleId != null
+                    ? reviewRepository.findByCycleIdAndEmployeeIdInAndStatusInOrderByCreatedAtDesc(cycleId, employeeIds, statuses, pageable)
+                    : reviewRepository.findByEmployeeIdInAndStatusInOrderByCreatedAtDesc(employeeIds, statuses, pageable);
+        }
+        return toPage(page);
+    }
+
+    /**
+     * Save a review as a draft (redesign BW-84): only the review's writer, only while
+     * it's still to be written (PENDING or a draft). The status becomes IN_PROGRESS;
+     * submitting stays the only way to SUBMITTED. Closing the cycle turns an unsent
+     * draft into MISSED, as before.
+     */
+    @Transactional
+    public PerformanceReviewResponse saveDraft(UUID reviewId, UUID employeeId, java.math.BigDecimal overallRating,
+                                               String strengths, String improvements) {
+        PerformanceReview review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("PerformanceReview", reviewId));
+        UUID writer = review.getReviewerId() != null ? review.getReviewerId() : review.getEmployeeId();
+        if (employeeId == null || !writer.equals(employeeId)) {
+            throw new BusinessRuleException("Only the assigned reviewer can save this review", "PERFORMANCE_REVIEW_FORBIDDEN");
+        }
+        if (review.getStatus() != ReviewStatus.PENDING && review.getStatus() != ReviewStatus.IN_PROGRESS) {
+            throw new BusinessRuleException("This review has already been " + review.getStatus().name().toLowerCase()
+                    .replace('_', ' '), "PERFORMANCE_REVIEW_NOT_PENDING");
+        }
+        if (overallRating != null && (overallRating.signum() < 0 || overallRating.compareTo(java.math.BigDecimal.valueOf(5)) > 0)) {
+            throw new BusinessRuleException("Review rating must be between 0 and 5", "PERFORMANCE_RATING_INVALID");
+        }
+        review.setOverallRating(overallRating);
+        review.setStrengths(strengths);
+        review.setImprovements(improvements);
+        review.setStatus(ReviewStatus.IN_PROGRESS);
+        review = reviewRepository.saveAndFlush(review);
+        jdbc.update("UPDATE performance_mgmt.appraisal_reviewer_assignments SET status = 'IN_PROGRESS', updated_at = now(), version = version + 1 WHERE review_id = ? AND tenant_id = ? AND status = 'PENDING'",
+                reviewId, TenantContext.getTenantId());
+        log.info("Performance review {} saved as a draft by employee={}", reviewId, employeeId);
+        return toResponse(review);
+    }
+
     @Transactional
     public PerformanceReviewResponse submitReview(UUID reviewId, UUID employeeId, ReviewSubmitRequest request) {
         PerformanceReview review = reviewRepository.findById(reviewId)
@@ -90,7 +145,8 @@ public class PerformanceReviewService {
                 || request.overallRating().compareTo(java.math.BigDecimal.valueOf(5)) > 0) {
             throw new BusinessRuleException("Review rating must be between 0 and 5", "PERFORMANCE_RATING_INVALID");
         }
-        if (review.getStatus() != ReviewStatus.PENDING) {
+        // A saved draft (IN_PROGRESS, redesign BW-84) is submitted the same way.
+        if (review.getStatus() != ReviewStatus.PENDING && review.getStatus() != ReviewStatus.IN_PROGRESS) {
             throw new BusinessRuleException(
                     "Only a pending review can be submitted (current status: " + review.getStatus() + ")",
                     "PERFORMANCE_REVIEW_NOT_PENDING");

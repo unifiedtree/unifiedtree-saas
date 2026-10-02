@@ -17,7 +17,7 @@ class LearningProgramEditTest {
 
     private static LearningService.UpdateProgramRequest edit(String title, String start, String end, Integer seats,
                                                             String mode, Boolean unlimited, String status) {
-        return new LearningService.UpdateProgramRequest(title, null, null, null, start, end, seats, status, mode, unlimited);
+        return new LearningService.UpdateProgramRequest(title, null, null, null, start, end, seats, status, mode, unlimited, null);
     }
 
     private static String code(Runnable r) {

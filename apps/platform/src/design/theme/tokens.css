@@ -89,7 +89,7 @@
  *   --u-shp   popover ......... 0 24px 60px -20px rgba(14,27,22,.35) / 0 24px 60px -20px rgba(0,0,0,.8)
  *
  *  Type and layout
- *   --u-font   'Plus Jakarta Sans', system-ui, sans-serif — weights 400/500/600 only
+ *   --u-font   'Inter', system-ui, sans-serif — weights 400/500/600 only
  *   --u-mono   ui-monospace, SFMono-Regular, Menlo, Consolas, monospace (codes, IDs)
  *   --u-railx  248px (rail width, pinned or expanded)
  *
@@ -190,7 +190,7 @@
   --u-shh: 0 20px 40px -22px rgba(15, 110, 86, .5);
   --u-shp: 0 24px 60px -20px rgba(14, 27, 22, .35);
 
-  --u-font: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --u-font: 'Inter', system-ui, sans-serif;
   --u-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --u-railx: 248px;
 

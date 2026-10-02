@@ -3,6 +3,7 @@ package com.hrms.api.workforce.search;
 import com.hrms.api.workforce.search.GlobalSearchAccess.Reach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static com.hrms.api.workforce.search.GlobalSearchAccess.reach;
@@ -64,6 +65,7 @@ class GlobalSearchAccessTest {
     @Test
     void hrReachesEveryone() {
         for (SearchType t : SearchType.values()) {
+            if (List.of(GlobalSearchRequestsTest.REQUESTS).contains(t)) continue; // requests follow their own pages (GlobalSearchRequestsTest)
             assertThat(reach(t, HR, true)).as(t.key).isEqualTo(Reach.ALL);
         }
         // "Everyone" doesn't depend on having an employee record.
@@ -83,5 +85,14 @@ class GlobalSearchAccessTest {
         for (SearchType t : SearchType.values()) {
             assertThat(reach(t, Set.of(), true)).as(t.key).isEqualTo(Reach.NONE);
         }
+    }
+
+    @Test
+    void holidaysReachWhoeverOpensTheLeavePage() {
+        assertThat(reach(SearchType.HOLIDAY, EMPLOYEE, true)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, HR, false)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, Set.of("hrms.ess.read"), true)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, Set.of("hrms.leave.read"), false)).isEqualTo(Reach.ALL);
+        assertThat(reach(SearchType.HOLIDAY, Set.of("payroll.runs.read"), true)).isEqualTo(Reach.NONE);
     }
 }

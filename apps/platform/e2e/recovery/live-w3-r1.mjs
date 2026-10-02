@@ -172,8 +172,8 @@ try {
   // ── 5. Employee workspace: edit drawer, full form, lifecycle dialog, shift drawer ──
   await section('workspace', async () => {
     await page.goto(base + `/hrms/employees/${EMP_PROBATION}`)
-    await page.getByRole('button', { name: 'Edit employee' }).click()
-    const edit = page.getByRole('dialog', { name: 'Edit employee' })
+    await page.getByRole('button', { name: 'Edit profile' }).click()
+    const edit = page.getByRole('dialog', { name: 'Edit profile' })
     await edit.waitFor({ timeout: 15000 })
     const doj = edit.locator('.utc-trigger')
     check('workspace edit: date of joining shows the saved date', await shows(doj, '22 Sep 2026'), await textOf(doj))
@@ -195,9 +195,9 @@ try {
     await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
     await page.getByRole('heading', { name: 'Edit Employee' }).waitFor({ state: 'hidden', timeout: 5000 })
 
-    await page.getByRole('button', { name: /^Actions/ }).click()
-    await page.getByRole('menuitem', { name: 'Confirm probation' }).click()
-    const modal = page.getByRole('dialog', { name: 'Confirm Probation' })
+    // On probation, the profile's left card shows Confirm probation and Extend probation.
+    await page.getByRole('complementary', { name: 'Profile' }).getByRole('button', { name: 'Confirm probation' }).click()
+    const modal = page.getByRole('dialog', { name: 'Confirm probation' })
     await modal.waitFor({ timeout: 5000 })
     const conf = modal.locator('.utc-trigger')
     check('lifecycle dialog: confirmation date starts on today', await shows(conf, short(today)), await textOf(conf))
@@ -206,8 +206,10 @@ try {
     await modal.getByRole('button', { name: 'Cancel' }).click()
     await modal.waitFor({ state: 'hidden', timeout: 5000 })
 
-    await page.getByRole('button', { name: 'Change shift', exact: true }).click()
-    const shift = page.getByRole('dialog', { name: 'Change employee shift' })
+    // On probation, Change shift sits in the left card's More actions menu.
+    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('menuitem', { name: 'Change shift' }).click()
+    const shift = page.getByRole('dialog', { name: 'Change shift' })
     await shift.waitFor({ timeout: 5000 })
     const eff = shift.locator('.utc-trigger')
     await pickPreset(eff, 'Tomorrow')

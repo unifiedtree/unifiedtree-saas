@@ -14,50 +14,51 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A company's overtime rules (BW-29, table {@code attendance.overtime_rules},
- * V143.54, JDBC only):
+ * A company's overtime rules (BW-29 as changed by the client on 2 Oct 2026, DECISIONS 22; table
+ * {@code attendance.overtime_rules}, V143.54, JDBC only):
  * <ul>
- *   <li>{@code countsAfterMinutes}: the first N extra minutes past the shift
- *       don't count as overtime; only the time past them does.</li>
- *   <li>{@code monthlyCapMinutes}: the most counted overtime that can be
- *       approved per person per calendar month.</li>
+ *   <li>{@code minimumMinutes}: a THRESHOLD. Extra time under it is not overtime; once it is reached, ALL of the
+ *       extra time counts (1 h 20 m extra with a 1 h minimum is 1 h 20 m of overtime). Default
+ *       {@value #DEFAULT_MINIMUM} minutes when the company has set none (no row, a NULL value, or no table).</li>
+ *   <li>{@code monthlyCapMinutes}: the most overtime that can be approved per person per calendar month; null = no cap.</li>
  * </ul>
- * Null means no rule. No row, null values or a missing table all give today's
- * behaviour exactly. The rules change only which minutes the Overtime list
- * counts and how much can be approved; stored {@code overtime_minutes},
- * {@code work_hours} and pay never change, and overtime stays recorded, not
- * paid.
+ * The rules change only which minutes the Overtime list counts and how much can be approved; stored
+ * {@code overtime_minutes}, {@code work_hours} and pay never change, and overtime stays recorded, not paid.
  *
- * <p>The readers the overtime list and decisions use ({@link #inUse},
- * {@link #forCompany}) first check the catalog, which can't fail, so a missing
- * table never aborts their transaction. The settings endpoints ({@link #get},
- * {@link #save}) answer FEATURE_NOT_READY instead.
+ * <p>The readers the overtime list and decisions use ({@link #tableReady}, {@link #forCompany}) never fail on a
+ * missing table, so they can't abort their transaction. The settings endpoints ({@link #get}, {@link #save}) answer
+ * FEATURE_NOT_READY instead.
  */
 @Service
 public class OvertimeRules {
 
-    /** Longest "counts after": a day. */
-    public static final int MAX_COUNTS_AFTER = 1440;
+    /** The minimum overtime when a company has set none: one hour (client, 2 Oct 2026). */
+    public static final int DEFAULT_MINIMUM = 60;
+    /** Largest minimum: a day. */
+    public static final int MAX_MINIMUM = 1440;
     /** Largest monthly cap: 31 days of 24 hours. */
     public static final int MAX_MONTHLY_CAP = 44640;
 
-    /** A company's rules; both values null when none are set. */
-    public record Rules(UUID companyId, Integer countsAfterMinutes, Integer monthlyCapMinutes,
+    /**
+     * A company's rules. {@code minimumMinutes} is the one in force (the company's, else the default);
+     * {@code minimumIsDefault} says which. {@code monthlyCapMinutes} null = no cap.
+     */
+    public record Rules(UUID companyId, int minimumMinutes, boolean minimumIsDefault, Integer monthlyCapMinutes,
                         String updatedByName, Instant updatedAt) {
         public static Rules none(UUID companyId) {
-            return new Rules(companyId, null, null, null, null);
+            return new Rules(companyId, DEFAULT_MINIMUM, true, null, null, null);
         }
 
         /** Minutes of {@code overtimeMinutes} that count as overtime under these rules. */
         public int counted(int overtimeMinutes) {
-            return countedMinutes(overtimeMinutes, countsAfterMinutes);
+            return countedMinutes(overtimeMinutes, minimumMinutes);
         }
     }
 
-    /** Counted minutes: all of them without a rule, else only the part past {@code countsAfter}. */
-    public static int countedMinutes(int overtimeMinutes, Integer countsAfter) {
-        if (countsAfter == null || countsAfter <= 0) return overtimeMinutes;
-        return Math.max(0, overtimeMinutes - countsAfter);
+    /** The threshold: nothing under the minimum, all of it from the minimum on. */
+    public static int countedMinutes(int overtimeMinutes, int minimum) {
+        if (overtimeMinutes <= 0) return 0;
+        return overtimeMinutes >= minimum ? overtimeMinutes : 0;
     }
 
     private final JdbcTemplate jdbc;
@@ -68,83 +69,68 @@ public class OvertimeRules {
 
     /**
      * True when the table and every column this class reads exist (a catalog read; never fails). Public: the
-     * overtime controller calls it through this bean's proxy.
+     * overtime controllers call it through this bean's proxy.
      */
     public boolean tableReady() {
         Integer n = jdbc.queryForObject("""
                 SELECT count(*) FROM pg_attribute
                  WHERE attrelid = to_regclass('attendance.overtime_rules') AND attnum > 0 AND NOT attisdropped
-                   AND attname IN ('tenant_id', 'company_id', 'counts_after_minutes', 'monthly_cap_minutes',
+                   AND attname IN ('tenant_id', 'company_id', 'minimum_minutes', 'monthly_cap_minutes',
                                    'updated_by_name', 'updated_at')
                 """, Integer.class);
         return n != null && n == 6;
     }
 
-    /**
-     * True when some company in this tenant has a "counts after" rule, so the
-     * overtime list must apply it. False without the table: the list is then
-     * exactly today's.
-     */
-    @Transactional(readOnly = true)
-    public boolean countsAfterInUse(UUID tenantId) {
-        if (!tableReady()) return false;
-        Boolean any = jdbc.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM attendance.overtime_rules WHERE tenant_id = ? AND counts_after_minutes > 0)",
-                Boolean.class, tenantId);
-        return Boolean.TRUE.equals(any);
-    }
-
-    /** The rules for a company, or none: never fails on a missing table (decisions read it mid-transaction). */
+    /** The rules for a company, the defaults when it has none: never fails on a missing table. */
     @Transactional(readOnly = true)
     public Rules forCompany(UUID tenantId, UUID companyId) {
         if (companyId == null || !tableReady()) return Rules.none(companyId);
-        List<Rules> rows = jdbc.query("""
-                SELECT company_id, counts_after_minutes, monthly_cap_minutes, updated_by_name, updated_at
-                  FROM attendance.overtime_rules WHERE tenant_id = ? AND company_id = ?
-                """, (rs, i) -> map(rs), tenantId, companyId);
+        List<Rules> rows = jdbc.query(SELECT_ONE, (rs, i) -> map(rs), tenantId, companyId);
         return rows.isEmpty() ? Rules.none(companyId) : rows.get(0);
     }
 
-    /** GET: the company's rules (nulls when never set). FEATURE_NOT_READY while the table is missing. */
+    private static final String SELECT_ONE = """
+            SELECT company_id, minimum_minutes, monthly_cap_minutes, updated_by_name, updated_at
+              FROM attendance.overtime_rules WHERE tenant_id = ? AND company_id = ?
+            """;
+
+    /** GET: the company's rules (the default minimum when never set). FEATURE_NOT_READY while the table is missing. */
     @Transactional(readOnly = true)
     public Rules get(UUID companyId) {
         UUID tenantId = TenantContext.requireTenantId();
         requireCompany(tenantId, companyId);
-        List<Rules> rows = FeatureNotReady.guard(() -> jdbc.query("""
-                SELECT company_id, counts_after_minutes, monthly_cap_minutes, updated_by_name, updated_at
-                  FROM attendance.overtime_rules WHERE tenant_id = ? AND company_id = ?
-                """, (rs, i) -> map(rs), tenantId, companyId));
+        List<Rules> rows = FeatureNotReady.guard(() -> jdbc.query(SELECT_ONE, (rs, i) -> map(rs), tenantId, companyId));
         return rows.isEmpty() ? Rules.none(companyId) : rows.get(0);
     }
 
     /**
-     * PUT: saves both values (null clears one). Clearing both keeps the row, so
-     * "who last changed them" stays, and gives today's behaviour again.
+     * PUT: saves both values. A null minimum goes back to the default (60 minutes); a null cap means no cap. The row
+     * is kept, so "who last changed them" stays.
      */
     @Transactional
-    public Rules save(UUID companyId, Integer countsAfterMinutes, Integer monthlyCapMinutes, UUID userId, String userName) {
+    public Rules save(UUID companyId, Integer minimumMinutes, Integer monthlyCapMinutes, UUID userId, String userName) {
         UUID tenantId = TenantContext.requireTenantId();
         requireCompany(tenantId, companyId);
-        validate(countsAfterMinutes, monthlyCapMinutes);
+        validate(minimumMinutes, monthlyCapMinutes);
         String name = userName == null ? null : userName.length() > 200 ? userName.substring(0, 200) : userName;
         FeatureNotReady.run(() -> jdbc.update("""
                 INSERT INTO attendance.overtime_rules
-                    (tenant_id, company_id, counts_after_minutes, monthly_cap_minutes, updated_by_user_id, updated_by_name, updated_at)
+                    (tenant_id, company_id, minimum_minutes, monthly_cap_minutes, updated_by_user_id, updated_by_name, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, now())
                 ON CONFLICT (tenant_id, company_id) DO UPDATE
-                   SET counts_after_minutes = EXCLUDED.counts_after_minutes,
+                   SET minimum_minutes      = EXCLUDED.minimum_minutes,
                        monthly_cap_minutes  = EXCLUDED.monthly_cap_minutes,
                        updated_by_user_id   = EXCLUDED.updated_by_user_id,
                        updated_by_name      = EXCLUDED.updated_by_name,
                        updated_at           = now()
-                """, tenantId, companyId, countsAfterMinutes, monthlyCapMinutes, userId, name));
+                """, tenantId, companyId, minimumMinutes, monthlyCapMinutes, userId, name));
         return get(companyId);
     }
 
-    static void validate(Integer countsAfterMinutes, Integer monthlyCapMinutes) {
-        if (countsAfterMinutes != null && (countsAfterMinutes < 0 || countsAfterMinutes > MAX_COUNTS_AFTER)) {
+    static void validate(Integer minimumMinutes, Integer monthlyCapMinutes) {
+        if (minimumMinutes != null && (minimumMinutes < 0 || minimumMinutes > MAX_MINIMUM)) {
             throw new BusinessRuleException(
-                    "Overtime can start counting from 0 to " + MAX_COUNTS_AFTER + " minutes after the shift.",
+                    "The minimum overtime must be between 0 and " + (MAX_MINIMUM / 60) + " hours.",
                     "OVERTIME_RULES_INVALID");
         }
         if (monthlyCapMinutes != null && (monthlyCapMinutes < 0 || monthlyCapMinutes > MAX_MONTHLY_CAP)) {
@@ -167,8 +153,9 @@ public class OvertimeRules {
 
     private static Rules map(java.sql.ResultSet rs) throws java.sql.SQLException {
         Timestamp at = rs.getTimestamp("updated_at");
+        Integer minimum = (Integer) rs.getObject("minimum_minutes");
         return new Rules(rs.getObject("company_id", UUID.class),
-                (Integer) rs.getObject("counts_after_minutes"),
+                minimum == null ? DEFAULT_MINIMUM : minimum, minimum == null,
                 (Integer) rs.getObject("monthly_cap_minutes"),
                 rs.getString("updated_by_name"),
                 at == null ? null : at.toInstant());

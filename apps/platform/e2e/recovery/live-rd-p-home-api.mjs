@@ -22,6 +22,7 @@
 // Everything it creates is removed at the end.
 //
 //   node e2e/recovery/live-rd-p-home-api.mjs      (RECOVERY_API_URL, RECOVERY_DB)
+/* global process, console, fetch, setTimeout */
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
@@ -53,7 +54,7 @@ async function login(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, body: json }
   }
@@ -260,7 +261,8 @@ try {
     // Every employee gets the EMPLOYEE role's permissions on top of their roles; a per-person DENY is how one is taken away.
     const denied = ['wfh.request.self', 'leave.balance.read', 'attendance.checkin.self', 'hrms.expense.claim.self', 'hrms.advance.request.self',
       'hrms.document.read.self', 'hrms.document.type.read', 'hrms.onboarding.task.complete', 'hrms.hiring.interview.self', 'hrms.hiring.read',
-      'hrms.performance.review.self', 'hrms.policy.acknowledge.self', 'payroll.payslip.read.self', 'attendance.team.read', 'hrms.leave.approve.l1']
+      'hrms.performance.review.self', 'hrms.policy.acknowledge.self', 'payroll.payslip.read.self', 'attendance.team.read', 'hrms.leave.approve.l1',
+      'hrms.onboarding.asset.self']
     // (hrms.probation.team.decide isn't in the catalogue until P-TEAM's migration; nobody here holds it.)
     const deny = await owner.call(`/v1/workspace/users/${user}/permissions`, 'PUT', { overrides: denied.map((c) => ({ permissionCode: c, effect: 'DENY', reason: 'P-HOME live check (temporary)' })) })
     check('restricted person: a custom role and per-person DENY overrides', role.status === 201 && perms.status === 200 && deny.status === 200, `${role.status} ${perms.status} ${deny.status} ${JSON.stringify(deny.body).slice(0, 200)}`)
@@ -333,7 +335,7 @@ try {
     try { await owner?.call(`/v1/settings/holidays/${id}`, 'DELETE'); sql(`DELETE FROM settings.holiday_calendar WHERE tenant_id = ${lit(tenant)} AND id = ${lit(id)}`) } catch (e) { console.log('cleanup (holiday):', String(e).split('\n')[0]) }
   }
   for (const id of created.users) {
-    try { sql(`BEGIN; DELETE FROM rbac.user_permission_overrides WHERE user_id = ${lit(id)}; DELETE FROM rbac.user_roles WHERE tenant_id = ${lit(tenant)} AND user_id = ${lit(id)}; DELETE FROM auth.refresh_tokens WHERE user_id = ${lit(id)}; DELETE FROM auth.user_credentials WHERE tenant_id = ${lit(tenant)} AND id = ${lit(id)}; COMMIT;`) } catch (e) {
+    try { sql(`BEGIN; DELETE FROM rbac.user_permission_overrides WHERE user_id = ${lit(id)}; DELETE FROM rbac.user_roles WHERE tenant_id = ${lit(tenant)} AND user_id = ${lit(id)}; DELETE FROM auth.refresh_tokens WHERE user_id = ${lit(id)}; DELETE FROM auth.user_credentials WHERE tenant_id = ${lit(tenant)} AND id = ${lit(id)}; COMMIT;`) } catch {
       try { sql(`BEGIN; DELETE FROM rbac.user_permission_overrides WHERE user_id = ${lit(id)}; DELETE FROM rbac.user_roles WHERE tenant_id = ${lit(tenant)} AND user_id = ${lit(id)}; DELETE FROM auth.user_credentials WHERE tenant_id = ${lit(tenant)} AND id = ${lit(id)}; COMMIT;`) } catch (e2) { console.log('cleanup (user):', String(e2).split('\n')[0]) }
     }
   }

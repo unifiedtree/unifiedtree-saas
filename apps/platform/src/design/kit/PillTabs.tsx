@@ -1,7 +1,10 @@
-// The top bar's page tabs (prototype HrmsPlatform header): outlined pills, the
-// active one solid brand green. They scroll sideways when they don't fit, with
-// a fade on the side that has more. Pages without tabs show one solid PagePill
-// (module icon + page name) instead.
+// A page's own tabs and views, inside the page under the top bar: the kit's
+// in-page pills, quiet text pills with the chosen one a soft brand tint. They are
+// lighter on purpose: the top bar's module tabs (design/shell ModuleTabs) are
+// outlined pills with a solid green one, so the two levels never look alike
+// (DECISIONS 21). They scroll sideways when they don't fit, with a fade on the
+// side that has more. PagePill is the top bar's one solid pill (module icon +
+// page name) for a page that is its module's only page.
 //
 // Semantics (the look is the same):
 //   "tabs"   role="tablist" / role="tab" / aria-selected, arrows move between

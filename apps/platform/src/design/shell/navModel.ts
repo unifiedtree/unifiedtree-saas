@@ -25,11 +25,11 @@ const SELF_FIRST: RailGroupKey[] = ['home', 'team', 'mine', 'people', 'time', 'p
 const ADMIN_FIRST: RailGroupKey[] = ['home', 'people', 'time', 'pay', 'org', 'insights', 'team', 'mine', 'apps']
 
 export interface NavPage {
-  /** Today's page name (Pages panel row; the page pill). */
+  /** Today's page name (its tab in the top bar; the page pill). */
   label: string
   /** Where it opens; a My work page may carry the tab it opens on (?tab=my). */
   path: string
-  /** Other routes that belong to this page (its lit row in the Pages panel). */
+  /** Other routes that belong to this page (its tab is lit on them). */
   also?: string[]
   /** Owns only its own address, not the ones under it (Home at /me doesn't own /me/payslips). */
   exact?: boolean
@@ -50,7 +50,7 @@ export interface NavModule {
   app?: string
 }
 
-const MASTER_ORG = ['/hrms/master/companies', '/hrms/master/branches', '/hrms/master/departments', '/hrms/master/designations', '/hrms/master/grades']
+const MASTER_ORG = ['/hrms/master/companies', '/hrms/master/branches', '/hrms/master/departments', '/hrms/master/designations', '/hrms/master/grades', '/hrms/master/org-chart']
 
 export const NAV_MODULES: readonly NavModule[] = [
   // ── Home ──
@@ -62,6 +62,9 @@ export const NAV_MODULES: readonly NavModule[] = [
   // ── My work (the old Employee Self Service item, split as the design does) ──
   { key: 'mytime', label: 'Time', myLabel: 'My time', icon: 'clock', group: 'mine', pages: [
     { label: 'Attendance', path: '/hrms/attendance' },
+    // People without the team view: the "Shifts & Overtime" section the Attendance page's own bar
+    // gave them (their My Shift), now that the bar is gone (menu rule mytime:/hrms/shifts).
+    { label: 'My shift', path: '/hrms/shifts' },
     { label: 'Work from home', path: '/me/wfh' },
     { label: 'Shift change', path: '/me/shift-change' },
   ] },
@@ -242,7 +245,7 @@ export function railGroups(ctx: AccessContext, opts: RailOptions): VisibleGroup[
     .filter((g) => g.modules.length > 0)
 }
 
-/** The settings pages this person may see (the settings module's Pages panel). */
+/** The settings pages this person may see (the top bar's tabs on a settings page). */
 export function settingsPages(ctx: AccessContext): NavPage[] {
   return SETTINGS_PAGES.filter((p) => pageVisible(p, undefined, ctx))
 }
@@ -279,6 +282,18 @@ export function activePage(pages: readonly NavPage[], pathname: string): NavPage
   let best: NavPage | undefined, score = 0
   for (const p of pages) { const s = pageScore(p, pathname); if (s > score) { best = p; score = s } }
   return best
+}
+
+/**
+ * The page of a module to light for this address, among the pages this person sees. The best match is
+ * found among ALL the module's pages, so an address that belongs to a page the person doesn't see
+ * (Workforce's Rules & Policies for Finance) lights none, rather than a shorter page that also matches
+ * (Overview at /hrms/master).
+ */
+export function litPage(moduleKey: string, visible: readonly NavPage[], pathname: string): NavPage | undefined {
+  const all = NAV_MODULES.find((m) => m.key === moduleKey)?.pages ?? visible
+  const best = activePage(all, pathname)
+  return best ? visible.find((p) => p.path === best.path) : undefined
 }
 
 /** The rail modules that own this address (railLit decides which one to light). */

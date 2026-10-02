@@ -55,5 +55,12 @@ public record CheckOutRequest(
          * approver on the overtime list. Never fails the punch: blank is
          * ignored and anything past 500 characters is cut.
          */
-        String overtimeReason
+        String overtimeReason,
+        /**
+         * The face scan of a WEB check-out (plain base64 JPEG, V143.53): the
+         * server matches it against the person's enrolled face before the
+         * punch. Ignored for every other method, so the mobile app, which
+         * verifies the face before it calls this, is unaffected.
+         */
+        String faceImageBase64
 ) {}

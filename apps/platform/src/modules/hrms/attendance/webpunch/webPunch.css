@@ -1,0 +1,65 @@
+/* The web punch dialog (WebPunchDialog.tsx): camera left, steps and the button right; stacked on a phone.
+   Tokens only (var(--u-*, light fallback)), so it reads right in light and dark. */
+.uwp {
+  display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: center;
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif); font-variant-numeric: tabular-nums;
+}
+.uwp-cam {
+  position: relative; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 12px;
+  background: var(--u-sf2, #F7F9F8); border: 1px solid var(--u-ln, #E3E9E6);
+  display: flex; align-items: center; justify-content: center;
+}
+.uwp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+/* The guide sits on the live picture, so it is light in both themes. */
+.uwp-guide { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--uwp-guide, rgba(255, 255, 255, .9)); pointer-events: none; }
+.uwp-cam-idle { color: var(--u-ink3, #6A7A73); opacity: .7; }
+.uwp-scan {
+  position: absolute; left: 12%; right: 12%; height: 2px; top: 20%; border-radius: 2px;
+  background: var(--u-g2, #5FB39C); box-shadow: 0 0 12px var(--u-g2, #5FB39C);
+  animation: uwp-scan 1.4s cubic-bezier(.2, .8, .2, 1) infinite alternate;
+}
+@keyframes uwp-scan { to { top: 78%; } }
+
+.uwp-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.uwp-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.uwp-line { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--u-ink2, #4A5A54); }
+.uwp-line[data-state="ok"] { color: var(--u-brt, #0F6E56); }
+.uwp-line[data-state="bad"] { color: var(--u-rdt, #B42318); }
+.uwp-dot {
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--u-hv, #F0F4F2); color: var(--u-ink3, #6A7A73);
+}
+.uwp-dot[data-state="ok"] { background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.uwp-dot[data-state="bad"] { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.uwp-spin {
+  width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--u-ln, #E3E9E6); border-top-color: var(--u-br, #0F6E56);
+  animation: uwp-spin .8s linear infinite;
+}
+@keyframes uwp-spin { to { transform: rotate(360deg); } }
+.uwp-lead { margin: 0; font-size: 14px; line-height: 1.55; color: var(--u-ink, #0E1B16); }
+.uwp-callout { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; line-height: 1.5; }
+.uwp-callout[data-tone="bad"] { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.uwp-callout[data-tone="warn"] { background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); }
+.uwp-retry { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: -6px; }
+.uwp-fine { margin: 0; font-size: 12px; line-height: 1.5; color: var(--u-ink3, #6A7A73); }
+
+@media (max-width: 600px) {
+  .uwp { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .uwp-cam { max-width: 260px; margin: 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .uwp-scan, .uwp-spin { animation: none; }
+}
+[data-ufx="off"] .uwp-scan { animation: none; }
+
+/* Assisted punch: the people you can punch for. */
+.uwp-pick { display: grid; gap: 12px; }
+.uwp-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: min(52vh, 420px); overflow-y: auto; }
+.uwp-person {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; text-align: left; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.uwp-person:hover { background: var(--u-hv, #F0F4F2); }
+.uwp-person:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.uwp-person__tags { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; }

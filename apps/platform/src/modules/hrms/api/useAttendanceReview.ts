@@ -66,6 +66,10 @@ export interface ReviewException {
   shiftName?: string | null
   expectedStart?: string | null
   lossOfPay: boolean
+  // Where and how the day's check-in was made (V143.53 redesign, BW-14); missing on older servers.
+  branchName?: string | null
+  zoneName?: string | null
+  checkInMethod?: string | null
 }
 
 export interface StatusChange {
@@ -132,6 +136,16 @@ export function useReviewExceptions(from: string, to: string, enabled = true) {
     queryKey: ['attendance', 'review', 'exceptions', from, to],
     queryFn: () => apiJson<ReviewException[]>(`/v1/attendance/review/exceptions?from=${from}&to=${to}`),
     enabled,
+    staleTime: 30_000,
+  })
+}
+
+/** One person's face punches between two days (at most 62), newest first: the Face Punch month calendar (V143.53 redesign). */
+export function useEmployeeFaceEvents(employeeId: string | undefined, from: string, to: string, enabled = true) {
+  return useQuery({
+    queryKey: ['attendance', 'review', 'face', 'employee', employeeId, from, to],
+    queryFn: () => apiJson<FaceReviewEvent[]>(`/v1/attendance/review/face-events/employee/${employeeId}?from=${from}&to=${to}`),
+    enabled: enabled && !!employeeId,
     staleTime: 30_000,
   })
 }

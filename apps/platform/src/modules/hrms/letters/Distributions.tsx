@@ -1,63 +1,84 @@
+// Distributions, on the kit (P-DOCS; prototype PgTalent h-letters tab 2): one
+// letter sent to many people. Scheduled sends ("Send on", BW-73) come first,
+// with their date and Cancel; then every distribution, newest first: its name,
+// the letter, how many people, when, and how it went, in the words the server
+// can stand behind ("sent", "failed"). A row opens the distribution.
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
-import { State, stamp } from '@/design/module/ModuleKit'
-import { useDistributions, type DistributionStatus } from './api/useDistribution'
+import { P, usePermission } from '@unifiedtree/sdk'
+import { Button, CellActions, CellStack, Section, StatusPill, Table, type TableColumn } from '@/design/kit/display'
+import { Pager } from '@/design/kit/data'
+import { useToast } from '@/design/kit/overlays'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+import {
+  useCancelScheduledDistribution, useDistributions, useScheduledDistributions,
+  type DistributionJobDto, type ScheduledDistribution,
+} from './api/useDistribution'
+import { distributionStatus, localDay, scheduleStatus, shortDay } from './lettersModel'
 
-const STATUS_TONE: Record<DistributionStatus, { label: string; tone: PillTone }> = {
-  PENDING:         { label: 'Pending',    tone: 'gray' },
-  PROCESSING:      { label: 'Processing', tone: 'info' },
-  COMPLETED:       { label: 'Completed',  tone: 'ok' },
-  PARTIAL_FAILURE: { label: 'Partial',    tone: 'warn' },
-  FAILED:          { label: 'Failed',     tone: 'red' },
+function Scheduled() {
+  const toast = useToast()
+  const confirm = useConfirmDialog()
+  const canDistribute = usePermission(P.HRMS_LETTERS_DISTRIBUTE)
+  const q = useScheduledDistributions()
+  const cancel = useCancelScheduledDistribution()
+  const rows = q.data ?? []
+  if (q.notAvailable || (q.isSuccess && rows.length === 0)) return null
+  const remove = async (s: ScheduledDistribution) => {
+    const failed = s.status === 'FAILED'
+    const ok = await confirm({
+      title: failed ? `Remove “${s.title}”?` : `Cancel “${s.title}”?`,
+      body: failed ? 'It never started, so nothing was sent.' : `It won’t be sent on ${shortDay(s.sendOn)}. Nothing has been sent yet.`,
+      confirmLabel: failed ? 'Remove' : 'Cancel the send', cancelLabel: 'Keep it', tone: 'danger',
+    })
+    if (!ok) return
+    try { await cancel.mutateAsync(s.id); toast.success(failed ? 'Removed' : 'Scheduled send cancelled') } catch (e) { toast.error('Couldn’t cancel it', { detail: (e as Error)?.message }) }
+  }
+  const columns: TableColumn<ScheduledDistribution>[] = [
+    { key: 'title', header: 'Distribution', primary: true, render: (s) => <CellStack primary={s.title} secondary={s.failureReason ?? undefined} /> },
+    { key: 'letter', header: 'Letter', render: (s) => s.templateName ?? '—' },
+    { key: 'recipients', header: 'Recipients', numeric: true, render: (s) => (s.recipientsAtSchedule ?? '—') },
+    { key: 'status', header: 'Status', render: (s) => { const st = scheduleStatus(s); return <StatusPill tone={st.tone}>{st.label}</StatusPill> } },
+    ...(canDistribute ? [{
+      key: 'actions', header: <span className="sr-only">Actions</span>, label: 'Actions', align: 'right' as const,
+      render: (s: ScheduledDistribution) => s.status === 'STARTING' ? null : (
+        <CellActions><Button size={30} variant="secondary" aria-label={`${s.status === 'FAILED' ? 'Remove' : 'Cancel'} ${s.title}`} onClick={() => remove(s)}>
+          {s.status === 'FAILED' ? 'Remove' : 'Cancel'}</Button></CellActions>
+      ),
+    }] : []),
+  ]
+  return (
+    <Section title="Scheduled" count={rows.length} sub="Sends at 9:00 India time on its date, to the people who match then." body="flush" cardClass={false}
+      loading={q.isLoading} skeleton="table" error={q.error} onRetry={() => q.refetch()}>
+      <Table label="Scheduled distributions" columns={columns} rows={rows} rowKey={(s) => s.id} mobile="cards" />
+    </Section>
+  )
 }
 
 /** Bulk letter sends, newest first, 20 per page. Opens a distribution's own page on click. */
 export function DistributionsList() {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
-  const { data, isLoading, isError, error, refetch } = useDistributions(page)
+  const { data, isLoading, error, refetch, isFetching } = useDistributions(page)
   const jobs = data?.content ?? []
   const total = data?.totalElements ?? 0
-  const totalPages = data?.totalPages ?? 1
-
-  if (isLoading) return <State kind="loading" height={220} />
-  if (isError) return <State kind="error" title="Couldn’t load distributions" description={(error as Error)?.message} onRetry={() => refetch()} />
-  if (jobs.length === 0) return <State kind="empty" icon="fileText" title="No distributions yet" description="Send a letter, like a policy update, to many people at once." />
+  const columns: TableColumn<DistributionJobDto>[] = [
+    { key: 'title', header: 'Distribution', primary: true, render: (j) => j.title },
+    { key: 'letter', header: 'Letter', render: (j) => j.templateName ?? '—' },
+    { key: 'recipients', header: 'Recipients', numeric: true, render: (j) => j.totalRecipients },
+    { key: 'sent', header: 'Sent', render: (j) => shortDay(localDay(j.completedAt ?? j.createdAt)) },
+    { key: 'status', header: 'Status', render: (j) => { const s = distributionStatus(j); return <StatusPill tone={s.tone}>{s.label}</StatusPill> } },
+  ]
   return (
-    <TableCard
-      footer={total > 20 ? (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-text-secondary">Showing {page * 20 + 1}–{Math.min((page + 1) * 20, total)} of {total}</p>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} aria-label="Previous page" className="rounded-lg border border-border-default p-1.5 text-text-secondary hover:text-text-primary disabled:opacity-30"><ChevronLeft size={15} /></button>
-            <span className="px-2 text-xs text-text-secondary">{page + 1} / {totalPages}</span>
-            <button onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages - 1} aria-label="Next page" className="rounded-lg border border-border-default p-1.5 text-text-secondary hover:text-text-primary disabled:opacity-30"><ChevronRight size={15} /></button>
-          </div>
-        </div>
-      ) : undefined}
-    >
-      <table className="hr-table">
-        <thead>
-          <tr><th>Title</th><th>Recipients</th><th>Status</th><th className="hidden sm:table-cell">Created</th></tr>
-        </thead>
-        <tbody>
-          {jobs.map((j) => {
-            const s = STATUS_TONE[j.status] ?? { label: j.status, tone: 'gray' as PillTone }
-            return (
-              <tr key={j.id} onClick={() => navigate(`/hrms/letters/distributions/${j.id}`)} className="cursor-pointer">
-                <td className="font-medium text-text-primary">{j.title}</td>
-                <td className="text-text-secondary">
-                  {`${j.sentCount} of ${j.totalRecipients} sent${j.failedCount > 0 ? ` · ${j.failedCount} failed` : ''}`}
-                </td>
-                <td><HrStatusPill tone={s.tone}>{s.label}</HrStatusPill></td>
-                <td className="hidden sm:table-cell text-text-secondary">{j.createdAt ? stamp(j.createdAt) : '—'}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </TableCard>
+    <div className="lt-stack">
+      <Scheduled />
+      <Section title="Distributions" body="flush" cardClass={false}
+        loading={isLoading} skeleton="table" error={error} onRetry={() => refetch()} retrying={isFetching}
+        empty={!isLoading && !error && jobs.length === 0 ? { title: 'No distributions yet', hint: 'Send a letter, like a policy update, to many people at once.' } : undefined}
+        footer={total > 20 ? <Pager page={page} pageSize={20} total={total} onPageChange={setPage} noun="distributions" /> : undefined}>
+        <Table label="Distributions" columns={columns} rows={jobs} rowKey={(j) => j.id} mobile="cards"
+          onRowClick={(j) => navigate(`/hrms/letters/distributions/${j.id}`)} rowHref={(j) => `/hrms/letters/distributions/${j.id}`} />
+      </Section>
+    </div>
   )
 }

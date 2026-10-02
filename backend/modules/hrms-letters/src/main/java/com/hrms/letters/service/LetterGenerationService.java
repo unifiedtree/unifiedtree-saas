@@ -107,7 +107,7 @@ public class LetterGenerationService {
 
         Map<String, String> ctx = mergeFieldResolver.buildContext(
                 employee, company, department, designation, branch, manager,
-                req.overrides() != null ? req.overrides() : Map.of());
+                req.overrides() != null ? req.overrides() : Map.of(), req.issueDate());
 
         String renderedSubject = mergeFieldResolver.resolve(template.getSubject(), ctx);
         String renderedBody    = mergeFieldResolver.resolve(template.getBodyHtml(), ctx);
@@ -231,6 +231,86 @@ public class LetterGenerationService {
     public PageResponse<GeneratedLetterDto> getMyLetters(UUID employeeId, Pageable pageable) {
         Page<GeneratedLetter> page = generatedRepo.findActiveByEmployeeId(employeeId, pageable);
         return toPage(page);
+    }
+
+    /**
+     * The letters shown to the employee in My letters (redesign BW-75): only
+     * letters that were sent to them (or that they opened or signed). HR's
+     * unsent drafts stay out; a sent letter HR voided stays, marked VOID.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<GeneratedLetterDto> getSentToEmployee(UUID employeeId, Pageable pageable) {
+        return toPage(generatedRepo.findSentToEmployee(employeeId, pageable));
+    }
+
+    /** True when the letter was sent to its employee, so they may open it (BW-75). */
+    @Transactional(readOnly = true)
+    public boolean isSentToEmployee(UUID letterId) {
+        return generatedRepo.isSentToEmployee(letterId);
+    }
+
+    /**
+     * The employee opened or downloaded their letter: a SENT letter becomes
+     * VIEWED (once; later states are kept). A letter a distribution emailed
+     * before distributions recorded the send (still GENERATED) counts as sent.
+     * Call it only for a letter {@link #isSentToEmployee sent to them}.
+     */
+    @Transactional
+    public void markViewedByOwner(UUID letterId) {
+        GeneratedLetter letter = requireLetter(letterId);
+        if ("SENT".equals(letter.getStatus()) || "GENERATED".equals(letter.getStatus())) {
+            letter.setStatus("VIEWED");
+            if (letter.getViewedAt() == null) letter.setViewedAt(Instant.now());
+            generatedRepo.save(letter);
+        }
+    }
+
+    /**
+     * A distribution emailed this letter: record it as sent, as a single send
+     * does, so the employee sees it in My letters (BW-75). A letter that is no
+     * longer GENERATED keeps its state.
+     */
+    @Transactional
+    public void markSentByDistribution(UUID letterId, String toEmail) {
+        GeneratedLetter letter = requireLetter(letterId);
+        if (!"GENERATED".equals(letter.getStatus())) return;
+        letter.setStatus("SENT");
+        letter.setSentAt(Instant.now());
+        letter.setSentToEmail(toEmail);
+        generatedRepo.save(letter);
+    }
+
+    /** The employee signed the letter (BW-76): status SIGNED and the signing time, on the mapped columns. */
+    @Transactional
+    public GeneratedLetterDto markSigned(UUID letterId, Instant signedAt) {
+        GeneratedLetter letter = requireLetter(letterId);
+        letter.setStatus("SIGNED");
+        letter.setSignedAt(signedAt);
+        if (letter.getViewedAt() == null) letter.setViewedAt(signedAt);
+        return toDto(generatedRepo.save(letter));
+    }
+
+    /** What the employee reads before signing: the rendered body, and the company name for the letterhead. */
+    public record ReadableLetter(UUID id, UUID employeeId, String status, String subject, String bodyHtml,
+                                 UUID companyId, String companyName) {}
+
+    @Transactional(readOnly = true)
+    public ReadableLetter readable(UUID letterId) {
+        GeneratedLetter letter = requireLetter(letterId);
+        String company = letter.getCompanyId() == null ? null
+                : companyRepo.findById(letter.getCompanyId()).map(Company::getName).orElse(null);
+        return new ReadableLetter(letter.getId(), letter.getEmployeeId(), letter.getStatus(), letter.getSubject(),
+                letter.getBodyHtmlRendered(), letter.getCompanyId(), company);
+    }
+
+    /** The letterhead (logo and company name) in front of a body, when the app provides one. */
+    public String withLetterhead(String bodyHtml, String companyName) {
+        return letterhead != null ? letterhead.decorate(bodyHtml, TenantContext.getTenantId(), companyName) : bodyHtml;
+    }
+
+    /** The PDF bytes for any letter body, rendered exactly as a generated letter is (letterhead included). */
+    public byte[] renderPdf(String bodyHtml, String companyName) {
+        return pdfRenderer.render(withLetterhead(bodyHtml, companyName));
     }
 
     private PageResponse<GeneratedLetterDto> toPage(Page<GeneratedLetter> page) {

@@ -32,6 +32,8 @@ export interface EmployeeSearchResponse {
 export const EMPLOYEE_SEARCH_MIN_CHARS = 2
 /** The directory's permission; the endpoint enforces the same code. */
 export const EMPLOYEE_SEARCH_PERMISSION = 'hrms.employee.read'
+/** As many people as the global search lists (its default), so "truncated" means more than the dialog shows. */
+export const EMPLOYEE_SEARCH_LIMIT = 5
 
 export function normalizeEmployeeQuery(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ')
@@ -49,8 +51,8 @@ export function useEmployeeSearch(query: string, enabled: boolean) {
   return useQuery({
     // Case-folded key: the server matches case-insensitively, so "Anita" and
     // "anita" are the same request and share one cache entry.
-    queryKey: ['search', 'employees', q.toLowerCase()],
-    queryFn: () => apiJson<EmployeeSearchResponse>(`/v1/search?q=${encodeURIComponent(q)}`),
+    queryKey: ['search', 'employees', q.toLowerCase(), EMPLOYEE_SEARCH_LIMIT],
+    queryFn: () => apiJson<EmployeeSearchResponse>(`/v1/search?q=${encodeURIComponent(q)}&limit=${EMPLOYEE_SEARCH_LIMIT}`),
     enabled: active,
     staleTime: 60_000,
     // A typeahead that silently retries three times just delays the error

@@ -55,10 +55,10 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
       ) : (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px 16px' }}>
-            <span aria-hidden="true" style={{ flex: '0 0 auto', width: 48, height: 48, borderRadius: 14, display: 'grid', placeItems: 'center', background: d.enrolled ? '#ecfdf5' : '#f8fafc', border: `1px solid ${d.enrolled ? '#a7f3d0' : '#e2e8f0'}`, color: d.enrolled ? '#047857' : '#94a3b8' }}>{dashIcon('scanFace', 24)}</span>
+            <span aria-hidden="true" style={{ flex: '0 0 auto', width: 48, height: 48, borderRadius: 14, display: 'grid', placeItems: 'center', background: d.enrolled ? 'var(--u-brs,#E8F3EE)' : 'var(--u-sf2,#F7F9F8)', border: `1px solid ${d.enrolled ? 'var(--u-brl,#BFDFD1)' : 'var(--u-ln,#E3E9E6)'}`, color: d.enrolled ? 'var(--u-brt,#0F6E56)' : 'var(--u-ink4,#A5B2AD)' }}>{dashIcon('scanFace', 24)}</span>
             <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 4 }}>
               <span><HrStatusPill tone={d.tone}>{d.label}</HrStatusPill></span>
-              <span style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.45 }}>{d.detail}</span>
+              <span style={{ fontSize: 13.5, color: 'var(--u-ink2,#4A5A54)', lineHeight: 1.45 }}>{d.detail}</span>
             </div>
             {d.canEnroll && (
               <HrButton variant={d.enrolled ? 'ghost' : 'primary'} onClick={() => setOpen({ reenroll: d.enrolled, enrolledAt: q.data?.enrolledAt })}>

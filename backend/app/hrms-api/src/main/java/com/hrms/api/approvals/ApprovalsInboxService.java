@@ -28,8 +28,8 @@ import java.util.function.Supplier;
 
 /**
  * The Approvals inbox (redesign BW-09): every request waiting for the caller,
- * across leave, attendance fixes, work from home, shift changes and expense
- * claims, in one list, newest first, with per-tab counts, facts, warnings,
+ * across leave, attendance fixes, work from home, shift changes, expense
+ * claims and submitted timesheet weeks (no Undo for those), in one list, newest first, with per-tab counts, facts, warnings,
  * {@code canDecide}, {@code rejectNeedsReason} and the caller's decisions that
  * can still be undone.
  *
@@ -44,6 +44,7 @@ public class ApprovalsInboxService {
     private static final Logger log = LoggerFactory.getLogger(ApprovalsInboxService.class);
     static final int DEFAULT_SIZE = 20;
     static final int MAX_SIZE = 100;
+    static final String TIMESHEET_APPROVE = "hrms.timesheet.approve";
 
     private final InboxQueries queries;
     private final TeamEmployeeScope teamScope;
@@ -79,7 +80,8 @@ public class ApprovalsInboxService {
                 Callers.hasAuthority(auth, Callers.LEAVE_L2),
                 Callers.hasClaim(jwt, Callers.WORKFORCE_ADMIN),
                 Callers.hasClaim(jwt, "hrms.expense.reimbursement"),
-                perm.check("hrms.expense.claim.approve"));
+                perm.check("hrms.expense.claim.approve"),
+                perm.check(TIMESHEET_APPROVE));
     }
 
     public Inbox inbox(String tab, int page, int size, Jwt jwt, Authentication auth) {
@@ -104,7 +106,7 @@ public class ApprovalsInboxService {
         Map<DecisionKind, List<InboxQueries.Row>> byKind = new EnumMap<>(DecisionKind.class);
         List<String> unavailable = new ArrayList<>();
         for (DecisionKind kind : a.kinds("all")) {
-            List<InboxQueries.Row> rows = read(kind, unavailable, () -> switch (kind) {
+            List<InboxQueries.Row> rows = read(kind.name(), unavailable, () -> switch (kind) {
                 case LEAVE -> queries.leave(tenantId, a);
                 case WFH -> queries.wfh(tenantId, a);
                 case CORRECTION -> queries.corrections(tenantId, a, team);
@@ -118,15 +120,28 @@ public class ApprovalsInboxService {
             byKind.put(kind, rows);
         }
 
+        // Submitted timesheet weeks (BW-36), under Requests, once their table exists.
+        List<InboxQueries.Row> timesheets = List.of();
+        if (a.timesheets()) {
+            List<InboxQueries.Row> rows = read(InboxQueries.TIMESHEET, unavailable, () -> queries.timesheets(tenantId, a, team));
+            if (rows != null) {
+                for (InboxQueries.Row r : rows) r.canDecide = a.canDecideTimesheet(r.employeeId, team);
+                timesheets = rows;
+            }
+        }
+
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String t : InboxAccess.TAB_ORDER) counts.put(t, 0);
         byKind.forEach((kind, rows) -> {
             counts.merge(InboxAccess.tabOf(kind), rows.size(), Integer::sum);
             counts.merge("all", rows.size(), Integer::sum);
         });
+        counts.merge("requests", timesheets.size(), Integer::sum);
+        counts.merge("all", timesheets.size(), Integer::sum);
 
         List<InboxQueries.Row> inTab = new ArrayList<>();
         for (DecisionKind kind : a.kinds(asked)) inTab.addAll(byKind.getOrDefault(kind, List.of()));
+        if (a.timesheetsIn(asked)) inTab.addAll(timesheets);
         inTab.sort(NEWEST_FIRST);
         int from = (int) Math.min((long) page * pageSize, inTab.size());
         List<InboxQueries.Row> pageRows = new ArrayList<>(inTab.subList(from, Math.min(from + pageSize, inTab.size())));
@@ -149,7 +164,10 @@ public class ApprovalsInboxService {
 
     private void enrich(UUID tenantId, List<InboxQueries.Row> rows, InboxAccess a, Set<UUID> team, LocalDate today) {
         Map<DecisionKind, List<InboxQueries.Row>> byKind = new EnumMap<>(DecisionKind.class);
-        for (InboxQueries.Row r : rows) byKind.computeIfAbsent(r.decisionKind(), k -> new ArrayList<>()).add(r);
+        for (InboxQueries.Row r : rows) {
+            // Timesheet weeks bring their one fact (the hours) from the source query.
+            if (r.decisionKind() != null) byKind.computeIfAbsent(r.decisionKind(), k -> new ArrayList<>()).add(r);
+        }
         // Colleagues' names are shown only when the caller sees them anyway: the whole tenant for
         // leave level 2, else their team.
         Set<UUID> visible = a.leaveL2() || a.workforceAdmin() ? null : team;
@@ -175,12 +193,12 @@ public class ApprovalsInboxService {
         });
     }
 
-    private List<InboxQueries.Row> read(DecisionKind kind, List<String> unavailable, Supplier<List<InboxQueries.Row>> source) {
+    private List<InboxQueries.Row> read(String kind, List<String> unavailable, Supplier<List<InboxQueries.Row>> source) {
         try {
             return readOnly.execute(s -> source.get());
         } catch (RuntimeException e) {
             log.warn("Approvals inbox: {} requests could not be read ({}); the rest still loads", kind, e.toString());
-            unavailable.add(kind.name());
+            unavailable.add(kind);
             return null;
         }
     }

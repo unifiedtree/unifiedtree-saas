@@ -1,19 +1,22 @@
 package com.hrms.app.reports;
 
+import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
  * Six canonical HRMS reports — all executed as tenant-scoped read-only queries.
- * RLS on the DB side ensures cross-tenant leakage is impossible even if
- * tenant_id is accidentally omitted from a query.
+ * Every table in every query is filtered by the request's tenant (bound as a
+ * parameter), and RLS on the DB side is a second wall behind it.
  */
 @Service
 public class ReportService {
@@ -48,6 +51,55 @@ public class ReportService {
         return o instanceof UUID u ? u : o == null ? null : UUID.fromString(o.toString());
     }
 
+    /** The request's (or the job's) tenant; every query binds it. */
+    static UUID tenant() {
+        return TenantContext.requireTenantId();
+    }
+
+    /**
+     * Each person's employment status on a date, from hrms.employee_status_history
+     * (V143_27: fed by a trigger on every status change, backfilled from the
+     * record's own dates), and who had an exit recorded by then with a last
+     * working day still to come (they count as on notice on that date). Takes
+     * five parameters: tenant, asOf, tenant, asOf, asOf. Shared by the
+     * headcount report and the diversity report as of a date, so both count the
+     * same people on the same day.
+     */
+    static final String STATUS_ON = """
+            status_on AS (
+                SELECT DISTINCT ON (h.employee_id) h.employee_id, h.status
+                  FROM hrms.employee_status_history h
+                 WHERE h.tenant_id = ?
+                   AND h.effective_on <= ?
+                 ORDER BY h.employee_id, h.effective_on DESC, h.recorded_at DESC
+            ),
+            -- An exit already recorded by asOf whose last working day is
+            -- still to come: that person is serving notice on asOf, even
+            -- when they went straight from active to exited.
+            leaving_on AS (
+                SELECT DISTINCT h.employee_id
+                  FROM hrms.employee_status_history h
+                 WHERE h.tenant_id = ?
+                   AND h.status IN ('EXITED', 'TERMINATED', 'RESIGNED')
+                   AND h.effective_on > ?
+                   AND (h.recorded_at AT TIME ZONE 'Asia/Kolkata')::date <= ?
+            )
+            """;
+
+    /**
+     * Who is employed on asOf: joined by then, and not gone by then (an exit
+     * only ends employment once the status says so and the last working day
+     * has passed). Takes two parameters: asOf, asOf. Starts with a space: a
+     * text block drops the trailing space of the "AND " it is appended to.
+     */
+    static final String EMPLOYED_ON = " " + """
+            e.date_of_joining <= ?
+                  AND NOT (
+                        e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
+                    AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') <= ?
+                  )
+            """;
+
     // ── 1. Headcount Report ───────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -62,28 +114,10 @@ public class ReportService {
         // stays in the diversity report, behind its own permission.)
         //
         // The active / notice / probation split is each person's status ON
-        // asOf, read from hrms.employee_status_history (V143_27: fed by a
-        // trigger on every status change, backfilled from the record's own
-        // dates), not today's status. Someone whose exit is still to come
-        // counts as on notice. Without a history row (should not happen after
-        // the backfill) the current status is used, as before.
-        String sql = """
-                WITH status_on AS (
-                    SELECT DISTINCT ON (h.employee_id) h.employee_id, h.status
-                      FROM hrms.employee_status_history h
-                     WHERE h.effective_on <= ?
-                     ORDER BY h.employee_id, h.effective_on DESC, h.recorded_at DESC
-                ),
-                -- An exit already recorded by asOf whose last working day is
-                -- still to come: that person is serving notice on asOf, even
-                -- when they went straight from active to exited.
-                leaving_on AS (
-                    SELECT DISTINCT h.employee_id
-                      FROM hrms.employee_status_history h
-                     WHERE h.status IN ('EXITED', 'TERMINATED', 'RESIGNED')
-                       AND h.effective_on > ?
-                       AND (h.recorded_at AT TIME ZONE 'Asia/Kolkata')::date <= ?
-                )
+        // asOf (STATUS_ON), not today's status. Someone whose exit is still to
+        // come counts as on notice. Without a history row (should not happen
+        // after the backfill) the current status is used, as before.
+        String sql = "WITH " + STATUS_ON + """
                 SELECT
                     d.id                            AS department_id,
                     d.name                          AS department,
@@ -95,17 +129,15 @@ public class ReportService {
                 FROM hrms.employees e
                 LEFT JOIN status_on s ON s.employee_id = e.id
                 LEFT JOIN leaving_on l ON l.employee_id = e.id
-                LEFT JOIN hrms.departments d ON d.id = e.department_id
-                WHERE e.company_id = ?
-                  AND e.date_of_joining <= ?
-                  AND NOT (
-                        e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
-                    AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') <= ?
-                  )
+                LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
+                WHERE e.tenant_id = ?
+                  AND e.company_id = ?
+                  AND """ + EMPLOYED_ON + """
                 GROUP BY d.id, d.name
                 ORDER BY total DESC
                 """;
-        return jdbc.queryForList(sql, asOf, asOf, asOf, companyId, asOf, asOf);
+        UUID t = tenant();
+        return jdbc.queryForList(sql, t, asOf, t, asOf, asOf, t, t, companyId, asOf, asOf);
     }
 
     // ── 2. Attrition Report ───────────────────────────────────────────────────
@@ -132,7 +164,8 @@ public class ReportService {
                            CASE WHEN e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
                                 THEN COALESCE(e.last_working_day, e.date_of_termination) END AS left_on
                     FROM hrms.employees e
-                    WHERE e.company_id = ?
+                    WHERE e.tenant_id = ?
+                      AND e.company_id = ?
                 ), months AS (
                     SELECT m::date AS m_start,
                            LEAST((m + INTERVAL '1 month' - INTERVAL '1 day')::date, CURRENT_DATE) AS m_end
@@ -158,7 +191,7 @@ public class ReportService {
                 FROM agg
                 ORDER BY m_start
                 """;
-        return jdbc.queryForList(sql, companyId, fromDate, toDate);
+        return jdbc.queryForList(sql, tenant(), companyId, fromDate, toDate);
     }
 
     // ── 3. Attendance Summary Report ─────────────────────────────────────────
@@ -179,16 +212,19 @@ public class ReportService {
                     COALESCE(ROUND(AVG(ar.work_hours)::numeric, 2), 0)   AS avg_hours,
                     COALESCE(SUM(ar.overtime_minutes), 0)                AS total_overtime_mins
                 FROM hrms.employees e
-                LEFT JOIN hrms.departments d ON d.id = e.department_id
+                LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
                 LEFT JOIN attendance.records ar
                     ON ar.employee_id = e.id
+                   AND ar.tenant_id = ?
                    AND ar.attendance_date BETWEEN ? AND ?
-                WHERE e.company_id = ?
+                WHERE e.tenant_id = ?
+                  AND e.company_id = ?
                   AND e.employment_status = 'ACTIVE'
                 GROUP BY e.id, e.employee_code, e.first_name, e.last_name, d.name
                 ORDER BY late_days DESC, e.last_name
                 """;
-        List<Map<String, Object>> rows = jdbc.queryForList(sql, fromDate, toDate, companyId);
+        UUID t = tenant();
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, t, t, fromDate, toDate, t, companyId);
         applyEffectiveSummary(rows, effective(
                 rows.stream().map(r -> uuid(r.get("employee_id"))).filter(java.util.Objects::nonNull).toList(), fromDate, toDate));
         return rows;
@@ -216,6 +252,62 @@ public class ReportService {
         }
     }
 
+    /**
+     * People who came in on each day of [from, to] (BW-87, the Reports
+     * Center's attendance tile), counted exactly as the attendance summary
+     * counts present days: the same people (the company's ACTIVE employees),
+     * the effective status when the policy service is there (present, late or
+     * half day), else one per attendance record. So the days add up to the
+     * summary's total present days for the same range. Every day of the range
+     * is listed; a day nobody came in has 0.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> attendanceDaily(UUID companyId, LocalDate fromDate, LocalDate toDate) {
+        UUID t = tenant();
+        Map<LocalDate, Long> perDay = new TreeMap<>();
+        for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) perDay.put(d, 0L);
+        List<UUID> ids = jdbc.queryForList(
+                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.company_id = ? AND e.employment_status = 'ACTIVE'",
+                UUID.class, t, companyId);
+        Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff = effective(ids, fromDate, toDate);
+        if (!eff.isEmpty()) {
+            countWorkedDays(perDay, ids, eff);
+        } else if (!ids.isEmpty()) {
+            jdbc.query("""
+                    SELECT ar.attendance_date AS day, COUNT(*) AS n
+                      FROM attendance.records ar
+                      JOIN hrms.employees e ON e.id = ar.employee_id AND e.tenant_id = ?
+                     WHERE ar.tenant_id = ?
+                       AND e.company_id = ?
+                       AND e.employment_status = 'ACTIVE'
+                       AND ar.attendance_date BETWEEN ? AND ?
+                     GROUP BY ar.attendance_date
+                    """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                LocalDate day = rs.getDate("day").toLocalDate();
+                long n = rs.getLong("n");
+                perDay.computeIfPresent(day, (k, v) -> v + n);
+            }, t, t, companyId, fromDate, toDate);
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        perDay.forEach((day, n) -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("date", day.toString());
+            m.put("present", n);
+            out.add(m);
+        });
+        return out;
+    }
+
+    /** Adds each person's worked days (effective status) to their day. Package-visible for tests. */
+    static void countWorkedDays(Map<LocalDate, Long> perDay, List<UUID> ids,
+                                Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff) {
+        for (UUID id : ids) {
+            for (Map.Entry<LocalDate, com.hrms.attendance.policy.EffectiveDay> d : eff.getOrDefault(id, Map.of()).entrySet()) {
+                if (d.getValue().worked()) perDay.computeIfPresent(d.getKey(), (k, v) -> v + 1);
+            }
+        }
+    }
+
     // ── 4. Leave Balance Report ───────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -235,15 +327,17 @@ public class ReportService {
                     lb.carry_forward,
                     (lb.total_entitlement + lb.carry_forward - lb.used - lb.pending) AS available
                 FROM leave_mgmt.leave_balances lb
-                JOIN hrms.employees e  ON e.id = lb.employee_id
-                JOIN leave_mgmt.leave_types lt ON lt.id = lb.leave_type_id
-                LEFT JOIN hrms.departments d ON d.id = e.department_id
-                WHERE e.company_id = ?
+                JOIN hrms.employees e  ON e.id = lb.employee_id AND e.tenant_id = ?
+                JOIN leave_mgmt.leave_types lt ON lt.id = lb.leave_type_id AND lt.tenant_id = ?
+                LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
+                WHERE lb.tenant_id = ?
+                  AND e.company_id = ?
                   AND lb.year = ?
                   AND e.employment_status = 'ACTIVE'
                 ORDER BY e.last_name, lt.name
                 """;
-        return jdbc.queryForList(sql, companyId, year);
+        UUID t = tenant();
+        return jdbc.queryForList(sql, t, t, t, t, companyId, year);
     }
 
     // ── 5. Late Marks Report ─────────────────────────────────────────────────
@@ -266,14 +360,16 @@ public class ReportService {
                     ar.late_by_minutes,
                     ar.check_in_at
                 FROM attendance.records ar
-                JOIN hrms.employees e ON e.id = ar.employee_id
-                LEFT JOIN hrms.departments d ON d.id = e.department_id
-                WHERE e.company_id = ?
+                JOIN hrms.employees e ON e.id = ar.employee_id AND e.tenant_id = ?
+                LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
+                WHERE ar.tenant_id = ?
+                  AND e.company_id = ?
                   AND ar.attendance_date BETWEEN ? AND ?
                   AND %s
                 ORDER BY ar.late_by_minutes DESC, ar.attendance_date
                 """.formatted(policy ? "ar.check_in_at IS NOT NULL" : "ar.attendance_status = 'LATE'");
-        List<Map<String, Object>> rows = jdbc.queryForList(sql, companyId, fromDate, toDate);
+        UUID t = tenant();
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, t, t, t, companyId, fromDate, toDate);
         if (!policy) {
             rows.forEach(r -> r.remove("employee_id"));
             return rows;
@@ -319,12 +415,51 @@ public class ReportService {
                     COUNT(*)                                             AS count,
                     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY d.id), 2) AS pct
                 FROM hrms.employees e
-                LEFT JOIN hrms.departments d ON d.id = e.department_id
-                WHERE e.company_id = ?
+                LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
+                WHERE e.tenant_id = ?
+                  AND e.company_id = ?
                   AND e.employment_status IN ('ACTIVE', 'PROBATION', 'NOTICE_PERIOD')
                 GROUP BY d.id, d.name, COALESCE(e.gender, 'NOT_SPECIFIED')
                 ORDER BY d.name, count DESC
                 """;
-        return jdbc.queryForList(sql, companyId);
+        UUID t = tenant();
+        return jdbc.queryForList(sql, t, t, companyId);
+    }
+
+    /**
+     * The diversity report as of a date (BW-86). The people counted are the
+     * ones the headcount report counts as active, on notice or on probation on
+     * that date: employed on it (EMPLOYED_ON), with their status on it read
+     * from hrms.employee_status_history (STATUS_ON); anyone whose exit was
+     * recorded by then with a last day still to come counts as on notice. So
+     * the people here always add up to the headcount report's active + on
+     * notice + probation for the same date. A null date is today's report,
+     * unchanged ({@link #diversityReport(UUID)}).
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> diversityReport(UUID companyId, LocalDate asOf) {
+        if (asOf == null) return diversityReport(companyId);
+        String sql = "WITH " + STATUS_ON + """
+                SELECT
+                    d.id                                                 AS department_id,
+                    d.name                                               AS department,
+                    COALESCE(e.gender, 'NOT_SPECIFIED')                  AS gender,
+                    COUNT(*)                                             AS count,
+                    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY d.id), 2) AS pct
+                FROM hrms.employees e
+                LEFT JOIN status_on s ON s.employee_id = e.id
+                LEFT JOIN leaving_on l ON l.employee_id = e.id
+                LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
+                WHERE e.tenant_id = ?
+                  AND e.company_id = ?
+                  AND """ + EMPLOYED_ON + """
+                  AND (l.employee_id IS NOT NULL
+                       OR COALESCE(s.status, e.employment_status)
+                          IN ('ACTIVE', 'PROBATION', 'NOTICE_PERIOD', 'EXITED', 'TERMINATED', 'RESIGNED'))
+                GROUP BY d.id, d.name, COALESCE(e.gender, 'NOT_SPECIFIED')
+                ORDER BY d.name, count DESC
+                """;
+        UUID t = tenant();
+        return jdbc.queryForList(sql, t, asOf, t, asOf, asOf, t, t, companyId, asOf, asOf);
     }
 }
