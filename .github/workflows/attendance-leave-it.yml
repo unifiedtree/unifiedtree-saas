@@ -84,6 +84,16 @@ jobs:
           # send a push notification.
           UNIFIEDTREE_FIREBASE_ENABLED: "false"
 
+          # SubscriptionAccessGuard (the LIVE copy is com.hrms.api.saasguard,
+          # not the unscanned com.hrms.api.saas one) returns 402
+          # subscription_lapsed when a tenant has no ledger row, which is every
+          # request these ITs make — nothing in the fixtures creates a
+          # subscription. The guard already allows a tenant with no row if it is
+          # grandfathered, so list the two fixture tenants (TENANT_A / TENANT_B
+          # in AbstractIntegrationTest) rather than inventing subscription rows
+          # whose shape the tests would then have to keep in step.
+          UNIFIEDTREE_SUBSCRIPTION_GRANDFATHER_TENANT_IDS: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
       - name: Publish test report
         if: always()
         uses: actions/upload-artifact@v4
