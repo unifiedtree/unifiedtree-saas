@@ -212,7 +212,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
         </div>
       </div>
       {pickerOpen && type.expiryTracked && (
-        <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-border-subtle bg-bg-base p-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border-subtle bg-bg-base p-2">
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase text-text-tertiary">Issued</label>
             <DateField
@@ -244,7 +244,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={upload.isPending}
-            className="col-span-2 rounded-md bg-[var(--u-br,#0F6E56)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-[var(--u-br,#0F6E56)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
           >
             {upload.isPending ? 'Uploading…' : 'Choose file & upload'}
           </button>
