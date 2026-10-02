@@ -13,5 +13,7 @@ public record EmployeeSkillResponse(
         String certificationName,
         LocalDate certifiedOn,
         Instant createdAt,
-        LocalDate expiresOn
+        LocalDate expiresOn,
+        // Redesign BW-85 (added): when the record last changed.
+        Instant updatedAt
 ) {}

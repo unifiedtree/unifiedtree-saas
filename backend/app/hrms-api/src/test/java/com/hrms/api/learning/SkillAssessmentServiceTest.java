@@ -57,11 +57,11 @@ class SkillAssessmentServiceTest {
     private void pendingProposal() throws Exception {
         ResultSet rs = mock(ResultSet.class);
         when(rs.next()).thenReturn(true);
-        when(rs.getObject(1, UUID.class)).thenReturn(employee);
-        when(rs.getObject(2, UUID.class)).thenReturn(null);
-        when(rs.getString(3)).thenReturn("TypeScript");
-        when(rs.getInt(4)).thenReturn(4);
-        when(rs.getString(5)).thenReturn("PENDING");
+        when(rs.getObject("employee_id", UUID.class)).thenReturn(employee);
+        when(rs.getObject("skill_id", UUID.class)).thenReturn(null);
+        when(rs.getString("skill_name")).thenReturn("TypeScript");
+        when(rs.getInt("proposed_proficiency")).thenReturn(4);
+        when(rs.getString("status")).thenReturn("PENDING");
         when(jdbc.query(contains("FOR UPDATE"), org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), any(Object[].class)))
                 .thenAnswer(inv -> ((ResultSetExtractor<?>) inv.getArgument(1)).extractData(rs));
     }
@@ -153,10 +153,61 @@ class SkillAssessmentServiceTest {
                 org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), any(Object[].class)))
                 .thenAnswer(inv -> ((ResultSetExtractor<?>) inv.getArgument(1)).extractData(current));
         var err = assertThrows(BusinessRuleException.class, () -> service.propose(tenant, employee,
-                new SkillAssessmentService.ProposeRequest("TypeScript", 3, null), UUID.randomUUID()));
+                new SkillAssessmentService.ProposeRequest("TypeScript", 3, null, null), UUID.randomUUID()));
         assertEquals("SKILL_LEVEL_UNCHANGED", err.getErrorCode());
         verify(jdbc, never()).queryForObject(contains("INSERT INTO learning_mgmt.skill_assessments"), eq(UUID.class), any(Object[].class));
         verifyNoInteractions(events);
+    }
+
+    // ── BW-85: the certification named with a proposal ───────────────────────
+
+    @Test void certificationNamesAreTrimmedAndLimited() {
+        assertNull(SkillAssessmentService.cleanCertification("  "));
+        assertEquals("AWS Certified Developer", SkillAssessmentService.cleanCertification(" AWS  Certified Developer "));
+        assertEquals("CERTIFICATION_NAME_TOO_LONG", assertThrows(BusinessRuleException.class,
+                () -> SkillAssessmentService.cleanCertification("x".repeat(201))).getErrorCode());
+    }
+
+    @Test void aCertificationNameBeforeTheMigrationIsNotReadyAndNothingIsSaved() {
+        when(jdbc.queryForObject(contains("information_schema.columns"), eq(Boolean.class))).thenReturn(false);
+        assertThrows(com.hrms.core.exception.FeatureNotReady.class, () -> service.propose(tenant, employee,
+                new SkillAssessmentService.ProposeRequest("AWS", 3, null, "AWS Certified Developer"), UUID.randomUUID()));
+        verify(jdbc, never()).queryForObject(contains("INSERT INTO learning_mgmt.skill_assessments"), eq(UUID.class), any(Object[].class));
+        verifyNoInteractions(events);
+    }
+
+    @Test void approvingAProposalWithACertificationMarksTheSkillCertified() throws Exception {
+        ResultSet rs = mock(ResultSet.class);
+        java.sql.ResultSetMetaData md = mock(java.sql.ResultSetMetaData.class);
+        when(md.getColumnCount()).thenReturn(1);
+        when(md.getColumnLabel(1)).thenReturn("certification_name");
+        when(rs.getMetaData()).thenReturn(md);
+        when(rs.getString(1)).thenReturn("AWS Certified Developer");
+        when(rs.next()).thenReturn(true);
+        when(rs.getObject("employee_id", UUID.class)).thenReturn(employee);
+        when(rs.getString("skill_name")).thenReturn("AWS");
+        when(rs.getInt("proposed_proficiency")).thenReturn(4);
+        when(rs.getString("status")).thenReturn("PENDING");
+        when(jdbc.query(contains("FOR UPDATE"), org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), any(Object[].class)))
+                .thenAnswer(inv -> ((ResultSetExtractor<?>) inv.getArgument(1)).extractData(rs));
+        ResultSet noSkill = mock(ResultSet.class);
+        when(jdbc.query(contains("SELECT id FROM learning_mgmt.employee_skills"),
+                org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), any(Object[].class)))
+                .thenAnswer(inv -> ((ResultSetExtractor<?>) inv.getArgument(1)).extractData(noSkill));
+        UUID created = UUID.randomUUID();
+        when(jdbc.queryForObject(contains("INSERT INTO learning_mgmt.employee_skills"), eq(UUID.class), any(Object[].class))).thenReturn(created);
+        when(jdbc.update(anyString(), any(Object[].class))).thenReturn(1);
+        var dto = new SkillAssessmentService.AssessmentDto(assessment, employee, "Reader User", "E-2", null,
+                created, "AWS", null, 4, null, "APPROVED", "Dept Manager", null, null, null);
+        when(jdbc.query(contains("FROM learning_mgmt.skill_assessments a"), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(dto));
+        when(team.resolve(any(Jwt.class), isNull())).thenReturn(List.of(person(employee)));
+
+        service.decide(tenant, assessment, new SkillAssessmentService.DecideRequest("APPROVED", null),
+                auth(manager, "hrms.learning.skill.approve"), UUID.randomUUID());
+
+        verify(jdbc).update(contains("SET certified = TRUE, certification_name = ?"), eq("AWS Certified Developer"), any(),
+                eq(tenant), eq(created));
     }
 
     @Test void hrSeesEveryoneAManagerOnlyTheirTeam() {

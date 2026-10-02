@@ -49,6 +49,13 @@ public class KpiController {
                 status, search, active, page, size);
     }
 
+    /** Redesign BW-82: the Goals & KPIs tiles, in the same scope as the list. Literal path, so it wins over /{id}. */
+    @GetMapping("/summary")
+    @PreAuthorize("hasAuthority('hrms.performance.read')")
+    public KpiService.KpiSummaryDto summary() {
+        return service.summary(TenantContext.getTenantId());
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('hrms.performance.read')")
     public KpiService.KpiRowDto get(@PathVariable UUID id) {

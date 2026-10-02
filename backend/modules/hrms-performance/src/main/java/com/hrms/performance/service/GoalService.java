@@ -39,7 +39,7 @@ public class GoalService {
         goal.setWeight(request.weight() != null ? request.weight() : 0);
         goal.setProgress(0);
         goal.setStatus(GoalStatus.ACTIVE);
-        goal = goalRepository.save(goal);
+        goal = goalRepository.saveAndFlush(goal);
         log.info("Goal created id={} employee={} title={}", goal.getId(), employeeId, request.title());
         return toResponse(goal);
     }

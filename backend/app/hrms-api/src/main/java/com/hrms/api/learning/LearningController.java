@@ -32,10 +32,37 @@ public class LearningController {
 
     private final LearningService service;
     private final SkillService skillService;
+    private final LearningDetailsService details;
 
-    public LearningController(LearningService service, SkillService skillService) {
+    public LearningController(LearningService service, SkillService skillService, LearningDetailsService details) {
         this.service = service;
         this.skillService = skillService;
+        this.details = details;
+    }
+
+    // ── Redesign BW-85 (literal paths win over /programs/{id}) ───────────────
+
+    @GetMapping("/programs/summary")
+    @PreAuthorize("hasAuthority('hrms.learning.read')")
+    public LearningDetailsService.ProgramsSummary programsSummary(@RequestParam(required = false) UUID companyId) {
+        return details.summary(TenantContext.getTenantId(), companyId);
+    }
+
+    @GetMapping("/programs/categories")
+    @PreAuthorize("hasAuthority('hrms.learning.read')")
+    public List<String> programCategories() {
+        return details.categories(TenantContext.getTenantId());
+    }
+
+    /** Everyone's certifications on file; same permission as reading someone's skills. */
+    @GetMapping("/certifications")
+    @PreAuthorize("hasAuthority('hrms.learning.skill.read')")
+    public LearningDetailsService.PageDto<LearningDetailsService.Certification> certifications(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return details.certifications(TenantContext.getTenantId(), status, search, page, size);
     }
 
     // ── Programs ─────────────────────────────────────────────────────────────
@@ -180,7 +207,7 @@ public class LearningController {
     public List<LearningService.EnrollmentDto> myEnrollments(@AuthenticationPrincipal Jwt jwt) {
         UUID empId = employeeId(jwt);
         if (empId == null) return List.of();
-        return service.myEnrollments(TenantContext.getTenantId(), empId);
+        return service.myEnrollmentsWithPlaces(TenantContext.getTenantId(), empId);
     }
 
     // ── Skills & certifications ──────────────────────────────────────────────

@@ -1,3 +1,4 @@
+/* global process, console, fetch */
 import assert from 'node:assert/strict'
 const base = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -39,7 +40,8 @@ for (const path of [`/v1/performance/kpis/${outsideKpi.id}`, `/v1/performance/kp
 assert.ok([400, 403, 404, 422].includes((await response(manager, `/v1/performance/kpis/${outsideKpi.id}/progress`, 'PUT', { newValue: 90 })).status))
 assert.equal(Number((await request(owner, `/v1/performance/kpis/${outsideKpi.id}`)).currentValue), 20)
 const managerContext = await request(manager, '/v1/canonical-auth/me')
-if (managerContext.permissions.includes('hrms.performance.write')) {
+// Since V143.9 a department manager holds hrms.kpi.progress and records progress on their own team's KPIs.
+if (managerContext.permissions.includes('hrms.performance.write') || managerContext.permissions.includes('hrms.kpi.progress')) {
   await request(manager, `/v1/performance/kpis/${directKpi.id}/progress`, 'PUT', { newValue: 35, notes: 'Assigned manager update' })
 } else {
   assert.equal((await response(manager, `/v1/performance/kpis/${directKpi.id}/progress`, 'PUT', { newValue: 35 })).status, 403)
