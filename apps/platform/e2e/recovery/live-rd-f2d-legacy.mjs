@@ -246,17 +246,20 @@ try {
   let prev = NaN
   for (let i = 0; i < 60; i++) { const t = await headingTop(page, 'Approval delegation'); if (t >= 0 && t < 260 && t === prev) break; prev = t; await page.waitForTimeout(60) }
   const t0 = await headingTop(page, 'Approval delegation')
-  await page.evaluate(() => { const el = document.getElementById('st-employment'); if (el) el.style.paddingBottom = '360px' })
+  // A card above the section grows. On the redesigned My profile, Approval delegation opens the Preferences
+  // tab, where the block above it is the tab's header (Employment and Personal details moved to Overview).
+  const growAbove = (px) => page.evaluate((v) => { const el = document.querySelector('.uks .uk-ph') || document.getElementById('st-employment'); if (el) el.style.paddingBottom = v }, px)
+  await growAbove('360px')
   await page.waitForTimeout(350)
   const t1 = await headingTop(page, 'Approval delegation')
   check('owner: the held section stays put when a card above grows', Math.abs(t1 - t0) <= 24, `before ${t0}, after ${t1}`)
   await page.mouse.move(700, 500)
   await page.mouse.wheel(0, 60); await page.waitForTimeout(450)
   const t2 = await headingTop(page, 'Approval delegation')
-  await page.evaluate(() => { const el = document.getElementById('st-details'); if (el) el.style.paddingBottom = '300px' })
+  await growAbove('660px')
   await page.waitForTimeout(450)
   const t3 = await headingTop(page, 'Approval delegation')
-  await page.evaluate(() => { for (const id of ['st-employment', 'st-details']) { const el = document.getElementById(id); if (el) el.style.paddingBottom = '' } })
+  await growAbove('')
   check('owner: after the person scrolls the page no longer holds it', t3 - t2 >= 250, `after scroll ${t2}, after growth ${t3}`)
 
   // The calendar inside a side panel closes alone on Escape (Exit → Start notice). Nothing is saved.
