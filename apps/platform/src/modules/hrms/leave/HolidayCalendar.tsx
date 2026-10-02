@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Plus, CalendarDays, Trash2 } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { Plus, CalendarDays, Trash2, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, P } from '@unifiedtree/sdk'
@@ -7,8 +7,9 @@ import { TableSkeleton } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { SubHeading } from '@/design/module/ModuleKit'
 import { DateField } from '@/shared/components/calendar'
-import { useHolidays, useCreateHoliday, useDeleteHoliday, type HolidayType } from '../api/useSettings'
+import { useHolidays, useCreateHoliday, useDeleteHoliday, type HolidayType, type HolidayResponse } from '../api/useSettings'
 import { useCompanies } from '../api/useOrg'
+import { useUpdateHoliday } from '../api/useLeave'
 
 const HOLIDAY_TYPE_LABELS: Record<HolidayType, string> = {
   NATIONAL: 'National',
@@ -28,26 +29,44 @@ const HOLIDAY_TYPE_TONE: Record<HolidayType, PillTone> = {
   COMPANY: 'teal',
 }
 
-// ── Add Drawer ────────────────────────────────────────────────────────────────
+// ── Add / Edit Drawer ─────────────────────────────────────────────────────────
+// Sentence case titles per crosscut §16 ("Add holiday", "Edit holiday"); the
+// close button keeps the "Close panel" accessible name live tests rely on.
 
-interface AddHolidayDrawerProps {
+interface HolidayDrawerProps {
   companyId: string
   year: number
+  holiday?: HolidayResponse | null
   onClose: () => void
 }
 
-function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
+function HolidayDrawer({ companyId, year, holiday, onClose }: HolidayDrawerProps) {
+  const editing = !!holiday
   const { toast } = useToast()
   const create = useCreateHoliday()
+  const update = useUpdateHoliday()
   const [form, setForm] = useState({
-    // Pre-filled to 1 Jan of the year being viewed, as the app does. Starting
-    // empty invited an out-of-year date that then vanished from the list the
-    // moment it was saved.
     holidayDate: `${year}-01-01`,
     holidayName: '',
     holidayType: 'NATIONAL' as HolidayType,
     description: '',
   })
+  // Pre-fill when switching into an existing holiday (BW-46).
+  useEffect(() => {
+    if (holiday) {
+      setForm({
+        holidayDate: holiday.holidayDate,
+        holidayName: holiday.holidayName,
+        holidayType: holiday.holidayType,
+        description: holiday.description ?? '',
+      })
+    } else {
+      setForm({ holidayDate: `${year}-01-01`, holidayName: '', holidayType: 'NATIONAL', description: '' })
+    }
+  }, [holiday, year])
+
+  const busy = create.isPending || update.isPending
+  const title = editing ? 'Edit holiday' : 'Add holiday'
 
   const handleSave = async () => {
     if (!form.holidayDate || !form.holidayName.trim()) {
@@ -55,25 +74,39 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
       return
     }
     try {
-      await create.mutateAsync({
-        companyId,
-        ...form,
-        description: form.description || undefined,
-      })
-      toast('Holiday added', 'success')
+      if (editing && holiday) {
+        await update.mutateAsync({
+          id: holiday.id,
+          data: {
+            holidayDate: form.holidayDate,
+            holidayName: form.holidayName.trim(),
+            holidayType: form.holidayType,
+            description: form.description.trim() || null,
+          },
+        })
+        toast('Holiday updated', 'success')
+      } else {
+        await create.mutateAsync({
+          companyId,
+          ...form,
+          description: form.description || undefined,
+        })
+        toast('Holiday added', 'success')
+      }
       onClose()
     } catch (err: unknown) {
-      toast((err as Error)?.message ?? 'Failed to add holiday', 'error')
+      toast((err as Error)?.message ?? (editing ? 'Failed to update holiday' : 'Failed to add holiday'), 'error')
     }
   }
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
+      <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={() => { if (!busy) onClose() }} />
+      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col"
+        role="dialog" aria-modal="true" aria-label={title}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
-          <h3 className="text-text-primary font-semibold">Add Holiday</h3>
-          <button onClick={onClose} className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-base">×</button>
+          <h3 className="text-text-primary font-semibold">{title}</h3>
+          <button onClick={onClose} aria-label="Close panel" className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-base">×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
@@ -118,15 +151,15 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
           </div>
         </div>
         <div className="flex gap-3 p-5 border-t border-border-default">
-          <HrButton variant="ghost" onClick={onClose}>
+          <HrButton variant="ghost" onClick={() => { if (!busy) onClose() }}>
             Cancel
           </HrButton>
           <HrButton
             onClick={handleSave}
-            disabled={create.isPending}
+            disabled={busy}
             className="flex-1"
           >
-            {create.isPending ? 'Adding...' : 'Add Holiday'}
+            {busy ? (editing ? 'Saving…' : 'Adding…') : editing ? 'Save changes' : 'Add holiday'}
           </HrButton>
         </div>
       </div>
@@ -151,13 +184,15 @@ export function HolidayCalendar({ canEdit, embedded }: HolidayCalendarProps & { 
   const { toast } = useToast()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
-  const [showAdd, setShowAdd] = useState(false)
+  // Null = no drawer, 'new' = Add, otherwise the id of the row being edited.
+  const [drawer, setDrawer] = useState<'new' | string | null>(null)
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: holidays = [], isLoading } = useHolidays(companyId, year)
   const deleteHoliday = useDeleteHoliday()
   const canEditFromPerm = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
   const editable = canEdit ?? canEditFromPerm
+  const editing = drawer && drawer !== 'new' ? holidays.find((h) => h.id === drawer) ?? null : null
 
   // The mobile Holiday Calendar navigates years with unbounded +/- chevrons.
   // A fixed 5-slot window here meant HR could not open an older year to check
@@ -194,9 +229,9 @@ export function HolidayCalendar({ canEdit, embedded }: HolidayCalendarProps & { 
                 the button visibly depressed with no drawer, no toast and no
                 disabled state. Disable it explicitly. */}
             {editable && (
-              <HrButton size="sm" onClick={() => setShowAdd(true)} disabled={!companyId}>
+              <HrButton size="sm" onClick={() => setDrawer('new')} disabled={!companyId}>
                 <Plus size={14} />
-                Add Holiday
+                Add holiday
               </HrButton>
             )}
           </>
@@ -235,21 +270,38 @@ export function HolidayCalendar({ canEdit, embedded }: HolidayCalendarProps & { 
                 {HOLIDAY_TYPE_LABELS[h.holidayType] ?? h.holidayType}
               </HrStatusPill>
               {editable && (
-                <button
-                  onClick={() => handleDelete(h.id, h.holidayName)}
-                  disabled={deleteHoliday.isPending}
-                  className="p-1.5 text-text-tertiary hover:text-[#B91C1C] rounded-lg hover:bg-[#FEE2E2] disabled:opacity-50 transition-colors"
-                >
-                  <Trash2 size={13} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    aria-label={`Edit ${h.holidayName}`}
+                    onClick={() => setDrawer(h.id)}
+                    className="p-1.5 text-text-tertiary hover:text-[#0F6E56] rounded-lg hover:bg-[#E8F3EE] transition-colors"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${h.holidayName}`}
+                    onClick={() => handleDelete(h.id, h.holidayName)}
+                    disabled={deleteHoliday.isPending}
+                    className="p-1.5 text-text-tertiary hover:text-[#B91C1C] rounded-lg hover:bg-[#FEE2E2] disabled:opacity-50 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </>
               )}
             </div>
           ))}
         </div>
       )}
 
-      {showAdd && companyId && editable && (
-        <AddHolidayDrawer companyId={companyId} year={year} onClose={() => setShowAdd(false)} />
+      {drawer && companyId && editable && (
+        <HolidayDrawer
+          companyId={companyId}
+          year={year}
+          holiday={editing}
+          onClose={() => setDrawer(null)}
+        />
       )}
     </div>
   )
