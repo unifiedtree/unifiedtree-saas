@@ -1,10 +1,11 @@
-// Redesign shell (F3a): the rail, the Pages panel, the top bar and More, per role, against the local API.
+// Redesign shell (F3a, Release 1.1): the rail, the module's pages as top tabs, the top bar and More, per role,
+// against the local API.
 //   - Home by permission: owner, HR and finance keep the admin dashboard (and its ?date=); manager and
 //     employee go from /dashboard to /me; a custom role goes to the first page it can open; someone
 //     with no page goes to /no-access (that last block changes a demo user's roles, so it only runs in
 //     the isolated live slot, or with SHELL_ROLE_CHANGES=1, and puts them back).
-//   - The rail's groups per role, the lit item (the item you came through stays lit), the Pages panel,
-//     the pin (kept per device), More's entries, Preferences (the first settings page the person can
+//   - The rail's groups per role, the lit item (the item you came through stays lit), the module's pages as
+//     tabs along the top bar (the left Pages panel is gone, DECISIONS 21), the pin (kept per device), More's entries, Preferences (the first settings page the person can
 //     open, and More lit there), Help & support, the Light/Dark choice kept across reloads, the "?q="
 //     filter chip, the phone drawer at 390, no vendor name, no page errors, no unexpected API errors.
 // Read-only except the role block, which removes everything it adds.
@@ -76,10 +77,12 @@ const railState = (page) => page.evaluate(() => {
   const more = nav.querySelector('.ut-rail__more')
   return { groups, lit, moreLit: more?.getAttribute('aria-current') === 'page', text: nav.textContent }
 })
+// The module's pages: the top bar's tabs (Release 1.1; they were the left Pages panel).
 const panelState = (page) => page.evaluate(() => {
-  const nav = [...document.querySelectorAll('nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
+  const nav = [...document.querySelectorAll('.ut-topbar nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
   if (!nav) return null
-  return { label: nav.getAttribute('aria-label'), rows: [...nav.querySelectorAll('a')].map((a) => a.querySelector('.ut-pages__label')?.textContent.trim()), current: [...nav.querySelectorAll('a[aria-current="page"]')].map((a) => a.querySelector('.ut-pages__label')?.textContent.trim()) }
+  const name = (a) => a.textContent.replace(/\s+/g, ' ').trim()
+  return { label: nav.getAttribute('aria-label'), rows: [...nav.querySelectorAll('a')].map(name), current: [...nav.querySelectorAll('a[aria-current="page"]')].map(name) }
 })
 async function clickRail(page, name) {
   await rail(page).getByRole('link', { name, exact: true }).click()
@@ -136,24 +139,26 @@ for (const who of ['owner', 'hrm', 'fin', 'mgr', 'reader']) {
     await rail(page).locator('.ut-rail__brand').click(); await settle(page)
     check(`${who}: the rail's top block opens their Home`, new URL(page.url()).pathname === home, at(page))
 
-    // A rail click lights that item; a module with several pages opens its Pages panel.
+    // A rail click lights that item; a module with several pages shows them as tabs along the top bar.
     const multi = { owner: 'Workforce', hrm: 'Workforce', fin: 'Payroll', mgr: 'My time', reader: 'My pay' }[who]
     await clickRail(page, multi)
     let s = await railState(page)
     const panel = await panelState(page)
-    check(`${who}: clicking ${multi} lights it alone and opens its Pages panel on its first page`, JSON.stringify(s.lit) === JSON.stringify([multi]) && !!panel && panel.current.length === 1 && panel.current[0] === panel.rows[0], `lit ${JSON.stringify(s.lit)}, panel ${JSON.stringify(panel)}`)
+    check(`${who}: clicking ${multi} lights it alone and shows its pages as top tabs, its first page lit`, JSON.stringify(s.lit) === JSON.stringify([multi]) && !!panel && panel.current.length === 1 && panel.current[0] === panel.rows[0], `lit ${JSON.stringify(s.lit)}, panel ${JSON.stringify(panel)}`)
     if (panel && panel.rows.length > 1) {
       await page.locator(`nav[aria-label="${panel.label}"]`).getByRole('link', { name: panel.rows[1], exact: true }).click(); await settle(page)
       s = await railState(page)
       const p2 = await panelState(page)
-      check(`${who}: a page in the Pages panel keeps ${multi} lit and marks that page`, JSON.stringify(s.lit) === JSON.stringify([multi]) && p2?.current[0] === panel.rows[1], `lit ${JSON.stringify(s.lit)}, panel ${JSON.stringify(p2)}`)
+      check(`${who}: a page tab in the top bar keeps ${multi} lit and marks that page`, JSON.stringify(s.lit) === JSON.stringify([multi]) && p2?.current[0] === panel.rows[1], `lit ${JSON.stringify(s.lit)}, panel ${JSON.stringify(p2)}`)
       if (shots && (who === 'hrm' || who === 'reader')) await page.screenshot({ path: `${shots}/rd-f3a-live-${who}-pages-1440.png` })
-      // Hide pages → the top bar's Pages button brings it back.
-      await page.getByRole('button', { name: 'Hide pages' }).click()
-      const btn = page.getByRole('button', { name: /^Show pages: / })
-      const shown = await btn.isVisible().catch(() => false)
-      if (shown) await btn.click()
-      check(`${who}: Hide pages, then the Pages button shows them again`, shown && !!(await panelState(page)), shown ? '' : 'no Pages button')
+      // No Pages button or side panel any more; the tabs are links in the keyboard order: focus the first
+      // one and Enter opens it, with the module still lit.
+      check(`${who}: no Pages button and no side Pages panel`, (await page.getByRole('button', { name: /^Show pages: |^Hide pages$/ }).count()) === 0 && (await page.locator('.ut-pages').count()) === 0)
+      await page.locator(`.ut-topbar nav[aria-label="${panel.label}"] a`).first().focus()
+      await page.keyboard.press('Enter'); await settle(page)
+      const pk = await panelState(page)
+      check(`${who}: a top tab opens from the keyboard (focus, Enter)`, pk?.current[0] === panel.rows[0] && JSON.stringify((await railState(page)).lit) === JSON.stringify([multi]), `panel ${JSON.stringify(pk)}`)
+      await page.locator(`.ut-topbar nav[aria-label="${panel.label}"]`).getByRole('link', { name: panel.rows[1], exact: true }).click(); await settle(page)
       // The module reopens on the last page used in it.
       await page.goto(base + '/profile'); await settle(page)
       await clickRail(page, multi)
@@ -231,11 +236,16 @@ for (const who of ['owner', 'hrm', 'fin', 'mgr', 'reader']) {
     const unpinned = await page.evaluate(() => document.querySelector('.ut-rail')?.getBoundingClientRect().width)
     check(`${who}: Collapse sidebar brings it back to icons`, unpinned <= 80, String(unpinned))
 
-    // The page's name as one pill when it publishes no tabs; the "?q=" chip where the page reads it.
+    // The page on screen is the lit top tab (a one-page module shows its name as one pill); the "?q=" chip
+    // where the page reads it.
     if (who === 'owner' || who === 'hrm') {
       await page.goto(base + '/hrms/employees?q=zz-no-match'); await settle(page)
-      const pill = await page.locator('.ut-topbar .uk-ppill').textContent().catch(() => null)
-      check(`${who}: a page without published tabs shows its name as one pill`, pill?.trim() === 'Workforce Directory', String(pill))
+      const pill = await page.locator('.ut-topbar nav[aria-label="Workforce pages"] a[aria-current="page"]').textContent().catch(() => null)
+      check(`${who}: the page on screen is the lit tab in the top bar`, pill?.trim() === 'Workforce Directory', String(pill))
+      await page.goto(base + '/hrms/leave'); await settle(page)
+      const one = await page.locator('.ut-topbar .uk-ppill').textContent().catch(() => null)
+      check(`${who}: a module with one page shows the page's name as one pill`, one?.trim() === 'Leave Operations Center' && (await page.locator('.ut-topbar nav[aria-label$=" pages"]').count()) === 0, String(one))
+      await page.goto(base + '/hrms/employees?q=zz-no-match'); await settle(page)
       const chip = page.getByRole('button', { name: 'Clear the filter “zz-no-match” on this page' })
       const chipShown = await chip.isVisible().catch(() => false)
       if (chipShown) { await chip.click(); await settle(page) }
@@ -277,17 +287,21 @@ for (const who of ['reader', 'owner']) {
     const sheet = await page.getByRole('dialog', { name: 'Search' }).isVisible().catch(() => false)
     check(`${who} (phone): the search icon opens today's search`, sheet)
     await page.keyboard.press('Escape')
-    // The drawer's Preferences: the settings page, and the top bar's Pages button lists the settings pages over it.
+    // The drawer's Preferences: the settings page, with the settings pages as the top bar's sideways tabs
+    // (this one lit) and, in the drawer, above the rail.
     await page.goto(base + HOME[who]); await settle(page)
     await page.getByRole('button', { name: 'Open navigation' }).click()
     await page.getByRole('dialog', { name: 'Navigation' }).getByRole('link', { name: 'Preferences', exact: true }).click(); await settle(page)
-    const pagesBtn = page.getByRole('button', { name: 'Show pages: Settings' })
-    const hasBtn = await pagesBtn.isVisible().catch(() => false)
-    if (hasBtn) await pagesBtn.click()
-    const list = page.getByRole('dialog', { name: 'Settings pages' })
-    const listed = hasBtn && await list.isVisible({ timeout: 5_000 }).catch(() => false)
-    const lit3 = listed ? (await list.locator('a[aria-current="page"]').allTextContents()).map((t) => t.trim()) : []
-    check(`${who} (phone): Preferences in the drawer keeps the Pages button, which lists the settings pages with this one lit`, listed && lit3.length === 1, `${at(page)}; button ${hasBtn}, lit ${JSON.stringify(lit3)}`)
+    const tabs = page.locator('.ut-topbar nav[aria-label="Settings pages"]')
+    const listed = await tabs.isVisible({ timeout: 5_000 }).catch(() => false)
+    const lit3 = listed ? (await tabs.locator('a[aria-current="page"]').allTextContents()).map((t) => t.trim()) : []
+    const wide3 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    check(`${who} (phone): Preferences in the drawer opens a settings page whose top bar lists the settings pages with this one lit`, listed && lit3.length === 1 && wide3 <= 2, `${at(page)}; tabs ${listed}, lit ${JSON.stringify(lit3)}, sideways ${wide3}`)
+    await page.getByRole('button', { name: 'Open navigation' }).click()
+    const dpages = page.getByRole('dialog', { name: 'Navigation' }).getByRole('navigation', { name: 'Settings pages' })
+    const dlit = (await dpages.locator('a[aria-current="page"]').allTextContents().catch(() => [])).map((t) => t.trim())
+    check(`${who} (phone): the drawer lists the settings pages too, this one lit`, JSON.stringify(dlit) === JSON.stringify(lit3), JSON.stringify(dlit))
+    await page.getByRole('button', { name: 'Close navigation' }).click()
   } catch (e) {
     check(`${who} (phone): run finished`, false, String(e.message || e).slice(0, 300))
   } finally {

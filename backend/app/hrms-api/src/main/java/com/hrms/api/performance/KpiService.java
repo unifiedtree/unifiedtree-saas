@@ -56,20 +56,53 @@ public class KpiService {
     private final JdbcTemplate jdbc;
     private final PerformanceTeamScope teamScope;
 
+    /** Company KPI links (BW-83); optional so the service also works without it (tests). */
+    private CompanyKpiService companyKpis;
+
     public KpiService(JdbcTemplate jdbc, PerformanceTeamScope teamScope) {
         this.jdbc = jdbc;
         this.teamScope = teamScope;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setCompanyKpis(CompanyKpiService companyKpis) {
+        this.companyKpis = companyKpis;
+    }
+
     // ── DTOs ──────────────────────────────────────────────────────────────────
 
+    /**
+     * Redesign BW-82/BW-83 added (at the end, additive): the owner's department and
+     * the company KPI the goal counts towards.
+     */
     public record KpiRowDto(
             UUID id, UUID ownerId, String ownerName, String ownerCode,
             String title, String description, String category,
             BigDecimal targetValue, BigDecimal currentValue, String unit,
             String direction, BigDecimal progressPct,
             BigDecimal weight, String dueDate, String status,
-            String createdAt, String updatedAt) {}
+            String createdAt, String updatedAt,
+            String department, UUID companyKpiId, String companyKpiTitle) {
+
+        public KpiRowDto(UUID id, UUID ownerId, String ownerName, String ownerCode,
+                         String title, String description, String category,
+                         BigDecimal targetValue, BigDecimal currentValue, String unit,
+                         String direction, BigDecimal progressPct,
+                         BigDecimal weight, String dueDate, String status,
+                         String createdAt, String updatedAt) {
+            this(id, ownerId, ownerName, ownerCode, title, description, category, targetValue, currentValue, unit,
+                    direction, progressPct, weight, dueDate, status, createdAt, updatedAt, null, null, null);
+        }
+
+        KpiRowDto withKpi(UUID kpiId, String kpiTitle) {
+            return new KpiRowDto(id, ownerId, ownerName, ownerCode, title, description, category, targetValue,
+                    currentValue, unit, direction, progressPct, weight, dueDate, status, createdAt, updatedAt,
+                    department, kpiId, kpiTitle);
+        }
+    }
+
+    /** Goals & KPIs tiles (BW-82): in the caller's scope, dropped goals left out. */
+    public record KpiSummaryDto(int total, int completed, int atRisk, int reachedPct, int averageProgress) {}
 
     public record CreateKpiRequest(
             @jakarta.validation.constraints.NotNull UUID ownerId,        // employee_id
@@ -82,12 +115,15 @@ public class KpiService {
             @jakarta.validation.constraints.Size(max = 24) String unit,
             String direction,       // one of ALLOWED_DIRECTIONS
             BigDecimal weight,
-            String dueDate) {}
+            String dueDate,
+            UUID companyKpiId) {}   // BW-83, optional
 
+    /** {@code companyKpiId} sets the link; {@code clearCompanyKpi = true} removes it (BW-83). */
     public record UpdateKpiRequest(
             String title, String description, String category,
             BigDecimal targetValue, String unit, String direction,
-            BigDecimal weight, String dueDate, String status, UUID ownerId) {}
+            BigDecimal weight, String dueDate, String status, UUID ownerId,
+            UUID companyKpiId, Boolean clearCompanyKpi) {}
 
     public record ProgressUpdateRequest(
             @jakarta.validation.constraints.NotNull BigDecimal newValue,
@@ -159,19 +195,24 @@ public class KpiService {
         pageArgs.add(size);
         pageArgs.add(page * size);
 
-        String sql = """
-                SELECT g.*,
-                       TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS owner_name,
-                       e.employee_code                                        AS owner_code
-                  FROM performance_mgmt.goals g
-                  LEFT JOIN hrms.employees e ON e.id = g.employee_id AND e.tenant_id = g.tenant_id
-                """ + where + """
+        String sql = ROW_SELECT + where + """
                  ORDER BY g.updated_at DESC
                  LIMIT ? OFFSET ?
                 """;
         List<KpiRowDto> rows = jdbc.query(sql, (rs, i) -> toKpiDto(rs), pageArgs.toArray());
-        return new PageDto<>(rows, page, size, total);
+        return new PageDto<>(withKpiLinks(tenantId, rows), page, size, total);
     }
+
+    /** A goal row with its owner's name, code and department (BW-82). */
+    private static final String ROW_SELECT = """
+            SELECT g.*,
+                   TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS owner_name,
+                   e.employee_code                                        AS owner_code,
+                   d.name                                                 AS department
+              FROM performance_mgmt.goals g
+              LEFT JOIN hrms.employees e ON e.id = g.employee_id AND e.tenant_id = g.tenant_id
+              LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+            """;
 
     @Transactional
     public KpiRowDto get(UUID tenantId, UUID id) {
@@ -179,16 +220,48 @@ public class KpiService {
         StringBuilder predicate = new StringBuilder(" WHERE g.tenant_id = ? AND g.id = ?");
         List<Object> args = new ArrayList<>(List.of(tenantId, id));
         accessScope().appendGoalPredicate(predicate, args);
-        return jdbc.query("""
-                SELECT g.*,
-                       TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS owner_name,
-                       e.employee_code AS owner_code
-                  FROM performance_mgmt.goals g
-                  LEFT JOIN hrms.employees e ON e.id = g.employee_id AND e.tenant_id = g.tenant_id
-                """ + predicate, rs -> {
+        KpiRowDto row = jdbc.query(ROW_SELECT + predicate, rs -> {
                     if (!rs.next()) throw new BusinessRuleException("KPI not found", "KPI_NOT_FOUND");
                     return toKpiDto(rs);
                 }, args.toArray());
+        return withKpiLinks(tenantId, List.of(row)).get(0);
+    }
+
+    /**
+     * Goals & KPIs tiles (BW-82): every goal in the caller's scope except dropped ones;
+     * completed and at-risk counts, the share reached and the average progress (each
+     * goal capped at 100%). Same scope as the list ({@link KpiAccessScope}).
+     */
+    @Transactional
+    public KpiSummaryDto summary(UUID tenantId) {
+        bindTenant(tenantId);
+        StringBuilder where = new StringBuilder(" WHERE g.tenant_id = ? AND g.status <> 'DROPPED'");
+        List<Object> args = new ArrayList<>(List.of(tenantId));
+        accessScope().appendGoalPredicate(where, args);
+        return jdbc.query("""
+                SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE g.status = 'COMPLETED') AS completed,
+                       COUNT(*) FILTER (WHERE g.status = 'AT_RISK')   AS at_risk,
+                       COALESCE(ROUND(AVG(LEAST(GREATEST(g.progress, 0), 100))), 0) AS avg_progress
+                  FROM performance_mgmt.goals g""" + where, rs -> {
+                    if (!rs.next()) return new KpiSummaryDto(0, 0, 0, 0, 0);
+                    return summaryOf(rs.getInt("total"), rs.getInt("completed"), rs.getInt("at_risk"), rs.getInt("avg_progress"));
+                }, args.toArray());
+    }
+
+    static KpiSummaryDto summaryOf(int total, int completed, int atRisk, int averageProgress) {
+        int reached = total == 0 ? 0 : (int) Math.round(completed * 100.0 / total);
+        return new KpiSummaryDto(total, completed, atRisk, reached, total == 0 ? 0 : averageProgress);
+    }
+
+    private List<KpiRowDto> withKpiLinks(UUID tenantId, List<KpiRowDto> rows) {
+        if (companyKpis == null || rows.isEmpty()) return rows;
+        java.util.Map<UUID, Object[]> links = companyKpis.linksFor(tenantId, rows.stream().map(KpiRowDto::id).toList());
+        if (links.isEmpty()) return rows;
+        return rows.stream().map(r -> {
+            Object[] l = links.get(r.id());
+            return l == null ? r : r.withKpi((UUID) l[0], (String) l[1]);
+        }).toList();
     }
 
     @Transactional
@@ -236,6 +309,7 @@ public class KpiService {
         // Default to 1 (matches every historical row seeded before this column
         // was exposed to the API) so POST /v1/performance/kpis works without it.
         BigDecimal weight = req.weight() == null ? BigDecimal.ONE : req.weight();
+        if (req.companyKpiId() != null) requireCompanyKpis().requireLinkable(tenantId, req.ownerId(), req.companyKpiId());
 
         UUID id = jdbc.queryForObject("""
                 INSERT INTO performance_mgmt.goals
@@ -264,7 +338,13 @@ public class KpiService {
                     pct == null ? BigDecimal.ZERO : pct,
                     actorId);
         }
+        if (req.companyKpiId() != null) companyKpis.link(tenantId, id, req.companyKpiId(), actorId);
         return get(tenantId, id);
+    }
+
+    private CompanyKpiService requireCompanyKpis() {
+        if (companyKpis == null) throw new com.hrms.core.exception.FeatureNotReady();
+        return companyKpis;
     }
 
     @Transactional
@@ -275,6 +355,8 @@ public class KpiService {
         if (req.direction() != null) validateDirection(req.direction());
         if (req.status() != null && !ALLOWED_STATUSES.contains(req.status()))
             throw new BusinessRuleException("Unknown status: " + req.status(), "INVALID_STATUS");
+        UUID owner = req.ownerId() != null ? req.ownerId() : existing.ownerId();
+        if (req.companyKpiId() != null) requireCompanyKpis().requireLinkable(tenantId, owner, req.companyKpiId());
 
         StringBuilder sql = new StringBuilder("UPDATE performance_mgmt.goals SET updated_at = now()");
         List<Object> args = new ArrayList<>();
@@ -298,6 +380,8 @@ public class KpiService {
         if (rows == 0) throw new BusinessRuleException("KPI not found", "KPI_NOT_FOUND");
 
         recomputeProgressPct(id);
+        if (req.companyKpiId() != null) companyKpis.link(tenantId, id, req.companyKpiId(), actorId);
+        else if (Boolean.TRUE.equals(req.clearCompanyKpi()) && companyKpis != null) companyKpis.unlink(tenantId, id);
         return get(tenantId, id);
     }
 
@@ -471,7 +555,8 @@ public class KpiService {
                 dueDate == null ? null : dueDate.toString(),
                 rs.getString("status"),
                 ts(rs.getTimestamp("created_at")),
-                ts(rs.getTimestamp("updated_at")));
+                ts(rs.getTimestamp("updated_at")),
+                rs.getString("department"), null, null);
     }
 
     private static String ts(java.sql.Timestamp t) {

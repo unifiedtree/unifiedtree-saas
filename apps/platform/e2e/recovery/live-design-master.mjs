@@ -1,3 +1,4 @@
+/* global console, process */
 // Live check of the Master data design against the local API.
 //
 //   node e2e/recovery/live-design-master.mjs
@@ -77,7 +78,8 @@ try {
     hr.errors.length = 0
     await page.goto(base + route); await settle()
     await page.getByRole('heading', { name: heading, exact: true }).first().waitFor({ timeout: 20000 }).catch(() => {})
-    const ok = (await page.getByRole('navigation', { name: 'Master sections' }).count()) === 1 && (await page.getByRole('heading', { name: heading, exact: true }).count()) > 0
+    // The Master tabs are the top bar's "Workforce pages" tabs since Release 1.1 (the page's own copy is hidden).
+    const ok = (await page.getByRole('navigation', { name: 'Workforce pages' }).count()) === 1 && (await page.getByRole('heading', { name: heading, exact: true }).count()) > 0
     check(`${route} renders "${heading}" under the Master tabs`, ok && !hr.errors.length, hr.errors[0] || '')
   }
 

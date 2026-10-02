@@ -146,9 +146,22 @@ public class AppNotificationService {
 
     @Transactional(readOnly = true)
     public PageResponse<NotificationDto> list(UUID userId, boolean unreadOnly, Pageable pageable) {
-        Page<AppNotification> page = unreadOnly
-                ? repo.findByUserIdAndReadAtIsNullOrderByCreatedAtDesc(userId, pageable)
-                : repo.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        return list(userId, unreadOnly, null, pageable);
+    }
+
+    /** {@code since} (optional, redesign BW-05): only rows created at or after it, e.g. the bell's last 7 days. */
+    @Transactional(readOnly = true)
+    public PageResponse<NotificationDto> list(UUID userId, boolean unreadOnly, Instant since, Pageable pageable) {
+        Page<AppNotification> page;
+        if (since == null) {
+            page = unreadOnly
+                    ? repo.findByUserIdAndReadAtIsNullOrderByCreatedAtDesc(userId, pageable)
+                    : repo.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        } else {
+            page = unreadOnly
+                    ? repo.findByUserIdAndReadAtIsNullAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(userId, since, pageable)
+                    : repo.findByUserIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(userId, since, pageable);
+        }
         return PageResponse.from(page, NotificationDto::from);
     }
 

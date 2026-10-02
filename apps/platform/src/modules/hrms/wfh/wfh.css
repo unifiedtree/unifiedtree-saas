@@ -1,0 +1,41 @@
+/* Work from home and Shift change (EmpTime.dc.html e-wfh, e-shift). Tokens only. */
+.uw-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.uw-form { display: flex; flex-direction: column; gap: 16px; }
+.uw-label { font-size: 13px; font-weight: 500; color: var(--u-ink2, #4A5A54); }
+
+/* Day chips */
+.uw-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.uw-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 58px; padding: 6px 4px; border-radius: 12px; box-sizing: border-box; cursor: pointer;
+  border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); font: inherit;
+}
+.uw-day:hover:not(:disabled) { border-color: var(--u-brl, #BFDFD1); }
+.uw-day:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.uw-day[aria-pressed='true'] { background: var(--u-br, #0F6E56); border-color: var(--u-br, #0F6E56); color: var(--u-onbr, #fff); }
+.uw-day:disabled { cursor: default; background: var(--u-sf2, #F6F8F7); color: var(--u-ink3, #6A7A73); }
+.uw-day__dow { font-size: 11.5px; font-weight: 500; letter-spacing: .02em; opacity: .85; }
+.uw-day__date { font-size: 14px; font-weight: 500; white-space: nowrap; }
+.uw-day__why { font-size: 11px; font-weight: 500; color: var(--u-ink3, #6A7A73); }
+.uw-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.uw-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding-top: 4px; }
+.uw-foot__line { font-size: 13px; color: var(--u-ink2, #4A5A54); min-width: 0; flex: 1 1 220px; }
+
+/* Shift cards */
+.us-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.us-card {
+  position: relative; display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 14px; text-align: left; cursor: pointer;
+  border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); font: inherit;
+}
+.us-card:hover:not(:disabled) { border-color: var(--u-brl, #BFDFD1); }
+.us-card:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.us-card[aria-pressed='true'] { border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 1px var(--u-br, #0F6E56); }
+.us-card:disabled { cursor: default; }
+.us-card__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.us-card__name { font-size: 15px; font-weight: 500; }
+.us-card__time { font-size: 13.5px; color: var(--u-ink2, #4A5A54); font-variant-numeric: tabular-nums; }
+.us-card__meta { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.us-bar { position: relative; height: 8px; border-radius: 4px; overflow: hidden; background: var(--u-sf2, #F0F4F2); }
+.us-bar > span { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--u-br, #0F6E56); }
+.us-bar__ticks { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
+.us-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }

@@ -81,11 +81,11 @@ export default {
       },
       // One typeface for the whole app (redesign --u-font), loaded in index.html.
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-        heading: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-        body: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        heading: ['Inter', 'system-ui', 'sans-serif'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
-        display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        display: ['Inter', 'system-ui', 'sans-serif'],
       },
       // Weights 400/500/600 only: nothing heavier than 600 renders.
       fontWeight: {

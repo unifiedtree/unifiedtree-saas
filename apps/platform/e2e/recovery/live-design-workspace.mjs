@@ -60,10 +60,10 @@ try {
   await page.getByText(`Workspace QA ${stamp}`).first().waitFor({ timeout: 20000 })
   check('header shows the person, code and status', await page.getByText(created.employeeCode, { exact: true }).count() > 0 && await page.getByText('Probation', { exact: true }).count() > 0)
   check('probation banner counts down to the real end date', await page.getByText(/Probation ends in 10 days/).count() > 0)
-  check('shell sub-tabs are hidden (the design has only ← Back)', await page.getByRole('navigation', { name: /sections$/ }).count() === 0)
+  check('shell sub-tabs are hidden (the design has only ← Workforce directory)', await page.getByRole('navigation', { name: /sections$/ }).count() === 0)
 
-  // ── Edit employee (Basic → Financial → Save) ──
-  await page.getByRole('button', { name: 'Edit employee' }).click()
+  // ── Edit profile (Basic → Financial → Save) ──
+  await page.getByRole('button', { name: 'Edit profile' }).click()
   await dialog().getByPlaceholder('+91 98450 12345').fill('+91 90000 54321')
   await page.getByRole('button', { name: 'Next: Financial →' }).click()
   await page.getByRole('button', { name: 'Save changes' }).click()
@@ -79,16 +79,16 @@ try {
   await dialog().getByRole('button', { name: 'Confirm probation' }).click()
   check('confirm makes the person active', await toast(/confirmed from/) && status() === 'ACTIVE')
   await settle()
-  await page.getByRole('button', { name: /Actions/ }).click()
-  await page.getByRole('menuitem', { name: 'Start notice' }).click()
+  // An active person's two actions are Change shift and Start notice (the redesign's left card).
+  await page.getByRole('complementary', { name: 'Profile' }).getByRole('button', { name: 'Start notice' }).click()
   await dialog().getByRole('button', { name: 'Start notice' }).click()
   check('notice needs a last working day', await dialog().getByText('Last working day is required').count() > 0)
   await pickDate(dialog().locator('.utc-trigger').nth(1), day(30))
   await dialog().getByRole('button', { name: 'Start notice' }).click()
   check('start notice records it', await toast(/Notice started/) && status() === 'NOTICE_PERIOD')
   await settle()
-  await page.getByRole('button', { name: /Actions/ }).click()
-  await page.getByRole('menuitem', { name: 'Cancel notice' }).click()
+  // On notice, the two actions are Cancel notice and Mark exited.
+  await page.getByRole('complementary', { name: 'Profile' }).getByRole('button', { name: 'Cancel notice' }).click()
   await dialog().getByRole('button', { name: 'Cancel notice' }).click()
   check('cancel notice makes the person active again', await toast(/Notice cancelled/) && status() === 'ACTIVE')
 
@@ -102,7 +102,9 @@ try {
   for (const tab of ['Personal', 'Job', 'Attendance', 'Payroll', 'Leave', 'Expenses', 'Documents', 'Letters', 'Performance', 'Exit', 'Overview']) {
     errors.length = 0
     await page.getByRole('tab', { name: new RegExp('^' + tab) }).click(); await settle()
-    const ok = tab === 'Leave' || tab === 'Expenses' ? await page.getByText(/only served for the signed-in person/).count() > 0 : !errors.length
+    // Leave and Expenses read the per-employee endpoints (V143.13): their sections render.
+    const ok = tab === 'Leave' ? !errors.length && await page.getByRole('heading', { name: /^Balances/ }).count() > 0
+      : tab === 'Expenses' ? !errors.length && await page.getByRole('heading', { name: 'Expense claims' }).count() > 0 : !errors.length
     check(`${tab} tab renders`, ok, errors[0] || '')
   }
   check('no unexpected API errors', !failed.length, failed.slice(0, 3).join(' | '))

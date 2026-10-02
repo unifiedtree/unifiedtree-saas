@@ -36,7 +36,7 @@ function ProgressBar({ pct }: { pct: number }) {
     <div className="flex items-center gap-2 min-w-[120px]">
       <div className="h-1.5 flex-1 rounded-full bg-gray-200 overflow-hidden">
         <div
-          className="h-full rounded-full bg-[#059669] transition-all"
+          className="h-full rounded-full bg-[var(--u-br)] transition-all"
           style={{ width: `${clamped}%` }}
         />
       </div>
@@ -168,7 +168,7 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
           >
             <div className="flex flex-wrap gap-2">
               {skillRows.map((s) => (
-                <div key={s.id} className="flex items-center gap-2.5" style={{ padding: '8px 12px', borderRadius: 10, background: '#f8fafc' }}>
+                <div key={s.id} className="flex items-center gap-2.5" style={{ padding: '8px 12px', borderRadius: 10, background: 'var(--u-sf2,#F7F9F8)' }}>
                   <div>
                     <p className="text-sm font-medium text-text-primary">{s.skillName}</p>
                     {s.certified && s.certificationName && (
@@ -183,7 +183,7 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="h-1.5 w-12 rounded-full bg-gray-200 overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-[#059669]"
+                        className="h-full rounded-full bg-[var(--u-br)]"
                         style={{ width: `${(Math.min(Math.max(s.proficiency, 0), 5) / 5) * 100}%` }}
                       />
                     </div>

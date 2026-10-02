@@ -6,6 +6,11 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import { useEmployeeShift } from '../../api/useShiftPolicies'
+import { Avatar, Button as KitButton, IconTile, ListRow, ListRows, StatusPill } from '@/design/kit/display'
+import { useToast } from '@/design/kit/overlays'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { useDirectReports } from '../api/useProfileData'
+import { fmtDate } from './profileFormat'
 import { SectionState, SubSection, Facts } from './shared'
 import type { EmploymentType } from '../../api/useWorkforce'
 import {
@@ -16,7 +21,6 @@ import { Button, Field, Input, TableSkeleton, CardSkeleton } from '@unifiedtree/
 import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { format } from 'date-fns'
-import { toast } from 'sonner'
 import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes } from '../../api/useOrg'
 import { useForm } from 'react-hook-form'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeesByIds } from '../../api/useWorkforce'
@@ -28,6 +32,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
   // Mirror OverviewTab: CTC is salary data, only reveal it to holders of the
   // salary-read permission (same code the Salary tab is gated on).
   const canReadSalary = usePermission(P.PAYROLL_STRUCTURE_READ)
+  const toast = useToast()
   const [open, setOpen] = useState(false)
   const updateMut = useUpdateWorkforceEmployee()
 
@@ -68,7 +73,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
       toast.success('Work details updated')
       reset(values)
       setOpen(false)
-    } catch { toast.error('Failed to update work details') }
+    } catch (e) { toast.error('Couldn’t update the work details', { detail: (e as Error)?.message }) }
   }
 
   return (
@@ -155,71 +160,82 @@ export function EmployeeJob({ emp }: {
   emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']>
 }) {
   const canReadAttendance = usePermission('attendance.team.read')
+  const canRead = usePermission(P.HRMS_EMPLOYEE_READ)
   const navigate = useNavigate()
+  const { data: me } = useCurrentUser()
 
   const managerIds = emp.reportingManagerId ? [emp.reportingManagerId] : []
-  const { data: managers, isLoading: managerLoading } = useEmployeesByIds(managerIds)
+  const { data: managers, isLoading: managerLoading } = useEmployeesByIds(managerIds, { enabled: canRead })
   const manager = managers?.[0]
+  const { data: designations = [] } = useDesignations(emp.companyId)
+  const reports = useDirectReports(emp.id, canRead)
   const shift = useEmployeeShift(emp.id, { enabled: canReadAttendance })
+  const title = (desigId?: string | null) => designations.find((d) => d.id === desigId)?.title
+  const nameOf = (e: { firstName?: string | null; lastName?: string | null; employeeCode: string }) => [e.firstName, e.lastName].filter(Boolean).join(' ') || e.employeeCode
+  const managedByViewer = !!emp.reportingManagerId && emp.reportingManagerId === me?.employeeId
+  // Only people whose manager really is this person (an older server ignores the filter).
+  const direct = (reports.data?.content ?? []).filter((r) => r.reportingManagerId === emp.id)
+  const [allReports, setAllReports] = useState(false)
+  const shown = allReports ? direct : direct.slice(0, 8)
 
   return (
-    <div className="flex flex-col gap-3">
-      <SubSection title="Employment details">
-        <WorkTab emp={emp} />
-      </SubSection>
+    <div className="upf-flow">
+      <div className="upf-full">
+        <SubSection title="Employment details">
+          <WorkTab emp={emp} />
+        </SubSection>
+      </div>
 
-      <SubSection title="Reporting line">
-        <div>
-          {!emp.reportingManagerId ? (
-            <p className="text-sm text-text-secondary">
-              No reporting manager set. Approvals that route to a manager will fall back to
-              the department head.
-            </p>
-          ) : managerLoading ? (
-            <p className="text-sm text-text-tertiary">Loading manager…</p>
-          ) : manager ? (
-            <button
-              type="button"
-              onClick={() => navigate(`/hrms/employees/${manager.id}`)}
-              className="flex items-center gap-3 text-left group"
-            >
-              <span className="w-9 h-9 rounded-xl bg-[var(--accent-bg)] text-[var(--accent-fg)] flex items-center justify-center text-xs font-bold">
-                {((manager.firstName?.[0] ?? '') + (manager.lastName?.[0] ?? '')).toUpperCase() || '?'}
-              </span>
-              <span>
-                <span className="block text-sm font-semibold text-text-primary group-hover:text-[#059669] transition-colors">
-                  {[manager.firstName, manager.lastName].filter(Boolean).join(' ') || manager.employeeCode}
-                </span>
-                <span className="block text-xs text-text-secondary">{manager.employeeCode}</span>
-              </span>
-            </button>
-          ) : (
-            <p className="text-sm text-text-secondary">
-              A reporting manager is set, but their record couldn’t be loaded.
-            </p>
-          )}
-        </div>
-      </SubSection>
+      <div className="upf-half">
+        <SubSection title="Reporting line" hint={canRead && direct.length ? `${direct.length} direct ${direct.length === 1 ? 'report' : 'reports'}` : undefined}
+          action={<KitButton size={30} variant="secondary" icon="workflow" onClick={() => navigate(`/hrms/org-chart?focus=${emp.id}`)}>View in org chart</KitButton>}>
+          <ListRows label="Reporting line">
+            {!emp.reportingManagerId ? (
+              <ListRow variant="divided" title="No reporting manager set" sub="Approvals that route to a manager fall back to the department head." leading={<IconTile icon="users" tone="neutral" />} />
+            ) : managerLoading ? (
+              <ListRow variant="divided" title="Loading manager…" />
+            ) : manager ? (
+              <ListRow variant="divided" onClick={() => navigate(`/hrms/employees/${manager.id}`)} chevron
+                leading={<Avatar name={nameOf(manager)} size={34} tone="soft" />} title={nameOf(manager)}
+                sub={`Reports to · ${title(manager.designationId) || manager.employeeCode}`} end={<StatusPill tone="brand">Manager</StatusPill>} />
+            ) : managedByViewer ? (
+              <ListRow variant="divided" leading={<IconTile icon="userCheck" tone="brand" />} title="You" sub="Reports to you" end={<StatusPill tone="brand">Manager</StatusPill>} />
+            ) : (
+              <ListRow variant="divided" title="A reporting manager is set" sub={canRead ? 'Their record couldn’t be loaded.' : 'Their name shows to people who can read the directory.'} />
+            )}
+            {shown.map((r) => (
+              <ListRow key={r.id} variant="divided" onClick={() => navigate(`/hrms/employees/${r.id}`)} chevron
+                leading={<Avatar name={nameOf(r)} size={34} tone="pale" />} title={nameOf(r)}
+                sub={`Direct report · ${title(r.designationId) || r.employeeCode}`}
+                end={r.employmentStatus === 'PROBATION' ? <StatusPill tone="warning">Probation</StatusPill> : r.employmentStatus === 'NOTICE_PERIOD' ? <StatusPill tone="warning">Notice period</StatusPill> : undefined} />
+            ))}
+          </ListRows>
+          {reports.error && <p className="upf-note" style={{ marginTop: 8 }}>Couldn’t load the direct reports.</p>}
+          {direct.length > shown.length && <div style={{ marginTop: 8 }}><KitButton size={30} variant="ghost" onClick={() => setAllReports(true)}>{`Show all ${direct.length} direct reports`}</KitButton></div>}
+        </SubSection>
+      </div>
 
       {canReadAttendance && (
-        <SubSection title="Assigned shift">
-          <SectionState
-            isLoading={shift.isLoading}
-            error={shift.error}
-            isEmpty={!shift.isLoading && !shift.error && !shift.data?.shiftPolicyId}
-            emptyIcon={Clock}
-            emptyTitle="No shift assigned"
-            emptyHint="Use Change shift at the top of this page to assign one."
-            onRetry={() => shift.refetch()}
-            skeleton={<CardSkeleton />}
-          >
-            <Facts>
-              <InfoRow label="Shift" value={shift.data?.shiftName || '—'} />
-              <InfoRow label="Timing" value={`${shift.data?.startTime?.slice(0, 5) ?? '—'} – ${shift.data?.endTime?.slice(0, 5) ?? '—'}`} />
-              {shift.data?.upcomingShiftName ? <InfoRow label="Next shift" value={`${shift.data.upcomingShiftName} from ${shift.data.upcomingEffectiveFrom ?? ''}`} /> : null}
-            </Facts>
-          </SectionState>
-        </SubSection>
+        <div className="upf-half">
+          <SubSection title="Assigned shift">
+            <SectionState
+              isLoading={shift.isLoading}
+              error={shift.error}
+              isEmpty={!shift.isLoading && !shift.error && !shift.data?.shiftPolicyId}
+              emptyIcon={Clock}
+              emptyTitle="No shift assigned"
+              emptyHint="Use Change shift on the left to assign one."
+              onRetry={() => shift.refetch()}
+              skeleton={<CardSkeleton />}
+            >
+              <Facts>
+                <InfoRow label="Shift" value={shift.data?.shiftName || '—'} />
+                <InfoRow label="Timing" value={`${shift.data?.startTime?.slice(0, 5) ?? '—'} – ${shift.data?.endTime?.slice(0, 5) ?? '—'}${shift.data?.gracePeriodMinutes ? ` · ${shift.data.gracePeriodMinutes} min grace` : ''}`} />
+                <InfoRow label="Next shift" value={shift.data?.upcomingShiftName ? `${shift.data.upcomingShiftName} from ${fmtDate(shift.data.upcomingEffectiveFrom)}` : 'No change scheduled'} />
+              </Facts>
+            </SectionState>
+          </SubSection>
+        </div>
       )}
     </div>
   )

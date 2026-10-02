@@ -67,6 +67,7 @@ const EmployeeDetail = lazyPage(() => import('@/modules/hrms/employees/EmployeeD
 const EssDashboard = lazyPage(() => import('@/modules/hrms/ess/EssDashboard').then(m => ({ default: m.EssDashboard })))
 const ShiftChangeRequest = lazyPage(() => import('@/modules/hrms/shifts/ShiftChangeRequest').then(m => ({ default: m.ShiftChangeRequest })))
 const TeamDashboard = lazyPage(() => import('@/modules/hrms/team/TeamDashboard').then(m => ({ default: m.TeamDashboard })))
+const OrgChartPage = lazyPage(() => import('@/modules/hrms/orgchart/OrgChartPage').then(m => ({ default: m.OrgChartPage })))
 const ReportsIndex = lazyPage(() => import('@/modules/hrms/reports/ReportsIndex').then(m => ({ default: m.ReportsIndex })))
 const HrConfigurationPage = lazyPage(() => import('@/modules/hrms/settings/HrConfigurationPage').then(m => ({ default: m.HrConfigurationPage })))
 const Expense = lazyPage(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
@@ -342,6 +343,9 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
+        {/* Org chart (P-ORG): every role. The server decides the reach: the whole company with
+            hrms.employee.read, otherwise the person's own line up and everyone below them. */}
+        <Route path="/hrms/org-chart" element={<ModuleGate moduleKey="hrms"><OrgChartPage /></ModuleGate>} />
 
         {/* ── HRMS ─────────────────────────────────────────────────────── */}
         <Route

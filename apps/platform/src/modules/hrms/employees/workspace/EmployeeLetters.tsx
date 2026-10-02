@@ -10,7 +10,7 @@
 import React, { useState } from 'react'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { Info } from 'lucide-react'
-import { SectionState, WsEmpty } from './shared'
+import { SectionState, SubSection, WsEmpty } from './shared'
 import type { GeneratedLetterDto } from '../../letters/api/useLetters'
 import { Button, Field, Input, TableSkeleton, CardSkeleton } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
@@ -39,22 +39,16 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
   })
 
   const letters = data?.content ?? []
+  const canGenerate = usePermission(P.HRMS_LETTERS_GENERATE)
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-text-primary">Generated Letters</h3>
-        <Can code={P.HRMS_LETTERS_GENERATE}>
-          <HrButton
-            size="sm"
-            onClick={() => navigate(`/hrms/letters/generated?employeeId=${employeeId}`)}
-          >
-            <Plus size={12} />
-            Generate letter
-          </HrButton>
-        </Can>
-      </div>
-
+    <SubSection title="Generated letters" hint={data?.totalElements ? `${data.totalElements} letter${data.totalElements === 1 ? '' : 's'}` : undefined}
+      action={canGenerate ? (
+        <HrButton size="sm" onClick={() => navigate(`/hrms/letters/generated?employeeId=${employeeId}`)}>
+          <Plus size={12} />
+          Generate letter
+        </HrButton>
+      ) : undefined}>
       {error ? <div role="alert"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div> : isLoading ? (
         <CardSkeleton />
       ) : letters.length === 0 ? (
@@ -64,12 +58,13 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
           columns={[
             { key: 'type', header: 'Type', render: (l) => <HrStatusPill tone="purple">{l.type}</HrStatusPill> },
             { key: 'subject', header: 'Subject', render: (l) => <span className="text-text-primary max-w-xs truncate">{l.subject}</span> },
-            { key: 'date', header: 'Date', render: (l) => format(new Date(l.createdAt), 'dd MMM yyyy') },
-            { key: 'status', header: 'Status', render: (l) => <HrStatusPill tone={l.status === 'VOID' ? 'red' : l.status === 'SENT' ? 'info' : 'gray'}>{l.status}</HrStatusPill> },
+            // Signed date once the employee has signed (BW-71), else the issue date HR chose, else when it was made.
+            { key: 'date', header: 'Date', render: (l) => l.signedAt ? `Signed ${format(new Date(l.signedAt), 'd MMM yyyy')}` : `Issued ${format(new Date(l.issueDate ? `${l.issueDate}T12:00:00` : l.createdAt), 'd MMM yyyy')}` },
+            { key: 'status', header: 'Status', render: (l) => <HrStatusPill tone={l.status === 'VOID' ? 'red' : l.status === 'SIGNED' ? 'ok' : l.status === 'SENT' ? 'info' : 'gray'}>{l.status === 'SIGNED' ? 'Signed' : l.signatureRequested && !l.signedAt && l.status !== 'VOID' ? 'Waiting for signature' : l.status}</HrStatusPill> },
             { key: 'action', header: '', render: (l) => (
               <button
                 onClick={() => navigate(`/hrms/letters/generated/${l.id}`)}
-                className="text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
+                className="text-xs font-semibold text-[var(--u-brt)] hover:underline transition-colors"
               >
                 View
               </button>
@@ -81,7 +76,7 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
         />
       )}
       <HrPagination page={page} pageSize={LETTERS_PAGE_SIZE} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} onPageChange={setPage} />
-    </div>
+    </SubSection>
   )
 }
 

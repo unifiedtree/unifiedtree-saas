@@ -22,7 +22,7 @@ export function SeatsTileView({ v }: { v: any }) {
                 {"Healthy"}
               </HrStatusPill>
             </div>
-            <p style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
+            <p style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
               {txt(v.used)}{" "}
               <span style={{fontSize: "15px", fontWeight: "600", color: "#64748b"}}>
                 {"/ "}{txt(v.purchased)}
@@ -59,7 +59,7 @@ export function SeatsTileView({ v }: { v: any }) {
                 {"Running low"}
               </HrStatusPill>
             </div>
-            <p style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
+            <p style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
               {txt(v.used)}{" "}
               <span style={{fontSize: "15px", fontWeight: "600", color: "#78716c"}}>
                 {"/ "}{txt(v.purchased)}
@@ -102,7 +102,7 @@ export function SeatsTileView({ v }: { v: any }) {
                 </HrStatusPill>
               </span>
             </div>
-            <p style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
+            <p style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
               {txt(v.used)}{" "}
               <span style={{fontSize: "15px", fontWeight: "600", color: "#78716c"}}>
                 {"/ "}{txt(v.purchased)}
@@ -145,7 +145,7 @@ export function SeatsTileView({ v }: { v: any }) {
                 </HrStatusPill>
               </span>
             </div>
-            <p style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#881337", fontVariantNumeric: "tabular-nums"}}>
+            <p style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "30px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", color: "#881337", fontVariantNumeric: "tabular-nums"}}>
               {txt(v.used)}{" "}
               <span style={{fontSize: "15px", fontWeight: "600", color: "#9f1239"}}>
                 {"/ "}{txt(v.purchased)}

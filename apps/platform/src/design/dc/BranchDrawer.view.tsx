@@ -11,7 +11,7 @@ export function BranchDrawerView({ v }: { v: any }) {
   return (
     <>
       <HrDrawer title={v.title} onClose={v.close} footer={v.footer} width="max-w-2xl">
-        <div style={{display: "grid", gap: "18px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+        <div style={{display: "grid", gap: "18px", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
           <p style={{margin: "-8px 0 0", fontSize: "13px", color: "#475569"}}>
             {txt(v.subtitle)}
           </p>
@@ -67,7 +67,7 @@ export function BranchDrawerView({ v }: { v: any }) {
                     {txt(v.icBuilding)}
                   </span>
                   <div>
-                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
                       {"Branch information"}
                     </h3>
                     <p style={{margin: "2px 0 0", fontSize: "12px", color: "#64748b"}}>
@@ -99,7 +99,7 @@ export function BranchDrawerView({ v }: { v: any }) {
                     {txt(v.icPin)}
                   </span>
                   <div>
-                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
+                    <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
                       {"Location"}
                     </h3>
                     <p style={{margin: "2px 0 0", fontSize: "12px", color: "#64748b"}}>
@@ -155,7 +155,7 @@ export function BranchDrawerView({ v }: { v: any }) {
                   {txt(v.icShield)}
                 </span>
                 <div>
-                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
+                  <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
                     {"Attendance geofence"}
                   </h3>
                   <p style={{margin: "2px 0 0", fontSize: "12px", color: "#475569"}}>
@@ -222,7 +222,7 @@ export function BranchDrawerView({ v }: { v: any }) {
             ) : null}
           </section>
           <section ref={v.secReview} style={{display: "grid", gap: "10px", padding: "16px", border: "1px dashed #cbd5e1", borderRadius: "14px"}}>
-            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
+            <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "14px", fontWeight: "700"}}>
               {"Review"}
             </h3>
             <dl style={{margin: "0", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "10px 16px", fontSize: "13px"}}>

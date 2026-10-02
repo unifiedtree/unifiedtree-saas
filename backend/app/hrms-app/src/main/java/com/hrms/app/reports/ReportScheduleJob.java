@@ -13,8 +13,9 @@ import java.util.UUID;
 
 /**
  * Sends the report emails that are due. Runs at five past every hour from
- * 07:05 to 23:05 IST: the first run of the day sends that day's emails, later
- * runs catch anything missed while an instance was restarting. Each schedule
+ * 07:05 to 23:05 IST: an email goes out on the run at its send hour (V143.62),
+ * or on the first run of the day when it has none; later runs catch anything
+ * missed while an instance was restarting. Each schedule
  * is claimed before it is sent, so several instances never send it twice.
  *
  * <p>No request thread here, so each tenant runs with its tenant bound (RLS
@@ -36,10 +37,12 @@ public class ReportScheduleJob {
 
     @Scheduled(cron = "0 5 7-23 * * *", zone = "Asia/Kolkata")
     public void hourly() {
-        sendAcrossTenants(LocalDate.now(ReportPdfService.IST));
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(ReportPdfService.IST);
+        sendAcrossTenants(now.toLocalDate(), now.getHour());
     }
 
-    void sendAcrossTenants(LocalDate today) {
+    /** {@code hour}: this run's hour, India time. An email with a send hour (V143.62) waits for the run at that hour. */
+    void sendAcrossTenants(LocalDate today, int hour) {
         // platform.tenants is not RLS-isolated, so list without tenant context.
         List<UUID> tenantIds;
         try {
@@ -53,7 +56,7 @@ public class ReportScheduleJob {
             try {
                 TenantContext.setTenantId(tenantId);
                 com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
-                sent += schedules.sendDue(today);
+                sent += schedules.sendDue(today, hour);
             } catch (Exception e) {
                 log.error("Report emails failed for tenant {}: {}", tenantId, e.getMessage(), e);
             } finally {

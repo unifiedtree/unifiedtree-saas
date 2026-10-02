@@ -364,14 +364,21 @@ export interface PaySchedule {
   processingDay: number | null
 }
 
-// ── BW-29 · Company overtime rules (owner P-ATT-PLAN; V143_54) ───────────────
+// ── BW-29 · Company overtime rules (owner P-ATT-PLAN; V143_54; DECISIONS 22) ─
 // GET/PUT /v1/attendance/overtime-rules?companyId=
 
 export interface OvertimeRules {
   companyId: string
-  /** Minutes past the shift's end before time counts as overtime; null = today's rule (from the first minute). */
-  countsAfterMinutes: number | null
-  /** The most overtime that can be approved per person per month, in minutes; null = no cap (today's rule). */
+  /**
+   * The minimum overtime, in minutes: a THRESHOLD (DECISIONS 22). Extra time under it doesn't count; once it is
+   * reached, ALL of it counts (1 h 20 m extra is 1 h 20 m of overtime). Always a number: the company's, else the default.
+   */
+  minimumMinutes: number
+  /** True when the company hasn't set its own minimum and the default applies. */
+  minimumIsDefault: boolean
+  /** The default minimum (60). */
+  defaultMinimumMinutes: number
+  /** The most overtime that can be approved per person per month, in minutes; null = no cap. */
   monthlyCapMinutes: number | null
   /** Who last changed them, and when; null while never set. */
   updatedByName: string | null
@@ -379,8 +386,9 @@ export interface OvertimeRules {
 }
 
 export interface SaveOvertimeRulesRequest {
-  /** Whole minutes, 0 or more; null clears the rule. */
-  countsAfterMinutes: number | null
+  /** Whole minutes, 0–1440; null goes back to the default (60). */
+  minimumMinutes: number | null
+  /** Whole minutes, 0 or more; null = no cap. */
   monthlyCapMinutes: number | null
 }
 
@@ -572,7 +580,7 @@ export interface MyEmployeeRecord {
 
 export interface WebPunchSetting {
   companyId: string
-  /** "Allow web check-in": off by default. While off, the punch API refuses WEB and "Your day" has no Check in/out. */
+  /** "Allow web check-in": on by default (client decision, 1 Oct; a web punch needs a face scan). While off, the punch API refuses WEB and "Your day" has no Check in/out. */
   allowWebPunch: boolean
 }
 

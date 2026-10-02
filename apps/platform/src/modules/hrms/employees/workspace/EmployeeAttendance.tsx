@@ -77,7 +77,7 @@ function Metric({ icon: Icon, label, value, hint }: {
   icon: React.ElementType; label: string; value: string; hint?: string
 }) {
   return (
-    <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}>
+    <div style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--u-sf2,#F7F9F8)' }}>
       <div className="flex items-center gap-2 text-text-secondary">
         <Icon size={14} />
         <span className="text-xs font-semibold">{label}</span>
@@ -92,7 +92,7 @@ function WeekStrip({ days }: { days: WeeklyDayResponse[] }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
       {days.map((d) => (
-        <div key={d.date} style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}>
+        <div key={d.date} style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--u-sf2,#F7F9F8)' }}>
           <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide">
             {(() => { try { return format(parseISO(d.date), 'EEE d MMM') } catch { return d.date } })()}
           </p>
@@ -208,7 +208,7 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
           onRetry={() => shift.refetch()}
           skeleton={<CardSkeleton />}
         >
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2" style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2" style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--u-sf2,#F7F9F8)' }}>
             <div>
               <p className="text-xs text-text-secondary">Shift</p>
               <p className="text-sm font-semibold text-text-primary">{shift.data?.shiftName}</p>

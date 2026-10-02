@@ -21,6 +21,21 @@ import { toast } from 'sonner'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeesByIds } from '../../api/useWorkforce'
 import { z } from 'zod'
 import { EmptyState } from '@/shared/components/EmptyState'
+import { Section } from '@/design/kit/display'
+import { useToast as useKitToast } from '@/design/kit/overlays'
+
+/**
+ * The sections' toasts on the kit Toast, with the sonner-style calls they always made
+ * (`toast.success(title)`, `toast.error(title, { description })`).
+ */
+export function useWsToast() {
+  const t = useKitToast()
+  return {
+    success: (title: string, o?: { description?: string }) => t.success(title, o?.description ? { detail: o.description } : undefined),
+    error: (title: string, o?: { description?: string }) => t.error(title, o?.description ? { detail: o.description } : undefined),
+    info: (title: string, o?: { description?: string }) => t.info(title, o?.description ? { detail: o.description } : undefined),
+  }
+}
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -165,31 +180,24 @@ export function maskPassport(passport: string) {
 export function InfoRow({ label, value }: { icon?: React.ElementType; label: string; value?: string }) {
   if (!value) return null
   return (
-    <div style={{ minWidth: 0, padding: '8px 10px', borderRadius: 10, background: '#f8fafc' }}>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b' }}>{label}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={value}>{value}</div>
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 12, color: 'var(--u-ink3,#6A7A73)' }}>{label}</div>
+      <div style={{ fontSize: 14, lineHeight: '20px', fontWeight: 500, marginTop: 2, color: 'var(--u-ink,#0E1B16)', overflowWrap: 'anywhere' }} title={value}>{value}</div>
     </div>
   )
 }
 
-/** The design's fact-tile grid (auto-fills tiles of 170px and up). */
+/** The design's key-value grid (PgProfileTabs "kv": auto-fit columns of 190px and up). */
 export function Facts({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '10px 16px' }}>{children}</div>
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,190px),1fr))', gap: '14px 18px' }}>{children}</div>
 }
 
-/** A white section card with the design's header (15px title, 12.5px sub, action on the right). */
+/** A section card as PgProfileTabs draws it (kit Section: 18px corners, 15px title, 12.5px sub, actions on the right). */
 export function WsCard({ title, hint, action, children, flush }: { title: string; hint?: string; action?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
   return (
-    <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)" }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', borderBottom: flush ? '1px solid #f1f5f9' : undefined }}>
-        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{title}</div>
-          {hint && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 1 }}>{hint}</div>}
-        </div>
-        {action}
-      </div>
-      <div style={{ padding: flush ? 0 : '0 16px 14px' }}>{children}</div>
-    </section>
+    <Section title={title} sub={hint} actions={action || undefined} variant="section" body={flush ? 'flush' : 'default'}>
+      {children}
+    </Section>
   )
 }
 
@@ -389,14 +397,15 @@ export function SectionState({
   return <>{children}</>
 }
 
-/** An empty / error / no-access line that sits inside a section card, in the design's quiet style. */
+/** An empty / error / no-access line that sits inside a section card (PgProfileTabs' dashed box). */
 export function WsEmpty({ icon: Icon = FileText, title, hint, action, tone }: { icon?: LucideIcon; title: string; hint?: string; action?: React.ReactNode; tone?: 'red' }) {
+  const red = tone === 'red'
   return (
-    <div role={tone === 'red' ? 'alert' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 14px', borderRadius: 12, background: tone === 'red' ? '#fff1f2' : '#f8fafc', border: `1px dashed ${tone === 'red' ? '#fecdd3' : '#cbd5e1'}` }}>
-      <span style={{ width: 34, height: 34, borderRadius: 10, background: '#fff', color: tone === 'red' ? '#e11d48' : '#64748b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={16} /></span>
+    <div role={red ? 'alert' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '14px 16px', borderRadius: 14, background: red ? 'var(--u-rds,#FCEDEB)' : 'var(--u-sf2,#F7F9F8)', border: `1.5px dashed ${red ? 'var(--u-rd,#C4453A)' : 'var(--u-ln,#E3E9E6)'}` }}>
+      <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--u-sf,#fff)', color: red ? 'var(--u-rdt,#B42318)' : 'var(--u-ink3,#6A7A73)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={16} /></span>
       <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>{title}</div>
-        {hint && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 1 }}>{hint}</div>}
+        <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--u-ink,#0E1B16)' }}>{title}</div>
+        {hint && <div style={{ fontSize: 12.5, color: 'var(--u-ink3,#6A7A73)', marginTop: 1 }}>{hint}</div>}
       </div>
       {action}
     </div>

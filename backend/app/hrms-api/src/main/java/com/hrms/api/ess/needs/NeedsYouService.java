@@ -13,12 +13,13 @@ import java.util.List;
  * tables that exist today. Missed punch-outs with no fix, documents to upload
  * again or still missing, my onboarding tasks, interview scorecards, my
  * self-review, reviews I have to write, policies to accept, and (for managers
- * who may decide it) their team's probation.
+ * who may decide it) their team's probation; and, now that their tables exist,
+ * assets to confirm and timesheet weeks sent back.
  *
  * <p>Each source sits behind the permission of the page it links to and runs on
  * its own ({@link EssSourceRunner}); a failing one is named in
- * {@code unavailable}. Letters to sign, assets to confirm and the review and
- * policy deadlines are added as sources once those packages' tables exist.
+ * {@code unavailable}. Letters to sign and the review and policy deadlines are
+ * added as sources once those packages' tables exist.
  * Red items come first, then gold, blue and brand; within a colour, the
  * soonest due.
  */

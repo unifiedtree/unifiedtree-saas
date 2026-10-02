@@ -18,7 +18,7 @@ const SURFACE: React.CSSProperties = {
   background: 'var(--u-sf, #fff)',
   color: 'var(--u-ink, #0E1B16)',
   borderColor: 'var(--u-ln, #E3E9E6)',
-  fontFamily: "var(--u-font, 'Plus Jakarta Sans', system-ui, sans-serif)",
+  fontFamily: "var(--u-font, 'Inter', system-ui, sans-serif)",
 };
 const EASE: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 const CLOSE_BTN =

@@ -71,8 +71,9 @@ try {
       check(`${tag}: greeting`, /^Good (morning|afternoon|evening), \S/.test(h1), h1)
       const nav = page.getByRole('navigation', { name: 'Dashboard sections' })
       const pills = (await nav.getByRole('button').allTextContents()).map(norm)
-      const inBar = (await nav.count()) > 0 && await nav.evaluate((n) => !n.closest('#workspace-content'))
-      check(`${tag}: section pills in the top bar`, pills[0] === 'Overview' && pills.length >= 3 && inBar, pills.join(' | '))
+      // Release 1.1 (DECISIONS 21): a page's own views sit inside the page, under the module's top tabs.
+      const inPage = (await nav.count()) > 0 && await nav.evaluate((n) => !!n.closest('#workspace-content'))
+      check(`${tag}: section pills inside the page`, pills[0] === 'Overview' && pills.length >= 3 && inPage, pills.join(' | '))
       // Each pill has its section; each section has its pill.
       const secs = await page.locator('[data-sec]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
       check(`${tag}: one pill per visible section`, secs.length === pills.length, `${secs.join(',')} vs ${pills.join(',')}`)

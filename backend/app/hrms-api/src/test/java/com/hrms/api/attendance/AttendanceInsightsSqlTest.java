@@ -181,30 +181,70 @@ class AttendanceInsightsSqlTest {
         // People per shift.
         Map<UUID, Integer> counts = new ShiftHeadcount(named).byShift(company);
         assertEquals(Map.of(shift, 3), counts);
-        // The overtime list with a company rule (the table must exist: V143.54): 45 extra minutes on Monday
-        // count as 15 past a 30-minute rule; 20 on Tuesday are all inside it and drop out.
+        // The overtime list (the rules table must exist: V143.54). The minimum is a threshold: with no rule it is
+        // one hour, so 80 extra minutes on Monday count fully and 45 on Tuesday don't count at all. With a company
+        // minimum of 30, both count fully; 20 on Wednesday never does.
         UUID early = team.get(0).getId();
         jdbc.update("UPDATE attendance.records SET check_out_at = check_in_at + interval '9 hours', overtime_minutes = ? "
-                + "WHERE employee_id = ? AND attendance_date = ?", 45, early, mon);
-        jdbc.update("UPDATE attendance.records SET check_out_at = check_in_at + interval '8 hours 30 minutes', overtime_minutes = ? "
-                + "WHERE employee_id = ? AND attendance_date = ?", 20, early, mon.plusDays(1));
-        jdbc.update("INSERT INTO attendance.overtime_rules(tenant_id, company_id, counts_after_minutes) VALUES (?, ?, 30)", tenant, company);
-        try {
-            String where = " WHERE r.tenant_id=:tenant AND r.employee_id IN (:employees) AND r.attendance_date BETWEEN :from AND :to AND r.overtime_minutes>0 AND r.check_out_at IS NOT NULL";
-            OvertimeRules rules = new OvertimeRules(jdbc);
-            assertTrue(rules.tableReady());
-            assertTrue(rules.countsAfterInUse(tenant));
-            assertEquals(30, rules.forCompany(tenant, company).countsAfterMinutes());
-            Map<String, Object> list = new OvertimeController(mock(TeamEmployeeScope.class), jdbc, named, mock(OvertimeReasons.class), rules)
-                    .listCounted(Map.of("tenant", tenant, "employees", ids, "from", mon, "to", fri, "offset", 0), where);
-            assertEquals(1L, list.get("totalElements"));
+                + "WHERE employee_id = ? AND attendance_date = ?", 80, early, mon);
+        jdbc.update("UPDATE attendance.records SET check_out_at = check_in_at + interval '8 hours 45 minutes', overtime_minutes = ? "
+                + "WHERE employee_id = ? AND attendance_date = ?", 45, early, mon.plusDays(1));
+        jdbc.update("UPDATE attendance.records SET check_out_at = check_in_at + interval '8 hours 20 minutes', overtime_minutes = ? "
+                + "WHERE employee_id = ? AND attendance_date = ?", 20, early, mon.plusDays(2));
+        String where = " WHERE r.tenant_id=:tenant AND r.employee_id IN (:employees) AND r.attendance_date BETWEEN :from AND :to AND r.overtime_minutes>0 AND r.check_out_at IS NOT NULL";
+        Map<String, Object> params = Map.of("tenant", tenant, "employees", ids, "from", mon, "to", fri, "offset", 0);
+        OvertimeRules rules = new OvertimeRules(jdbc);
+        assertTrue(rules.tableReady());
+        OvertimeController ot = new OvertimeController(mock(TeamEmployeeScope.class), jdbc, named, mock(OvertimeReasons.class), rules);
+        for (boolean table : new boolean[]{true, false}) {
+            Map<String, Object> list = ot.listCounted(params, where, table);
+            assertEquals(1L, list.get("totalElements"), "no rule: only the day over an hour");
             @SuppressWarnings("unchecked") Map<String, Object> row = ((List<Map<String, Object>>) list.get("content")).get(0);
-            assertEquals(45, ((Number) row.get("minutes")).intValue(), "the stored minutes");
-            assertEquals(15, ((Number) row.get("countedMinutes")).intValue(), "the part that counts");
+            assertEquals(80, ((Number) row.get("minutes")).intValue(), "the stored minutes");
+            assertEquals(80, ((Number) row.get("countedMinutes")).intValue(), "all of it counts");
+            assertEquals(60, ((Number) row.get("minimumMinutes")).intValue());
             assertEquals("PENDING", row.get("status"));
             assertEquals("QA General", row.get("shiftName"));
+        }
+        jdbc.update("INSERT INTO attendance.overtime_rules(tenant_id, company_id, minimum_minutes) VALUES (?, ?, 30)", tenant, company);
+        try {
+            assertEquals(30, rules.forCompany(tenant, company).minimumMinutes());
+            Map<String, Object> list = ot.listCounted(params, where, true);
+            assertEquals(2L, list.get("totalElements"), "a 30-minute minimum: 80 and 45, not 20");
+            @SuppressWarnings("unchecked") List<Map<String, Object>> rows30 = (List<Map<String, Object>>) list.get("content");
+            assertEquals(List.of(45, 80), rows30.stream().map(r -> ((Number) r.get("countedMinutes")).intValue()).sorted().toList());
         } finally {
             jdbc.update("DELETE FROM attendance.overtime_rules WHERE tenant_id = ?", tenant);
+        }
+
+        // Overtime requests (V143.66): asked for, listed, approved; under the minimum or a day already counted is refused.
+        TeamEmployeeScope scope = mock(TeamEmployeeScope.class);
+        when(scope.resolve(any(), isNull())).thenReturn(team);
+        OvertimeRequestService requests = new OvertimeRequestService(jdbc, scope, rules, new OvertimeCap(jdbc));
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        org.springframework.security.oauth2.jwt.Jwt mgr = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("t").header("alg", "none")
+                .subject("m").claim("employee_id", UUID.randomUUID().toString()).build();
+        try {
+            var r = requests.create(early, today.minusDays(1), 80, "Month-end closing for the audit");
+            assertEquals("PENDING", r.status());
+            assertEquals(80, r.minutes());
+            assertEquals("Early Insights", r.employeeName());
+            assertEquals("OVERTIME_REQUEST_EXISTS", assertThrows(com.hrms.core.exception.BusinessRuleException.class,
+                    () -> requests.create(early, today.minusDays(1), 90, "Asking twice for the same day")).getErrorCode());
+            assertEquals("OVERTIME_BELOW_MINIMUM", assertThrows(com.hrms.core.exception.BusinessRuleException.class,
+                    () -> requests.create(early, today.minusDays(2), 45, "Only forty five minutes")).getErrorCode());
+            assertEquals(List.of(r.id()), requests.mine(early).stream().map(OvertimeRequestService.OvertimeRequestResponse::id).toList());
+            assertEquals(1, requests.team(mgr, today.minusDays(7), today).size());
+            var approved = requests.decide(mgr, r.id(), true, null);
+            assertEquals("APPROVED", approved.status());
+            assertEquals("OVERTIME_REQUEST_NOT_PENDING", assertThrows(com.hrms.core.exception.BusinessRuleException.class,
+                    () -> requests.decide(mgr, r.id(), false, "again")).getErrorCode());
+            // The cap counts approved requests.
+            assertThrows(com.hrms.core.exception.BusinessRuleException.class, () -> new OvertimeCap(jdbc)
+                    .requireWithin(tenant, early, today.minusDays(1), 30, 100, null, null));
+            new OvertimeCap(jdbc).requireWithin(tenant, early, today.minusDays(1), 20, 100, null, null);
+        } finally {
+            jdbc.update("DELETE FROM attendance.overtime_requests WHERE tenant_id = ?", tenant);
         }
     }
 }

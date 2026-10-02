@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { SHARED_KEYS } from './shared/contracts'
 
 export interface ShiftRequest {
   id: string
@@ -23,6 +24,8 @@ export interface ShiftRequest {
   decidedAt?: string | null
   /** Who decided it; null while pending and for requests that expired on their own. */
   approverName?: string | null
+  /** BW-31: the last day of a temporary change; null = permanent. */
+  requestedEndDate?: string | null
 }
 
 export function usePendingShiftRequests(opts?: { enabled?: boolean }) {
@@ -60,6 +63,9 @@ export function useDecideShiftRequest() {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['shifts'] }),
         client.invalidateQueries({ queryKey: ['hrms', 'attendance'] }),
+        // Every decision changes the Approvals inbox and the Undo offers (approval Undo, BW-06).
+        client.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox }),
+        client.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions }),
       ])
     },
   })

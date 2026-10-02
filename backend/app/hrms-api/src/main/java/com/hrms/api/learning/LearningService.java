@@ -47,9 +47,11 @@ public class LearningService {
     static final int MAX_TITLE = 200, MAX_CATEGORY = 50, MAX_TRAINER = 150, MAX_SEATS = 100_000;
 
     private final JdbcTemplate jdbc;
+    private final LearningDetailsService details;
 
-    public LearningService(JdbcTemplate jdbc) {
+    public LearningService(JdbcTemplate jdbc, LearningDetailsService details) {
         this.jdbc = jdbc;
+        this.details = details;
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -58,13 +60,30 @@ public class LearningService {
             UUID id, UUID companyId, String title, String description,
             String category, String trainer, String startDate, String endDate,
             Integer capacity, int enrolledCount, String status,
-            String createdAt, String updatedAt, String mode) {}
+            String createdAt, String updatedAt, String mode,
+            // Redesign BW-85 (added): where it happens (V143.61; null when not set).
+            String location) {
+
+        public ProgramDto(UUID id, UUID companyId, String title, String description,
+                          String category, String trainer, String startDate, String endDate,
+                          Integer capacity, int enrolledCount, String status,
+                          String createdAt, String updatedAt, String mode) {
+            this(id, companyId, title, description, category, trainer, startDate, endDate, capacity, enrolledCount,
+                    status, createdAt, updatedAt, mode, null);
+        }
+
+        ProgramDto withLocation(String place) {
+            return new ProgramDto(id, companyId, title, description, category, trainer, startDate, endDate, capacity,
+                    enrolledCount, status, createdAt, updatedAt, mode, place);
+        }
+    }
 
     public record CreateProgramRequest(
             @jakarta.validation.constraints.NotNull UUID companyId,
             @jakarta.validation.constraints.NotBlank String title,
             String description, String category, String trainer,
-            String startDate, String endDate, Integer capacity, String mode) {}
+            String startDate, String endDate, Integer capacity, String mode,
+            String location) {}   // BW-85, optional
 
     /**
      * Partial update: a null field is left as it is. For description, category,
@@ -74,7 +93,8 @@ public class LearningService {
     public record UpdateProgramRequest(
             String title, String description, String category, String trainer,
             String startDate, String endDate, Integer capacity, String status,
-            String mode, Boolean unlimitedSeats) {}
+            String mode, Boolean unlimitedSeats,
+            String location) {}   // BW-85: null leaves it, "" clears it
 
     /**
      * {@code programTitle} added 2026-09-09: the "My Training" tab renders one
@@ -86,7 +106,17 @@ public class LearningService {
             UUID id, UUID programId, String programTitle,
             UUID employeeId, String employeeName,
             String status, BigDecimal score, String completedAt,
-            String createdAt, String updatedAt) {}
+            String createdAt, String updatedAt,
+            // Redesign BW-85 (added): the person's department, and the program's dates,
+            // mode and place, for the roster and My training.
+            String department, String programStartDate, String programEndDate,
+            String programMode, String programLocation) {
+
+        EnrollmentDto withLocation(String place) {
+            return new EnrollmentDto(id, programId, programTitle, employeeId, employeeName, status, score, completedAt,
+                    createdAt, updatedAt, department, programStartDate, programEndDate, programMode, place);
+        }
+    }
 
     public record EnrollRequest(
             @jakarta.validation.constraints.NotNull UUID employeeId) {}
@@ -111,8 +141,9 @@ public class LearningService {
         if (size <= 0) size = 25;
         if (size > MAX_PAGE_SIZE) size = MAX_PAGE_SIZE;
 
-        StringBuilder where = new StringBuilder(" WHERE 1=1");
+        StringBuilder where = new StringBuilder(" WHERE p.tenant_id = ?");
         List<Object> args = new ArrayList<>();
+        args.add(tenantId);
         if (companyId != null) { where.append(" AND p.company_id = ?"); args.add(companyId); }
         if (status != null)    { where.append(" AND p.status = ?");     args.add(status); }
         if (search != null && !search.isBlank()) {
@@ -136,20 +167,37 @@ public class LearningService {
                 + " ORDER BY COALESCE(p.start_date, p.created_at::date) DESC "
                 + " LIMIT ? OFFSET ?",
                 (rs, i) -> toProgramDto(rs), pageArgs.toArray());
-        return new PageDto<>(rows, page, size, total);
+        return new PageDto<>(withLocations(tenantId, rows), page, size, total);
     }
 
     @Transactional
     public ProgramDto getProgram(UUID tenantId, UUID id) {
         bindTenant(tenantId);
-        return jdbc.query(
+        ProgramDto program = jdbc.query(
                 "SELECT p.*, (SELECT COUNT(*) FROM learning_mgmt.training_enrollments e "
                 + "WHERE e.program_id = p.id AND e.status <> 'DROPPED') AS enrolled_count "
-                + "FROM learning_mgmt.training_programs p WHERE p.id = ?",
+                + "FROM learning_mgmt.training_programs p WHERE p.tenant_id = ? AND p.id = ?",
                 rs -> {
                     if (!rs.next()) throw new BusinessRuleException("Program not found", "PROGRAM_NOT_FOUND");
                     return toProgramDto(rs);
-                }, id);
+                }, tenantId, id);
+        return withLocations(tenantId, List.of(program)).get(0);
+    }
+
+    private List<ProgramDto> withLocations(UUID tenantId, List<ProgramDto> rows) {
+        java.util.Map<UUID, String> places = details.locations(tenantId, rows.stream().map(ProgramDto::id).toList());
+        if (places.isEmpty()) return rows;
+        return rows.stream().map(p -> places.containsKey(p.id()) ? p.withLocation(places.get(p.id())) : p).toList();
+    }
+
+    /**
+     * BW-85: a place can be saved only once V143.61's table exists. Checked before
+     * anything is written, so a program is never half-saved.
+     */
+    private void requireLocationsFor(String location) {
+        if (location != null && !location.isBlank() && !details.locationsReady()) {
+            throw new com.hrms.core.exception.FeatureNotReady();
+        }
     }
 
     @Transactional
@@ -167,6 +215,8 @@ public class LearningService {
         // Blank = unlimited. 0 used to be accepted and made a program nobody could join.
         Integer capacity = req.capacity();
         validateSeats(capacity, 0);
+        LearningDetailsService.cleanLocation(req.location());
+        requireLocationsFor(req.location());
         UUID id = jdbc.queryForObject("""
                 INSERT INTO learning_mgmt.training_programs
                     (tenant_id, company_id, title, description, category,
@@ -182,6 +232,7 @@ public class LearningService {
                 capacity, mode,
                 actorId == null ? null : actorId.toString(),
                 actorId == null ? null : actorId.toString());
+        if (req.location() != null && !req.location().isBlank()) details.saveLocation(tenantId, id, req.location(), actorId);
         return getProgram(tenantId, id);
     }
 
@@ -196,6 +247,8 @@ public class LearningService {
             validateStatusTransition(existing.status(), req.status());
         }
         validateDetailEdit(existing, req);
+        LearningDetailsService.cleanLocation(req.location());
+        requireLocationsFor(req.location());
 
         StringBuilder sql = new StringBuilder("UPDATE learning_mgmt.training_programs SET updated_at = now()");
         List<Object> args = new ArrayList<>();
@@ -215,6 +268,7 @@ public class LearningService {
 
         int rows = jdbc.update(sql.toString(), args.toArray());
         if (rows == 0) throw new BusinessRuleException("Program not found", "PROGRAM_NOT_FOUND");
+        if (req.location() != null && details.locationsReady()) details.saveLocation(tenantId, id, req.location(), actorId);
 
         // CANCELLED cascades — drop all non-terminal enrollments so they no
         // longer show in the reviewer's "in progress" list.
@@ -238,13 +292,15 @@ public class LearningService {
         return jdbc.query("""
                 SELECT e.*,
                        TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name,
-                       p.title AS program_title
+                       p.title AS program_title, p.start_date AS program_start, p.end_date AS program_end,
+                       p.mode AS program_mode, dep.name AS department
                   FROM learning_mgmt.training_enrollments e
                   LEFT JOIN hrms.employees emp ON emp.id = e.employee_id AND emp.tenant_id = e.tenant_id
-                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id
-                 WHERE e.program_id = ?
+                  LEFT JOIN hrms.departments dep ON dep.id = emp.department_id AND dep.tenant_id = emp.tenant_id
+                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id AND p.tenant_id = e.tenant_id
+                 WHERE e.tenant_id = ? AND e.program_id = ?
                  ORDER BY employee_name
-                """, (rs, i) -> toEnrollmentDto(rs), programId);
+                """, (rs, i) -> toEnrollmentDto(rs), tenantId, programId);
     }
 
     @Transactional
@@ -253,13 +309,21 @@ public class LearningService {
         return jdbc.query("""
                 SELECT e.*,
                        TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name,
-                       p.title AS program_title
+                       p.title AS program_title, p.start_date AS program_start, p.end_date AS program_end,
+                       p.mode AS program_mode, dep.name AS department
                   FROM learning_mgmt.training_enrollments e
                   LEFT JOIN hrms.employees emp ON emp.id = e.employee_id AND emp.tenant_id = e.tenant_id
-                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id
-                 WHERE e.employee_id = ?
+                  LEFT JOIN hrms.departments dep ON dep.id = emp.department_id AND dep.tenant_id = emp.tenant_id
+                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id AND p.tenant_id = e.tenant_id
+                 WHERE e.tenant_id = ? AND e.employee_id = ?
                  ORDER BY e.created_at DESC
-                """, (rs, i) -> toEnrollmentDto(rs), employeeId);
+                """, (rs, i) -> toEnrollmentDto(rs), tenantId, employeeId);
+    }
+
+    /** My training with each program's place (BW-85). */
+    @Transactional
+    public List<EnrollmentDto> myEnrollmentsWithPlaces(UUID tenantId, UUID employeeId) {
+        return withProgramLocations(tenantId, myEnrollments(tenantId, employeeId));
     }
 
     @Transactional
@@ -491,7 +555,8 @@ public class LearningService {
     static void validateDetailEdit(ProgramDto existing, UpdateProgramRequest req) {
         boolean detailsChange = req.title() != null || req.description() != null || req.category() != null
                 || req.trainer() != null || req.startDate() != null || req.endDate() != null
-                || req.capacity() != null || req.mode() != null || Boolean.TRUE.equals(req.unlimitedSeats());
+                || req.capacity() != null || req.mode() != null || Boolean.TRUE.equals(req.unlimitedSeats())
+                || req.location() != null;
         if (!detailsChange) return;
         if ("COMPLETED".equals(existing.status()) || "CANCELLED".equals(existing.status())) {
             throw new BusinessRuleException(
@@ -569,10 +634,12 @@ public class LearningService {
         List<EnrollmentDto> rows = jdbc.query("""
                 SELECT e.*,
                        TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name,
-                       p.title AS program_title
+                       p.title AS program_title, p.start_date AS program_start, p.end_date AS program_end,
+                       p.mode AS program_mode, dep.name AS department
                   FROM learning_mgmt.training_enrollments e
                   LEFT JOIN hrms.employees emp ON emp.id = e.employee_id AND emp.tenant_id = e.tenant_id
-                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id
+                  LEFT JOIN hrms.departments dep ON dep.id = emp.department_id AND dep.tenant_id = emp.tenant_id
+                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id AND p.tenant_id = e.tenant_id
                  WHERE e.id = ?
                 """, (rs, i) -> toEnrollmentDto(rs), id);
         if (rows.isEmpty()) throw new BusinessRuleException("Enrollment not found", "ENROLLMENT_NOT_FOUND");
@@ -634,7 +701,24 @@ public class LearningService {
                 rs.getBigDecimal("score"),
                 ts(rs.getTimestamp("completed_at")),
                 ts(rs.getTimestamp("created_at")),
-                ts(rs.getTimestamp("updated_at")));
+                ts(rs.getTimestamp("updated_at")),
+                rs.getString("department"),
+                date(rs.getDate("program_start")),
+                date(rs.getDate("program_end")),
+                rs.getString("program_mode"),
+                null);
+    }
+
+    private static String date(java.sql.Date d) {
+        return d == null ? null : d.toString();
+    }
+
+    /** My training: each enrollment with its program's place (BW-85). */
+    List<EnrollmentDto> withProgramLocations(UUID tenantId, List<EnrollmentDto> rows) {
+        java.util.Map<UUID, String> places = details.locations(tenantId,
+                rows.stream().map(EnrollmentDto::programId).filter(java.util.Objects::nonNull).distinct().toList());
+        if (places.isEmpty()) return rows;
+        return rows.stream().map(r -> places.containsKey(r.programId()) ? r.withLocation(places.get(r.programId())) : r).toList();
     }
 
     /**

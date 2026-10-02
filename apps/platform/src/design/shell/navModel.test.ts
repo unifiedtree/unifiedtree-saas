@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccessContext } from '@/shared/navigation/access'
 import {
-  activePage, fitRail, isMorePath, isSettingsPath, moduleTarget, NAV_MODULES, owningModules, preferencesTarget, railGroups,
+  activePage, fitRail, isMorePath, litPage, isSettingsPath, moduleTarget, NAV_MODULES, owningModules, preferencesTarget, railGroups,
   readLastPages, readPinned, saveLastPage, savePinned, settingsActive, settingsPages, SETTINGS_PAGES, type VisibleGroup,
 } from './navModel'
 import { pageTitleLabel } from './pageTitle'
@@ -205,5 +205,32 @@ describe('browser tab titles stay as they were', () => {
     expect(pageTitleLabel('/hrms/expenses', ctx(EMPLOYEE))).toBe('Expense Center')
     expect(pageTitleLabel('/team', ctx(DEPT_MANAGER))).toBe('My Team')
     expect(pageTitleLabel('/hrms/attendance', ctx(DEPT_MANAGER))).toBe('Daily Tracking')
+  })
+})
+
+describe('the top bar’s page tabs (Release 1.1)', () => {
+  const master = NAV_MODULES.find((m) => m.key === 'master')!
+  it('lights the page the address belongs to', () => {
+    expect(litPage('master', master.pages, '/hrms/master/shift-rules')?.label).toBe('Rules & Policies')
+    expect(litPage('master', master.pages, '/hrms/master')?.label).toBe('Overview')
+    expect(litPage('master', master.pages, '/hrms/employees/123')?.label).toBe('Workforce Directory')
+  })
+  it('lights nothing when that page is one the person does not see (not a shorter page that also matches)', () => {
+    const seen = master.pages.filter((p) => ['Overview', 'Workforce Directory', 'Payroll Configuration'].includes(p.label))
+    expect(litPage('master', seen, '/hrms/master/shift-rules')).toBeUndefined()
+    expect(litPage('master', seen, '/hrms/master')?.label).toBe('Overview')
+  })
+  it('Attendance & time: its pages are the old in-page "Attendance sections" bar, as the top tabs, per person', () => {
+    const pagesOf = (perms: AccessContext, key: string) => railGroups(perms, { selfFirst: true }).flatMap((g) => g.modules).find((m) => m.key === key)?.pages.map((p) => `${p.label} ${p.path}`)
+    // The team view (attendance.team.read): Analytics, Daily Tracking, Shifts & Overtime, in that order.
+    const team = ['Attendance Analytics /hrms/att-analytics', 'Daily Tracking /hrms/attendance', 'Shifts & Overtime /hrms/shifts']
+    expect(pagesOf(ctx(DEPT_MANAGER), 'attendance')).toEqual(team)
+    expect(pagesOf(ctx(HR_MANAGER), 'attendance')).toEqual(team)
+    expect(pagesOf(OWNER, 'attendance')).toEqual(team)
+    // Without it the bar gave Daily Tracking and Shifts & Overtime (their My Shift): My time has both.
+    expect(pagesOf(ctx(EMPLOYEE), 'attendance')).toBeUndefined()
+    expect(pagesOf(ctx(EMPLOYEE), 'mytime')).toEqual(['Attendance /hrms/attendance', 'My shift /hrms/shifts', 'Work from home /me/wfh', 'Shift change /me/shift-change'])
+    // People with the team view keep My time as it was (their shifts are under Attendance & time).
+    expect(pagesOf(ctx(DEPT_MANAGER), 'mytime')).not.toContain('My shift /hrms/shifts')
   })
 })

@@ -6,6 +6,16 @@ export type CycleStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED'
 export type ReviewStatus = 'PENDING' | 'IN_PROGRESS' | 'MISSED' | 'SUBMITTED' | 'ACKNOWLEDGED'
 export type GoalStatus = 'ACTIVE' | 'AT_RISK' | 'COMPLETED' | 'DROPPED'
 
+/** A cycle's step dates (BW-78). Null fields aren't set. */
+export interface CycleMilestones {
+  goalsBy: string | null
+  selfReviewBy: string | null
+  managerReviewBy: string | null
+  shareOn: string | null
+  holdUntilShared: boolean
+  sharedAt: string | null
+}
+
 export interface ReviewCycle {
   id: string
   companyId: string
@@ -14,6 +24,8 @@ export interface ReviewCycle {
   periodEnd?: string
   status: CycleStatus
   createdAt: string
+  /** BW-78: null until V143.61 is applied (then every cycle has one, empty when no dates are set). */
+  milestones?: CycleMilestones | null
 }
 
 export interface PerformanceReview {
@@ -31,6 +43,12 @@ export interface PerformanceReview {
   improvements?: string
   submittedAt?: string
   createdAt: string
+  /** BW-81: SELF, MANAGER, PEER, SKIP_LEVEL or DIRECT_REPORT. */
+  reviewerType?: string | null
+  /** BW-81: the reviewee's department. */
+  department?: string | null
+  /** BW-78: the date this review is due by, from the cycle's dates. */
+  dueDate?: string | null
 }
 
 export interface Goal {
@@ -46,6 +64,14 @@ export interface Goal {
   targetValue?: number | null
   currentValue?: number | null
   unit?: string | null
+  /** BW-84 (My goals): due date and the last progress update. */
+  dueDate?: string | null
+  lastNote?: string | null
+  lastUpdatedAt?: string | null
+  previousValue?: number | null
+  /** BW-83: the company KPI this goal counts towards. */
+  companyKpiId?: string | null
+  companyKpiTitle?: string | null
 }
 
 export interface Page<T> {
@@ -103,12 +129,14 @@ export function useMyReviews() {
   })
 }
 
-export function useReviews(cycleId: string | undefined, page = 0, enabled = true) {
+/** Employee reviews. `status` (BW-81): WAITING, SUBMITTED or MISSED; omitted = every review, as before. */
+export function useReviews(cycleId: string | undefined, page = 0, enabled = true, status?: 'WAITING' | 'SUBMITTED' | 'MISSED') {
   return useQuery({
-    queryKey: ['hrms', 'performance', 'reviews', cycleId ?? 'all', page],
+    queryKey: ['hrms', 'performance', 'reviews', cycleId ?? 'all', page, status ?? 'any'],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), size: '20' })
       if (cycleId) params.set('cycleId', cycleId)
+      if (status) params.set('status', status)
       return apiJson<Page<PerformanceReview>>(`/v1/performance/reviews?${params.toString()}`)
     },
     staleTime: 15_000,
@@ -136,6 +164,53 @@ export interface SubmitReviewPayload {
   improvements?: string
 }
 
+/** BW-84: save a review you write as a draft (it becomes IN_PROGRESS). Only its writer may. */
+export function useSaveReviewDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; overallRating?: number | null; strengths?: string; improvements?: string }) =>
+      apiJson<PerformanceReview>(`/v1/performance/reviews/${id}/draft`, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'reviews'] }),
+        qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'my-current'] }),
+      ])
+    },
+  })
+}
+
+/** One of my steps in a cycle (BW-84). */
+export interface MyReviewStep {
+  reviewId: string
+  status: ReviewStatus
+  reviewerName?: string | null
+  submittedAt?: string | null
+}
+
+/** GET /v1/performance/cycles/my-current: the open cycles I'm reviewed in, with my steps. */
+export interface MyCycle {
+  cycleId: string
+  name: string
+  periodStart?: string | null
+  periodEnd?: string | null
+  status: CycleStatus
+  milestones?: CycleMilestones | null
+  goals: number
+  goalsFirstSetAt?: string | null
+  selfReview?: MyReviewStep | null
+  managerReview?: MyReviewStep | null
+  feedbackHeld: boolean
+}
+
+export function useMyCurrentCycles(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'my-current'],
+    queryFn: () => apiJson<MyCycle[]>('/v1/performance/cycles/my-current'),
+    staleTime: 30_000,
+    enabled,
+  })
+}
+
 export function useSubmitReview() {
   const qc = useQueryClient()
   return useMutation({
@@ -144,7 +219,12 @@ export function useSubmitReview() {
         method: 'POST',
         body: JSON.stringify(body),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'reviews'] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'reviews'] }),
+        qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'my-current'] }),
+      ])
+    },
   })
 }
 
@@ -163,6 +243,10 @@ export interface CreateGoalPayload {
   description?: string
   weight?: number
   cycleId?: string
+  /** BW-84 */
+  dueDate?: string
+  /** BW-83 */
+  companyKpiId?: string
 }
 
 export function useCreateGoal() {
@@ -267,6 +351,10 @@ export interface EmployeePerformanceRow {
   lastReviewCycleName?: string | null
   lastReviewSubmittedAt?: string | null
   lastReviewStatus?: 'PENDING' | 'SUBMITTED' | 'ACKNOWLEDGED' | null
+  /** BW-82: ACTIVE, PROBATION, NOTICE_PERIOD, … */
+  employmentStatus?: string | null
+  /** BW-82: a review about them is still to be written in an open cycle. */
+  pendingInOpenCycle?: boolean
 }
 
 export interface PerformanceDirectoryPage {
@@ -330,6 +418,11 @@ export interface EmployeeKpiRow {
   status?: string
   createdAt?: string
   updatedAt?: string
+  /** BW-82: the owner's department. */
+  department?: string | null
+  /** BW-83: the company KPI it counts towards. */
+  companyKpiId?: string | null
+  companyKpiTitle?: string | null
 }
 
 /** Mirrors KpiService.PageDto — note `items`, NOT `content`. */

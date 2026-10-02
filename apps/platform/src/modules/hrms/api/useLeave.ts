@@ -259,6 +259,44 @@ export function useLeaveDecision() {
   })
 }
 
+/** One request's outcome in a bulk decision (LeaveBulkDecisions.Result). */
+export interface LeaveBulkResult {
+  id: string
+  ok: boolean
+  /** The new status when decided. */
+  status: string | null
+  /** Why it wasn't decided (the single decision's own refusal). */
+  errorCode: string | null
+  message: string | null
+}
+
+export interface LeaveBulkOutcome {
+  requested: number
+  decided: number
+  failed: number
+  results: LeaveBulkResult[]
+}
+
+/** Most ids one bulk decision takes (LeaveBulkDecisions.MAX_IDS). */
+export const LEAVE_BULK_MAX = 100
+
+/**
+ * Approve or reject several leave requests at once (POST /v1/leave/approvals/bulk-decision, BW-42):
+ * the same decision as useLeaveDecision once per request, with a result per request; one refused
+ * request doesn't stop the others. Refreshes what useLeaveDecision refreshes.
+ */
+export function useBulkLeaveDecision() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ids, status, comment }: { ids: string[]; status: 'APPROVED' | 'REJECTED'; comment?: string }) =>
+      apiJson<LeaveBulkOutcome>('/v1/leave/approvals/bulk-decision', {
+        method: 'POST',
+        body: JSON.stringify({ ids, status, comment }),
+      }),
+    onSuccess: () => invalidateLeaveMutation(qc),
+  })
+}
+
 /**
  * Cancel a request of your own.
  *

@@ -1,86 +1,88 @@
-// My team (/team): a manager's day at a glance, in the module kit's style.
-// Today's numbers, who's in (the roster the attendance API scopes to the
-// manager's team), leave waiting for them (decided right here, same cards as
-// the Leave page) and the week's shift roster.
-import { useNavigate } from 'react-router-dom'
-import { usePermission, P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
-import { HrAvatar, HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
-import { dashIcon } from '@/design/dc/icons'
-import { greetingName } from '@/shared/hooks/greetingName'
-import { ModulePage, StatRow, SubHeading, State, RowList, Row, ApprovalList, useDesignToast, todayIso, range, days, stamp } from '@/design/module/ModuleKit'
-import { useTeamDashboard } from '../api/useAttendance'
-import { usePendingApprovals, useLeaveDecision } from '../api/useLeave'
+// My team (/team): Team today, Team schedule and Approvals as the page's own views (inline pill
+// tabs under the header, kept in ?view=; Approvals keeps its kind in ?tab=). Each view shows only
+// with the permission its API needs:
+//   Team today   anyone who can open /team (each block then needs its own permission)
+//   Schedule     attendance.team.read
+//   Approvals    any approve permission (leave, work from home, fixes and shift changes, expenses, timesheets)
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { P, useAnyPermission, usePermission } from '@unifiedtree/sdk'
+import { PageFrame } from '@/design/kit/display'
+import { Views } from '@/design/module/ModuleKit'
+import { TEAM_APPROVE_CODES } from '@/shared/navigation/shellCodes'
+import { useApprovalsInbox } from '../api/shared/useApprovalsInbox'
+import { useTeamSummary } from '../api/shared/useTeamSummary'
+import type { InboxTab } from '../api/shared/contracts'
+import { MessageTeamPanel } from './TeamDialogs'
+import { TeamApprovals } from './TeamApprovals'
 import { TeamSchedule } from './TeamSchedule'
-
-const time = (at?: string | null) => (at ? new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—')
-function pill(status?: string): [string, PillTone] {
-  const s = (status || '').toUpperCase()
-  if (s === 'PRESENT' || s === 'CHECKED_IN' || s === 'ON_TIME') return ['Present', 'ok']
-  if (s === 'LATE') return ['Late', 'late']
-  if (s === 'ABSENT') return ['Absent', 'red']
-  if (s === 'ON_LEAVE') return ['On leave', 'blue']
-  if (s === 'NOT_MARKED' || !s) return ['Not marked yet', 'gray']
-  return [s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()), 'gray']
-}
+import { NoTeamAccess, TeamToday } from './TeamToday'
+import { TEAM_VIEWS, inboxTabsFor, pickTab, pickView, type TeamView } from './teamModel'
+import './team.css'
 
 export function TeamDashboard() {
   const navigate = useNavigate()
-  const user = useSdkStore((s) => s.user)
+  const [params, setParams] = useSearchParams()
   const canTeam = usePermission(P.ATTENDANCE_TEAM_READ)
-  const canApprove = usePermission(P.HRMS_LEAVE_APPROVE_L1)
-  const { show, node } = useDesignToast()
-  const team = useTeamDashboard(todayIso())
-  const leave = usePendingApprovals(0, canApprove)
-  const decide = useLeaveDecision()
-  const c = team.data?.counts, people = team.data?.staffStatuses ?? []
-  const pending = leave.data?.content ?? []
-  const hour = new Date().getHours(), greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-  const onDecide = async (id: string, status: 'APPROVED' | 'REJECTED', note: string) => {
-    try { await decide.mutateAsync({ requestId: id, status, comment: note.trim() || undefined }); show(`Leave ${status === 'APPROVED' ? 'approved' : 'rejected'}`) } catch (e) { show('Couldn’t save the decision', true, (e as Error)?.message) }
+  const canLeaveL1 = usePermission(P.HRMS_LEAVE_APPROVE_L1)
+  const canWfh = usePermission(P.WFH_APPROVE)
+  const canInbox = useAnyPermission([...TEAM_APPROVE_CODES])
+  const canPerformance = usePermission('hrms.performance.read')
+  const canDecideProbation = usePermission(P.HRMS_PROBATION_TEAM_DECIDE)
+  const canMessage = usePermission(P.HRMS_TEAM_MESSAGE)
+  const canOpenPeople = usePermission(P.HRMS_EMPLOYEE_READ)
+  const canFixes = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+  const canExpenses = usePermission('hrms.expense.claim.approve')
+  const canTimesheets = usePermission(P.HRMS_TIMESHEET_APPROVE)
+  const [messaging, setMessaging] = useState(false)
+
+  const summary = useTeamSummary({ enabled: canTeam || canLeaveL1 })
+  // The same query Team today's "Waiting for you" reads: one request for the count and the card.
+  const inbox = useApprovalsInbox({ tab: 'all', page: 0, size: 3 }, { enabled: canInbox })
+
+  const allowed: TeamView[] = TEAM_VIEWS.map((v) => v.key)
+    .filter((k) => k === 'today' || (k === 'schedule' && canTeam) || (k === 'approvals' && canInbox))
+  const view = pickView(params.get('view'), allowed)
+  const tab = pickTab(params.get('tab'), inboxTabsFor({ leave: canLeaveL1, wfh: canWfh, fixes: canFixes, expenses: canExpenses, timesheets: canTimesheets }))
+
+  const go = (next: TeamView, nextTab?: InboxTab) => {
+    const sp = new URLSearchParams(params)
+    if (next === 'today') sp.delete('view'); else sp.set('view', next)
+    if (next === 'approvals' && nextTab) sp.set('tab', nextTab)
+    else if (next !== 'approvals') sp.delete('tab')
+    setParams(sp, { replace: true })
+    window.scrollTo?.({ top: 0 })
   }
+
+  if (!canTeam && !canLeaveL1 && !canInbox) {
+    return <PageFrame width="narrow" label="My team"><NoTeamAccess /></PageFrame>
+  }
+
+  const waiting = inbox.data?.counts.all ?? 0
+  const members = summary.data?.members
+  const teamLabel = summary.data?.scope === 'DEPARTMENT' && summary.data.departmentNames.length ? summary.data.departmentNames.join(', ') : null
+  // A message goes to the person's own team (their departments or direct reports), never the whole company,
+  // so a company-wide summary (attendance.workforce.admin) doesn't tell its size.
+  const reach = members && summary.data?.scope !== 'COMPANY' ? members.length : null
+
   return (
-    <ModulePage crumb="My team" title={`${greeting}, ${greetingName(user?.firstName, user?.lastName) || 'there'}`} subtitle={`Your team today, ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}.`}
-      actions={canTeam ? <HrButton variant="ghost" onClick={() => navigate('/hrms/attendance')}>{dashIcon('clock', 15)} Team attendance</HrButton> : undefined}>
-      {canTeam && (team.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
-        { icon: 'userCheck', color: 'green', label: 'Present', value: String(c?.present ?? 0), sub: 'Checked in today' },
-        // Today nobody is absent until the day is over; the API's own count of people without a punch.
-        { icon: 'help', color: 'orange', label: 'Not marked yet', value: String(c?.notMarked ?? 0), sub: 'No punch so far today' },
-        { icon: 'calendarDays', color: 'blue', label: 'On leave', value: String(c?.onLeave ?? 0), sub: 'Approved leave today' },
-        ...(canApprove ? [{ icon: 'inbox', color: 'orange' as const, label: 'Waiting for you', value: String(leave.data?.totalElements ?? 0), sub: 'Leave requests to decide' }] : []),
-      ]} />)}
-
-      {canApprove && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <SubHeading aside={pending.length ? <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/leave?tab=approvals')}>All approvals</HrButton> : undefined}>Leave waiting for your OK</SubHeading>
-          {leave.isLoading ? <State kind="loading" />
-            : leave.error ? <State kind="error" title="Couldn’t load leave requests" onRetry={() => leave.refetch()} />
-              : pending.length === 0 ? <State kind="empty" icon="checkCircle" title="All caught up" description="No leave requests are waiting for you." />
-                : <ApprovalList items={pending.slice(0, 5).map((l) => ({ id: l.id, name: l.employeeName || 'Employee', sub: [l.employeeCode, l.departmentName].filter(Boolean).join(' · '), facts: [{ k: 'Leave', v: l.leaveTypeName || 'Leave' }, { k: 'Dates', v: range(l.startDate, l.endDate) }, { k: 'Days', v: days(Number(l.totalDays)) }], reason: l.reason || '—', raised: stamp(l.createdAt) }))}
-                  onDecide={onDecide} busy={decide.isPending} approveTip="Approves the request and updates their balance" />}
-        </div>
+    <PageFrame width="narrow" label="My team" className="tm-page">
+      {allowed.length > 1 && (
+        <Views label="My team views" active={view} onChange={(k) => go(k as TeamView)}
+          items={TEAM_VIEWS.filter((v) => allowed.includes(v.key)).map((v) => ({
+            key: v.key, label: v.label, count: v.key === 'approvals' && waiting > 0 ? waiting : undefined,
+          }))} />
       )}
-
-      {canTeam && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <SubHeading>Who’s in today</SubHeading>
-          {team.isLoading ? <State kind="loading" />
-            : team.error ? <State kind="error" title="Couldn’t load your team" onRetry={() => team.refetch()} />
-              : people.length === 0 ? <State kind="empty" icon="users" title="No one in your team yet" description="People who report to you appear here with today’s punches." />
-                : (
-                  <RowList>
-                    {people.map((s) => {
-                      // The effective status (company attendance policy + reviewers' changes) when the server sends it.
-                      const [lab, tone] = pill(s.effectiveStatus || (s.checkInAt ? (s.status === 'LATE' ? 'LATE' : 'PRESENT') : s.onLeave ? 'ON_LEAVE' : s.status))
-                      return <Row key={s.employeeId} lead={<HrAvatar name={s.fullName ?? '—'} sub={s.jobTitle ?? s.departmentName ?? ''} />} title={`In ${time(s.checkInAt)} · Out ${time(s.checkOutAt)}`} trail={<HrStatusPill tone={tone}>{lab}</HrStatusPill>} />
-                    })}
-                  </RowList>
-                )}
-        </div>
+      {view === 'today' && (
+        <TeamToday summary={summary} canTeam={canTeam} canInbox={canInbox} canTimeOff={canTeam || canLeaveL1 || canWfh}
+          canPerformance={canPerformance} canDecideProbation={canDecideProbation} canMessage={canMessage}
+          onView={go} onMessage={() => setMessaging(true)} onAttendance={() => navigate('/hrms/attendance')} />
       )}
-
-      <TeamSchedule />
-      {!canTeam && !canApprove && <State kind="empty" icon="lock" title="No team access" description="Ask an admin if you manage people and can’t see them here." />}
-      {node}
-    </ModulePage>
+      {view === 'schedule' && <TeamSchedule canOpenPeople={canOpenPeople} onView={go} />}
+      {view === 'approvals' && <div className="tm-approvals"><TeamApprovals tab={tab} onTab={(t) => go('approvals', t)} /></div>}
+      {canMessage && (
+        <MessageTeamPanel open={messaging} onClose={() => setMessaging(false)} teamSize={reach} teamLabel={teamLabel} />
+      )}
+    </PageFrame>
   )
 }

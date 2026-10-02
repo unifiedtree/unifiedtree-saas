@@ -22,9 +22,12 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { CalendarCheck, LogOut } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { HrButton, HrDrawer, HrStatusPill } from '@/shared/components/hr'
+import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import { Section, StatusPill, KeyValueGrid } from '@/design/kit/display'
+import { PanelButton, SidePanel, useToast } from '@/design/kit/overlays'
+import { useFnfStatus } from '../../api/shared/useFnfStatus'
+import { fmtDate, inr } from './profileFormat'
 import { DateField } from '@/shared/components/calendar'
-import { useToast } from '@/shared/hooks/useToast'
 import { useUpdateWorkforceEmployee, EXIT_TYPES, exitTypeLabel, type ExitType, type useWorkforceEmployee } from '../../api/useWorkforce'
 import { STATUS_STYLE, PILL_TONE, SubSection } from './shared'
 
@@ -43,7 +46,8 @@ function Milestone({ label, date, done, tone }: {
     <li className="flex items-start gap-3">
       <span
         aria-hidden
-        className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${done ? 'bg-[#059669]' : 'bg-gray-300'}`}
+        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ background: done ? 'var(--u-br,#0F6E56)' : 'var(--u-gy,#C9D2CE)' }}
       />
       <div className="min-w-0">
         <p className={`text-sm font-medium ${done ? 'text-text-primary' : 'text-text-tertiary'}`}>
@@ -98,7 +102,7 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
           {!separated && !onNotice && (
             <p className="text-sm text-text-secondary">
               This employee is still employed. Notice and exit are recorded from the
-              actions at the top of this page.
+              actions on the left of this page.
             </p>
           )}
         </div>
@@ -126,14 +130,15 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
 
       {(onNotice || separated) && <SubSection title="Separation details" action={canEdit && <HrButton size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit separation details</HrButton>}>
         <div style={{ display: 'grid', gap: 10 }}>
-          <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}><p className="text-xs font-semibold text-text-secondary">Exit type</p><p className="mt-2 text-sm text-text-primary">{exitTypeLabel(emp.exitType)}</p></div>
-          <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}><p className="text-xs font-semibold text-text-secondary">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm text-text-primary">{emp.exitReason || 'No reason recorded.'}</p></div>
+          <KeyValueGrid items={[
+            { label: 'Notice start date', value: fmtDate(emp.noticeStartDate) },
+            { label: 'Last working day', value: fmtDate(emp.lastWorkingDay) },
+            { label: 'Exit type', value: exitTypeLabel(emp.exitType) },
+            { label: 'Reason', value: <span style={{ whiteSpace: 'pre-wrap' }}>{emp.exitReason || 'No reason recorded.'}</span> },
+          ]} />
         </div>
       </SubSection>}
-      {canReadSettlement && (onNotice || separated) && <div className="text-sm" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
-        <p className="font-semibold">Full &amp; final settlement</p><p className="mt-1 text-text-secondary">Review final salary, leave encashment and outstanding recoveries.</p>
-        <Link to="/hrms/fnf" className="mt-3 inline-block font-semibold text-primary underline">Open full &amp; final settlements</Link>
-      </div>}
+      {canReadSettlement && <Settlement employeeId={emp.id} started={onNotice || separated} />}
       {editing && <SeparationEditor emp={emp} onClose={() => setEditing(false)} />}
 
       {separated && (
@@ -145,7 +150,7 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
       {!separated && !emp.confirmationDate && emp.probationEndDate && (
         <p className="flex items-center gap-2 text-xs text-text-tertiary">
           <CalendarCheck size={12} />
-          Still on probation — confirm or extend from the actions at the top of this page.
+          Still on probation — confirm or extend from the actions on the left of this page.
         </p>
       )}
     </div>
@@ -154,7 +159,7 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
 
 function SeparationEditor({ emp, onClose }: { emp: Emp; onClose: () => void }) {
   const update = useUpdateWorkforceEmployee()
-  const { toast } = useToast()
+  const toast = useToast()
   const [noticeStart, setNoticeStart] = useState(emp.noticeStartDate || '')
   const [lastDay, setLastDay] = useState(emp.lastWorkingDay || '')
   const [reason, setReason] = useState(emp.exitReason || '')
@@ -164,11 +169,13 @@ function SeparationEditor({ emp, onClose }: { emp: Emp; onClose: () => void }) {
   const save = async () => {
     try {
       await update.mutateAsync({ id: emp.id, data: { noticeStartDate: noticeStart || undefined, lastWorkingDay: lastDay, exitReason: reason.trim(), exitType: exitType || undefined } })
-      toast('Separation details saved', 'success'); onClose()
+      toast.success('Separation details saved'); onClose()
     } catch { /* Keep input visible and display the server error. */ }
   }
-  return <HrDrawer title="Edit separation details" onClose={() => { if (!update.isPending) onClose() }} footer={<><HrButton variant="ghost" disabled={update.isPending} onClick={onClose}>Cancel</HrButton><HrButton disabled={!lastDay || (requiresNoticeStart && !noticeStart) || invalidOrder || update.isPending} onClick={save}>{update.isPending ? 'Saving…' : 'Save separation details'}</HrButton></>}>
-    <div className="space-y-5"><p className="text-sm text-text-secondary">Correct the dates, exit type and reason recorded for this employee.</p>
+  const blocked = !lastDay ? 'Choose the last working day' : requiresNoticeStart && !noticeStart ? 'Choose the notice start date' : invalidOrder ? 'Last working day must be on or after the notice start date' : null
+  return <SidePanel open title="Edit separation details" sub="Correct the dates, exit type and reason recorded for this employee." closeLabel="Close panel" busy={update.isPending} onClose={onClose}
+    footer={<><PanelButton size="lg" onClick={onClose}>Cancel</PanelButton><PanelButton size="lg" variant="primary" busy={update.isPending} blockedReason={blocked} onClick={() => void save()}>Save separation details</PanelButton></>}>
+    <div className="space-y-5">
       <label className="block text-sm font-medium">Exit type<select className="ut-select mt-2" value={exitType} onChange={e => setExitType(e.target.value as ExitType)}>
         {!exitType && <option value="">Not recorded</option>}
         {EXIT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -179,5 +186,31 @@ function SeparationEditor({ emp, onClose }: { emp: Emp; onClose: () => void }) {
       {invalidOrder && <p role="alert" className="text-sm text-danger">Last working day must be on or after the notice start date.</p>}
       {update.isError && <p role="alert" className="text-sm text-danger">{update.error instanceof Error ? update.error.message : 'Unable to update separation details.'}</p>}
     </div>
-  </HrDrawer>
+  </SidePanel>
+}
+
+const FNF_LABEL: Record<string, [string, 'brand' | 'warning' | 'success' | 'neutral']> = {
+  INITIATED: ['Initiated', 'neutral'], PROCESSED: ['Waiting for approval', 'warning'], APPROVED: ['Waiting for payment', 'brand'], PAID: ['Paid', 'success'], CANCELLED: ['Cancelled', 'neutral'],
+}
+
+/** Full & final settlement for this person (BW-64, hrms.fnf.read): its state, or that it hasn't started. */
+function Settlement({ employeeId, started }: { employeeId: string; started: boolean }) {
+  const q = useFnfStatus([employeeId])
+  const row = q.data?.find((r) => r.employeeId === employeeId)
+  const [label, tone] = row?.status ? FNF_LABEL[row.status] ?? [row.status, 'neutral' as const] : ['Not started', 'neutral' as const]
+  return (
+    <Section title="Full & final settlement" variant="section" loading={q.isLoading} error={q.notAvailable ? undefined : q.error} onRetry={() => void q.refetch()} skeleton="text"
+      actions={<Link to="/hrms/fnf" className="text-sm font-medium" style={{ color: 'var(--u-brt,#0F6E56)' }}>Open full &amp; final settlements</Link>}>
+      {!row?.settlementId ? (
+        <p className="upf-note">{started ? 'Not started yet. Review final salary, leave encashment and outstanding recoveries.' : 'Starts once a last working day is set.'}</p>
+      ) : (
+        <KeyValueGrid items={[
+          { label: 'Status', value: <StatusPill tone={tone} dot>{label}</StatusPill> },
+          { label: 'Last working day', value: fmtDate(row.lastWorkingDay) },
+          { label: 'Net settlement', value: inr(row.netSettlement) },
+          { label: 'Paid', value: row.paidAt ? fmtDate(row.paidAt) : 'Not yet' },
+        ]} />
+      )}
+    </Section>
+  )
 }

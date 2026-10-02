@@ -1,5 +1,5 @@
-// Live check (wave 3, r2): the shared calendar on the leave, WFH, shift change,
-// holiday, time entry, attendance history, muster roll, manual entry and exit
+// Live check (wave 3, r2): the shared calendar on the leave, shift change (WFH: day chips since P-HOME),
+// holiday, time entry (Timesheet), attendance history (My Attendance), muster roll, manual entry and exit
 // screens. Picks dates with the mouse (including a previous year through the
 // year view), checks each value lands, and that a required date still blocks
 // saving while empty. Creates one time entry and one holiday, and deletes both.
@@ -45,7 +45,6 @@ async function login(email, viewport = { width: 1440, height: 900 }) {
   await page.waitForLoadState('networkidle')
 }
 const dateDialog = () => page.getByRole('dialog', { name: 'Choose date', exact: true })
-const monthDialog = () => page.getByRole('dialog', { name: 'Choose month', exact: true })
 const text = async (loc) => ((await loc.textContent()) || '').trim()
 /** Open a DateField and pick `day` through the year → month → day views. */
 async function pickDay(trigger, day, { viaYear = true } = {}) {
@@ -60,6 +59,25 @@ async function pickDay(trigger, day, { viaYear = true } = {}) {
   }
   await dlg.locator(`[role=gridcell][aria-label^="${full(day)}"]`).click()
   await dlg.waitFor({ state: 'hidden', timeout: 5000 })
+}
+/** The Monday of a day's week (yyyy-MM-dd). */
+const mondayOf = (s) => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d) }
+/** On the Timesheet: step back from this week to the week of `past`. */
+async function goBackWeeks() {
+  const weeksBack = Math.round((new Date(mondayOf(today) + 'T00:00:00') - new Date(mondayOf(past) + 'T00:00:00')) / (7 * 864e5))
+  for (let i = 0; i < weeksBack; i++) await page.getByRole('button', { name: 'Previous week' }).click()
+}
+/** Delete one of reader@'s time entries (by its text) in the Timesheet week on screen; true when the DELETE succeeded. */
+async function deleteEntry(text) {
+  const row = page.getByRole('list', { name: 'Entries this week' }).locator('li', { hasText: text })
+  await row.getByRole('button', { name: 'Edit' }).click()
+  const panel = page.getByRole('dialog', { name: 'Edit time' })
+  await panel.waitFor({ timeout: 10000 })
+  await panel.getByRole('button', { name: 'Delete', exact: true }).click()
+  const del = page.waitForResponse((r) => r.url().includes('/v1/ess/timesheets/') && r.request().method() === 'DELETE', { timeout: 15000 }).catch(() => null)
+  await panel.getByRole('button', { name: 'Delete this entry' }).click()
+  const dr = await del
+  return !!(dr && dr.ok())
 }
 const shot = (name) => page.screenshot({ path: `${SHOTS}/r2-${name}.png` }).catch(() => {})
 
@@ -88,94 +106,110 @@ try {
   check('leave: To shows the picked day', (await text(leaveTo)).includes(short(lt)), await text(leaveTo))
   await shot('leave-apply-1440')
 
-  // ── 2. Work from home: From bumps To; the day count follows both ──
+  // ── 2. Work from home (P-HOME): separate days are picked as chips, not a From/To range ──
   await page.goto(base + '/me/wfh')
-  const wfhFrom = page.getByRole('combobox', { name: 'From *', exact: true })
-  const wfhTo = page.getByRole('combobox', { name: 'To *', exact: true })
-  await wfhFrom.waitFor({ timeout: 20000 })
-  const wf = `${nm}-20`
-  await pickDay(wfhFrom, wf)
-  check('wfh: From shows the picked day', (await text(wfhFrom)).includes(short(wf)), await text(wfhFrom))
-  check('wfh: To moved up to From (same onChange rule as before)', (await text(wfhTo)).includes(short(wf)), await text(wfhTo))
-  await page.locator('textarea').first().fill('Live calendar check, not sent')
-  check('wfh: 1 day from home', await page.getByText('1 day from home').first().isVisible())
-  await pickDay(wfhTo, addDays(wf, 2), { viaYear: false })
-  check('wfh: 3 days from home after picking To', await page.getByText('3 days from home').first().isVisible(), await text(wfhTo))
+  const chips = page.getByRole('group', { name: 'Pick days' }).getByRole('button')
+  await chips.first().waitFor({ timeout: 20000 })
+  const free = page.getByRole('group', { name: 'Pick days' }).locator('button:not([disabled])')
+  const nFree = await free.count()
+  check('wfh: day chips for the coming working days', (await chips.count()) >= 5, `${await chips.count()} chips, ${nFree} free`)
+  if (nFree >= 2) {
+    await free.nth(0).click()
+    await free.nth(1).click()
+    check('wfh: picked chips are pressed', (await page.getByRole('group', { name: 'Pick days' }).locator('button[aria-pressed="true"]').count()) === 2)
+    check('wfh: 2 days picked', await page.getByText(/^2 days: /).first().isVisible())
+    await page.getByRole('button', { name: 'Later days' }).click()
+    await page.getByRole('button', { name: 'Earlier days' }).click()
+    check('wfh: picks are kept across pages', (await page.getByRole('group', { name: 'Pick days' }).locator('button[aria-pressed="true"]').count()) === 2)
+  } else check('wfh: at least two free days to pick', false, `${nFree} free`)
+  await page.locator('textarea').first().fill('Live chip check, not sent')
 
   // ── 3. Shift change request ──
   await page.goto(base + '/me/shift-change')
-  const shiftDate = page.getByRole('combobox', { name: 'Starting from *', exact: true })
+  // P-HOME: the date field is "From" and opens once a shift card is picked.
+  const shiftDate = page.getByRole('combobox', { name: /^From/ })
   const hasForm = await shiftDate.waitFor({ timeout: 20000 }).then(() => true).catch(() => false)
-  check('shift change: Starting from is the shared calendar', hasForm)
-  // The field stays disabled until the employee, company and shift list have loaded.
+  check('shift change: From is the shared calendar', hasForm)
+  // The field stays disabled until a shift card is picked.
   await page.waitForLoadState('networkidle')
+  const card = page.getByRole('group', { name: 'Shifts' }).locator('button:not([disabled])').first()
+  if (await card.count()) await card.click()
   for (let i = 0; hasForm && i < 20 && (await shiftDate.isDisabled()); i++) await page.waitForTimeout(500)
   if (hasForm && !(await shiftDate.isDisabled())) {
     const sd = `${nm}-25`
     await pickDay(shiftDate, sd)
-    check('shift change: Starting from shows the picked day', (await text(shiftDate)).includes(short(sd)), await text(shiftDate))
+    check('shift change: From shows the picked day', (await text(shiftDate)).includes(short(sd)), await text(shiftDate))
   } else if (hasForm) check('shift change: field disabled (no other shift to move to)', true)
   check('leave/wfh/shift pages: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
 
-  // ── 4. My workspace (/me): attendance history month + time entries on a previous-year day ──
+  // ── 4. My Attendance and Timesheet (P-ATT-DAY): the history month and a time entry on a previous-year day ──
+  // Before P-ATT-DAY these were the fallback sections on /me (a month box and a day box). Now the month
+  // is My Attendance's month view (arrows; the next month stops at this one) and time entries are the
+  // Timesheet's, a week at a time.
   pageErrors.length = 0
   await login('reader@unifiedtree.demo')
-  await page.goto(base + '/me')
-  const monthF = page.getByRole('combobox', { name: 'Attendance month', exact: true })
-  await monthF.waitFor({ timeout: 20000 })
-  check('history: month box is the shared MonthField', (await text(monthF)).includes(`${MONTHS[Number(get('month')) - 1]} ${cy}`), await text(monthF))
-  await monthF.click()
-  await monthDialog().waitFor({ timeout: 5000 })
-  const next = monthDialog().locator(`[role=gridcell][aria-label="${MONTHS[Number(nm.slice(5, 7)) - 1]} ${nm.slice(0, 4)}"]`)
-  check('history: max = this month (next month not pickable)', (await next.count()) === 0 || (await next.getAttribute('aria-disabled')) === 'true')
-  await monthDialog().getByRole('button', { name: 'Choose year' }).click()
-  const histReq = page.waitForRequest((r) => r.url().includes('/v1/attendance/history') && r.url().includes(`year=${py}`) && r.url().includes('month=9'), { timeout: 15000 }).catch(() => null)
-  await monthDialog().locator(`[role=gridcell][aria-label="${py}"]`).click()
-  await monthDialog().locator(`[role=gridcell][aria-label="September ${py}"]`).click()
-  check('history: picking September last year asks for it', !!(await histReq))
-  check('history: box shows September last year', (await text(monthF)).includes(`September ${py}`), await text(monthF))
+  await page.goto(base + '/hrms/attendance?tab=my')
+  const monthNext = page.getByRole('button', { name: 'Next month' })
+  await monthNext.waitFor({ timeout: 30000 })
+  const monthTitle = () => page.getByRole('heading', { name: new RegExp(`^(${MONTHS.join('|')}) \\d{4}$`) }).first().textContent().then((t) => (t || '').trim())
+  check('history: the month view opens on this month', (await monthTitle()) === `${MONTHS[Number(get('month')) - 1]} ${cy}`, await monthTitle())
+  check('history: max = this month (next month not pickable)', await monthNext.isDisabled())
+  const histReq = page.waitForRequest((r) => r.url().includes('/v1/attendance/history') && r.url().includes(`year=${py}`) && r.url().includes('month=9'), { timeout: 60000 }).catch(() => null)
+  const back = (cy - py) * 12 + Number(get('month')) - 9
+  for (let i = 0; i < back; i++) await page.getByRole('button', { name: 'Previous month' }).click()
+  check('history: going back to September last year asks for it', !!(await histReq))
+  check('history: the view shows September last year', (await monthTitle()) === `September ${py}`, await monthTitle())
+  check('history: next month is pickable again in the past', !(await monthNext.isDisabled()))
 
-  const dayF = page.getByRole('combobox', { name: 'Time entry date', exact: true })
-  const entriesReq = page.waitForRequest((r) => r.url().includes(`/v1/ess/timesheets?from=${past}&to=${past}`), { timeout: 15000 }).catch(() => null)
-  await pickDay(dayF, past)
-  check('time entries: a previous-year day through the year view loads that day', !!(await entriesReq))
-  check('time entries: box shows the picked day', (await text(dayF)).includes(short(past)), await text(dayF))
+  // A time entry on a previous-year day, through the Timesheet's week of that day.
+  const pastMonday = mondayOf(past), pastSunday = addDays(pastMonday, 6)
+  await page.goto(base + '/hrms/attendance?tab=timesheet')
+  await page.getByRole('button', { name: 'Previous week' }).waitFor({ timeout: 30000 })
+  const weekReq = page.waitForRequest((r) => r.url().includes(`/v1/ess/timesheets?from=${pastMonday}&to=${pastSunday}`), { timeout: 60000 }).catch(() => null)
+  await goBackWeeks()
+  check('time entries: going back to a previous-year week loads that week', !!(await weekReq))
   await page.waitForLoadState('networkidle')
-  await shot('ess-1440')
+  await shot('timesheet-1440')
   entryTitle = `W3 r2 calendar check ${Date.now()}`
-  await page.getByLabel('Work description').fill(entryTitle)
-  await page.getByLabel('Time entry minutes').fill('30')
+  await page.getByRole('button', { name: 'Add time', exact: true }).first().click()
+  const panel = page.getByRole('dialog', { name: 'Add time' })
+  await panel.waitFor({ timeout: 10000 })
+  await panel.getByLabel('Day').selectOption(past)
+  check('time entries: the panel offers the previous-year day', (await panel.getByLabel('Day').inputValue()) === past, await panel.getByLabel('Day').inputValue())
+  await panel.getByLabel('Hours').fill('0')
+  await panel.getByLabel('Minutes').fill('30')
+  await panel.getByLabel(/What did you work on|Notes/).fill(entryTitle)
   const post = page.waitForResponse((r) => r.url().includes('/v1/ess/timesheets') && r.request().method() === 'POST', { timeout: 15000 }).catch(() => null)
-  await page.getByRole('button', { name: 'Add entry' }).click()
+  await panel.getByRole('button', { name: 'Add time', exact: true }).click()
   const pr = await post
   const body = pr && pr.ok() ? await pr.request().postDataJSON() : null
   check('time entries: the entry is saved on the picked day', !!body && body.workDate === past, pr ? `${pr.status()} ${JSON.stringify(body)}` : 'no request')
-  const row = page.locator('div', { has: page.locator('strong', { hasText: entryTitle }) }).last()
-  entryLeft = await row.waitFor({ timeout: 15000 }).then(() => true).catch(() => false)
-  check('time entries: the entry is listed', entryLeft)
+  entryLeft = !!(pr && pr.ok())
+  const row = page.getByRole('list', { name: 'Entries this week' }).locator('li', { hasText: entryTitle })
+  check('time entries: the entry is listed', await row.waitFor({ timeout: 15000 }).then(() => true).catch(() => false))
   if (entryLeft) {
-    await row.getByRole('button', { name: 'Delete' }).click()
-    const del = page.waitForResponse((r) => r.url().includes('/v1/ess/timesheets/') && r.request().method() === 'DELETE', { timeout: 15000 }).catch(() => null)
-    await row.getByRole('button', { name: 'Delete' }).click()
-    const dr = await del
-    entryLeft = !(dr && dr.ok())
-    check('time entries: the test entry is deleted', !entryLeft && await page.locator('strong', { hasText: entryTitle }).waitFor({ state: 'detached', timeout: 10000 }).then(() => true).catch(() => false))
+    entryLeft = !(await deleteEntry(entryTitle))
+    check('time entries: the test entry is deleted', !entryLeft && await row.waitFor({ state: 'detached', timeout: 10000 }).then(() => true).catch(() => false))
   }
-  check('my workspace: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
+  check('my attendance and timesheet: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
 
-  // Phone: the two boxes fit, and the calendar opens as a bottom sheet.
+  // Phone: My Attendance and the Timesheet fit, and the Add time panel stays inside the screen.
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(base + '/me')
-  await dayF.waitFor({ timeout: 20000 })
-  await dayF.scrollIntoViewIfNeeded()
+  await page.goto(base + '/hrms/attendance?tab=my')
+  await page.getByRole('button', { name: 'Next month' }).waitFor({ timeout: 30000 })
   const bw = await page.evaluate(() => document.documentElement.scrollWidth)
-  check('390px: no horizontal page scroll on /me', bw <= 390, String(bw))
-  await dayF.click()
-  await dateDialog().waitFor({ timeout: 5000 })
+  check('390px: no horizontal page scroll on My Attendance', bw <= 390, String(bw))
+  await page.goto(base + '/hrms/attendance?tab=timesheet')
+  await page.getByRole('button', { name: 'Add time', exact: true }).first().waitFor({ timeout: 30000 })
+  const tw = await page.evaluate(() => document.documentElement.scrollWidth)
+  check('390px: no horizontal page scroll on the Timesheet', tw <= 390, String(tw))
+  await page.getByRole('button', { name: 'Add time', exact: true }).first().click()
+  const sheet = page.getByRole('dialog', { name: 'Add time' })
+  await sheet.waitFor({ timeout: 5000 })
   await page.waitForTimeout(350)
-  const sb = await dateDialog().boundingBox()
-  check('390px: the calendar stays inside the viewport', !!sb && sb.x >= 0 && sb.x + sb.width <= 390.5 && sb.y + sb.height <= 844.5, JSON.stringify(sb))
-  await shot('ess-sheet-390')
+  const sb = await sheet.boundingBox()
+  check('390px: the Add time panel stays inside the viewport', !!sb && sb.x >= -0.5 && sb.x + sb.width <= 390.5, JSON.stringify(sb))
+  await shot('timesheet-panel-390')
   await page.keyboard.press('Escape')
 
   // ── 5. Holidays (owner): add one next year with the calendar, then delete it ──
@@ -242,14 +276,16 @@ try {
   await page.getByRole('button', { name: 'Start notice' }).first().click()
   const drawer = page.getByRole('dialog', { name: 'Start notice period' })
   await drawer.waitFor({ timeout: 10000 })
-  const startF = drawer.locator('label', { hasText: 'Notice start date' }).getByRole('combobox')
-  const lastF = drawer.locator('label', { hasText: 'Last working day' }).getByRole('combobox')
+  // P-GROW: kit fields label the combobox (the label no longer wraps it).
+  const startF = drawer.getByRole('combobox', { name: 'Notice start date' })
+  const lastF = drawer.getByRole('combobox', { name: 'Last working day' })
   check('exit: notice start prefilled to today', (await text(startF)).includes(short(today)), await text(startF))
-  const lastNative = drawer.locator('label', { hasText: 'Last working day' }).locator('input.utc-native')
+  const lastNative = lastF.locator('xpath=..').locator('input.utc-native')
   check('exit: empty last working day is required (native valueMissing)', await lastNative.evaluate((el) => el.required && el.validity.valueMissing))
   await drawer.locator('#notice-employee-search').fill('Reader')
   await drawer.getByRole('option', { name: /Reader User/ }).first().click()
-  const saveBtn = drawer.getByRole('button', { name: 'Start notice', exact: true })
+  // By its text: while blocked, the kit's tooltip (data-tip, CSS content) is part of the button's accessible name.
+  const saveBtn = drawer.locator('button', { hasText: /^Start notice$/ })
   check('exit: Save stays blocked while the last working day is empty', await saveBtn.isDisabled())
   await lastF.click()
   await dateDialog().waitFor({ timeout: 5000 })
@@ -267,29 +303,25 @@ try {
   const edit = page.getByRole('button', { name: 'Edit dates' }).first()
   if (await edit.waitFor({ timeout: 15000 }).then(() => true).catch(() => false)) {
     await edit.click()
-    const sep = page.getByRole('dialog', { name: /Separation details/ })
+    const sep = page.getByRole('dialog', { name: /^Edit dates/ })
     await sep.waitFor({ timeout: 10000 })
-    const s1 = await text(sep.locator('label', { hasText: 'Notice start date' }).getByRole('combobox'))
-    const s2 = await text(sep.locator('label', { hasText: 'Last working day' }).getByRole('combobox'))
+    const s1 = await text(sep.getByRole('combobox', { name: 'Notice start date' }))
+    const s2 = await text(sep.getByRole('combobox', { name: 'Last working day' }))
     check('exit: Edit dates shows the saved notice dates', /\d{1,2} \w{3} \d{4}/.test(s1) && /\d{1,2} \w{3} \d{4}/.test(s2), `${s1} / ${s2}`)
-    await sep.getByRole('button', { name: 'Cancel' }).click()
+    await sep.getByRole('button', { name: 'Close', exact: true }).click()
   } else check('exit: someone on notice to open Edit dates', false, 'no Edit dates button')
   check('owner pages: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
 
-  // Phone: WFH form fits, and its calendar is a bottom sheet inside the screen.
+  // Phone: the WFH day chips fit the screen (P-HOME: chips instead of the From/To calendar).
   await login('mgr@unifiedtree.demo', { width: 390, height: 844 })
   await page.goto(base + '/me/wfh')
-  const pf = page.getByRole('combobox', { name: 'From *', exact: true })
-  await pf.waitFor({ timeout: 20000 })
+  const pc = page.getByRole('group', { name: 'Pick days' }).getByRole('button').first()
+  await pc.waitFor({ timeout: 20000 })
   const pw = await page.evaluate(() => document.documentElement.scrollWidth)
   check('390px: no horizontal page scroll on /me/wfh', pw <= 390, String(pw))
-  await pf.click()
-  await dateDialog().waitFor({ timeout: 5000 })
-  await page.waitForTimeout(350)
-  await dateDialog().getByRole('button', { name: 'Choose year' }).click()
-  await page.waitForTimeout(250)
-  await shot('wfh-years-390')
-  await page.keyboard.press('Escape')
+  const cb = await pc.boundingBox()
+  check('390px: the day chips stay inside the viewport', !!cb && cb.x >= 0 && cb.x + cb.width <= 390.5, JSON.stringify(cb))
+  await shot('wfh-chips-390')
   check('no failed API calls', failed.length === 0, failed.slice(0, 5).join(' | '))
 } catch (e) {
   check('script completed', false, String(e.message || e).slice(0, 300))
@@ -299,14 +331,11 @@ try {
   try {
     if (entryLeft && entryTitle) {
       await login('reader@unifiedtree.demo')
-      await page.goto(base + '/me')
-      const dayF = page.getByRole('combobox', { name: 'Time entry date', exact: true })
-      await pickDay(dayF, past)
-      const row = page.locator('div', { has: page.locator('strong', { hasText: entryTitle }) }).last()
-      await row.getByRole('button', { name: 'Delete' }).click()
-      await row.getByRole('button', { name: 'Delete' }).click()
-      await page.waitForTimeout(1500)
-      console.log('cleanup: removed the leftover time entry')
+      await page.goto(base + '/hrms/attendance?tab=timesheet')
+      await page.getByRole('button', { name: 'Previous week' }).waitFor({ timeout: 30000 })
+      await goBackWeeks()
+      await page.waitForLoadState('networkidle')
+      if (await deleteEntry(entryTitle)) console.log('cleanup: removed the leftover time entry')
     }
     if (holidayLeft && holidayName) {
       await login('owner@unifiedtree.demo')

@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -142,7 +143,9 @@ class GlobalSearchServiceTest {
         verify(queries).payslips(eq(tenant), eq(Scope.EVERYONE), anyList(), anyInt());
         verify(queries).policies(eq(tenant), eq(false), anyList(), anyInt());
         verify(queries).offers(eq(tenant), anyList(), anyInt());
-        verifyNoInteractions(teamScope);
+        // No team lookup for these records; the one team lookup allowed is the overtime request list, which is team-scoped on its page.
+        verify(teamScope, atMost(1)).resolve(any(), isNull());
+        verify(queries, never()).leave(any(), argThat(s -> s != Scope.EVERYONE), anyList(), anyInt());
         assertThat(res.groups()).extracting("type").containsExactly("employee");
         SearchHit person = res.groups().get(0).items().get(0);
         assertThat(person.url()).isEqualTo("/hrms/employees?q=ravi");
@@ -238,5 +241,17 @@ class GlobalSearchServiceTest {
                 GlobalSearchAccess.Reach.PUBLISHED);
         assertThat(live.badge()).isNull();
         verify(queries, never()).policies(any(), anyBoolean(), anyList(), anyInt());
+    }
+
+    @Test
+    void holidaysShowTheirDayAndKindAndOpenTheHolidaysTab() {
+        UUID id = UUID.randomUUID();
+        SearchHit h = GlobalSearchService.holidayHit(new GlobalSearchQueries.HolidayRow(id, "Christmas Eve", java.time.LocalDate.of(2027, 12, 24), "NATIONAL"));
+        assertThat(h.type()).isEqualTo("holiday");
+        assertThat(h.title()).isEqualTo("Christmas Eve");
+        assertThat(h.subtitle()).isEqualTo("Fri, 24 Dec 2027 · National holiday");
+        assertThat(h.url()).isEqualTo("/hrms/leave?tab=holidays");
+        assertThat(h.badge()).isNull();
+        assertThat(GlobalSearchService.holidayHit(new GlobalSearchQueries.HolidayRow(id, "X", null, null)).subtitle()).isEqualTo("Holiday");
     }
 }

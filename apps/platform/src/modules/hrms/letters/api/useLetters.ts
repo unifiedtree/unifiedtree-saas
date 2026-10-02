@@ -43,6 +43,19 @@ export interface GeneratedLetterDto {
   generationContext?: Record<string, string>
   createdAt: string
   updatedAt: string
+  // Redesign (BW-71, BW-74, BW-76): additive, absent on older servers.
+  /** When the employee signed it. */
+  signedAt?: string | null
+  /** The issue date HR chose (yyyy-MM-dd); null when the letter is dated the day it was generated. */
+  issueDate?: string | null
+  departmentName?: string | null
+  templateName?: string | null
+  generatedByName?: string | null
+  /** HR asked for a signature; null/absent while signatures aren't switched on. */
+  signatureRequested?: boolean | null
+  signatureRequestedAt?: string | null
+  /** The name the employee typed to sign. */
+  signedName?: string | null
 }
 
 export interface MergeFieldEntry {
@@ -86,11 +99,17 @@ export interface GenerateLetterRequest {
   overrides?: Record<string, string>
   sendImmediately?: boolean
   sendToEmail?: string
+  /** yyyy-MM-dd; the today fields print it and lists show it as Issued (BW-74). */
+  issueDate?: string
+  /** Ask the employee to sign it once it's sent (BW-76). */
+  requestSignature?: boolean
 }
 
 export interface SendLetterRequest {
   toEmail?: string
   ccEmail?: string
+  /** Ask the employee to sign it (BW-76). */
+  requestSignature?: boolean
 }
 
 export interface VoidLetterRequest {
@@ -250,4 +269,118 @@ export async function downloadLetterPdf(letterId: string, filename?: string) {
   a.download = filename ?? `letter-${letterId}.pdf`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// ── Preview before saving (client request, 2 Oct) ─────────────────────────────
+
+/** What to preview: a draft as it's being edited, or a saved template; for an employee; on a date. */
+export interface LetterPreviewRequest {
+  templateId?: string
+  companyId?: string
+  subject?: string
+  bodyHtml?: string
+  /** Left out: the viewer's own record, else the catalogue's example values. */
+  employeeId?: string
+  issueDate?: string
+}
+
+export interface LetterPage { size: string; widthMm: number; heightMm: number; marginMm: number }
+
+/** The letter as it would come out: the letterhead and the body, merge fields filled, on its page. */
+export interface LetterPreview {
+  subject: string
+  html: string
+  companyId?: string | null
+  companyName?: string | null
+  employeeId?: string | null
+  employeeName?: string | null
+  /** True when the catalogue's example values were used (no employee to show). */
+  sample: boolean
+  /** Merge fields with no value (shown in red in the letter). */
+  unresolved: string[]
+  issueDate?: string | null
+  page: LetterPage
+}
+
+/**
+ * The live preview (POST /v1/letters/templates/preview). Keyed by the request,
+ * so a change fetches a new one; the last one stays on screen meanwhile.
+ * Pass `enabled: false` until there is something to preview.
+ */
+export function useLetterPreview(req: LetterPreviewRequest, opts?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['hrms', 'letters', 'preview', req],
+    queryFn: () => apiJson<LetterPreview>('/v1/letters/templates/preview', { method: 'POST', body: JSON.stringify(req) }),
+    enabled: opts?.enabled ?? true,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    retry: false,
+  })
+}
+
+/** The same preview as the PDF it would become, opened in a new tab (or saved where tabs are blocked). */
+export async function openPreviewPdf(req: LetterPreviewRequest) {
+  const win = window.open('', '_blank')
+  try {
+    const blob = await apiBlob('/v1/letters/templates/preview/pdf', {
+      method: 'POST', body: JSON.stringify(req), headers: { 'Content-Type': 'application/json' },
+    })
+    const url = URL.createObjectURL(blob)
+    if (win) win.location.href = url
+    else { const a = document.createElement('a'); a.href = url; a.download = 'letter-preview.pdf'; a.click() }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (e) {
+    win?.close()
+    throw e
+  }
+}
+
+// ── My letters: read and sign (BW-75, BW-76) ──────────────────────────────────
+
+export interface ReadableLetter {
+  id: string
+  subject: string
+  html: string
+  status: LetterStatus
+  signatureRequested?: boolean | null
+  signedAt?: string | null
+  signedName?: string | null
+  page: LetterPage
+}
+
+/** One of my letters to read (opening it marks it viewed). */
+export function useReadMyLetter(id: string | undefined) {
+  const qc = useQueryClient()
+  return useQuery({
+    queryKey: ['hrms', 'letters', 'my', 'read', id],
+    queryFn: async () => {
+      const letter = await apiJson<ReadableLetter>(`/v1/letters/my/${id}/html`)
+      qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'my'], exact: false, refetchType: 'none' })
+      return letter
+    },
+    enabled: !!id,
+    staleTime: 60_000,
+  })
+}
+
+/** Sign my letter: click to accept with my typed name. */
+export function useSignLetter() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, typedName }: { id: string; typedName: string }) =>
+      apiJson<GeneratedLetterDto>(`/v1/letters/my/${id}/sign`, { method: 'POST', body: JSON.stringify({ typedName, accept: true }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'my'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'generated'] })
+    },
+  })
+}
+
+/** Download a letter's PDF and refresh My letters (the owner downloading it marks it viewed). */
+export function useDownloadLetter() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, filename }: { id: string; filename?: string }) => downloadLetterPdf(id, filename),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'my'] }),
+  })
 }

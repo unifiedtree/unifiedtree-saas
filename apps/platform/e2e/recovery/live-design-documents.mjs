@@ -1,7 +1,7 @@
 // Live check of the redesigned Documents and Letters pages:
 //  - Documents: HR adds a document (by link) to the employee's file with the
 //    searched picker; the employee sees it under My documents; HR deletes it.
-//  - Documents to review: a pending document shows as a card; "View file" says
+//  - Documents to review: a pending document shows as a row; "View file" says
 //    plainly that storage isn't set up (local) instead of opening nothing;
 //    Reject needs a reason; Verify clears it from the queue.
 //  - Letters: templates, generated letters (no UUID fragments), a letter,
@@ -15,7 +15,7 @@ import { chromium } from '@playwright/test'
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', company = 'cccccccc-cccc-cccc-cccc-cccccccccccc', readerId = '22222222-2222-2222-2222-222222222222'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const browser = await chromium.launch()
@@ -57,22 +57,23 @@ try {
   // ── review queue ──
   sql(`insert into document_mgmt.employee_documents (tenant_id, employee_id, company_id, title, category, file_url, verification_status, original_filename, file_size_bytes) values ('${tenant}','${readerId}','${company}','${pendingTitle}','ID_PROOF','r2://employee-documents/${tenant}/qa-${stamp}.pdf','PENDING','qa.pdf',20480), ('${tenant}','${readerId}','${company}','${rejectTitle}','ID_PROOF','r2://employee-documents/${tenant}/qa-r-${stamp}.pdf','PENDING','qa-r.pdf',10240)`)
   await o.page.goto(base + '/hrms/documents/pending'); await settle(o.page)
-  const card = o.page.locator('article').filter({ hasText: pendingTitle })
-  check('review: the pending document is a card with its file details', (await card.count()) === 1 && /qa\.pdf · 20 KB/.test(await card.innerText()))
-  await card.getByRole('button', { name: 'View file' }).click()
+  const card = o.page.getByRole('row').filter({ hasText: pendingTitle })
+  check('review: the pending document is a row with its file details', (await card.count()) === 1 && /qa\.pdf · 20 KB/.test(await card.innerText()))
+  await card.getByRole('button', { name: /^View file/ }).click()
   await o.page.getByText('This file can’t be opened here', { exact: true }).waitFor({ timeout: 10000 }).catch(() => {})
   check('review: "View file" explains when storage isn’t set up', (await o.page.getByText('This file can’t be opened here', { exact: true }).count()) === 1)
-  const rcard = o.page.locator('article').filter({ hasText: rejectTitle })
-  await rcard.getByRole('button', { name: 'Reject' }).click()
-  check('review: reject waits for a reason', await rcard.getByRole('button', { name: 'Reject and tell them' }).isDisabled())
-  await rcard.getByLabel(/Why it’s rejected/).fill('Blurry scan, please upload again')
-  await rcard.getByRole('button', { name: 'Reject and tell them' }).click()
+  const rcard = o.page.getByRole('row').filter({ hasText: rejectTitle })
+  await rcard.getByRole('button', { name: /^Reject/ }).click()
+  const rdlg = o.page.getByRole('dialog', { name: 'Reject document' })
+  check('review: reject waits for a reason', await rdlg.getByRole('button', { name: 'Reject and tell them' }).isDisabled())
+  await rdlg.getByLabel(/Why it’s rejected/).fill('Blurry scan, please upload again')
+  await rdlg.getByRole('button', { name: 'Reject and tell them' }).click()
   await o.page.getByText(/Rejected; the employee/).waitFor({ timeout: 10000 }).catch(() => {})
   check('review: reject records the reason', sql(`select verification_status||'|'||rejection_reason from document_mgmt.employee_documents where title='${rejectTitle}'`) === 'REJECTED|Blurry scan, please upload again')
-  await card.getByRole('button', { name: 'Verify' }).click()
-  await o.page.getByText('Verified', { exact: true }).waitFor({ timeout: 10000 }).catch(() => {})
+  await card.getByRole('button', { name: /^Verify/ }).click()
+  await o.page.getByText(/ verified$/).waitFor({ timeout: 10000 }).catch(() => {})
   await settle(o.page)
-  check('review: verify clears it from the queue', sql(`select verification_status from document_mgmt.employee_documents where title='${pendingTitle}'`) === 'VERIFIED' && (await o.page.locator('article').filter({ hasText: pendingTitle }).count()) === 0)
+  check('review: verify clears it from the queue', sql(`select verification_status from document_mgmt.employee_documents where title='${pendingTitle}'`) === 'VERIFIED' && (await o.page.getByRole('row').filter({ hasText: pendingTitle }).count()) === 0)
 
   // ── letters ──
   await o.page.goto(base + '/hrms/documents?view=letters'); await settle(o.page)
@@ -110,8 +111,9 @@ try {
   await o.page.goto(base + '/hrms/documents?view=all'); await settle(o.page)
   await o.page.getByLabel('Find employee').fill('Reader')
   await o.page.getByRole('button', { name: /Reader User/ }).click(); await settle(o.page)
-  o.page.once('dialog', (d) => d.accept())
   await o.page.getByRole('button', { name: `Delete ${docTitle}` }).click()
+  // The app asks in its own dialog now (was the browser's confirm).
+  await o.page.getByRole('dialog', { name: new RegExp(`Delete .${docTitle}`) }).getByRole('button', { name: 'Delete', exact: true }).click()
   await o.page.getByText('Document deleted', { exact: true }).waitFor({ timeout: 10000 }).catch(() => {})
   check('documents: HR deletes it', sql(`select count(*) from document_mgmt.employee_documents where title='${docTitle}'`) === '0')
   await o.ctx.close()

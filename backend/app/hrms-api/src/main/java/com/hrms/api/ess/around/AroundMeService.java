@@ -13,8 +13,8 @@ import java.util.List;
 
 /**
  * Home's "Around you" (BW-121): what happens around the caller from today to
- * {@code days} ahead (both included): colleagues' birthdays and work
- * anniversaries in their company, holidays, company notices, payday, and for
+ * {@code days} ahead (both included): colleagues' birthdays, work anniversaries
+ * and retirements in their company, holidays, company notices, payday, and for
  * team approvers their team's probation ends. Sorted by date.
  *
  * <p>Each source is read only with its own rule and module, on its own
@@ -30,7 +30,7 @@ public class AroundMeService {
     public static final int MAX_ITEMS = 50;
 
     /** On the same day: payday, then holidays, notices, probation ends, birthdays, anniversaries. */
-    static final List<String> KIND_ORDER = List.of("PAYDAY", "HOLIDAY", "NOTICE", "PROBATION_END", "BIRTHDAY", "WORK_ANNIVERSARY");
+    static final List<String> KIND_ORDER = List.of("PAYDAY", "HOLIDAY", "NOTICE", "PROBATION_END", "RETIREMENT", "BIRTHDAY", "WORK_ANNIVERSARY");
 
     private final List<AroundSource> sources;
     private final EssSourceRunner runner;

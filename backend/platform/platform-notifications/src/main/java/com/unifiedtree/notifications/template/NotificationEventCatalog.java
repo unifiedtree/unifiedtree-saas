@@ -201,6 +201,10 @@ public final class NotificationEventCatalog {
                 "Sent to the employee when their attendance correction is rejected.",
                 "Correction rejected", "Your attendance correction for {{date}} has been rejected.{{reasonText}}",
                 DATE, REASON, REASON_TEXT));
+        add(inApp("attendance.overtime_requested", AppNotificationType.OVERTIME_REQUESTED, "Attendance", "Overtime requested", "Approver",
+                "Sent to the approver when someone asks for overtime on a day. Approval records it; it isn't paid.",
+                "Overtime to review", "{{employeeName}} asked for {{hours}} of overtime on {{date}}.",
+                EMPLOYEE_NAME, HOURS, DATE));
         add(inApp("attendance.overtime_approved", AppNotificationType.OVERTIME_APPROVED, "Attendance", "Overtime approved", "Employee",
                 "Sent to the employee when their overtime is approved. Approval records it; it isn't paid.",
                 "Overtime approved", "Your overtime of {{hours}} on {{date}} was approved. Recorded, not paid.",

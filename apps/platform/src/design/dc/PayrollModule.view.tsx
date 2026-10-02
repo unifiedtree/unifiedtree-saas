@@ -16,7 +16,7 @@ import './PayrollModule.view.css'
 export function PayrollModuleView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+      <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
         <nav aria-label="Payroll sections" style={{position: "relative", marginBottom: "8px", background: "#fff", boxShadow: "0 0 0 100vmax #fff", clipPath: "inset(0 -100vmax)"}}>
           <span aria-hidden="true" style={{position: "absolute", left: "0", right: "0", bottom: "0", height: "1px", background: "#e2e8f0", boxShadow: "0 0 0 100vmax #e2e8f0", clipPath: "inset(0 -100vmax)"}} />
           <div style={{position: "relative", display: "flex", alignItems: "stretch", gap: "24px", overflowX: "auto", scrollbarWidth: "none"}}>
