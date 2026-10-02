@@ -70,6 +70,7 @@ try {
   await page.waitForURL(url => !url.pathname.includes('login'))
   await page.goto(ui + '/hrms/advances')
   await expect(page.getByRole('heading', { name: 'Company advances', exact: true })).toBeVisible()
+  // Status filter is still the Status select; the redesign adds Phase and Department.
   await page.getByLabel('Advance status', { exact: true }).selectOption('DISBURSED')
   await page.getByRole('row').filter({ hasText: '3,210.45' }).first().getByRole('button', { name: /View advance/ }).click()
   await expect(page.getByRole('heading', { name: 'Salary recovery' })).toBeVisible()

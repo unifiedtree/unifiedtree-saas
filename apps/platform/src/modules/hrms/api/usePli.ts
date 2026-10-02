@@ -48,14 +48,61 @@ export const inr = (n?: number) =>
  */
 export const PLI_PAGE_SIZE = 20
 
-export function useAllAwards(page = 0, enabled = true) {
+/** The admin table's status filter (BW-63). PROPOSED/APPROVED/PAID/REJECTED, or null for all. */
+export type PliStatusFilter = PliStatus | 'ALL'
+
+export function useAllAwards(page = 0, enabled = true, filter: PliStatusFilter = 'ALL') {
+  const query = filter === 'ALL' ? '' : `&status=${filter}`
   return useQuery({
-    // `page` is part of the key: without it react-query would hand page 2 the
-    // cached page-1 rows and the table would never appear to advance.
-    queryKey: ['hrms', 'pli', 'awards', page],
-    queryFn: () => apiJson<Page<PliAward>>(`/v1/pli/awards?page=${page}&size=${PLI_PAGE_SIZE}`),
+    // `page` and the filter are part of the key: without them react-query would
+    // hand page 2 the cached page-1 rows and switching filters would show stale
+    // data.
+    queryKey: ['hrms', 'pli', 'awards', page, filter],
+    queryFn: () => apiJson<Page<PliAward>>(`/v1/pli/awards?page=${page}&size=${PLI_PAGE_SIZE}${query}`),
     staleTime: 15_000,
     enabled,
+  })
+}
+
+export interface PliBucket { count: number; amount: number }
+
+/** All awards: proposed / approved to be paid / paid / paid this FY (BW-63). */
+export interface PliAwardsSummary {
+  total: number
+  proposed: PliBucket
+  approved: PliBucket
+  paid: PliBucket
+  paidThisFinancialYear: PliBucket
+  rejected: number
+  financialYear: string
+  financialYearStart: string
+  financialYearEnd: string
+}
+
+export function usePliAwardsSummary(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'pli', 'awards', 'summary'],
+    queryFn: () => apiJson<PliAwardsSummary>('/v1/pli/awards/summary'),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+/** The signed-in person's awards summary (BW-63). */
+export interface MyPliAwardsSummary {
+  proposedForYou: PliBucket
+  waiting: PliBucket
+  approved: PliBucket
+  paid: PliBucket
+  rejected: number
+}
+
+export function useMyPliSummary(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'pli', 'my', 'summary'],
+    queryFn: () => apiJson<MyPliAwardsSummary>('/v1/pli/my/summary'),
+    enabled,
+    staleTime: 30_000,
   })
 }
 

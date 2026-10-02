@@ -10,7 +10,8 @@ import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useAllAwards, useMyIncentives, useCreateAward, usePliDecision, usePayAward,
-  usePliTargets, useCreatePliTarget, inr, PLI_PAGE_SIZE, type PliStatus, type PliAward,
+  usePliTargets, useCreatePliTarget, usePliAwardsSummary, useMyPliSummary,
+  inr, PLI_PAGE_SIZE, type PliStatus, type PliAward, type PliStatusFilter,
 } from './api/usePli'
 
 const STATUS_TONE: Record<PliStatus, PillTone> = {
@@ -54,18 +55,29 @@ export const Pli: React.FC = () => {
 
 // ── All Awards (admin) ─────────────────────────────────────────────────────────
 
+const AWARD_FILTERS: { key: PliStatusFilter; label: string }[] = [
+  { key: 'ALL', label: 'Everything' },
+  { key: 'PROPOSED', label: 'Proposed' },
+  { key: 'APPROVED', label: 'Approved' },
+  { key: 'PAID', label: 'Paid' },
+  { key: 'REJECTED', label: 'Not approved' },
+]
+
 export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
   const { toast } = useToast()
   // Was hard-coded to page 0 with no control, so only the newest
   // PLI_PAGE_SIZE awards in the whole tenant were reachable — every older
   // award was invisible to the approver.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useAllAwards(page)
+  const [filter, setFilter] = useState<PliStatusFilter>('ALL')
+  const { data, isLoading } = useAllAwards(page, true, filter)
+  const summary = usePliAwardsSummary()
   const decide = usePliDecision()
   const pay = usePayAward()
   const awards = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
+  const changeFilter = (next: PliStatusFilter) => { setPage(0); setFilter(next) }
 
   const onDecide = async (id: string, approved: boolean) => {
     try {
@@ -85,9 +97,30 @@ export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
     }
   }
 
+  const s = summary.data
   return (
     <div className="space-y-5">
       {canWrite && <CreateAwardForm />}
+
+      <StatRow tiles={[
+        { icon: 'target', color: 'orange', label: 'Proposed', value: s ? inr(s.proposed.amount) : '—', sub: s ? `${s.proposed.count} ${s.proposed.count === 1 ? 'award' : 'awards'} · waiting` : 'Loading…' },
+        { icon: 'checkCircle', color: 'blue', label: 'Approved, to be paid', value: s ? inr(s.approved.amount) : '—', sub: s ? `${s.approved.count} ${s.approved.count === 1 ? 'award' : 'awards'} · next payroll run` : '—' },
+        { icon: 'rupee', color: 'green', label: 'Paid this year', value: s ? inr(s.paidThisFinancialYear.amount) : '—', sub: s ? `${s.financialYear}` : '—' },
+        { icon: 'list', color: 'teal', label: 'Total awards', value: s ? String(s.total) : '—', sub: 'All time' },
+      ]} />
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div role="group" aria-label="Incentive status filter" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {AWARD_FILTERS.map((f) => (
+            <HrButton key={f.key} size="sm"
+              variant={f.key === filter ? 'primary' : 'ghost'}
+              aria-pressed={f.key === filter}
+              onClick={() => changeFilter(f.key)}>
+              {f.label}
+            </HrButton>
+          ))}
+        </div>
+      </div>
 
       <TableCard
         footer={hrPaginationFooter({
@@ -251,32 +284,21 @@ function MyIncentivesTab() {
   // not see any incentive older than their most recent PLI_PAGE_SIZE awards.
   const [page, setPage] = useState(0)
   const { data, isLoading, isError, error, refetch } = useMyIncentives(page)
+  const summary = useMyPliSummary()
   const awards = useMemo(() => data?.content ?? [], [data])
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
 
-  const stats = useMemo(() => {
-    const proposed = awards.filter((a) => a.status === 'PROPOSED').length
-    const approved = awards.filter((a) => a.status === 'APPROVED').length
-    const paid = awards.filter((a) => a.status === 'PAID').reduce((s, a) => s + (a.amount ?? 0), 0)
-    return { proposed, approved, paid }
-  }, [awards])
-
-  // Proposed / Approved / Paid Out are reduced over the rows we hold, so they
-  // describe the current page only — /v1/pli exposes no status aggregate to
-  // call instead. Label them as such rather than let a partial "Paid Out"
-  // figure read as a career total. "Total Awards" is genuinely tenant-wide
-  // (totalElements), so it stays unqualified — it used to show awards.length,
-  // which never exceeded one page.
-  const pageScoped = totalPages > 1 ? 'On this page' : undefined
   if (isError) return <State kind="error" title="Couldn’t load your incentives" description={(error as Error)?.message} onRetry={() => refetch()} />
+  const s = summary.data
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
-        { icon: 'target', color: 'blue', label: 'Incentives', value: String(total), sub: 'Proposed for you so far' },
-        { icon: 'clock', color: 'orange', label: 'Waiting for approval', value: String(stats.proposed), sub: pageScoped || 'Proposed' },
-        { icon: 'checkCircle', color: 'green', label: 'Approved, to be paid', value: String(stats.approved), sub: pageScoped || 'Not paid yet' },
-        { icon: 'rupee', color: 'teal', label: 'Paid to you', value: inr(stats.paid), sub: pageScoped || 'All time' },
+      {isLoading && !s ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        // BW-63 summary: aggregates come from the server, not the current page.
+        { icon: 'target', color: 'blue', label: 'Proposed for you so far', value: s ? inr(s.proposedForYou.amount) : String(total), sub: s ? `${s.proposedForYou.count} ${s.proposedForYou.count === 1 ? 'award' : 'awards'} · all time` : 'All time' },
+        { icon: 'clock', color: 'orange', label: 'Waiting for approval', value: s ? inr(s.waiting.amount) : '—', sub: s ? `${s.waiting.count} ${s.waiting.count === 1 ? 'award' : 'awards'}` : '—' },
+        { icon: 'checkCircle', color: 'green', label: 'Approved, to be paid', value: s ? inr(s.approved.amount) : '—', sub: 'Next payroll run' },
+        { icon: 'rupee', color: 'teal', label: 'Paid to you', value: s ? inr(s.paid.amount) : '—', sub: 'All time' },
       ]} />}
       {isLoading ? <State kind="loading" height={200} />
         : awards.length === 0 ? <State kind="empty" icon="target" title="No incentives yet" description="Performance-linked incentives proposed for you appear here with their status." />

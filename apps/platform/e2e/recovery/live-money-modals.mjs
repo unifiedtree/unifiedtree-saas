@@ -84,14 +84,17 @@ try {
 
   // ── Expense: reject through the drawer ──────────────────────────────────
   await page.goto(base + '/hrms/expenses')
-  await page.getByRole('heading', { name: 'Expense Center' }).waitFor({ timeout: 30_000 })
+  // The redesigned Expenses page uses the design's "Expense center" (sentence case).
+  await page.getByRole('heading', { name: /^Expense center$/i }).waitFor({ timeout: 30_000 })
   const stats = await get(owner, '/v1/expense/dashboard-stats')
   const statCard = page.locator('.ut-card').filter({ hasText: 'Reimbursed this month' }).first()
   await statCard.waitFor({ timeout: 15_000 })
   await page.waitForTimeout(500)
   check('"Reimbursed this month" stat shows the API amount', (await statCard.innerText()).includes(inr(stats.reimbursedThisMonthAmount)), inr(stats.reimbursedThisMonthAmount))
 
-  const claimRow = page.getByRole('row').filter({ hasText: claimTitle })
+  // Approvals in the redesign are DecisionCards (<article>), not <tr>; the
+  // test's "row" locator is really "the card for this claim".
+  const claimRow = page.locator('article').filter({ hasText: claimTitle })
   await claimRow.waitFor({ timeout: 15_000 })
   const claimRowText = await claimRow.innerText()
   check('submitted claim pill reads "Pending approval" (not SUBMITTED)', claimRowText.includes('Pending approval') && !claimRowText.includes('SUBMITTED'))
@@ -110,7 +113,7 @@ try {
   await drawer.getByLabel('Reason (optional)').fill(claimReason)
   await drawer.getByRole('button', { name: 'Confirm rejection' }).click()
   await page.getByText('Claim rejected').first().waitFor({ timeout: 15_000 })
-  await page.getByRole('row').filter({ hasText: claimTitle }).waitFor({ state: 'detached', timeout: 15_000 })
+  await page.locator('article').filter({ hasText: claimTitle }).waitFor({ state: 'detached', timeout: 15_000 })
   check('rejected claim leaves the approvals queue', true)
   const claimAfter = await get(owner, `/v1/expense/claims/${claim.id}`)
   check('API: claim REJECTED with the typed reason', claimAfter.status === 'REJECTED' && claimAfter.approverComment === claimReason, `${claimAfter.status} "${claimAfter.approverComment}"`)
@@ -133,7 +136,8 @@ try {
   // ── Advance: reject through the drawer ──────────────────────────────────
   await page.goto(base + '/hrms/advances')
   await tabButton(page, 'Approvals').click({ timeout: 30_000 })
-  const advRow = page.getByRole('row').filter({ hasText: inr(advanceAmount) }).filter({ hasText: 'Requested' }).first()
+  // The redesign renders pending advances as DecisionCards (<article>), not <tr>.
+  const advRow = page.locator('article').filter({ hasText: inr(advanceAmount) }).filter({ hasText: 'Requested' }).first()
   await advRow.waitFor({ timeout: 15_000 })
   check('requested advance pill reads "Requested" (not REQUESTED)', !(await advRow.innerText()).includes('REQUESTED'))
   await advRow.getByRole('button', { name: 'Reject' }).click()
@@ -152,13 +156,16 @@ try {
   // ── Reader: readable pills on My Advances / My Claims ───────────────────
   page = await signIn('reader@unifiedtree.demo')
   await page.goto(base + '/hrms/advances')
-  await tabButton(page, 'My Advances').click({ timeout: 30_000 })
-  const myAdv = page.getByRole('row').filter({ hasText: inr(advanceAmount) }).first()
+  // The reader's view labels the self tab "My advances" (sentence case) and the
+  // list is a ModuleKit RowList (`.umk-row`) rather than a table.
+  await tabButton(page, 'My advances').click({ timeout: 30_000 })
+  const myAdv = page.locator('.umk-row').filter({ hasText: inr(advanceAmount) }).first()
   await myAdv.waitFor({ timeout: 15_000 })
   const myAdvText = await myAdv.innerText()
   check('My Advances pill reads "Rejected"', myAdvText.includes('Rejected') && !myAdvText.includes('REJECTED'), myAdvText.replace(/\s+/g, ' '))
   await page.goto(base + '/hrms/expenses')
-  await tabButton(page, 'My Claims').click({ timeout: 30_000 })
+  // "My claims" (sentence case) tab for an employee; the list is a DataTable.
+  await tabButton(page, 'My claims').click({ timeout: 30_000 })
   const myClaim = page.getByRole('row').filter({ hasText: claimTitle })
   await myClaim.waitFor({ timeout: 15_000 })
   const myClaimText = await myClaim.innerText()
