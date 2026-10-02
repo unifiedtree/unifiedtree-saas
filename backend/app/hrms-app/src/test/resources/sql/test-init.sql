@@ -16,3 +16,21 @@ DO $$ BEGIN
         CREATE ROLE ut_app LOGIN PASSWORD 'ut_app_test' NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE;
     END IF;
 END $$;
+
+-- The app's DataSource connects as hrms_app, but the canonical migrations are
+-- inconsistent about which role they grant to: timing_policies,
+-- distribution_schedules and letter_signatures grant to ut_app only, and
+-- shift_change_requests has no grant at all. Reading them as hrms_app raises
+-- "permission denied for table ...", which surfaces as a 500 out of
+-- AttendancePolicyService and the letters jobs.
+--
+-- Production is unaffected — it has both roles with grants applied by hand and
+-- never runs Flyway — so this is a test-role problem and is fixed here rather
+-- than by widening the grants in the migrations themselves.
+--
+-- Default privileges apply only to objects created after this runs, which is
+-- why it belongs in the init script: Flyway connects as ut_test and creates
+-- everything afterwards, so every table it makes is covered whichever role the
+-- individual migration happens to name.
+ALTER DEFAULT PRIVILEGES FOR ROLE ut_test GRANT ALL ON TABLES    TO hrms_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ut_test GRANT ALL ON SEQUENCES TO hrms_app;
