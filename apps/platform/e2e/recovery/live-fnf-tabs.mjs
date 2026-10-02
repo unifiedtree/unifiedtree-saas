@@ -19,7 +19,7 @@ const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const headers = { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, 'X-Tenant-Subdomain': 'demo' }
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',
-  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q]).toString().trim()
+  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q]).toString().trim()
 
 const checks = []
 const check = (name, ok, detail) => { checks.push({ name, ok: Boolean(ok), detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`) }

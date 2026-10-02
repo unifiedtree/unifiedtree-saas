@@ -95,6 +95,9 @@ try {
     await page.getByRole('heading', { name: 'Salary', level: 1 }).waitFor({ timeout: 30_000 })
     check('My Salary shortcut on /me opens /me/salary', path(page) === '/me/salary')
     if (salary) {
+      // The page's title draws before the structure loads; wait for the structure before reading the page.
+      await page.getByText(/Your salary structure, effective /).first().waitFor({ timeout: 30_000 }).catch(() => {})
+      await page.waitForLoadState('networkidle').catch(() => {})
       const body = await page.locator('main').innerText().catch(() => page.locator('body').innerText())
       const eff = new Date(`${salary.effectiveFrom}T00:00:00`)
       const effText = `${eff.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][eff.getMonth()]} ${eff.getFullYear()}`
