@@ -284,7 +284,8 @@ try {
   check('exit: empty last working day is required (native valueMissing)', await lastNative.evaluate((el) => el.required && el.validity.valueMissing))
   await drawer.locator('#notice-employee-search').fill('Reader')
   await drawer.getByRole('option', { name: /Reader User/ }).first().click()
-  const saveBtn = drawer.getByRole('button', { name: 'Start notice', exact: true })
+  // By its text: while blocked, the kit's tooltip (data-tip, CSS content) is part of the button's accessible name.
+  const saveBtn = drawer.locator('button', { hasText: /^Start notice$/ })
   check('exit: Save stays blocked while the last working day is empty', await saveBtn.isDisabled())
   await lastF.click()
   await dateDialog().waitFor({ timeout: 5000 })
