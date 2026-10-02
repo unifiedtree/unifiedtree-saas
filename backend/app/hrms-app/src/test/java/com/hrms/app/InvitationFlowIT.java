@@ -38,6 +38,8 @@ import static org.mockito.Mockito.*;
         "spring.kafka.bootstrap-servers=",
         "hrms.kafka.enabled=false",
         "hrms.face-recognition.enabled=false",
+        // Firebase Admin needs Google credentials that CI has not got; tests never send a push.
+        "unifiedtree.firebase.enabled=false",
         "unifiedtree.face.enabled=false",
         "hrms.attendance.geofence-enforce=false",
         "spring.autoconfigure.exclude=" +

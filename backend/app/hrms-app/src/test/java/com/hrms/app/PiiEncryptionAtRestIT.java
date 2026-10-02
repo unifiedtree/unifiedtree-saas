@@ -60,6 +60,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.kafka.bootstrap-servers=",
         "hrms.kafka.enabled=false",
         "hrms.face-recognition.enabled=false",
+        // Firebase Admin needs Google credentials that CI has not got; tests never send a push.
+        "unifiedtree.firebase.enabled=false",
         "hrms.attendance.geofence-enforce=false",
         "spring.autoconfigure.exclude=" +
             "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration," +
