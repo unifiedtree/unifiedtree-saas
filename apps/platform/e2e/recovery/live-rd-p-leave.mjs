@@ -142,7 +142,7 @@ try {
   }
 
   // ── Case 4: hrm edits a holiday, then restores it ─────────────────────────
-  let h = sql1(`select id||'|'||holiday_name||'|'||holiday_date::text||'|'||coalesce(holiday_type::text,'PUBLIC') from settings.holiday_calendar where tenant_id='${tenant}' and company_id='${company}' order by holiday_date limit 1`)
+  let h = sql1(`select id||'|'||holiday_name||'|'||holiday_date::text||'|'||coalesce(holiday_type::text,'PUBLIC') from settings.holiday_calendar where tenant_id='${tenant}' and company_id='${company}' and is_active order by holiday_date limit 1`)
   if (!h) {
     // No holiday in the demo seed — add a far-future throwaway and clean it up.
     const nextYr = Number(today.slice(0, 4)) + 1
