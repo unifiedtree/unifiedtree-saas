@@ -426,11 +426,11 @@ public class EmployeeController {
         if (jdbcTemplate == null) {
             // Best-effort: in tests without JdbcTemplate, treat as inactive so
             // the UI defaults to "Resend invitation" (the safe, useful action).
-            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", ""));
+            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", "", "lastLoginDevice", ""));
         }
         try {
             Map<String, Object> row = jdbcTemplate.queryForMap(
-                    "SELECT (password_hash IS NOT NULL) AS activated, "
+                    "SELECT id, (password_hash IS NOT NULL) AS activated, "
                             + "invited_at, last_login_at, is_active "
                             + "FROM auth.user_credentials WHERE employee_id = ? LIMIT 1",
                     employeeId);
@@ -440,12 +440,48 @@ public class EmployeeController {
             Object lastLoginAt = row.get("last_login_at");
             return ResponseEntity.ok(Map.of(
                     "activated", activated,
-                    "invitedAt", invitedAt instanceof Instant i ? i.toString() : (invitedAt == null ? "" : invitedAt.toString()),
-                    "lastLoginAt", lastLoginAt instanceof Instant i ? i.toString() : (lastLoginAt == null ? "" : lastLoginAt.toString())
+                    "invitedAt", isoInstant(invitedAt),
+                    "lastLoginAt", isoInstant(lastLoginAt),
+                    "lastLoginDevice", lastLoginDevice(row.get("id") instanceof UUID u ? u : null)
             ));
         } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
             // No credential row yet -> never invited / never activated.
-            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", ""));
+            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", "", "lastLoginDevice", ""));
+        }
+    }
+
+    /**
+     * A timestamp column as an ISO instant ("2026-10-02T03:51:00Z"), "" when null. The driver hands
+     * back java.sql.Timestamp, whose toString() has no time zone, so a browser in another zone read
+     * the time wrong; the date was right, which is all the page used to show (the redesign shows the time).
+     */
+    static String isoInstant(Object v) {
+        if (v == null) return "";
+        if (v instanceof Instant i) return i.toString();
+        if (v instanceof java.sql.Timestamp t) return t.toInstant().toString();
+        if (v instanceof java.time.OffsetDateTime o) return o.toInstant().toString();
+        return v.toString();
+    }
+
+    /**
+     * Redesign BW-100: the device of the person's newest sign-in session, in words
+     * ("Android", "Chrome on Windows"), from the user agent on their newest refresh
+     * token. Additive and best effort: "" when there is no session or the lookup
+     * fails, so the invitation status itself never fails because of it.
+     */
+    private String lastLoginDevice(UUID userId) {
+        if (jdbcTemplate == null || userId == null) return "";
+        try {
+            // The same login whose times are returned (one employee can, rarely, have two logins).
+            List<String> rows = jdbcTemplate.queryForList(
+                    "SELECT user_agent FROM auth.refresh_tokens "
+                            + "WHERE user_id = ? AND tenant_id = ? "
+                            + "ORDER BY COALESCE(last_used_at, issued_at) DESC LIMIT 1",
+                    String.class, userId, TenantContext.getTenantId());
+            return rows.isEmpty() ? "" : LoginDevice.describe(rows.get(0));
+        } catch (RuntimeException e) {
+            log.warn("Last sign-in device lookup failed for login {}: {}", userId, e.getMessage());
+            return "";
         }
     }
 

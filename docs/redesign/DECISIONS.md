@@ -247,3 +247,12 @@ up anything ... not create new problems ... do this very carefully by thoroughly
     - **Teammate:** uses his own Claude account, GitHub user `chakridol143` (write access), Windows. Work is split via
       GitHub: branches + pull requests into `redesign/int`, and tasks as Issues/files; the lead reviews, merges and pushes `main`.
     - **Vercel branch previews:** left on (the user's choice).
+22. **Overtime (user, 2 Oct 2026):**
+    - **Minimum overtime = 1 hour by default**, changeable by roles with the overtime-rules permission.
+    - It is a THRESHOLD, not a deduction: below the minimum nothing counts; once it is reached, ALL the extra time counts
+      (1 h 20 m extra → 1 h 20 m overtime). This replaces P-ATT-PLAN's "counts after = subtract" rule.
+    - **Employees can request overtime whenever they want** (not limited to chosen dates); their approver approves or
+      rejects, as with other requests.
+    - Overtime still never changes pay (OT pay is not built).
+    - Web face punch follows the same office-location (geofence) rule as the app; approved WFH is exempt.
+    - Org chart placement as proposed: a tab in Organization setup + its own page for every role.

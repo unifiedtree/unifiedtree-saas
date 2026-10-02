@@ -2,9 +2,9 @@ import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 
-const api = 'http://127.0.0.1:8080/api', base = 'http://demo.localhost:3002'
+const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api', base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 const name = `Browser letter template ${Date.now()}`
 const login = await fetch(api + '/v1/canonical-auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant }, body: JSON.stringify({ tenantId: tenant, email: 'owner@unifiedtree.demo', password: 'Hrms@12345' }) })
@@ -27,11 +27,12 @@ try {
   await page.waitForURL(url => !url.pathname.includes('login'))
   await page.goto(base + '/hrms/letters/generated')
   await page.getByRole('button', { name: 'Generate letter', exact: true }).click()
-  const drawer = page.getByRole('dialog')
-  await drawer.getByRole('button').filter({ hasText: name }).click()
+  const drawer = page.getByRole('dialog', { name: 'Generate letter' })
+  // The template is now a select in the side panel (was one button per template).
+  await drawer.getByLabel('Template').selectOption({ label: name })
   await drawer.getByLabel('Find employee').fill('reader@unifiedtree.demo')
   await drawer.getByRole('button').filter({ hasText: 'Reader User' }).click()
-  await drawer.getByRole('button', { name: 'Generate PDF', exact: true }).click()
+  await drawer.getByRole('button', { name: 'Generate letter', exact: true }).click()
   await page.waitForURL(/\/letters\/generated\/[0-9a-f-]+$/)
   await expect(page.getByText('Reader User', { exact: false }).first()).toBeVisible()
   const id = new URL(page.url()).pathname.split('/').at(-1)

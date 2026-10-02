@@ -1,3 +1,4 @@
+/* global process, console, fetch, URL */
 // Resignation & Exit page (/hrms/exit) — browser acceptance against the local
 // recovery runtime. Creates a throw-away active employee through the real API,
 // starts a notice period from the page, checks the row, the reload, the API
@@ -17,7 +18,7 @@ const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const headers = { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, 'X-Tenant-Subdomain': 'demo' }
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',
-  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q]).toString().trim()
+  ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q]).toString().trim()
 
 const checks = []
 const check = (name, ok, detail) => { checks.push({ name, ok: Boolean(ok), detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`) }
@@ -96,9 +97,11 @@ try {
   const viaApi = await (await fetch(`${api}/v1/hrms/employees/${fixture.id}`, { headers: owner })).json()
   check('API shows NOTICE_PERIOD with the recorded dates', viaApi.employmentStatus === 'NOTICE_PERIOD' && viaApi.lastWorkingDay === lastDay && viaApi.noticeStartDate === today, `${viaApi.employmentStatus} ${viaApi.noticeStartDate}→${viaApi.lastWorkingDay}`)
 
-  // Withdraw it again through the confirm dialog.
-  await page.getByRole('row').filter({ hasText: fixtureName }).getByRole('button', { name: 'Withdraw notice' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Withdraw notice' }).click()
+  // Withdraw it again through the confirm dialog. Redesign (PgGrow x-res): Withdraw notice sits in
+  // the row's Edit dates panel, and still asks to confirm.
+  await page.getByRole('row').filter({ hasText: fixtureName }).getByRole('button', { name: 'Edit dates' }).click()
+  await page.getByRole('dialog', { name: /^Edit dates/ }).getByRole('button', { name: 'Withdraw notice' }).click()
+  await page.getByRole('dialog', { name: /^Withdraw .* notice\?$/ }).getByRole('button', { name: 'Withdraw notice' }).click()
   await page.getByText('is active again').waitFor({ timeout: 15_000 })
   await page.getByRole('row').filter({ hasText: fixtureName }).waitFor({ state: 'detached', timeout: 15_000 })
   check('withdrawn notice leaves the On notice list', true)

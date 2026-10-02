@@ -115,8 +115,12 @@ public class ReportExportController {
     @GetMapping("/diversity/export.pdf")
     @Operation(summary = "Diversity report as a PDF")
     @PreAuthorize("hasAuthority('hrms.report.diversity')")
-    public ResponseEntity<byte[]> diversityPdf(@RequestParam UUID companyId, Authentication auth) {
-        return pdf(ReportKind.DIVERSITY, new ReportPdfService.Params(companyId, null, null, null, null), auth, Map.of());
+    public ResponseEntity<byte[]> diversityPdf(@RequestParam UUID companyId,
+                                               @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf,
+                                               Authentication auth) {
+        // Without asOf: today's report, as before. With it: the people employed on that date (BW-86).
+        return pdf(ReportKind.DIVERSITY, new ReportPdfService.Params(companyId, null, null, asOf, null), auth,
+                asOf == null ? Map.<String, Object>of() : Map.<String, Object>of("asOf", asOf.toString()));
     }
 
     /** The Workforce Analytics snapshot: each section only with its own report permission. */

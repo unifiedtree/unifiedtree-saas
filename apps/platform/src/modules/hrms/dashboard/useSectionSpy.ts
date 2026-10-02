@@ -1,7 +1,7 @@
-// The dashboard's section pills follow the scroll (prototype PgDashboard: spy / jump). The page scrolls inside
-// the shell's #workspace-content (the window when shown outside the shell). A pill click scrolls to its section
-// and keeps the pill lit while the smooth scroll runs; the section's name goes into the URL hash (#people), so a
-// link or a refresh opens on it once the sections above have loaded.
+// The dashboard's section pills (in the page, stuck under the top bar) follow the scroll (prototype PgDashboard:
+// spy / jump). The page scrolls inside the shell's #workspace-content (the window when shown outside the shell).
+// A pill click scrolls to its section and keeps the pill lit while the smooth scroll runs; the section's name
+// goes into the URL hash (#people), so a link or a refresh opens on it once the sections above have loaded.
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { DashSection } from './dashboardModel'
 
@@ -51,7 +51,9 @@ export function useSectionSpy(rootRef: RefObject<HTMLElement | null>, keys: read
     try { window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${key === 'overview' ? '' : '#' + key}`) } catch { /* ignore */ }
     if (!el) return
     const v = view()
-    const y = key === 'overview' ? 0 : Math.max(0, el.getBoundingClientRect().top - v.top + v.y - 18)
+    // The section pills stay stuck at the top of the page while it scrolls: land the section just under them.
+    const bar = rootRef.current?.querySelector<HTMLElement>('[data-dash-nav]')?.offsetHeight ?? 0
+    const y = key === 'overview' ? 0 : Math.max(0, el.getBoundingClientRect().top - v.top + v.y - 18 - bar)
     const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ;(v.sc ?? window).scrollTo({ top: y, behavior: smooth && !reduce ? 'smooth' : 'auto' })
   }, [rootRef, view])

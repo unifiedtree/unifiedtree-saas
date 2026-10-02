@@ -13,7 +13,7 @@ import './AttDailyLogs.view.css'
 export function AttDailyLogsView({ v }: { v: any }) {
   return (
     <>
-      <div style={{display: "grid", gap: "14px", minWidth: "0", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)"}}>
+      <div style={{display: "grid", gap: "14px", minWidth: "0", fontFamily: "var(--u-font)"}}>
         <div role="group" aria-label="Filter by status" style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "12px"}}>
           {arr(v.tiles).map((t: any, $index: number) => (
             <Fragment key={$index}>
@@ -113,7 +113,7 @@ export function AttDailyLogsView({ v }: { v: any }) {
       {v.drawerOpen ? (
         <>
           <HrDrawer title={v.d?.name} onClose={v.close} footer={v.drawerFooter} width="max-w-md">
-            <div style={{display: "grid", gap: "14px", fontFamily: "var(--u-font,'Plus Jakarta Sans',system-ui,sans-serif)", color: "#0f172a"}}>
+            <div style={{display: "grid", gap: "14px", fontFamily: "var(--u-font)", color: "#0f172a"}}>
               <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px"}}>
                 <HrAvatar name={v.d?.name} sub={v.d?.sub} />
                 <HrStatusPill tone={v.d?.tone}>

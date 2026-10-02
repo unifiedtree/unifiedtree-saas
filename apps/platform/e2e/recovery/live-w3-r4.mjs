@@ -109,13 +109,13 @@ try {
   // ── 2. Review cycles: empty dates still block the submit; end can't be before start ──
   await screen('Review cycles', async () => {
     await page.goto(base + '/hrms/performance?view=cycles')
-    await page.getByRole('button', { name: 'Create cycle' }).first().click()
-    const drawer = page.getByRole('dialog', { name: 'Create review cycle' })
+    await page.getByRole('button', { name: 'New cycle' }).first().click()
+    const drawer = page.getByRole('dialog', { name: 'New review cycle' })
     await drawer.waitFor({ timeout: 10000 })
     await drawer.getByRole('button', { name: 'Create cycle' }).click()
     check('review cycle: empty period dates block the submit', await drawer.getByRole('alert').filter({ hasText: 'set both period dates' }).isVisible())
-    const start = drawer.locator('label', { hasText: 'Period start' }).getByRole('combobox')
-    const end = drawer.locator('label', { hasText: 'Period end' }).getByRole('combobox')
+    const start = drawer.getByRole('combobox', { name: 'Period start' })
+    const end = drawer.getByRole('combobox', { name: 'Period end' })
     await pickViaYear(start, py, 9, 10)
     check('review cycle: start shows the previous-year day', (await text(start)).includes(`10 Sep ${py}`), await text(start))
     let dayBeforeOff = false
@@ -132,13 +132,13 @@ try {
   // ── 3. KPIs: optional due date — pick next year, then clear ──
   await screen('KPIs', async () => {
     await page.goto(base + '/hrms/performance?view=kpis')
-    await page.getByRole('button', { name: 'Create KPI' }).click()
-    const drawer = page.getByRole('dialog', { name: 'Create company KPI' })
+    await page.getByRole('button', { name: 'Add goal', exact: true }).click()
+    const drawer = page.getByRole('dialog', { name: 'Add goal' })
     await drawer.waitFor({ timeout: 10000 })
-    const due = drawer.locator('label', { hasText: 'Due date' }).getByRole('combobox')
+    const due = drawer.getByRole('combobox', { name: 'Due date' })
     await pickViaYear(due, ny, 3, 15)
     check('KPI due date: next-year pick shows', (await text(due)).includes(`15 Mar ${ny}`), await text(due))
-    await drawer.locator('label', { hasText: 'Due date' }).getByRole('button', { name: 'Clear' }).click()
+    await drawer.locator('.utc-field', { has: page.getByRole('combobox', { name: 'Due date' }) }).getByRole('button', { name: 'Clear' }).click()
     check('KPI due date: can be cleared again', (await text(due)).includes('Select date'), await text(due))
     await drawer.getByRole('button', { name: 'Cancel' }).click()
   })
@@ -197,7 +197,8 @@ try {
 
   // ── 6. Approval delegation on the profile ──
   await screen('Approval delegation', async () => {
-    await page.goto(base + '/profile')
+    // Approval delegation lives in My profile's Preferences tab.
+    await page.goto(base + '/profile?tab=preferences')
     await page.getByRole('button', { name: '+ Add delegation' }).click()
     const from = page.getByRole('combobox', { name: 'From', exact: true })
     const to = page.getByRole('combobox', { name: 'To', exact: true })
@@ -284,21 +285,21 @@ try {
   })
   await screen('Phone: review cycle', async () => {
     await page.goto(base + '/hrms/performance?view=cycles')
-    await page.getByRole('button', { name: 'Create cycle' }).first().click()
-    const drawer = page.getByRole('dialog', { name: 'Create review cycle' })
+    await page.getByRole('button', { name: 'New cycle' }).first().click()
+    const drawer = page.getByRole('dialog', { name: 'New review cycle' })
     await drawer.waitFor({ timeout: 10000 })
     await page.waitForTimeout(500)
-    await pickViaYear(drawer.locator('label', { hasText: 'Period start' }).getByRole('combobox'), py, 9, 10)
+    await pickViaYear(drawer.getByRole('combobox', { name: 'Period start' }), py, 9, 10)
     await shot('review-cycle-390')
     await drawer.getByRole('button', { name: 'Cancel' }).click()
   })
   await screen('Phone: KPI due date', async () => {
     await page.goto(base + '/hrms/performance?view=kpis')
-    await page.getByRole('button', { name: 'Create KPI' }).click()
-    const drawer = page.getByRole('dialog', { name: 'Create company KPI' })
+    await page.getByRole('button', { name: 'Add goal', exact: true }).click()
+    const drawer = page.getByRole('dialog', { name: 'Add goal' })
     await drawer.waitFor({ timeout: 10000 })
     await page.waitForTimeout(500)
-    const due = drawer.locator('label', { hasText: 'Due date' }).getByRole('combobox')
+    const due = drawer.getByRole('combobox', { name: 'Due date' })
     await pickViaYear(due, ny, 12, 28)
     check('390px: KPI due date shows in full', !(await isCut(due)), await text(due))
     await due.scrollIntoViewIfNeeded()

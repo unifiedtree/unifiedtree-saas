@@ -9,6 +9,7 @@
 // rows are deleted.
 //
 // Run from apps/platform:  node e2e/recovery/live-shift-requests.mjs
+/* global process, console, fetch, URL, document */
 import { chromium } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -43,7 +44,6 @@ const policies = (await call(reader, 'GET', `/v1/shifts?companyId=${company}`)).
 const target = policies.find((p) => p.id !== before.shiftPolicyId)
 if (!target) throw new Error('no alternative shift policy to request')
 const emp = (await call(owner, 'GET', `/v1/hrms/employees/${readerId}`)).json
-const hhmm = (t) => { const [h, m] = t.split(':').map(Number); return `${String(h % 12 || 12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}` }
 const readerName = [emp.firstName, emp.lastName].filter(Boolean).join(' ')
 const dept = emp.departmentId
   ? ((await call(owner, 'GET', `/v1/hrms/departments?companyId=${emp.companyId || company}`)).json || []).find((d) => d.id === emp.departmentId)?.name
@@ -84,10 +84,10 @@ try {
   pageErrors.length = 0; failedApi.length = 0
 
   await page.goto(base + '/hrms/shifts')
-  await page.getByRole('heading', { name: 'Shifts & Overtime' }).waitFor({ timeout: 30_000 })
-  const tabNames = (await page.getByRole('tab').allInnerTexts()).map((t) => t.replace(/\s+\d+\s*$/, '').trim())
-  check('tabs are Shift schedules · Roster · Overtime · Shift requests',
-    JSON.stringify(tabNames) === JSON.stringify(['Shift schedules', 'Roster', 'Overtime', 'Shift requests']), tabNames.join(' · '))
+  await page.getByRole('heading', { name: 'Shifts & overtime' }).waitFor({ timeout: 30_000 })
+  const tabNames = (await page.getByRole('tablist', { name: 'Shifts & overtime views' }).getByRole('tab').allInnerTexts()).map((t) => t.replace(/\s+\d+\s*$/, '').trim())
+  check('tabs are Shift Schedules · Roster · Overtime · Shift Requests',
+    JSON.stringify(tabNames) === JSON.stringify(['Shift Schedules', 'Roster', 'Overtime', 'Shift Requests']), tabNames.join(' · '))
 
   // Shift schedules (default tab) keeps the CRUD table.
   await page.getByRole('row').filter({ hasText: target.name }).first().waitFor({ timeout: 15_000 })
@@ -95,22 +95,24 @@ try {
 
   // Overtime tab: approvals + monthly table, honest payroll copy, no schedule CRUD.
   await page.getByRole('tab', { name: 'Overtime' }).click()
-  await page.getByRole('heading', { name: 'Overtime approvals' }).waitFor({ timeout: 15_000 })
-  check('Overtime tab says approved overtime is "Recorded, not paid"', await page.getByText('Recorded, not paid').isVisible())
+  await page.getByRole('heading', { name: 'Overtime this month' }).waitFor({ timeout: 15_000 })
+  check('Overtime tab says approved overtime is "Recorded, not paid"', await page.getByText('Recorded, not paid').first().isVisible())
   check('Overtime tab no longer carries the shift-schedule CRUD table', (await page.getByRole('button', { name: /^Edit shift / }).count()) === 0)
-  check('Overtime tab keeps the monthly overtime table', await page.getByRole('heading', { name: /^Overtime — / }).isVisible())
+  await page.getByRole('button', { name: 'This month' }).click()
+  check('Overtime tab keeps the monthly overtime table', await page.getByRole('heading', { name: 'Overtime requests', exact: true }).isVisible())
 
   // Roster tab still mounts.
-  await page.getByRole('tab', { name: 'Roster' }).click()
-  await page.getByRole('tab', { name: 'Roster' }).and(page.locator('[aria-selected="true"]')).waitFor({ timeout: 15_000 })
-  check('Roster tab renders its panel', (await page.getByRole('tabpanel').count()) === 1)
+  await page.getByRole('tab', { name: /^Roster/ }).click()
+  await page.getByRole('tab', { name: /^Roster/ }).and(page.locator('[aria-selected="true"]')).waitFor({ timeout: 15_000 })
+  check('Roster tab renders its panel', (await page.getByRole('heading', { name: 'Roster' }).count()) === 1)
 
   // Shift requests tab — the badge mirrors the server's pending count.
   const pendingNow = ((await call(owner, 'GET', '/v1/shifts/change-requests/pending')).json || []).length
-  await page.waitForFunction((n) => (document.querySelector('#tab-requests')?.textContent ?? '').includes(String(n)), pendingNow, { timeout: 15_000 }).catch(() => {})
-  const badge = (await page.locator('#tab-requests').innerText()).replace('Shift requests', '').trim()
+  const reqTab = page.getByRole('tab', { name: /^Shift Requests/ })
+  await page.waitForFunction((n) => [...document.querySelectorAll('[role=tab]')].some((t) => (t.textContent ?? '').startsWith('Shift Requests') && (t.textContent ?? '').includes(String(n))), pendingNow, { timeout: 15_000 }).catch(() => {})
+  const badge = (await reqTab.innerText()).replace('Shift Requests', '').trim()
   check('Shift requests tab shows the pending-count badge', badge === String(pendingNow), `badge "${badge}" vs API ${pendingNow}`)
-  await page.getByRole('tab', { name: /^Shift requests/ }).click()
+  await reqTab.click()
   const card = page.getByRole('article').filter({ hasText: reason })
   await card.waitFor({ timeout: 20_000 })
   await card.getByText(readerName).first().waitFor({ timeout: 15_000 })
@@ -121,12 +123,12 @@ try {
   if (dept) check('request shows the department', cardText.includes(dept), dept)
   check('request shows current → requested shift', cardText.includes(before.shiftName) && cardText.includes(requestedName), `${before.shiftName} → ${requestedName}`)
   check('request shows the reason and submitted date', cardText.includes(reason) && /Submitted \d{1,2} \w{3} \d{4}/.test(cardText))
-  check('request shows the requested shift timing (12-hour)', cardText.includes(`${hhmm(target.startTime)} – ${hhmm(target.endTime)}`), `${hhmm(target.startTime)} – ${hhmm(target.endTime)}`)
-  check('request offers both Approve and Reject', (await card.getByRole('button', { name: 'Approve change' }).isEnabled()) && (await card.getByRole('button', { name: 'Reject' }).isEnabled()))
+  check('request shows the requested shift timing', cardText.includes(`${target.startTime.slice(0, 5)} – ${target.endTime.slice(0, 5)}`), `${target.startTime.slice(0, 5)} – ${target.endTime.slice(0, 5)}`)
+  check('request offers both Approve and Reject', (await card.getByRole('button', { name: 'Approve' }).isEnabled()) && (await card.getByRole('button', { name: 'Reject' }).isEnabled()))
 
   // Reject with a note so the reader's real shift is NOT changed.
   const note = 'QA automation — rejected, shift unchanged'
-  await card.getByLabel('Decision note (optional)').fill(note)
+  await card.getByLabel(`Note for ${readerName}`).fill(note)
   const decisionCall = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/v1/shifts/change-requests/${request.id}/decision`), { timeout: 15_000 })
   await card.getByRole('button', { name: 'Reject' }).click()
   const sent = JSON.parse((await decisionCall).postData() || '{}')
@@ -138,8 +140,8 @@ try {
   check('rejected request leaves the list (list refreshed)', cardGone)
   if (pendingNow === 1) {
     check('empty queue shows "All caught up"', await page.getByText('All caught up').waitFor({ timeout: 15_000 }).then(() => true, () => false))
-    await page.waitForFunction(() => !/\d/.test(document.querySelector('#tab-requests')?.textContent ?? ''), null, { timeout: 15_000 }).catch(() => {})
-    check('badge clears once the queue is empty', !/\d/.test(await page.locator('#tab-requests').innerText()))
+    await page.waitForFunction(() => ![...document.querySelectorAll('[role=tab]')].some((t) => (t.textContent ?? '').startsWith('Shift Requests') && /\d/.test(t.textContent ?? '')), null, { timeout: 15_000 }).catch(() => {})
+    check('badge clears once the queue is empty', !/\d/.test(await reqTab.innerText()))
   }
 
   const pendingAfter = (await call(owner, 'GET', '/v1/shifts/change-requests/pending')).json || []
@@ -173,7 +175,7 @@ try {
   await readerPage.goto(base + '/hrms/shifts')
   await readerPage.waitForLoadState('networkidle').catch(() => {})
   await readerPage.waitForTimeout(1500)
-  check('employee view has no Shift requests tab', (await readerPage.getByRole('tab', { name: /^Shift requests/ }).count()) === 0)
+  check('employee view has no Shift requests tab', (await readerPage.getByRole('tab', { name: /^Shift Requests/ }).count()) === 0)
   check('employee view never requests the pending queue', readerQueueCalls.length === 0, readerQueueCalls.join(' | '))
 } catch (error) {
   // An aborted flow must not print "N/N checks passed".

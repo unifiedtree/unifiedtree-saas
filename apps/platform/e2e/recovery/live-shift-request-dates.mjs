@@ -67,7 +67,7 @@ async function call(h, method, path, body) {
 // Local database only (superuser, trust auth) — fixtures and the exact restore.
 // SQL goes in on stdin as UTF-8: Windows re-encodes argv to the ANSI code page.
 function sql(statement) {
-  return execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery',
+  return execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery',
     '-v', 'ON_ERROR_STOP=1', '-At', '-f', '-'], { input: statement, encoding: 'utf8', env: { ...process.env, PGCLIENTENCODING: 'UTF8' } }).trim()
 }
 // A pending request whose start date is already in the past (the API refuses

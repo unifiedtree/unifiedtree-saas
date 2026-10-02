@@ -58,9 +58,9 @@ public class EmployeeRecordQueries {
                        NULLIF(concat_ws(' ', NULLIF(trim(m.first_name), ''), NULLIF(trim(m.last_name), '')), '') AS manager_name,
                        e.probation_end_date, e.confirmation_date, e.notice_start_date, e.last_working_day
                   FROM hrms.employees e
-                  LEFT JOIN hrms.designations g ON g.id = e.designation_id
-                  LEFT JOIN hrms.departments  d ON d.id = e.department_id
-                  LEFT JOIN hrms.employees    m ON m.id = e.reporting_manager_id
+                  LEFT JOIN hrms.designations g ON g.id = e.designation_id AND g.tenant_id = e.tenant_id
+                  LEFT JOIN hrms.departments  d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN hrms.employees    m ON m.id = e.reporting_manager_id AND m.tenant_id = e.tenant_id
                  WHERE e.tenant_id = ? AND e.id = ?
                 """, (rs, i) -> new MyEmployeeRecord(
                         rs.getObject("id", UUID.class), rs.getString("employee_code"),
@@ -96,8 +96,8 @@ public class EmployeeRecordQueries {
         String in = String.join(",", java.util.Collections.nCopies(statuses.size(), "?"));
         String where = """
                   FROM hrms.employees e
-                  LEFT JOIN hrms.departments  d ON d.id = e.department_id
-                  LEFT JOIN hrms.designations g ON g.id = e.designation_id
+                  LEFT JOIN hrms.departments  d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN hrms.designations g ON g.id = e.designation_id AND g.tenant_id = e.tenant_id
                  WHERE e.tenant_id = ? AND e.is_active = TRUE
                    AND (CAST(? AS uuid) IS NULL OR e.company_id = CAST(? AS uuid))
                    AND e.employment_status IN (""" + in + ")\n";

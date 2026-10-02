@@ -58,6 +58,8 @@ export interface ShiftPolicy {
   coreEndTime?: string | null
   /** V143.23: weekly offs for people on this shift with none of their own, ISO 1 = Mon … 7 = Sun. */
   weeklyOffDays?: number[] | null
+  /** BW-32: people on this shift today (still employed, same company); only on the list (GET /v1/shifts). */
+  employeeCount?: number | null
 }
 
 /** Mirrors ShiftDtos.ShiftPolicyRequest (all fields optional server-side except name). */

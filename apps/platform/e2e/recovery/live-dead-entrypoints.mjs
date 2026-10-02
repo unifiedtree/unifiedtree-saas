@@ -7,6 +7,7 @@
 // Read-only: no fixtures are written.
 //
 // Run from apps/platform:  node e2e/recovery/live-dead-entrypoints.mjs
+/* global process, console, fetch, URL */
 import { chromium } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -69,11 +70,12 @@ try {
     const { ctx, page } = await session('reader@unifiedtree.demo')
 
     await page.goto(base + '/me')
-    await page.getByText('Your balance this year').waitFor({ timeout: 30_000 })
-    const salaryCard = page.getByRole('button', { name: /^Salary.*View/ })
+    // Home (P-HOME): today's shortcuts sit in the Shortcuts card; "Apply leave" is the greeting's main button.
+    await page.getByRole('heading', { name: 'Shortcuts' }).waitFor({ timeout: 30_000 })
+    const salaryCard = page.getByRole('button', { name: /^Salary/ })
     check('/me shows a My Salary shortcut to the employee', (await salaryCard.count()) === 1)
 
-    const applyLeave = page.getByRole('button', { name: /Apply for leave/ })
+    const applyLeave = page.locator('header.uk-ph').getByRole('button', { name: 'Apply leave' })
     check('/me shows "Apply leave" to the employee', (await applyLeave.count()) === 1)
     check('/me shows the Onboarding Tasks shortcut (employee holds onboarding.instance.read / task.complete)',
       (await page.getByText('Onboarding tasks', { exact: true }).count()) === 1)
@@ -88,11 +90,14 @@ try {
     assertClean('/hrms/leave?tab=apply')
 
     await page.goto(base + '/me')
-    await page.getByRole('button', { name: /^Salary.*View/ }).click()
+    await page.getByRole('button', { name: /^Salary/ }).click()
     await page.waitForURL((u) => u.pathname === '/me/salary', { timeout: 15_000 })
     await page.getByRole('heading', { name: 'Salary', level: 1 }).waitFor({ timeout: 30_000 })
     check('My Salary shortcut on /me opens /me/salary', path(page) === '/me/salary')
     if (salary) {
+      // The page's title draws before the structure loads; wait for the structure before reading the page.
+      await page.getByText(/Your salary structure, effective /).first().waitFor({ timeout: 30_000 }).catch(() => {})
+      await page.waitForLoadState('networkidle').catch(() => {})
       const body = await page.locator('main').innerText().catch(() => page.locator('body').innerText())
       const eff = new Date(`${salary.effectiveFrom}T00:00:00`)
       const effText = `${eff.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][eff.getMonth()]} ${eff.getFullYear()}`
@@ -136,9 +141,9 @@ try {
     await page.goto(base + `/hrms/employees/${readerEmployeeId}`)
     await page.getByRole('tab', { name: /^Expenses/ }).waitFor({ timeout: 30_000 })
     await page.getByRole('tab', { name: /^Expenses/ }).click()
-    await page.getByRole('button', { name: 'Open Expenses' }).or(page.getByRole('link', { name: 'Open Expenses' })).first().click()
+    await page.getByRole('button', { name: /^Open Expense/ }).or(page.getByRole('link', { name: /^Open Expense/ })).first().click()
     await page.waitForURL((u) => u.pathname.startsWith('/hrms/expense'), { timeout: 15_000 })
-    check('workspace Expenses tab "Open Expenses" lands on /hrms/expenses', path(page) === '/hrms/expenses', path(page))
+    check('workspace Expenses tab "Open Expense centre" lands on /hrms/expenses', path(page) === '/hrms/expenses', path(page))
     await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30_000 })
     const h1 = await page.getByRole('heading', { level: 1 }).first().innerText()
     check('expenses page renders (not a 404 / NoAccess)', /expense/i.test(h1) && !(await noAccess(page)), h1)

@@ -1,3 +1,4 @@
+/* global console, process */
 // Live check of the Master data design against the local API.
 //
 //   node e2e/recovery/live-design-master.mjs
@@ -14,7 +15,7 @@ import { execFileSync } from 'node:child_process'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const tag = `MQA${Date.now() % 100000}`
@@ -77,7 +78,8 @@ try {
     hr.errors.length = 0
     await page.goto(base + route); await settle()
     await page.getByRole('heading', { name: heading, exact: true }).first().waitFor({ timeout: 20000 }).catch(() => {})
-    const ok = (await page.getByRole('navigation', { name: 'Master sections' }).count()) === 1 && (await page.getByRole('heading', { name: heading, exact: true }).count()) > 0
+    // The Master tabs are the top bar's "Workforce pages" tabs since Release 1.1 (the page's own copy is hidden).
+    const ok = (await page.getByRole('navigation', { name: 'Workforce pages' }).count()) === 1 && (await page.getByRole('heading', { name: heading, exact: true }).count()) > 0
     check(`${route} renders "${heading}" under the Master tabs`, ok && !hr.errors.length, hr.errors[0] || '')
   }
 

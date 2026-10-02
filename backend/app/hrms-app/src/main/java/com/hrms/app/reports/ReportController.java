@@ -81,10 +81,12 @@ public class ReportController {
     }
 
     @GetMapping("/diversity")
-    @Operation(summary = "Headcount by gender and department (org diversity)")
+    @Operation(summary = "Headcount by gender and department (org diversity); with asOf, the people employed on that date")
     @PreAuthorize("@perm.check('hrms.report.diversity')")
-    public List<Map<String, Object>> diversity(@RequestParam UUID companyId) {
-        return reportService.diversityReport(companyId);
+    public List<Map<String, Object>> diversity(
+            @RequestParam UUID companyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
+        return reportService.diversityReport(companyId, asOf);
     }
 
     // ── CSV export ────────────────────────────────────────────────────────
@@ -150,42 +152,24 @@ public class ReportController {
     @GetMapping("/diversity/export.csv")
     @Operation(summary = "Diversity report as a CSV download")
     @PreAuthorize("@perm.check('hrms.report.diversity')")
-    public ResponseEntity<byte[]> diversityCsv(@RequestParam UUID companyId) {
-        return csv(ReportKind.DIVERSITY, companyId, Map.of(), reportService.diversityReport(companyId));
+    public ResponseEntity<byte[]> diversityCsv(
+            @RequestParam UUID companyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
+        return csv(ReportKind.DIVERSITY, companyId, asOf == null ? Map.<String, Object>of() : Map.<String, Object>of("asOf", asOf.toString()),
+                reportService.diversityReport(companyId, asOf));
     }
 
     /**
-     * Renders report rows as a downloadable CSV.
-     *
-     * <p>Column order comes from the first row's key order — Spring's
-     * {@code JdbcTemplate.queryForList} returns insertion-ordered maps, so the
-     * columns match the SELECT list rather than coming out alphabetised.
-     *
-     * <p>An empty result is a header-less but VALID empty CSV and a 200, not a
-     * 500 — "no leavers this month" is a legitimate answer to a report.
-     *
-     * <p>A UTF-8 BOM is prepended so Excel on Windows opens rupee symbols and
-     * non-ASCII names correctly instead of mojibake; every other reader
-     * tolerates it.
+     * Renders report rows as a downloadable CSV ({@link ReportCsv}: the same
+     * bytes a scheduled email attaches). An empty result is a valid empty CSV
+     * and a 200, not a 500.
      *
      * <p>Every download is written to the export log (hrms.report_exports),
      * which the Reports Center's "Recent downloads" reads.
      */
     private ResponseEntity<byte[]> csv(ReportKind kind, UUID companyId, Map<String, Object> filters, List<Map<String, Object>> rows) {
         String reportName = kind.key();
-        StringBuilder out = new StringBuilder();
-        if (!rows.isEmpty()) {
-            List<String> columns = List.copyOf(rows.get(0).keySet());
-            out.append(String.join(",", columns.stream().map(ReportController::escapeCsv).toList()))
-               .append("\r\n");
-            for (Map<String, Object> row : rows) {
-                List<String> cells = columns.stream()
-                        .map(column -> escapeCsv(row.get(column)))
-                        .toList();
-                out.append(String.join(",", cells)).append("\r\n");
-            }
-        }
-        byte[] body = ("\uFEFF" + out).getBytes(StandardCharsets.UTF_8);
+        byte[] body = ReportCsv.bytes(rows);
         String filename = reportName + "-" + LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")) + ".csv";
         exportLog.record(new ReportExportLog.Entry(kind, "CSV", "SERVER", filename, companyId, null, filters,
                 rows.size(), (long) body.length, null, null));
@@ -194,18 +178,5 @@ public class ReportController {
         headers.setContentDispositionFormData("attachment", filename);
         headers.setContentLength(body.length);
         return new ResponseEntity<>(body, headers, HttpStatus.OK);
-    }
-
-    /**
-     * RFC-4180 escaping: a field is quoted when it contains a comma, a double
-     * quote, CR or LF, and embedded quotes are doubled. Null becomes empty.
-     */
-    private static String escapeCsv(Object value) {
-        if (value == null) return "";
-        String text = String.valueOf(value);
-        boolean mustQuote = text.indexOf(',') >= 0 || text.indexOf('\"') >= 0
-                || text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0;
-        if (!mustQuote) return text;
-        return "\"" + text.replace("\"", "\"\"") + "\"";
     }
 }

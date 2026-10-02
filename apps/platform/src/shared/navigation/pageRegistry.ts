@@ -42,11 +42,11 @@ export interface PageEntry {
 
 /**
  * Release switch (lead-owned): the redesign packages whose new pages and tabs are live. A page or tab
- * declared with `pkg` is left out of PAGE_REGISTRY (search, menus, Pages panel counts) until its
+ * declared with `pkg` is left out of PAGE_REGISTRY (search, menus) until its
  * package is listed here, so nothing points at a page that isn't built yet; today's page is all there
  * is. Add a package's key when it ships, e.g. new Set(['P-TEAM']).
  */
-export const READY_PAGES: ReadonlySet<string> = new Set<string>([])
+export const READY_PAGES: ReadonlySet<string> = new Set<string>(['P-TEAM', 'P-ATT-DAY', 'P-ATT-PLAN', 'P-ORG', 'P-GROW', 'P-REPORTS'])
 /** Whether a page or tab is live in this release. */
 export const isReadyPage = (e: Pick<PageEntry, 'pkg'>, ready: ReadonlySet<string> = READY_PAGES) => !e.pkg || ready.has(e.pkg)
 
@@ -128,6 +128,7 @@ page('me-reviews', 'My reviews', '/hrms/performance?view=my-reviews', 'Me', 'me/
 page('me-goals', 'My goals', '/hrms/performance?view=my-goals', 'Me', 'me/goals', [{ ...any('hrms.performance.review.self'), module: HR }], { keywords: ['kpi', 'objectives', 'targets'] })
 page('me-training', 'My training', '/hrms/learning?view=my', 'Me', 'me/training', [{ ...any('hrms.learning.enroll.self'), module: HR }], { keywords: ['course', 'learning', 'enrol'] })
 page('me-onboarding', 'My onboarding', '/hrms/onboarding/instances?view=hires', 'Me', 'me/onboarding', [{ ...any('hrms.onboarding.instance.read'), noneOf: ['hrms.onboarding.instance.write'], module: HR }], { keywords: ['joining', 'checklist', 'tasks'] })
+page('org-chart', 'Org chart', '/hrms/org-chart', 'Organization', 'org-chart', [{ module: HR, when: (c) => c.self || c.has('hrms.employee.read') }], { aliases: ['orgchart', 'org-tree', 'hierarchy', 'reporting-line'], keywords: ['org chart', 'reporting manager', 'who reports to', 'tree'], pkg: 'P-ORG' })
 page('profile', 'My profile', '/profile', 'Me', 'me/profile', [], { aliases: ['profile', 'settings/profile'], keywords: ['account', 'my details', 'personal', 'password', 'photo'] })
 page('team', 'My team', '/team', 'Me', 'team', [{ ...any('attendance.team.read', 'hrms.leave.approve.l1'), noneOf: ['hrms.employee.read'], module: HR }], { keywords: ['team', 'reports', 'my people', 'who is in'] })
 // My team's views (?view=); Team today is the page itself.
@@ -150,6 +151,7 @@ page('m-branches', 'Branches', '/hrms/master/branches', 'Master data', 'master/b
 page('m-departments', 'Departments', '/hrms/master/departments', 'Master data', 'master/departments', [{ anyOf: ORG_SETUP, allOf: ['hrms.department.read'], module: HR }], { aliases: ['departments'], keywords: ['department', 'team', 'division'] })
 page('m-designations', 'Designations', '/hrms/master/designations', 'Master data', 'master/designations', [{ anyOf: ORG_SETUP, allOf: ['hrms.designation.read'], module: HR }], { aliases: ['designations'], keywords: ['job title', 'role', 'position'] })
 page('m-grades', 'Grades', '/hrms/master/grades', 'Master data', 'master/grades', [{ anyOf: ORG_SETUP, module: HR }], { keywords: ['band', 'level'] })
+page('m-org-chart', 'Org chart (setup)', '/hrms/master/org-chart', 'Master data', 'master/org-chart', [{ anyOf: ORG_SETUP, module: HR }], { pkg: 'P-ORG' })
 page('m-contractors', 'Contractor Master', '/hrms/master/contractors', 'Master data', 'master/contractors', [{ ...any('hrms.contractor.read'), module: HR }], { keywords: ['agency', 'vendor', 'contract workers'] })
 page('m-classifications', 'Employee classifications', '/hrms/master/classifications', 'Master data', 'master/classifications', [{ ...any('hrms.employee.read'), module: HR }], { keywords: ['employment type', 'permanent', 'contract', 'intern'] })
 page('m-shift-rules', 'Shift Rules', '/hrms/master/shift-rules', 'Master data', 'master/shift-rules', [{ ...any('attendance.workforce.admin', 'hrms.policy.write'), module: HR }], { aliases: ['master/rules'], keywords: ['shift policy', 'timings', 'grace'] })
@@ -169,7 +171,8 @@ tab('att-daily', 'face', 'Face Punch', 'tab=face', 'attendance/face-punch', [{ a
 tab('att-daily', 'corrections', 'Regularization', 'tab=corrections', 'attendance/regularization', [], { aliases: ['attendance/corrections', 'attendance/fix', 'attendance/fixes'], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'fix'] })
 tab('att-daily', 'review', 'Review', 'tab=review', 'attendance/review', [{ allOf: ['attendance.team.read', 'attendance.status.review'] }], { aliases: ['attendance/exceptions', 'attendance/status-review'], keywords: ['excuse', 'change status', 'late', 'half day', 'absent', 'no check-out', 'outside zone'] })
 tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['attendance/my', 'attendance/mine'] })
-tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'], pkg: 'P-ATT-DAY' })
+// Your own week (not for owners and admins), or the weeks your team submits (hrms.timesheet.approve).
+tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self', 'hrms.timesheet.approve'), when: (ctx) => !ctx.adminRole || ctx.has('hrms.timesheet.approve') }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'], pkg: 'P-ATT-DAY' })
 page('att-shifts', 'Shifts & Overtime', '/hrms/shifts', 'Attendance & Time', 'attendance/shifts', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/shifts-overtime', 'shifts'], keywords: ['shift', 'overtime', 'ot', 'roster'] })
 tab('att-shifts', 'schedules', 'Shift Schedules', 'tab=schedules', 'attendance/shift-schedules', [any('attendance.team.read')], { aliases: ['attendance/schedules'], keywords: ['shift timings', 'general shift', 'night shift'] })
 tab('att-shifts', 'roster', 'Shift Roster', 'tab=roster', 'attendance/roster', [any('attendance.team.read')], { keywords: ['assign shift', 'change shift', 'who works when'] })
@@ -341,6 +344,8 @@ export const MENU_RULES: Record<string, Access[]> = {
   'home:/me': [...entry('me').access, { noneOf: [...ADMIN_HOME_CODES], when: notAdminRole }],
   // My work: today's self-service rules, page by page, with the admin-role exclusion.
   'mytime:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }],
+  // My Shift for people without the team view (the team's Shifts & Overtime is under Attendance & time).
+  'mytime:/hrms/shifts': [{ ...any('attendance.checkin.self'), noneOf: ['attendance.team.read'], module: HR, self: true, when: notAdminRole }],
   'mytime:/me/wfh': mine('me-wfh'),
   'mytime:/me/shift-change': mine('me-shift'),
   'myleave:/hrms/leave': [{ ...any('leave.request.self'), module: HR, self: true, when: notAdminRole }],

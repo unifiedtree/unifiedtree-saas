@@ -23,6 +23,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -67,15 +69,7 @@ public class LetterDistributionService {
         UUID tenantId = TenantContext.requireTenantId();
 
         List<WorkforceEmployee> employees = resolveRecipients(req.recipientFilter());
-        if (employees.isEmpty()) {
-            throw new HrmsException("No employees match the selected recipients",
-                    HttpStatus.BAD_REQUEST, "NO_RECIPIENTS");
-        }
-        if (employees.size() > MAX_RECIPIENTS) {
-            throw new HrmsException("This distribution targets " + employees.size() + " employees, over the "
-                    + MAX_RECIPIENTS + " per-job cap. Split it into multiple jobs.",
-                    HttpStatus.BAD_REQUEST, "TOO_MANY_RECIPIENTS");
-        }
+        checkRecipientCount(employees.size());
 
         DistributionJob job = new DistributionJob();
         job.setTenantId(tenantId);
@@ -127,6 +121,40 @@ public class LetterDistributionService {
         return DistributionJobDto.summary(job);
     }
 
+    /** No recipients, or more than one job may take: refused (also when a scheduled send is set up). */
+    static void checkRecipientCount(int count) {
+        if (count == 0) {
+            throw new HrmsException("No employees match the selected recipients",
+                    HttpStatus.BAD_REQUEST, "NO_RECIPIENTS");
+        }
+        if (count > MAX_RECIPIENTS) {
+            throw new HrmsException("This distribution targets " + count + " employees, over the "
+                    + MAX_RECIPIENTS + " per-job cap. Split it into multiple jobs.",
+                    HttpStatus.BAD_REQUEST, "TOO_MANY_RECIPIENTS");
+        }
+    }
+
+    /**
+     * How many active employees {@code filter} picks now, and how many of them
+     * have no email (they would be skipped). For a send that is scheduled.
+     */
+    @Transactional(readOnly = true)
+    public int[] countRecipients(RecipientFilter filter) {
+        List<WorkforceEmployee> employees = resolveRecipients(filter);
+        int noEmail = (int) employees.stream().filter(e -> e.getEmail() == null || e.getEmail().isBlank()).count();
+        return new int[]{employees.size(), noEmail};
+    }
+
+    /** Template names by id (deleted templates too: a past distribution keeps its letter's name). */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> templateNames(List<UUID> ids) {
+        Map<UUID, String> out = new HashMap<>();
+        List<UUID> distinct = ids.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (distinct.isEmpty()) return out;
+        templateRepo.findAllById(distinct).forEach(t -> out.put(t.getId(), t.getName()));
+        return out;
+    }
+
     @Transactional
     public int retryFailed(UUID jobId) {
         DistributionJob job = jobRepo.findById(jobId)
@@ -149,7 +177,10 @@ public class LetterDistributionService {
 
     @Transactional(readOnly = true)
     public PageResponse<DistributionJobDto> list(Pageable pageable) {
-        return PageResponse.from(jobRepo.findAllByOrderByCreatedAtDesc(pageable), DistributionJobDto::summary);
+        PageResponse<DistributionJobDto> page = PageResponse.from(jobRepo.findAllByOrderByCreatedAtDesc(pageable), DistributionJobDto::summary);
+        Map<UUID, String> names = templateNames(page.content().stream().map(DistributionJobDto::templateId).toList());
+        return new PageResponse<>(page.content().stream().map(j -> j.withTemplateName(names.get(j.templateId()))).toList(),
+                page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
     }
 
     @Transactional(readOnly = true)
@@ -157,7 +188,8 @@ public class LetterDistributionService {
         DistributionJob job = jobRepo.findById(jobId)
                 .orElseThrow(() -> new HrmsException("Distribution not found: " + jobId,
                         HttpStatus.NOT_FOUND, "DISTRIBUTION_NOT_FOUND"));
-        return DistributionJobDto.withRecipients(job, recipientRepo.findByJobId(jobId));
+        return DistributionJobDto.withRecipients(job, recipientRepo.findByJobId(jobId))
+                .withTemplateName(templateNames(List.of(job.getTemplateId())).get(job.getTemplateId()));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -193,6 +225,10 @@ public class LetterDistributionService {
                     spec = spec.and((root, q, cb) -> root.get("designationId").in(toUuids(values)));
             case RecipientFilter.BY_EMPLOYMENT_TYPE ->
                     spec = spec.and((root, q, cb) -> root.get("employmentType").in(toEmploymentTypes(values)));
+            case RecipientFilter.BY_BRANCH -> {
+                List<UUID> branches = toUuids(values); // checked now, not when the query runs
+                spec = spec.and((root, q, cb) -> root.get("branchId").in(branches));
+            }
             default -> throw new HrmsException("Unknown recipient filter type: " + f.type(),
                     HttpStatus.BAD_REQUEST, "BAD_FILTER_TYPE");
         }

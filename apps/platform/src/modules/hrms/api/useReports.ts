@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { asAvailable, useAvailableQuery } from './shared/available'
 
 // ── Response interfaces (column names match backend SQL exactly) ───────────────
 
@@ -127,11 +128,17 @@ export function useLateMarksReport(companyId: string | null, from: string, to: s
   })
 }
 
-export function useDiversityReport(companyId: string | null, opts?: { enabled?: boolean }) {
+/**
+ * Today's gender split, or (BW-86) the people employed on `asOf`: the ones the
+ * headcount report counts as active, on notice or on probation that day.
+ */
+export function useDiversityReport(companyId: string | null, opts?: { enabled?: boolean; asOf?: string | null }) {
+  const asOf = opts?.asOf || null
   return useQuery({
-    queryKey: ['hrms', 'reports', 'diversity', companyId],
+    queryKey: ['hrms', 'reports', 'diversity', companyId, ...(asOf ? [asOf] : [])],
     queryFn: () => {
       const params = new URLSearchParams({ companyId: companyId! })
+      if (asOf) params.set('asOf', asOf)
       return apiJson<DiversityRow[]>(`/v1/reports/diversity?${params}`)
     },
     enabled: !!companyId && (opts?.enabled ?? true),
@@ -183,4 +190,77 @@ export interface HeadcountWorkbookData {
 
 export function fetchHeadcountWorkbook(companyId: string, asOf: string) {
   return apiJson<HeadcountWorkbookData>(`/v1/reports/headcount/workbook?companyId=${encodeURIComponent(companyId)}&asOf=${encodeURIComponent(asOf)}`)
+}
+
+// ── Reports Center and Workforce analytics figures (P-REPORTS: BW-86, BW-87, BW-88) ──
+// New endpoints: until the backend that has them is live they answer 404, which
+// these hooks turn into `notAvailable` (the block is left out, never an error).
+
+/** GET /v1/reports/headcount/change (hrms.report.headcount). */
+export interface HeadcountChange {
+  from: string
+  to: string
+  headcountFrom: number
+  headcountTo: number
+  change: number
+  joined: number
+  left: number
+}
+
+/** GET /v1/reports/summary: each key only when the caller holds that report's permission. */
+export interface ReportSummary {
+  companyId: string
+  asOf: string
+  headcount?: { total: number; departments: { departmentId: string | null; name: string | null; count: number }[] }
+  attrition?: { months: { month: string; exits: number; headcount: number; pct: number }[] }
+  diversity?: { women: number; men: number; other: number; total: number }
+  attendance?: { from: string; to: string; days: { date: string; present: number }[] }
+  lateMarks?: { from: string; to: string; days: { date: string; count: number }[] }
+  leaveBalance?: { year: number; entitlement: number; used: number; pending: number; available: number }
+}
+
+/** GET /v1/reports/headcount/trend: month-end headcount, the last point on `to`. */
+export interface HeadcountTrendPoint { month: string; asOf: string; headcount: number }
+
+/** GET /v1/reports/fiscal-year: the company's fiscal year containing a date. */
+export interface FiscalYear { startMonth: string; from: string; to: string; label: string }
+
+export function useReportSummary(companyId: string | null, opts?: { enabled?: boolean }) {
+  return useAvailableQuery<ReportSummary>({
+    queryKey: ['hrms', 'reports', 'summary', companyId],
+    queryFn: () => asAvailable(() => apiJson<ReportSummary>(`/v1/reports/summary?${new URLSearchParams({ companyId: companyId! })}`)),
+    enabled: !!companyId && (opts?.enabled ?? true),
+    staleTime: 60_000,
+  })
+}
+
+export function useHeadcountChange(companyId: string | null, from: string, to: string, opts?: { enabled?: boolean }) {
+  return useAvailableQuery<HeadcountChange>({
+    queryKey: ['hrms', 'reports', 'headcount-change', companyId, from, to],
+    queryFn: () => asAvailable(() => apiJson<HeadcountChange>(`/v1/reports/headcount/change?${new URLSearchParams({ companyId: companyId!, from, to })}`)),
+    enabled: !!companyId && !!from && !!to && (opts?.enabled ?? true),
+    staleTime: 60_000,
+  })
+}
+
+export function useHeadcountTrend(companyId: string | null, months: number, to: string | null, opts?: { enabled?: boolean }) {
+  return useAvailableQuery<HeadcountTrendPoint[]>({
+    queryKey: ['hrms', 'reports', 'headcount-trend', companyId, months, to ?? 'today'],
+    queryFn: () => {
+      const params = new URLSearchParams({ companyId: companyId!, months: String(months) })
+      if (to) params.set('to', to)
+      return asAvailable(() => apiJson<HeadcountTrendPoint[]>(`/v1/reports/headcount/trend?${params}`))
+    },
+    enabled: !!companyId && (opts?.enabled ?? true),
+    staleTime: 60_000,
+  })
+}
+
+export function useFiscalYear(companyId: string | null, opts?: { enabled?: boolean }) {
+  return useAvailableQuery<FiscalYear>({
+    queryKey: ['hrms', 'reports', 'fiscal-year', companyId],
+    queryFn: () => asAvailable(() => apiJson<FiscalYear>(`/v1/reports/fiscal-year?${new URLSearchParams({ companyId: companyId! })}`)),
+    enabled: !!companyId && (opts?.enabled ?? true),
+    staleTime: 10 * 60_000,
+  })
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { addMonths, emptyText, isValidRange, lastTo, maxTo, presetRange, rangeLabel, rangeOf, rangeOptions, rangeReach, reachNote, rowLabels, serverRange, viewAllPath } from './milestoneRange'
+import { HOLIDAYS_PATH, addMonths, choiceLabel, emptyText, holidayLabels, isValidRange, lastTo, maxTo, presetRange, rangeLabel, rangeOf, rangeOptions, rangeReach, reachNote, rowLabels, serverRange, viewAllPath } from './milestoneRange'
 
 const today = '2026-09-26'
 
-describe('upcoming milestones: date ranges', () => {
+describe('upcoming events: the people lists (date ranges)', () => {
   it('presets look ahead from today', () => {
     expect(presetRange('birthdays', 'this-month', today)).toEqual({ from: '2026-09-26', to: '2026-09-30' })
     expect(presetRange('birthdays', 'next-month', today)).toEqual({ from: '2026-10-01', to: '2026-10-31' })
@@ -91,5 +91,46 @@ describe('upcoming milestones: date ranges', () => {
     expect(rowLabels('birthdays', '2026-09-20', null, today)).toEqual({ when: '6 days ago', sub: '20 Sep' })
     expect(rowLabels('anniversaries', '2026-10-06', 3, today)).toEqual({ when: 'in 10 days', sub: '3 years' })
     expect(rowLabels('retirements', '2027-01-25', 60, today)).toEqual({ when: '25 Jan 2027', sub: 'in 4 months' })
+  })
+})
+
+describe('upcoming events: the holidays list', () => {
+  it('looks three months ahead until a range is picked', () => {
+    expect(presetRange('holidays', 'default', today)).toEqual({ from: today, to: '2026-12-26' })
+    expect(rangeOf('holidays', { preset: 'default' }, today)).toEqual({ from: today, to: '2026-12-26' })
+    expect(choiceLabel('holidays', { preset: 'default' })).toBe('Next 3 months')
+    // The presets are the people lists' presets, counted the same way.
+    expect(rangeOf('holidays', { preset: 'next-month' }, today)).toEqual({ from: '2026-10-01', to: '2026-10-31' })
+    expect(rangeOf('holidays', { preset: 'this-year' }, today)).toEqual({ from: today, to: '2026-12-31' })
+    expect(rangeOf('holidays', { preset: 'custom', from: '2026-12-15', to: '2027-01-20' }, today)).toEqual({ from: '2026-12-15', to: '2027-01-20' })
+    // Unusable custom dates fall back to the window.
+    expect(rangeOf('holidays', { preset: 'custom', from: '2026-12-15', to: '2028-01-20' }, today)).toEqual({ from: today, to: '2026-12-26' })
+  })
+
+  it('its own window stands in for "Next 3 months" in the menu', () => {
+    expect(rangeOptions('holidays').map((o) => o.value)).toEqual(['this-month', 'next-month', 'default', 'next-6', 'this-year', 'custom'])
+    expect(rangeOptions('holidays').map((o) => o.label)).toEqual(['This month', 'Next month', 'Next 3 months', 'Next 6 months', 'This year', 'Custom range'])
+  })
+
+  it('a custom range is only capped at 12 months (the holiday list is open to everyone)', () => {
+    expect(rangeReach('holidays', today)).toEqual({})
+    expect(reachNote('holidays', rangeReach('holidays', today))).toBe('Up to 12 months.')
+    expect(lastTo('2027-06-01', rangeReach('holidays', today))).toBe('2028-05-31')
+  })
+
+  it('labels and links', () => {
+    expect(emptyText('holidays', { preset: 'default' })).toBe('No holidays in the next 3 months.')
+    expect(emptyText('holidays', { preset: 'next-month' })).toBe('No holidays next month.')
+    expect(holidayLabels('2026-10-02', today)).toEqual({ when: 'in 6 days', day: 'Fri, 2 Oct' })
+    expect(holidayLabels(today, today).when).toBe('Today')
+    expect(holidayLabels('2026-09-27', today).when).toBe('Tomorrow')
+    expect(holidayLabels('2026-12-25', today).when).toBe('in 3 months')
+    expect(HOLIDAYS_PATH).toBe('/hrms/leave?tab=holidays')
+  })
+
+  it('the people lists are unchanged by it', () => {
+    expect(rangeOptions('birthdays')[0]).toEqual({ value: 'default', label: 'Next 14 days' })
+    expect(rangeOptions('anniversaries').map((o) => o.value)).toEqual(['default', 'this-month', 'next-month', 'next-3', 'next-6', 'this-year', 'custom'])
+    expect(viewAllPath('birthdays', { preset: 'default' }, today)).toBe('/hrms/employees?filter=birthday')
   })
 })

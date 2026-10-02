@@ -6,9 +6,11 @@
 // captured from rd/int 33cc0d41 on the stable demo data): where it ends up, the browser title, the
 // heading, "Access Restricted" or not, and every section/tab bar on the page (Master's tabs and inner
 // sections, Payroll's section bar, Expenses' views, Roles' views, the settings tabs) with the lit one.
-// The shell's old "<Module> sections" row is now the Pages panel: the settings row is the "Settings
-// pages" panel (the same pages, plus Document types after Integrations for people who can open it),
-// HR Setup's row is the "HR setup pages" panel, with the same page lit. The rail lights what it lit
+// The shell's old "<Module> sections" row is now the top bar's page tabs (Release 1.1; in Release 1 the
+// left Pages panel): the settings row is the "Settings pages" tabs (the same pages, plus Document types
+// after Integrations for people who can open it), HR Setup's row is the "HR setup pages" tabs, with the
+// same page lit. Payroll's and Workforce's own "Payroll sections" / "Master sections" bars show as the
+// top bar's "Payroll pages" / "Workforce pages" tabs: the same pages, the same one lit. The rail lights what it lit
 // then, under its new name (Master → Workforce…); what the gear lit, More lights now.
 // The gear and the profile menu become More: My workspace (the person's Home), My profile, All apps,
 // Preferences (the first settings page the person can open), Help & support and Sign out. On a phone
@@ -19,7 +21,7 @@
 //   RECOVERY_APP_URL=<app under test> node e2e/recovery/live-settings-restored.mjs
 //   SETTINGS_ONLY=owner,hrm            runs only those accounts
 //   SETTINGS_BASELINE=<file.json>      another baseline (same shape)
-/* global console, process, URL, document, location, getComputedStyle */
+/* global console, process, URL, document, location, getComputedStyle, window */
 import { chromium } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
@@ -74,8 +76,38 @@ const RENAMED = {
   'Employee Self Service': ['Home', ...MY_WORK],
 }
 const BUSINESS_APPS = ['CRM', 'Accounts', 'Projects', 'Inventory', 'Purchase']
-// The shell's old rows and the Pages panel that replaced them.
+// The shell's old rows and the top bar's page tabs that replaced them.
 const PANEL_FOR_ROW = { 'Settings sections': 'Settings pages', 'HR Setup sections': 'HR setup pages' }
+// Pages' own module bars that the top bar's page tabs show now (the page's copy is hidden).
+const TOP_FOR_BAR = { 'Payroll sections': 'Payroll pages', 'Master sections': 'Workforce pages' }
+// Pages a later redesign package rebuilt on purpose: what the baseline recorded, adjusted to the new page.
+// My profile (P-PROFILE, DECISIONS 17): the tabbed profile. Its heading is the person's name, and its bar is
+// the "Profile sections" tabs with Overview open (the person's own tabs, Preferences last). The old
+// "On this page" sections moved: Face enrollment and Employment to Overview (checked by its anchor below),
+// delegation and notification choices to Preferences, My documents to Documents.
+const REDESIGNED = {
+  '/profile': (was, now) => {
+    const tabs = now.bars.find((b) => b.bar === 'Profile sections')
+    const ok = tabs && tabs.items[0] === 'Overview' && tabs.items.at(-1) === 'Preferences'
+    return { ...was, heading: now.heading.length === 1 ? now.heading : ['(the person’s name)'], bars: [{ bar: 'Profile sections', items: ok ? tabs.items : ['Overview', '…', 'Preferences'], lit: ['Overview'] }] }
+  },
+}
+// The same, for addresses that redirect to a redesigned page (the baseline's `at`). The self-service Home
+// (P-HOME, DECISIONS 12): the baseline's Home had no bars; the redesigned Home has its sections. Their
+// items are live figures (today's team, this month), so the layout is what is compared: the first section
+// ("Your team today" for people with a team, else "Your month at a glance"), then "Quick actions"; a
+// team Home also has "Filter your team", and each team row's icon buttons are a group named after the person.
+const iconRow = (b) => b.items.length > 0 && b.items.every((t) => t === '')
+const REDESIGNED_AT = {
+  '/me': (was, now) => {
+    const names = now.bars.map((b) => b.bar)
+    const team = names[0] === 'Your team today'
+    const ok = (team || names[0] === 'Your month at a glance') && names[1] === 'Quick actions'
+      && now.bars.slice(2).every((b) => (team && b.bar === 'Filter your team') || (team && iconRow(b)))
+      && (!team || names.includes('Filter your team'))
+    return { ...was, bars: ok ? now.bars : [{ bar: 'Your team today or Your month at a glance', items: [] }, { bar: 'Quick actions', items: [] }] }
+  },
+}
 // Bars whose lit item is the chosen tab (the "On this page" jump bars light what is scrolled into view).
 const LIT_BARS = /(sections|views|Master inner sections)$/
 // API answers expected here: the session refresh probe (nothing to refresh), the admin contacts behind
@@ -96,6 +128,18 @@ async function session(email, width, who) {
   const page = await context.newPage()
   const errors = new Set(), failed = new Set()
   page.on('pageerror', (e) => errors.add(String(e.message || e).slice(0, 160)))
+  // Who this is, from the app's own sign-in answers: the employee record and permissions (login), the
+  // workspace's modules (canonical-auth/me). Used for the rows More shows by permission (Org chart).
+  const me = { employeeId: null, permissions: [], modules: [] }
+  page.on('response', async (r) => {
+    const path = new URL(r.url()).pathname
+    if (r.ok() && /\/canonical-auth\/(login|me)$/.test(path)) {
+      const d = await r.json().catch(() => null)
+      if (d?.employeeId) me.employeeId = d.employeeId
+      if (Array.isArray(d?.permissions)) me.permissions = d.permissions
+      if (Array.isArray(d?.activeModules)) me.modules = d.activeModules
+    }
+  })
   page.on('response', (r) => {
     if (!r.url().includes('/api/') || r.status() < 400) return
     const line = `${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`
@@ -106,7 +150,7 @@ async function session(email, width, who) {
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login') && u.pathname !== '/', { timeout: 60_000 })
-  return { context, page, errors, failed, who }
+  return { context, page, errors, failed, who, me }
 }
 
 async function settle(page) {
@@ -122,7 +166,7 @@ const snap = (page) => page.evaluate(() => {
   const vis = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'
   const txt = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim()
   const lit = (el) => el.getAttribute('aria-current') === 'page' || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' || /(^|\s)(on|active|is-on)(\s|$)/.test(typeof el.className === 'string' ? el.className : '')
-  const shell = (n) => n.getAttribute('aria-label') === 'Primary' || !!n.closest('[aria-label="Primary"], .ut-more, .ut-drawer, .ut-pages, .ut-pages-layer') || /\spages$/.test(n.getAttribute('aria-label') || '')
+  const shell = (n) => n.getAttribute('aria-label') === 'Primary' || !!n.closest('[aria-label="Primary"], .ut-more, .ut-drawer, .ut-topbar') || /\spages$/.test(n.getAttribute('aria-label') || '')
   const bars = [...document.querySelectorAll('nav[aria-label], [role=navigation][aria-label], [role=tablist], [role=group][aria-label], .hero-tabs .seg')]
     .filter((n) => vis(n) && !shell(n))
     .map((n) => { const items = [...n.querySelectorAll('a, button, [role=tab]')].filter(vis); return { bar: n.getAttribute('aria-label') || (n.matches('.seg') ? 'Master inner sections' : n.getAttribute('role')), items: items.map(txt), lit: items.filter(lit).map(txt) } })
@@ -142,27 +186,15 @@ const snap = (page) => page.evaluate(() => {
   }
 })
 
-// The Pages panel for this page: opened with the top bar's Pages button when it isn't showing, read, then put back.
+// The module's pages for this page: the top bar's tabs (all of them, scrolled into view or not).
 async function pagesPanel(page) {
-  const read = () => page.evaluate(() => {
-    const nav = [...document.querySelectorAll('nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
+  return page.evaluate(() => {
+    const nav = [...document.querySelectorAll('.ut-topbar nav[aria-label$=" pages"]')].find((n) => n.getClientRects().length)
     if (!nav) return null
-    const label = (a) => a.querySelector('.ut-pages__label')?.textContent.trim()
+    const label = (a) => a.textContent.replace(/\s+/g, ' ').trim()
     const links = [...nav.querySelectorAll('a')]
     return { bar: nav.getAttribute('aria-label'), items: links.map(label), lit: links.filter((a) => a.getAttribute('aria-current') === 'page').map(label) }
   })
-  let p = await read()
-  if (p) return p
-  const button = page.locator('button[aria-label^="Show pages: "]').filter({ visible: true }).first()
-  if (!(await button.count())) return null
-  // A pointer left over the rail keeps it widened over the top bar's left end: move it off first.
-  await page.mouse.move(900, 500)
-  await button.click({ timeout: 10_000 })
-  await page.locator('nav[aria-label$=" pages"]').filter({ visible: true }).first().waitFor({ timeout: 5_000 }).catch(() => {})
-  p = await read()
-  const hide = page.getByRole('button', { name: 'Hide pages' }).filter({ visible: true }).first()
-  if (await hide.count()) await hide.click()
-  return p
 }
 
 async function look(s, path) {
@@ -172,8 +204,10 @@ async function look(s, path) {
 }
 
 const digits = (t) => t.replace(/\d+/g, '').trim()
-// Time of day in the greeting ("Good morning, …") is not a difference.
-const heading = (h) => h.map((t) => t.replace(/^Good (morning|afternoon|evening)/, 'Good <time of day>'))
+// Time of day in the greeting ("Good morning, …") is not a difference, and neither is the greeting's full
+// name (Release 1.1: the client's "full name everywhere"; the baseline has the first name): the first name
+// must still lead it.
+const heading = (h) => h.map((t) => t.replace(/^Good (morning|afternoon|evening)/, 'Good <time of day>').replace(/^(Good <time of day>, \S+) .*$/, '$1'))
 const barsOf = (bars) => bars.map((b) => ({ bar: b.bar, items: b.items.map(digits), ...(LIT_BARS.test(b.bar) ? { lit: b.lit.map(digits) } : {}) }))
 
 // What the old settings row becomes in the Settings pages panel: Document types after Integrations,
@@ -268,7 +302,11 @@ try {
 
       const mySpace = groups.find((g) => g.group === 'My space')?.rows ?? []
       const settingsRows = groups.find((g) => g.group === 'Settings')?.rows ?? []
-      check(`${tag}: More has My workspace, My profile, All apps; Preferences, Help & support (the gear and profile menu)`, show(mySpace) === show(['My workspace', 'My profile', 'All apps']) && show(settingsRows) === show(['Preferences', 'Help & support']), show(groups))
+      // Org chart (P-ORG) sits in My space for people the shell offers it to (PlatformShell canSeeOrgChart):
+      // HRMS active, and an employee record or hrms.employee.read.
+      const orgChart = s.me.modules.includes('hrms') && (!!s.me.employeeId || s.me.permissions.includes('hrms.employee.read') || s.me.permissions.includes('*'))
+      const mySpaceWant = ['My workspace', 'My profile', ...(orgChart ? ['Org chart'] : []), 'All apps']
+      check(`${tag}: More has My workspace, My profile${orgChart ? ', Org chart' : ''}, All apps; Preferences, Help & support (the gear and profile menu)`, show(mySpace) === show(mySpaceWant) && show(settingsRows) === show(['Preferences', 'Help & support']), show(groups))
       const lead = async (row, kind = 'link') => {
         await s.page.goto(base + '/profile'); await settle(s.page)
         const box = phone ? await openDrawer(s) : await openMore(s)
@@ -306,6 +344,8 @@ try {
       const docsOpen = openBefore('/settings/documents')
       const compare = async (label, path, was) => {
         let now = await look(s, path)
+        const redo = was && (REDESIGNED[path] || REDESIGNED_AT[was.at])
+        if (redo) was = redo(was, now)
         let diff = []
         const run = async () => {
           diff = []
@@ -313,13 +353,23 @@ try {
           if (now.title !== was.title) diff.push(`title: before ${show(was.title)}, now ${show(now.title)}`)
           if (show(heading(now.heading)) !== show(heading(was.heading))) diff.push(`heading: before ${show(was.heading)}, now ${show(now.heading)}`)
           if (now.restricted !== was.restricted) diff.push(`restricted: before ${was.restricted}, now ${now.restricted}`)
-          if (show(barsOf(now.bars)) !== show(barsOf(was.bars))) diff.push(`bars: before ${show(barsOf(was.bars))}, now ${show(barsOf(now.bars))}`)
+          // A page's own module bar that the top bar's tabs show now: compared with those tabs instead. When
+          // the top bar shows no tabs for it (the person has one page of that module), the page keeps its bar.
+          const topTabs = await pagesPanel(s.page)
+          const moved = was.bars.filter((b) => TOP_FOR_BAR[b.bar] && topTabs?.bar === TOP_FOR_BAR[b.bar])
+          const wasBars = was.bars.filter((b) => !moved.includes(b))
+          if (show(barsOf(now.bars)) !== show(barsOf(wasBars))) diff.push(`bars: before ${show(barsOf(wasBars))}, now ${show(barsOf(now.bars))}`)
+          for (const b of moved) {
+            const tabs = topTabs
+            const want = { bar: TOP_FOR_BAR[b.bar], items: b.items.map(digits), lit: b.lit.map(digits) }
+            if (!tabs || show({ bar: tabs.bar, items: tabs.items.map(digits), lit: tabs.lit.map(digits) }) !== show(want)) diff.push(`page bar → top tabs: before ${show(b)}, now ${show(tabs)} (want ${show(want)})`)
+          }
           if (!phone) {
             const railNames = await s.page.locator('.ut-railwrap nav[aria-label="Primary"] a.ut-rail__item').evaluateAll((els) => els.map((a) => a.title))
             const r = railOk(was, now, railNames, inMore)
             if (!r.ok) diff.push(`rail: before ${show(was.lit)}${was.gear === 'lit' ? ' + gear' : ''}, now ${show(now.lit)}${now.more ? ' + More' : ''} (want ${r.want})`)
           }
-          // The old row → its Pages panel, same pages (Document types added), same one lit.
+          // The old row → the top bar's page tabs, same pages (Document types added), same one lit.
           if (was.row && PANEL_FOR_ROW[was.row.bar]) {
             const want = was.row.bar === 'Settings sections' ? settingsPanelWant(was.row, now.at, docsOpen) : { items: was.row.items, lit: was.row.lit }
             const panel = await pagesPanel(s.page)
@@ -332,6 +382,17 @@ try {
         return now
       }
       for (const path of PAGES) await compare(path, path, before.pages[path])
+      // My profile's "On this page" listed Face enrollment; it now lives on the Overview tab under the same anchor.
+      if (before.pages['/profile']?.bars?.some((b) => b.items.includes('Face enrollment'))) {
+        await s.page.goto(base + '/profile#st-face'); await settle(s.page)
+        const face = s.page.locator('#st-face')
+        const shown = await face.getByRole('heading', { name: 'Face enrollment', exact: true }).isVisible().catch(() => false)
+        // In view: its heading sits inside the window (it is the last card, so the page may stop scrolling before it reaches the top).
+        const top = shown ? await face.getByRole('heading', { name: 'Face enrollment', exact: true }).evaluate((el) => el.getBoundingClientRect().top) : Infinity
+        const vh = await s.page.evaluate(() => window.innerHeight)
+        const onOverview = (await s.page.getByRole('tab', { name: 'Overview', exact: true }).getAttribute('aria-selected').catch(() => null)) === 'true'
+        check(`${tag}: /profile#st-face opens My profile's Overview with Face enrollment scrolled into view`, shown && onOverview && top >= 0 && top < vh - 40, `shown ${shown}, overview ${onOverview}, top ${Math.round(top)} of ${vh}`)
+      }
       // ── the hub's addresses open the original page ──
       for (const [hub, page] of HUB) {
         if (before.pages[page]) await compare(`${hub} (the hub's address for ${page})`, hub, before.pages[page])

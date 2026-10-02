@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { CheckCircle2, Upload, XCircle, Clock, FileText, Trash2 } from 'lucide-react'
-import { HrButton } from '@/shared/components/hr'
+import { useToast } from '@/design/kit/overlays'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { DateField } from '@/shared/components/calendar'
 import {
   useDocumentTypes,
@@ -53,7 +53,7 @@ export const MyDocumentsCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
       {types.isLoading || mine.isLoading ? (
         <p className="text-xs text-text-tertiary">Loading…</p>
       ) : (types.isError || mine.isError) ? (
-        <p className="text-xs text-red-600">Couldn't load documents.</p>
+        <p role="alert" className="text-xs text-[var(--u-rdt,#B42318)]">Couldn't load documents.</p>
       ) : activeTypes.length === 0 ? (
         <p className="text-xs text-text-tertiary">
           HR hasn't configured any document types yet. Ask them to add some in Settings.
@@ -94,6 +94,8 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
   const [pickerOpen, setPickerOpen] = useState(false)
   const upload = useSelfUploadDocument()
   const remove = useDeleteDocument()
+  const toast = useToast()
+  const confirm = useConfirmDialog()
 
   const acceptString = useMemo(() => {
     return type.allowedFormats
@@ -130,7 +132,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
           setExpiryDate('')
         },
         onError: (err) =>
-          toast.error(`Upload failed`, { description: (err as Error).message }),
+          toast.error(`Upload failed`, { detail: (err as Error).message }),
       },
     )
   }
@@ -155,7 +157,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
             </p>
           )}
           {latest?.verificationStatus === 'REJECTED' && latest.rejectionReason && (
-            <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[11px] text-red-700">
+            <p className="mt-1 rounded bg-[var(--u-rds,#FCEDEB)] px-2 py-1 text-[11px] text-[var(--u-rdt,#B42318)]">
               Rejected: {latest.rejectionReason}
             </p>
           )}
@@ -175,15 +177,15 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
           {latest && (
             <button
               type="button"
-              onClick={() => {
-                if (confirm(`Delete your ${type.displayName}?`)) {
+              onClick={async () => {
+                if (await confirm({ title: `Delete your ${type.displayName}?`, confirmLabel: 'Delete', tone: 'danger' })) {
                   remove.mutate(latest.id, {
                     onSuccess: () => toast.success('Removed'),
-                    onError: (err) => toast.error('Delete failed', { description: (err as Error).message }),
+                    onError: (err) => toast.error('Delete failed', { detail: (err as Error).message }),
                   })
                 }
               }}
-              className="rounded-md p-1 text-text-tertiary hover:bg-red-50 hover:text-red-600"
+              className="rounded-md p-1 text-text-tertiary hover:bg-[var(--u-rds,#FCEDEB)] hover:text-[var(--u-rdt,#B42318)]"
               title="Delete"
               disabled={remove.isPending}
             >
@@ -200,7 +202,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
                   inputRef.current?.click()
                 }
               }}
-              className="rounded-md p-1 text-[#059669] hover:bg-[#059669]/10"
+              className="rounded-md p-1 text-[var(--u-brt,#0F6E56)] hover:bg-[var(--u-brs,#E8F3EE)]"
               title={latest ? 'Re-upload' : 'Upload'}
               disabled={upload.isPending}
             >
@@ -217,7 +219,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
               aria-label="Issued"
               value={issuedDate}
               onChange={(e) => setIssuedDate(e.target.value)}
-              className="w-full rounded border border-border-default bg-white px-2 py-1 text-xs"
+              className="w-full rounded border border-border-default bg-[var(--u-sf,#fff)] px-2 py-1 text-xs"
               size="sm"
               format="short"
               icon={false}
@@ -230,7 +232,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
               aria-label="Expires"
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
-              className="w-full rounded border border-border-default bg-white px-2 py-1 text-xs"
+              className="w-full rounded border border-border-default bg-[var(--u-sf,#fff)] px-2 py-1 text-xs"
               size="sm"
               format="short"
               icon={false}
@@ -242,7 +244,7 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={upload.isPending}
-            className="col-span-2 rounded-md bg-[#059669] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#047857] disabled:opacity-50"
+            className="col-span-2 rounded-md bg-[var(--u-br,#0F6E56)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
           >
             {upload.isPending ? 'Uploading…' : 'Choose file & upload'}
           </button>
@@ -262,18 +264,18 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
 const StatusPill: React.FC<{ status: string }> = ({ status }) => {
   if (status === 'VERIFIED')
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--u-brs,#E8F3EE)] px-2 py-0.5 text-[10px] font-semibold text-[var(--u-brt,#0F6E56)]">
         <CheckCircle2 size={10} /> Verified
       </span>
     )
   if (status === 'REJECTED')
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--u-rds,#FCEDEB)] px-2 py-0.5 text-[10px] font-semibold text-[var(--u-rdt,#B42318)]">
         <XCircle size={10} /> Rejected
       </span>
     )
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--u-gds,#FAF1E1)] px-2 py-0.5 text-[10px] font-semibold text-[var(--u-gdt,#8A5A10)]">
       <Clock size={10} /> Pending
     </span>
   )

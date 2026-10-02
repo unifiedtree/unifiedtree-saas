@@ -1,5 +1,18 @@
-/* hand-owned (F2d). SubTabs = the kit filter pills (display.css) + an urgent count badge. */
+/* hand-owned (F2d). SubTabs = a page's own views (ModuleKit Views), inside the page under the top bar.
+   The kit's in-page pills, like PillTabs (display.css .uk-ptab): quiet text pills, the chosen one a soft
+   brand tint, so they never look like the top bar's module tabs (outlined, the page on screen solid
+   green). The filter-pill markup (.uk-fpill) stays for the semantics and counts; the look is set here. */
+.dcsub { gap: 4px; }
+.dcsub .uk-fpill {
+  height: 34px; padding: 0 13px; gap: 7px;
+  border-color: transparent; background: transparent; color: var(--u-ink2, #4A5A54);
+  font-size: 13px; font-weight: 500;
+}
+.dcsub .uk-fpill:hover { border-color: transparent; background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
+.dcsub .uk-fpill.is-on,
+.dcsub .uk-fpill.is-on:hover { border-color: var(--u-brl, #BFDFD1); background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
 .dcsub .dcsub-n { font-weight: 500; }
+.dcsub .uk-fpill.is-on .dcsub-n { opacity: 1; }
 .dcsub .dcsub-n.is-urgent {
   display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; box-sizing: border-box;
   padding: 0 6px; border-radius: 999px; background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); font-size: 11.5px; opacity: 1;

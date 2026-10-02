@@ -7,13 +7,14 @@
 // button is not pressed (it sends an email).
 //
 //   node e2e/recovery/live-design-settings.mjs
+/* global process, console, document */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const shots = process.env.SHOTS_DIR || ''
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const OWNER = 'owner@unifiedtree.demo'
@@ -40,23 +41,28 @@ const heading = (page, name) => page.getByRole('heading', { name, exact: true })
 try {
   const { ctx, page, errors, failed } = await session(OWNER)
 
-  // ── Profile ──
+  // ── Profile (redesigned My profile: the left card holds display name and Mobile; Preferences holds delegation and notifications) ──
   await page.goto(base + '/profile'); await settle(page)
-  await heading(page, 'Personal details').waitFor({ timeout: 30_000 })
-  for (const h of ['Employment', 'Personal details', 'Approval delegation', 'My documents', 'Notifications']) check(`profile: "${h}" section renders`, (await heading(page, h).count()) === 1)
-  check('profile: "On this page" lists six sections', (await page.getByRole('navigation', { name: 'On this page' }).getByRole('link').count()) === 6)
+  await page.getByRole('tablist', { name: 'Profile sections' }).waitFor({ timeout: 30_000 })
+  check('profile: "Employment" section renders', (await heading(page, 'Employment').count()) === 1)
+  await page.goto(base + '/profile?tab=documents'); await settle(page)
+  check('profile: "My documents" section renders', (await heading(page, 'My documents').count()) === 1)
+  await page.goto(base + '/profile?tab=preferences'); await settle(page)
+  for (const h of ['Approval delegation', 'Notifications']) check(`profile: "${h}" section renders`, (await heading(page, h).count()) === 1)
+  check('profile: "On this page" lists the preference sections', (await page.getByRole('navigation', { name: 'On this page' }).getByRole('link').count()) >= 2)
   if (shots) await page.screenshot({ path: `${shots}/profile.png` })
 
-  const phone = page.getByLabel('Contact phone')
+  const phone = page.getByLabel('Mobile', { exact: true })
+  const updateBtn = page.getByRole('button', { name: 'Update', exact: true })
   await phone.fill('abc')
-  check('profile: a bad phone shows an error', (await page.getByText(/Enter a phone number/).count()) > 0 && (await page.getByText(/Fix 1 error to save/).count()) === 1)
+  check('profile: a bad phone shows an error and can’t be saved', (await page.getByText(/Enter a phone number/).count()) > 0 && await updateBtn.isDisabled())
   const newPhone = phone0 === '+91 90000 11111' ? '+91 90000 22222' : '+91 90000 11111'
   await phone.fill(newPhone)
-  check('profile: unsaved bar counts 1 change', (await page.getByText('1 change · not saved yet').count()) === 1)
-  await page.getByRole('button', { name: 'Save settings' }).click()
+  check('profile: one change can be saved', await updateBtn.isEnabled())
+  await updateBtn.click()
   await page.locator('[role=status]').filter({ hasText: 'Profile updated' }).first().waitFor({ timeout: 15_000 }).catch(() => {})
   check('profile: saving writes the phone', sql(`select mobile_number from auth.user_credentials where lower(email)='${OWNER}' limit 1`) === newPhone)
-  check('profile: unsaved bar goes away after saving', (await page.getByRole('region', { name: 'Unsaved changes' }).count()) === 0)
+  check('profile: nothing left unsaved after saving', await updateBtn.isDisabled())
 
   await page.getByRole('switch', { name: 'Push notifications' }).click()
   check('profile: a switch change shows the unsaved bar', (await page.getByRole('region', { name: 'Unsaved changes' }).count()) === 1)
@@ -114,7 +120,7 @@ try {
   // ── Reader: own profile works; workspace settings don't leak ──
   const r = await session('reader@unifiedtree.demo')
   await r.page.goto(base + '/profile'); await settle(r.page)
-  check('reader: own profile opens', (await heading(r.page, 'Personal details').count()) === 1)
+  check('reader: own profile opens', (await heading(r.page, 'Employment').count()) === 1)
   check('reader: no page errors or failed API calls on profile', !r.errors.length && !r.failed.length, r.errors[0] || r.failed[0] || '')
   await r.page.goto(base + '/settings/danger'); await settle(r.page)
   check('reader: danger zone is not open', (await heading(r.page, 'Delete organisation').count()) === 0)

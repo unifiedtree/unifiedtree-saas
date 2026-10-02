@@ -250,11 +250,12 @@ public class ReportPdfService {
             new String[]{"NOT_SPECIFIED", "Not specified", "#d1fae5"});
 
     private Rendered diversity(Params p, String company, String stamp, String footer) {
-        Gender g = gender(reports.diversityReport(p.companyId()));
+        // A date (BW-86) counts the people employed on it; none is today's report, as before.
+        Gender g = gender(p.asOf() == null ? reports.diversityReport(p.companyId()) : reports.diversityReport(p.companyId(), p.asOf()));
         long people = g.totals().values().stream().mapToLong(Long::longValue).sum();
         long women = g.totals().getOrDefault("FEMALE", 0L), men = g.totals().getOrDefault("MALE", 0L), unspecified = g.totals().getOrDefault("NOT_SPECIFIED", 0L);
         List<String[]> series = GENDERS.stream().filter(x -> g.totals().getOrDefault(x[0], 0L) > 0).toList();
-        String today = day(LocalDate.now(IST));
+        String today = day(p.asOf() == null ? LocalDate.now(IST) : p.asOf());
         ReportHtml h = new ReportHtml("Diversity report", company + " · " + today, stamp, footer, series.size() > 3)
                 .kpis(List.of(
                         new Kpi("People counted", num(people), "Active, probation and notice"),
@@ -284,7 +285,7 @@ public class ReportPdfService {
         for (int i = 1; i < head.size(); i++) numeric.add(i);
         h.table("By department", head, rows, foot, numeric);
         h.note("Everyone currently employed: active, on probation and on notice. People without a recorded gender are counted as not specified.");
-        return new Rendered(h.pdf(), "diversity-" + slug(company) + "-" + LocalDate.now(IST) + ".pdf", rows.size(), company);
+        return new Rendered(h.pdf(), "diversity-" + slug(company) + "-" + (p.asOf() == null ? LocalDate.now(IST) : p.asOf()) + ".pdf", rows.size(), company);
     }
 
     record Gender(Map<String, Long> totals, Map<String, Map<String, Long>> byDept) {}

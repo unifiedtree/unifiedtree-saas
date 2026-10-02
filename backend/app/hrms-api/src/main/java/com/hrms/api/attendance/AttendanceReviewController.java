@@ -91,6 +91,17 @@ public class AttendanceReviewController {
         return review.faceEvents(jwt, from, to);
     }
 
+    @Operation(summary = "One person's face punches in a range (default this month, at most 62 days), for the month calendar on the Face Punch tab")
+    @GetMapping("/face-events/employee/{employeeId}")
+    @PreAuthorize("hasAnyAuthority('attendance.face.admin.read', 'attendance.status.review')")
+    public List<AttendanceReviewService.FaceEvent> faceEventsOf(
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @AuthenticationPrincipal Jwt jwt) {
+        return review.faceEventsOf(jwt, employeeId, from, to);
+    }
+
     @Operation(summary = "Record HR's check on a face punch: CONFIRMED (it's them) or REJECTED (not them — the punch no longer counts)")
     @PostMapping("/face-events/{eventId}/decision")
     @PreAuthorize("hasAuthority('attendance.status.override')")

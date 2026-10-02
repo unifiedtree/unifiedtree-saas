@@ -26,6 +26,11 @@ public interface AppNotificationRepository extends JpaRepository<AppNotification
 
     Page<AppNotification> findByUserIdAndReadAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
+    // Redesign BW-05: the bell's "Last 7 days" (rows created at or after `since`).
+    Page<AppNotification> findByUserIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(UUID userId, Instant since, Pageable pageable);
+
+    Page<AppNotification> findByUserIdAndReadAtIsNullAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(UUID userId, Instant since, Pageable pageable);
+
     long countByUserIdAndReadAtIsNull(UUID userId);
 
     Optional<AppNotification> findByIdAndUserId(UUID id, UUID userId);

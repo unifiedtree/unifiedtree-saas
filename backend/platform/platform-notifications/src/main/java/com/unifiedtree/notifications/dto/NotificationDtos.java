@@ -2,6 +2,7 @@ package com.unifiedtree.notifications.dto;
 
 import com.unifiedtree.notifications.entity.AppNotification;
 import com.unifiedtree.notifications.enums.AppNotificationType;
+import com.unifiedtree.notifications.template.NotificationEventCatalog;
 
 import java.time.Instant;
 import java.util.Map;
@@ -23,7 +24,10 @@ public final class NotificationDtos {
             String body,
             Map<String, Object> data,
             Instant readAt,
-            Instant createdAt) {
+            Instant createdAt,
+            // Redesign BW-05 (additive): the catalog's module for this type ("Leave", "Payroll"…),
+            // the label and icon the web bell shows.
+            String group) {
 
         public static NotificationDto from(AppNotification n) {
             return new NotificationDto(
@@ -33,7 +37,14 @@ public final class NotificationDtos {
                     n.getBody(),
                     n.getData(),
                     n.getReadAt(),
-                    n.getCreatedAt());
+                    n.getCreatedAt(),
+                    groupOf(n.getType()));
+        }
+
+        /** The catalog's group; "Other" for a type without an entry of its own (the catalog's fallback). */
+        static String groupOf(AppNotificationType type) {
+            NotificationEventCatalog.EventDef def = NotificationEventCatalog.forType(type);
+            return def == null || def.group() == null ? "Other" : def.group();
         }
     }
 

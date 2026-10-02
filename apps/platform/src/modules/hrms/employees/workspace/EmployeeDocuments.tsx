@@ -14,7 +14,6 @@
  */
 
 import React, { useState } from 'react'
-import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { FileText, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
@@ -23,12 +22,13 @@ import { TableCard, HrStatusPill, HrButton, type PillTone } from '@/shared/compo
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import {
   useEmployeeDocuments,
+  useEmployeeDocumentSummary,
   useVerifyDocument,
   useRejectDocument,
   type DocumentCategory,
   type EmployeeDocumentV2,
 } from '../../api/useDocument'
-import { SectionState, SubSection } from './shared'
+import { SectionState, SubSection, useWsToast } from './shared'
 
 const CATEGORY_TONE: Record<string, PillTone> = {
   CONTRACT: 'purple', ID_PROOF: 'blue', CERTIFICATE: 'teal',
@@ -53,6 +53,7 @@ function expiryState(expiryDate?: string): { tone: PillTone; label: string } | n
 }
 
 export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
+  const toast = useWsToast()
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
 
@@ -71,6 +72,9 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
     employeeId, page, canRead, EMPLOYEE_DOCUMENTS_PAGE_SIZE,
   )
 
+  // Exact counts over every document (BW-77), not just the page on screen; absent on older servers.
+  const summary = useEmployeeDocumentSummary(employeeId, canRead)
+  const sum = summary.data
   const docs = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 0
@@ -89,7 +93,9 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
   return (
     <SubSection
       title="Filed documents"
-      hint={total ? `${total} document${total === 1 ? '' : 's'} on record` : 'Contracts, ID proofs, certificates and tax records.'}
+      hint={sum
+        ? [`${sum.onFile} on file`, sum.waitingForHr ? `${sum.waitingForHr} waiting for review` : '', sum.expiringSoon ? `${sum.expiringSoon} expiring soon` : '', sum.expired ? `${sum.expired} expired` : '', sum.rejected ? `${sum.rejected} rejected` : ''].filter(Boolean).join(' · ')
+        : total ? `${total} document${total === 1 ? '' : 's'} on record` : 'Contracts, ID proofs, certificates and tax records.'}
       action={canWrite ? (
         <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/documents')}>
           Open Document Vault
@@ -166,7 +172,7 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
                             href={d.fileUrl}
                             target="_blank"
                             rel="noreferrer noopener"
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--u-brt)] hover:underline transition-colors"
                           >
                             Open <ExternalLink size={11} />
                           </a>

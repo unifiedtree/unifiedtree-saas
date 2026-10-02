@@ -3,6 +3,7 @@ package com.hrms.app.reports;
 import com.hrms.api.mail.EmailMessage;
 import com.hrms.api.mail.MailService;
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.core.exception.FeatureNotReady;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.unifiedtree.audit.AuditService;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -28,7 +29,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Weekly and monthly report emails (hrms.report_schedules).
+ * Report emails (hrms.report_schedules): every day, every weekday, every week
+ * or every month, at a chosen hour (India time).
  *
  * <p>Rules, checked when a schedule is saved AND again every time it sends:
  * <ul>
@@ -40,8 +42,16 @@ import java.util.stream.Collectors;
  *       report, the schedule is paused instead of sending.</li>
  * </ul>
  * Each send claims the schedule first (moving next_run_on on in one UPDATE),
- * so two app instances can never send the same email twice. Every email is
- * recorded in the export log.
+ * so two app instances can never send the same email twice. Every email
+ * carries the report as a PDF and its rows as a CSV (the same CSV the report
+ * page downloads), and each file is recorded in the export log.
+ *
+ * <p>Daily and weekday emails and the send hour need V143.62. Until it is
+ * applied, weekly and monthly emails work as before (sent on the first run of
+ * the day) and asking for the new options answers FEATURE_NOT_READY.
+ *
+ * <p>Every query filters every table by the bound tenant (RLS is a second
+ * wall behind it).
  */
 @Service
 public class ReportScheduleService {
@@ -52,43 +62,83 @@ public class ReportScheduleService {
 
     private final JdbcTemplate jdbc;
     private final ReportPdfService pdfs;
+    private final ReportService reports;
     private final ReportExportLog exportLog;
     private final MailService mail;
     private final AuditService audit;
     private final TransactionTemplate tx;
 
-    public ReportScheduleService(JdbcTemplate jdbc, ReportPdfService pdfs, ReportExportLog exportLog, MailService mail,
-                                 AuditService audit, PlatformTransactionManager txm) {
+    public ReportScheduleService(JdbcTemplate jdbc, ReportPdfService pdfs, ReportService reports, ReportExportLog exportLog,
+                                 MailService mail, AuditService audit, PlatformTransactionManager txm) {
         this.jdbc = jdbc;
         this.pdfs = pdfs;
+        this.reports = reports;
         this.exportLog = exportLog;
         this.mail = mail;
         this.audit = audit;
         this.tx = new TransactionTemplate(txm);
     }
 
+    /** {@code sendHour}: 7 to 23 (India time), or null for the first run of the day. Needs V143.62. */
     public record Request(String report, UUID companyId, String frequency, Integer dayOfWeek, Integer dayOfMonth,
-                          List<UUID> recipientIds, Boolean active) {}
+                          List<UUID> recipientIds, Boolean active, Integer sendHour) {}
 
     public record Recipient(UUID id, String name, String email, Set<String> permissions) {}
 
     public record SendResult(String status, int sent, int failed, int skipped, String message) {}
 
+    /** What the schedule form may offer: daily, weekday and a send hour only once V143.62 is applied. */
+    public record Options(boolean ready, List<String> frequencies, int firstHour, int lastHour) {}
+
+    private static UUID tenant() {
+        return TenantContext.requireTenantId();
+    }
+
+    // ── V143.62 ──────────────────────────────────────────────────────────────
+
+    /**
+     * True once V143.62 is applied: the send_hour column exists and the
+     * frequency CHECK takes the new values. Read from the catalog each time
+     * (cheap), because production applies the migration by hand while the app
+     * is running.
+     */
+    boolean optionsReady() {
+        Boolean ok = tx.execute(s -> jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                                WHERE table_schema = 'hrms' AND table_name = 'report_schedules' AND column_name = 'send_hour')
+                   AND EXISTS (SELECT 1 FROM pg_constraint
+                                WHERE conrelid = 'hrms.report_schedules'::regclass
+                                  AND conname = 'ck_report_schedules_frequency'
+                                  AND pg_get_constraintdef(oid) LIKE '%WEEKDAYS%')
+                """, Boolean.class));
+        return Boolean.TRUE.equals(ok);
+    }
+
+    public Options options() {
+        boolean ready = optionsReady();
+        List<String> f = ready ? List.of("DAILY", "WEEKDAYS", "WEEKLY", "MONTHLY") : List.of("WEEKLY", "MONTHLY");
+        return new Options(ready, f, ReportPeriods.FIRST_HOUR, ReportPeriods.LAST_HOUR);
+    }
+
     // ── reads ────────────────────────────────────────────────────────────────
 
     public List<Map<String, Object>> list() {
+        boolean ready = optionsReady();
+        UUID t = tenant();
         return tx.execute(s -> {
             List<Map<String, Object>> rows = normalized(jdbc.queryForList("""
                     SELECT r.id, r.report, r.company_id, co.name AS company_name, r.frequency, r.day_of_week, r.day_of_month,
+                           %s AS send_hour,
                            r.recipient_user_ids, r.active, r.next_run_on, r.last_run_at, r.last_status, r.last_message,
                            r.created_by, r.created_at,
                            COALESCE(NULLIF(btrim(c.display_name), ''), NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), ''), c.email) AS created_by_name
                       FROM hrms.report_schedules r
-                      LEFT JOIN org.companies co ON co.id = r.company_id
-                      LEFT JOIN auth.user_credentials c ON c.id = r.created_by
-                      LEFT JOIN hrms.employees e ON e.id = c.employee_id
+                      LEFT JOIN org.companies co ON co.id = r.company_id AND co.tenant_id = ?
+                      LEFT JOIN auth.user_credentials c ON c.id = r.created_by AND c.tenant_id = ?
+                      LEFT JOIN hrms.employees e ON e.id = c.employee_id AND e.tenant_id = ?
+                     WHERE r.tenant_id = ?
                      ORDER BY r.created_at DESC
-                    """));
+                    """.formatted(ready ? "r.send_hour" : "NULL::smallint"), t, t, t, t));
             Set<UUID> ids = new LinkedHashSet<>();
             for (Map<String, Object> r : rows) ids.addAll(uuids(r.get("recipient_user_ids")));
             Map<UUID, Recipient> people = people(ids, List.of());
@@ -104,6 +154,7 @@ public class ReportScheduleService {
                 m.put("frequency", r.get("frequency"));
                 m.put("dayOfWeek", r.get("day_of_week"));
                 m.put("dayOfMonth", r.get("day_of_month"));
+                m.put("sendHour", num(r.get("send_hour")));
                 m.put("recipients", uuids(r.get("recipient_user_ids")).stream().map(id -> {
                     Recipient p = people.get(id);
                     Map<String, Object> x = new LinkedHashMap<>();
@@ -115,7 +166,7 @@ public class ReportScheduleService {
                 }).toList());
                 m.put("active", r.get("active"));
                 m.put("nextRunOn", String.valueOf(r.get("next_run_on")));
-                m.put("lastRunAt", r.get("last_run_at") instanceof Timestamp t ? t.toInstant().toString() : null);
+                m.put("lastRunAt", r.get("last_run_at") instanceof Timestamp ts ? ts.toInstant().toString() : null);
                 m.put("lastStatus", r.get("last_status"));
                 m.put("lastMessage", r.get("last_message"));
                 m.put("createdBy", r.get("created_by"));
@@ -128,13 +179,17 @@ public class ReportScheduleService {
 
     /** Workspace members who may receive this report: active, and able to open it. */
     public List<Recipient> eligibleRecipients(ReportKind kind) {
+        UUID t = tenant();
         return tx.execute(s -> {
             String in = String.join(",", Collections.nCopies(kind.permissions().size(), "?"));
+            List<Object> args = new ArrayList<>(List.of(t, t, t));
+            args.addAll(kind.permissions());
             List<UUID> ids = jdbc.queryForList("""
                     SELECT DISTINCT c.id FROM auth.user_credentials c
-                      JOIN rbac.user_roles ur ON ur.user_id = c.id
+                      JOIN rbac.user_roles ur ON ur.user_id = c.id AND ur.tenant_id = ?
+                      JOIN rbac.roles ro ON ro.id = ur.role_id AND (ro.tenant_id IS NULL OR ro.tenant_id = ?)
                       JOIN rbac.role_permissions rp ON rp.role_id = ur.role_id
-                     WHERE c.is_active AND rp.permission_code IN (""" + in + ")", UUID.class, kind.permissions().toArray());
+                     WHERE c.tenant_id = ? AND c.is_active AND rp.permission_code IN (""" + in + ")", UUID.class, args.toArray());
             return people(new LinkedHashSet<>(ids), kind.permissions()).values().stream()
                     .filter(p -> kind.openableWith(p.permissions()))
                     .sorted((a, b) -> String.valueOf(a.name()).compareToIgnoreCase(String.valueOf(b.name())))
@@ -145,15 +200,26 @@ public class ReportScheduleService {
     // ── writes ───────────────────────────────────────────────────────────────
 
     public Map<String, Object> create(Request req, Set<String> held) {
-        Checked c = check(req, held);
+        boolean ready = optionsReady();
+        Checked c = check(req, held, ready);
         UUID id = UUID.randomUUID();
         LocalDate next = ReportPeriods.nextRun(c.frequency(), c.dayOfWeek(), c.dayOfMonth(), LocalDate.now(ReportPdfService.IST));
-        tx.executeWithoutResult(s -> jdbc.update("""
-                INSERT INTO hrms.report_schedules (id, tenant_id, company_id, report, frequency, day_of_week, day_of_month,
-                                                   recipient_user_ids, active, next_run_on, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?::uuid[], ?, ?, ?)
-                """, id, TenantContext.requireTenantId(), req.companyId(), c.kind().key(), c.frequency().name(), c.dayOfWeek(), c.dayOfMonth(),
-                pgArray(c.recipients()), req.active() == null || req.active(), next, TenantContext.getUserId()));
+        UUID t = tenant();
+        if (ready) {
+            tx.executeWithoutResult(s -> jdbc.update("""
+                    INSERT INTO hrms.report_schedules (id, tenant_id, company_id, report, frequency, day_of_week, day_of_month, send_hour,
+                                                       recipient_user_ids, active, next_run_on, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::uuid[], ?, ?, ?)
+                    """, id, t, req.companyId(), c.kind().key(), c.frequency().name(), c.dayOfWeek(), c.dayOfMonth(), c.sendHour(),
+                    pgArray(c.recipients()), req.active() == null || req.active(), next, TenantContext.getUserId()));
+        } else {
+            tx.executeWithoutResult(s -> jdbc.update("""
+                    INSERT INTO hrms.report_schedules (id, tenant_id, company_id, report, frequency, day_of_week, day_of_month,
+                                                       recipient_user_ids, active, next_run_on, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?::uuid[], ?, ?, ?)
+                    """, id, t, req.companyId(), c.kind().key(), c.frequency().name(), c.dayOfWeek(), c.dayOfMonth(),
+                    pgArray(c.recipients()), req.active() == null || req.active(), next, TenantContext.getUserId()));
+        }
         audit.record("reports", "CREATE", "report_schedule", id, describe(c) + " created");
         return one(id);
     }
@@ -165,7 +231,8 @@ public class ReportScheduleService {
         if (existing != null && !existing.openableWith(held)) {
             throw new AccessDeniedException("You can't open the " + existing.label().toLowerCase() + ", so you can't change its email");
         }
-        Checked c = check(req, held);
+        boolean ready = optionsReady();
+        Checked c = check(req, held, ready);
         boolean active = req.active() == null ? Boolean.TRUE.equals(cur.get("active")) : req.active();
         boolean sameTiming = c.frequency().name().equals(cur.get("frequency"))
                 && java.util.Objects.equals(c.dayOfWeek(), num(cur.get("day_of_week")))
@@ -173,13 +240,24 @@ public class ReportScheduleService {
         LocalDate today = LocalDate.now(ReportPdfService.IST);
         LocalDate curNext = LocalDate.parse(String.valueOf(cur.get("next_run_on")));
         LocalDate next = sameTiming && !curNext.isBefore(today) ? curNext : ReportPeriods.nextRun(c.frequency(), c.dayOfWeek(), c.dayOfMonth(), today);
-        tx.executeWithoutResult(s -> jdbc.update("""
-                UPDATE hrms.report_schedules
-                   SET company_id = ?, report = ?, frequency = ?, day_of_week = ?, day_of_month = ?, recipient_user_ids = ?::uuid[],
-                       active = ?, next_run_on = ?, updated_at = now()
-                 WHERE id = ?
-                """, req.companyId(), c.kind().key(), c.frequency().name(), c.dayOfWeek(), c.dayOfMonth(), pgArray(c.recipients()),
-                active, next, id));
+        UUID t = tenant();
+        if (ready) {
+            tx.executeWithoutResult(s -> jdbc.update("""
+                    UPDATE hrms.report_schedules
+                       SET company_id = ?, report = ?, frequency = ?, day_of_week = ?, day_of_month = ?, send_hour = ?, recipient_user_ids = ?::uuid[],
+                           active = ?, next_run_on = ?, updated_at = now()
+                     WHERE id = ? AND tenant_id = ?
+                    """, req.companyId(), c.kind().key(), c.frequency().name(), c.dayOfWeek(), c.dayOfMonth(), c.sendHour(), pgArray(c.recipients()),
+                    active, next, id, t));
+        } else {
+            tx.executeWithoutResult(s -> jdbc.update("""
+                    UPDATE hrms.report_schedules
+                       SET company_id = ?, report = ?, frequency = ?, day_of_week = ?, day_of_month = ?, recipient_user_ids = ?::uuid[],
+                           active = ?, next_run_on = ?, updated_at = now()
+                     WHERE id = ? AND tenant_id = ?
+                    """, req.companyId(), c.kind().key(), c.frequency().name(), c.dayOfWeek(), c.dayOfMonth(), pgArray(c.recipients()),
+                    active, next, id, t));
+        }
         audit.record("reports", "UPDATE", "report_schedule", id, describe(c) + (active ? " updated" : " paused"));
         return one(id);
     }
@@ -190,7 +268,8 @@ public class ReportScheduleService {
         if (kind != null && !kind.openableWith(held)) {
             throw new AccessDeniedException("You can't open the " + kind.label().toLowerCase() + ", so you can't delete its email");
         }
-        tx.executeWithoutResult(s -> jdbc.update("DELETE FROM hrms.report_schedules WHERE id = ?", id));
+        UUID t = tenant();
+        tx.executeWithoutResult(s -> jdbc.update("DELETE FROM hrms.report_schedules WHERE id = ? AND tenant_id = ?", id, t));
         audit.record("reports", "DELETE", "report_schedule", id,
                 (kind == null ? "Report" : kind.label()) + " email deleted");
     }
@@ -207,20 +286,28 @@ public class ReportScheduleService {
 
     // ── the job ──────────────────────────────────────────────────────────────
 
-    /** Sends every due schedule of the bound tenant. Returns how many were sent (fully or partly). */
-    public int sendDue(LocalDate today) {
+    /**
+     * Sends every schedule of the bound tenant that is due on the job's run of
+     * {@code today} at {@code hour} (India time): due today and its send hour
+     * has come (no hour = the first run of the day), or missed on an earlier
+     * day. Returns how many were sent (fully or partly).
+     */
+    public int sendDue(LocalDate today, int hour) {
+        UUID t = tenant();
         List<Map<String, Object>> due = tx.execute(s -> normalized(jdbc.queryForList(
-                "SELECT * FROM hrms.report_schedules WHERE active AND next_run_on <= ? ORDER BY next_run_on, created_at", today)));
+                "SELECT " + columns(optionsReady()) + " FROM hrms.report_schedules WHERE tenant_id = ? AND active AND next_run_on <= ? ORDER BY next_run_on, created_at", t, today)));
         int sent = 0;
         for (Map<String, Object> r : due == null ? List.<Map<String, Object>>of() : due) {
             UUID id = (UUID) r.get("id");
             LocalDate dueOn = LocalDate.parse(String.valueOf(r.get("next_run_on")));
+            // send_hour is only in the row once V143.62 is applied; without it every email keeps the first run.
+            if (!ReportPeriods.sendsNow(dueOn, num(r.get("send_hour")), today, hour)) continue;
             ReportPeriods.Frequency f = ReportPeriods.Frequency.valueOf((String) r.get("frequency"));
             LocalDate next = ReportPeriods.nextRun(f, num(r.get("day_of_week")), num(r.get("day_of_month")), today);
             // Claim it: only the instance whose UPDATE moves the date on sends.
             Integer claimed = tx.execute(s -> jdbc.update(
-                    "UPDATE hrms.report_schedules SET next_run_on = ?, updated_at = now() WHERE id = ? AND active AND next_run_on = ?",
-                    next, id, dueOn));
+                    "UPDATE hrms.report_schedules SET next_run_on = ?, updated_at = now() WHERE id = ? AND tenant_id = ? AND active AND next_run_on = ?",
+                    next, id, t, dueOn));
             if (claimed == null || claimed == 0) continue;
             try {
                 SendResult res = send(r, dueOn, "Scheduled");
@@ -249,7 +336,8 @@ public class ReportScheduleService {
         if (owner == null || !owner.permissions().contains(MANAGE) || !kind.openableWith(owner.permissions())) {
             String who = owner == null ? "The person who set it up" : owner.name();
             String msg = who + " can no longer schedule this report, so it was paused. Anyone who may schedule report emails can turn it back on.";
-            tx.executeWithoutResult(s -> jdbc.update("UPDATE hrms.report_schedules SET active = false, updated_at = now() WHERE id = ?", id));
+            UUID t = tenant();
+            tx.executeWithoutResult(s -> jdbc.update("UPDATE hrms.report_schedules SET active = false, updated_at = now() WHERE id = ? AND tenant_id = ?", id, t));
             stamp(id, "SKIPPED", msg);
             return new SendResult("SKIPPED", 0, 0, 0, msg);
         }
@@ -278,13 +366,17 @@ public class ReportScheduleService {
         }
         int ok = 0, failed = 0;
         String lastError = null;
-        String frequencyWord = f == ReportPeriods.Frequency.WEEKLY ? "weekly" : "monthly";
+        String frequencyWord = f.word();
         for (Map.Entry<Set<String>, List<Recipient>> g : groups.entrySet()) {
             ReportPdfService.Rendered pdf = pdfs.render(kind, params, g.getKey(), "Scheduled " + frequencyWord + " by " + owner.name());
+            List<CsvFile> csvs = csvFiles(kind, params, g.getKey(), pdf.companyName(), period);
+            List<EmailMessage.Attachment> files = new ArrayList<>();
+            files.add(new EmailMessage.Attachment(pdf.fileName(), "application/pdf", pdf.bytes()));
+            for (CsvFile c : csvs) files.add(new EmailMessage.Attachment(c.fileName(), "text/csv", c.bytes()));
             for (Recipient p : g.getValue()) {
                 try {
                     mail.send(new EmailMessage(p.email(), p.name(), subject(kind, pdf.companyName(), period), body(kind, pdf.companyName(), period, p, owner, frequencyWord),
-                            null, List.of(), List.of(new EmailMessage.Attachment(pdf.fileName(), "application/pdf", pdf.bytes())))
+                            null, List.of(), List.copyOf(files))
                             .withFromName(pdf.companyName()));
                     ok++;
                 } catch (RuntimeException e) {
@@ -303,6 +395,10 @@ public class ReportScheduleService {
             filters.put("how", how);
             exportLog.record(new ReportExportLog.Entry(kind, "PDF", "SCHEDULE", pdf.fileName(), companyId, pdf.companyName(), filters,
                     pdf.rowCount(), (long) pdf.bytes().length, id, creatorId));
+            for (CsvFile c : csvs) {
+                exportLog.record(new ReportExportLog.Entry(c.kind(), "CSV", "SCHEDULE", c.fileName(), companyId, pdf.companyName(), filters,
+                        c.rows(), (long) c.bytes().length, id, creatorId));
+            }
         }
         String status = failed == 0 ? "SENT" : ok == 0 ? "FAILED" : "PARTIAL";
         String msg = (ok > 0 ? "Sent to " + ok + (ok == 1 ? " person" : " people") : "Not sent")
@@ -311,6 +407,40 @@ public class ReportScheduleService {
                 + " · " + period.label();
         stamp(id, status, msg);
         return new SendResult(status, ok, failed, skipped, msg);
+    }
+
+    /** One CSV attached to an email: the report's rows, as the report page's "Raw rows (CSV)" downloads them. */
+    record CsvFile(ReportKind kind, String fileName, byte[] bytes, int rows) {}
+
+    /**
+     * The CSV(s) an email carries next to its PDF, with the PDF's own filters.
+     * Workforce Analytics carries one per section the group may read
+     * (headcount, attrition, diversity), as its PDF shows.
+     */
+    List<CsvFile> csvFiles(ReportKind kind, ReportPdfService.Params p, Set<String> held, String company, ReportPeriods.Period period) {
+        List<ReportKind> parts = kind != ReportKind.WORKFORCE_ANALYTICS ? List.of(kind)
+                : List.of(ReportKind.HEADCOUNT, ReportKind.ATTRITION, ReportKind.DIVERSITY).stream()
+                        .filter(k -> k.openableWith(held)).toList();
+        List<CsvFile> out = new ArrayList<>();
+        for (ReportKind k : parts) {
+            List<Map<String, Object>> rows = rowsFor(k, p);
+            out.add(new CsvFile(k, k.key() + "-" + ReportPdfService.slug(company) + "-" + period.to() + ".csv", ReportCsv.bytes(rows), rows.size()));
+        }
+        return out;
+    }
+
+    /** A report's rows for the given filters (the same service calls the report pages and their CSV downloads make). */
+    List<Map<String, Object>> rowsFor(ReportKind kind, ReportPdfService.Params p) {
+        return switch (kind) {
+            case HEADCOUNT -> reports.headcountReport(p.companyId(), p.asOf());
+            case ATTRITION -> reports.attritionReport(p.companyId(), p.from(), p.to());
+            case ATTENDANCE_SUMMARY -> reports.attendanceSummaryReport(p.companyId(), p.from(), p.to());
+            case LEAVE_BALANCE -> reports.leaveBalanceReport(p.companyId(), p.year());
+            case LATE_MARKS -> reports.lateMarksReport(p.companyId(), p.from(), p.to());
+            // The Workforce Analytics PDF shows today's gender split; a diversity email has no date either.
+            case DIVERSITY -> reports.diversityReport(p.companyId());
+            default -> throw new IllegalArgumentException(kind.label() + " has no CSV");
+        };
     }
 
     static String subject(ReportKind kind, String company, ReportPeriods.Period period) {
@@ -322,7 +452,7 @@ public class ReportScheduleService {
         return "<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#0f172a;line-height:1.55\">"
                 + "<p>Hello " + ReportHtml.esc(to.name()) + ",</p>"
                 + "<p>Here is the <b>" + ReportHtml.esc(kind.label().toLowerCase()) + "</b> for <b>" + e + "</b>, covering "
-                + ReportHtml.esc(period.label()) + ". The PDF is attached.</p>"
+                + ReportHtml.esc(period.label()) + ". The report is attached as a PDF, and its rows as a CSV file.</p>"
                 + "<p style=\"color:#475569\">You get this " + frequencyWord + " email because " + ReportHtml.esc(owner.name())
                 + " added you to it in " + e + "'s HR workspace. To stop it, ask them or your HR team to take you off the list.</p>"
                 + "<p style=\"color:#94a3b8;font-size:12px\">The report holds " + e + " data. Please don't forward it outside the company.</p>"
@@ -331,9 +461,10 @@ public class ReportScheduleService {
 
     private void stamp(UUID id, String status, String message) {
         try {
+            UUID t = tenant();
             tx.executeWithoutResult(s -> jdbc.update(
-                    "UPDATE hrms.report_schedules SET last_run_at = now(), last_status = ?, last_message = ?, updated_at = now() WHERE id = ?",
-                    status, message == null || message.length() <= 1000 ? message : message.substring(0, 1000), id));
+                    "UPDATE hrms.report_schedules SET last_run_at = now(), last_status = ?, last_message = ?, updated_at = now() WHERE id = ? AND tenant_id = ?",
+                    status, message == null || message.length() <= 1000 ? message : message.substring(0, 1000), id, t));
         } catch (RuntimeException e) {
             log.error("Could not record the result of report schedule {}: {}", id, e.getMessage());
         }
@@ -341,9 +472,11 @@ public class ReportScheduleService {
 
     // ── validation ───────────────────────────────────────────────────────────
 
-    record Checked(ReportKind kind, ReportPeriods.Frequency frequency, Integer dayOfWeek, Integer dayOfMonth, List<UUID> recipients) {}
+    record Checked(ReportKind kind, ReportPeriods.Frequency frequency, Integer dayOfWeek, Integer dayOfMonth, Integer sendHour,
+                   List<UUID> recipients) {}
 
-    private Checked check(Request req, Set<String> held) {
+    /** Package-visible for tests. {@code ready}: V143.62 is applied. */
+    Checked check(Request req, Set<String> held, boolean ready) {
         if (req == null) throw new BusinessRuleException("Nothing to save", "REPORT_SCHEDULE_EMPTY");
         ReportKind kind = ReportKind.fromKey(req.report()).filter(ReportKind::schedulable)
                 .orElseThrow(() -> new BusinessRuleException("Choose a report to send", "REPORT_SCHEDULE_REPORT"));
@@ -351,13 +484,20 @@ public class ReportScheduleService {
             throw new AccessDeniedException("You can't open the " + kind.label().toLowerCase() + ", so you can't schedule it");
         }
         if (req.companyId() == null) throw new BusinessRuleException("Choose a company", "REPORT_SCHEDULE_COMPANY");
-        Boolean companyExists = tx.execute(s -> !jdbc.queryForList("SELECT 1 FROM org.companies WHERE id = ?", Integer.class, req.companyId()).isEmpty());
+        UUID t = tenant();
+        Boolean companyExists = tx.execute(s -> !jdbc.queryForList("SELECT 1 FROM org.companies WHERE id = ? AND tenant_id = ?",
+                Integer.class, req.companyId(), t).isEmpty());
         if (!Boolean.TRUE.equals(companyExists)) throw new ResourceNotFoundException("Company not found");
         ReportPeriods.Frequency f;
         try {
             f = ReportPeriods.Frequency.valueOf(String.valueOf(req.frequency()).toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new BusinessRuleException("Choose weekly or monthly", "REPORT_SCHEDULE_FREQUENCY");
+            throw new BusinessRuleException("Choose how often it goes out", "REPORT_SCHEDULE_FREQUENCY");
+        }
+        // Every day, every weekday and a send time need V143.62; weekly and monthly work without it.
+        if ((f.needsScheduleOptions() || req.sendHour() != null) && !ready) throw new FeatureNotReady();
+        if (req.sendHour() != null && (req.sendHour() < ReportPeriods.FIRST_HOUR || req.sendHour() > ReportPeriods.LAST_HOUR)) {
+            throw new BusinessRuleException("Choose a time from 7 am to 11 pm", "REPORT_SCHEDULE_HOUR");
         }
         Integer dow = null, dom = null;
         if (f == ReportPeriods.Frequency.WEEKLY) {
@@ -365,7 +505,7 @@ public class ReportScheduleService {
                 throw new BusinessRuleException("Choose the weekday it goes out", "REPORT_SCHEDULE_DAY");
             }
             dow = req.dayOfWeek();
-        } else {
+        } else if (f == ReportPeriods.Frequency.MONTHLY) {
             if (req.dayOfMonth() == null || req.dayOfMonth() < 1 || req.dayOfMonth() > 28) {
                 throw new BusinessRuleException("Choose a day of the month from 1 to 28", "REPORT_SCHEDULE_DAY");
             }
@@ -385,11 +525,17 @@ public class ReportScheduleService {
             throw new BusinessRuleException("These people can't open the " + kind.label().toLowerCase() + ", so they can't receive it: "
                     + String.join(", ", refused), "REPORT_SCHEDULE_RECIPIENT_ACCESS");
         }
-        return new Checked(kind, f, dow, dom, ids);
+        return new Checked(kind, f, dow, dom, req.sendHour(), ids);
     }
 
     private static String describe(Checked c) {
-        return (c.frequency() == ReportPeriods.Frequency.WEEKLY ? "Weekly " : "Monthly ") + c.kind().label() + " email";
+        String how = switch (c.frequency()) {
+            case DAILY -> "Daily ";
+            case WEEKDAYS -> "Weekday ";
+            case WEEKLY -> "Weekly ";
+            case MONTHLY -> "Monthly ";
+        };
+        return how + c.kind().label() + " email";
     }
 
     // ── lookups ──────────────────────────────────────────────────────────────
@@ -398,22 +544,28 @@ public class ReportScheduleService {
     private Map<UUID, Recipient> people(Set<UUID> ids, List<String> perms) {
         Map<UUID, Recipient> out = new LinkedHashMap<>();
         if (ids.isEmpty()) return out;
+        UUID t = tenant();
         String in = String.join(",", Collections.nCopies(ids.size(), "?"));
+        List<Object> first = new ArrayList<>(List.of(t, t));
+        first.addAll(ids);
         jdbc.query("""
                 SELECT c.id, c.email,
                        COALESCE(NULLIF(btrim(c.display_name), ''), NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), ''), c.email) AS name
-                  FROM auth.user_credentials c LEFT JOIN hrms.employees e ON e.id = c.employee_id
-                 WHERE c.is_active AND c.id IN (""" + in + ")", rs -> {
+                  FROM auth.user_credentials c LEFT JOIN hrms.employees e ON e.id = c.employee_id AND e.tenant_id = ?
+                 WHERE c.tenant_id = ? AND c.is_active AND c.id IN (""" + in + ")", rs -> {
             UUID id = rs.getObject("id", UUID.class);
             out.put(id, new Recipient(id, rs.getString("name"), rs.getString("email"), new java.util.HashSet<>()));
-        }, ids.toArray());
+        }, first.toArray());
         if (!out.isEmpty() && !perms.isEmpty()) {
             String users = String.join(",", Collections.nCopies(out.size(), "?"));
             String codes = String.join(",", Collections.nCopies(perms.size(), "?"));
-            List<Object> args = new ArrayList<>(out.keySet());
+            List<Object> args = new ArrayList<>(List.of(t, t));
+            args.addAll(out.keySet());
             args.addAll(perms);
-            jdbc.query("SELECT DISTINCT ur.user_id, rp.permission_code FROM rbac.user_roles ur JOIN rbac.role_permissions rp ON rp.role_id = ur.role_id"
-                    + " WHERE ur.user_id IN (" + users + ") AND rp.permission_code IN (" + codes + ")", rs -> {
+            jdbc.query("SELECT DISTINCT ur.user_id, rp.permission_code FROM rbac.user_roles ur"
+                    + " JOIN rbac.roles ro ON ro.id = ur.role_id AND (ro.tenant_id IS NULL OR ro.tenant_id = ?)"
+                    + " JOIN rbac.role_permissions rp ON rp.role_id = ur.role_id"
+                    + " WHERE ur.tenant_id = ? AND ur.user_id IN (" + users + ") AND rp.permission_code IN (" + codes + ")", rs -> {
                 Recipient p = out.get(rs.getObject("user_id", UUID.class));
                 if (p != null) p.permissions().add(rs.getString("permission_code"));
             }, args.toArray());
@@ -421,8 +573,21 @@ public class ReportScheduleService {
         return out;
     }
 
+    /**
+     * The columns a send or a change reads, named (never SELECT *): a pooled
+     * connection's cached plan for SELECT * breaks when a column is added or
+     * renamed while the app runs (V143.62 is applied by hand). send_hour only
+     * once it exists.
+     */
+    static String columns(boolean ready) {
+        return "id, tenant_id, company_id, report, frequency, day_of_week, day_of_month, recipient_user_ids, active, next_run_on,"
+                + " last_run_at, last_status, last_message, created_by, created_at, updated_at" + (ready ? ", send_hour" : "");
+    }
+
     private Map<String, Object> row(UUID id) {
-        List<Map<String, Object>> rows = tx.execute(s -> normalized(jdbc.queryForList("SELECT * FROM hrms.report_schedules WHERE id = ?", id)));
+        UUID t = tenant();
+        List<Map<String, Object>> rows = tx.execute(s -> normalized(jdbc.queryForList(
+                "SELECT " + columns(optionsReady()) + " FROM hrms.report_schedules WHERE id = ? AND tenant_id = ?", id, t)));
         if (rows == null || rows.isEmpty()) throw new ResourceNotFoundException("Report email not found");
         return rows.get(0);
     }
