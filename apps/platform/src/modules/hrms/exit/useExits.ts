@@ -1,7 +1,9 @@
 // People on notice or gone, for Resignation & exit (P-GROW). Uses P-WF-PEOPLE's BW-91:
-//   GET /v1/hrms/employees/exits?status=&page&pageSize (hrms.employee.write) → reason, exit type,
-//   department and last working day. The key sits under ['hrms', 'employees'], so the notice,
-//   exit and cancel-notice mutations (useWorkforce) refresh it.
+//   GET /v1/hrms/employees/exits?status=&page&pageSize&search= (hrms.employee.write) → reason,
+//   exit type, department and last working day. `search` is optional and matched server-side,
+//   case-insensitive contains over full name, employee code and department name. The key sits
+//   under ['hrms', 'employees'], so the notice, exit and cancel-notice mutations (useWorkforce)
+//   refresh it.
 import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import type { ExitType } from '../api/useWorkforce'
@@ -26,10 +28,15 @@ export interface ExitRow {
 
 export interface ExitPage { content: ExitRow[]; page: number; size: number; totalElements: number; totalPages: number; last: boolean }
 
-export function useExitList(status: ExitStatus, page: number, pageSize: number, opts?: { enabled?: boolean }) {
+export function useExitList(status: ExitStatus, page: number, pageSize: number, search?: string, opts?: { enabled?: boolean }) {
+  const q = (search ?? '').trim()
   return useQuery({
-    queryKey: ['hrms', 'employees', 'exits', status, page, pageSize],
-    queryFn: () => apiJson<ExitPage>(`/v1/hrms/employees/exits?${new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) })}`),
+    queryKey: ['hrms', 'employees', 'exits', status, page, pageSize, q],
+    queryFn: () => {
+      const sp = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) })
+      if (q) sp.set('search', q)
+      return apiJson<ExitPage>(`/v1/hrms/employees/exits?${sp}`)
+    },
     enabled: opts?.enabled ?? true,
     staleTime: 15_000,
   })
@@ -37,10 +44,3 @@ export function useExitList(status: ExitStatus, page: number, pageSize: number, 
 
 export const exitName = (r: { firstName: string; lastName?: string | null; employeeCode?: string }) =>
   [r.firstName, r.lastName].filter(Boolean).join(' ') || r.employeeCode || 'Employee'
-
-/** Rows matching a search over name, code and department (used while a search is typed). */
-export function matchesSearch(r: ExitRow, q: string): boolean {
-  const n = q.trim().toLowerCase()
-  if (!n) return true
-  return [exitName(r), r.employeeCode, r.departmentName].some((v) => (v ?? '').toLowerCase().includes(n))
-}

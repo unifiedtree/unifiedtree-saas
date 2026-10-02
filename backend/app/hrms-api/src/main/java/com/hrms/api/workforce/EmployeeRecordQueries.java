@@ -85,14 +85,32 @@ public class EmployeeRecordQueries {
         return List.of(s);
     }
 
-    /** People on notice or gone, latest last working day first, then by code. Paged like the directory (at most 200 a page). */
+    /**
+     * A lower-case LIKE pattern for the exit-list search, with % and _ taken literally (the web's
+     * matchesSearch was a plain "contains"); null for a missing or blank search, so the predicate
+     * short-circuits and the list is unfiltered.
+     */
+    static String searchPattern(String search) {
+        if (search == null || search.isBlank()) return null;
+        String t = search.trim().toLowerCase(Locale.ROOT)
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return "%" + t + "%";
+    }
+
+    /**
+     * People on notice or gone, latest last working day first, then by code. Paged like the
+     * directory (at most 200 a page). {@code search} is a case-insensitive "contains" over the
+     * full name, the employee code and the department name (what the web filtered client-side);
+     * blank or null means no search.
+     */
     @Transactional(readOnly = true)
-    public PageResponse<ExitRow> exits(UUID companyId, String status, int page, int pageSize) {
+    public PageResponse<ExitRow> exits(UUID companyId, String status, String search, int page, int pageSize) {
         List<String> statuses = exitStatuses(status);
         int size = pageSize <= 0 ? 50 : Math.min(pageSize, 200);
         int p = Math.max(0, page);
         UUID tenant = TenantContext.getTenantId();
         String cid = companyId == null ? null : companyId.toString();
+        String like = searchPattern(search);
         String in = String.join(",", java.util.Collections.nCopies(statuses.size(), "?"));
         String where = """
                   FROM hrms.employees e
@@ -100,11 +118,19 @@ public class EmployeeRecordQueries {
                   LEFT JOIN hrms.designations g ON g.id = e.designation_id AND g.tenant_id = e.tenant_id
                  WHERE e.tenant_id = ? AND e.is_active = TRUE
                    AND (CAST(? AS uuid) IS NULL OR e.company_id = CAST(? AS uuid))
+                   AND (CAST(? AS text) IS NULL
+                        OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE ? ESCAPE '\\'
+                        OR lower(coalesce(e.employee_code, '')) LIKE ? ESCAPE '\\'
+                        OR lower(coalesce(d.name, '')) LIKE ? ESCAPE '\\')
                    AND e.employment_status IN (""" + in + ")\n";
         List<Object> args = new java.util.ArrayList<>();
         args.add(tenant);
         args.add(cid);   // null = every company
         args.add(cid);
+        args.add(like);  // null = no search; the three LIKEs below are then never reached
+        args.add(like);
+        args.add(like);
+        args.add(like);
         args.addAll(statuses);
         Long total = jdbc.queryForObject("SELECT count(*) " + where, Long.class, args.toArray());
         List<Object> pageArgs = new java.util.ArrayList<>(args);
