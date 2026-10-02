@@ -280,7 +280,8 @@ try {
 
   // ── 5. My documents on the profile (employee) ──
   const r = await session('reader@unifiedtree.demo', 390, 844)
-  await r.page.goto(base + '/profile'); await settle(r.page)
+  // My documents live in My profile's Documents tab.
+  await r.page.goto(base + '/profile?tab=documents'); await settle(r.page)
   // An expiry-tracked type the employee can upload to (Passport, else Driving License).
   let card = null
   for (const name of ['Passport', 'Driving License']) {

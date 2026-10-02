@@ -334,7 +334,8 @@ try {
     await page.goto(`${base}/hrms/employees/${READER}`); await settle(page)
     await page.getByText('Reader User').first().waitFor({ timeout: 20000 })
     const btn = page.getByRole('button', { name: /^(Enroll face|Re-enroll face)$/ })
-    check('owner sees Face enrollment with Enroll on an employee’s record', await seen(page.getByText('Face enrollment')) && await seen(btn) && await seen(page.getByText('Not enrolled')))
+    // The redesigned profile's Account card names it "Face check-in".
+    check('owner sees Face enrollment with Enroll on an employee’s record', await seen(page.getByText('Face check-in', { exact: true })) && await seen(btn) && await seen(page.getByText('Not enrolled')))
     await btn.scrollIntoViewIfNeeded()
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-hr-record.png` })
     await btn.click()

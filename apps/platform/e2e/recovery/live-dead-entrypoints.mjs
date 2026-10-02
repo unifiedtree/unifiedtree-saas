@@ -7,6 +7,7 @@
 // Read-only: no fixtures are written.
 //
 // Run from apps/platform:  node e2e/recovery/live-dead-entrypoints.mjs
+/* global process, console, fetch, URL */
 import { chromium } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -137,9 +138,9 @@ try {
     await page.goto(base + `/hrms/employees/${readerEmployeeId}`)
     await page.getByRole('tab', { name: /^Expenses/ }).waitFor({ timeout: 30_000 })
     await page.getByRole('tab', { name: /^Expenses/ }).click()
-    await page.getByRole('button', { name: 'Open Expenses' }).or(page.getByRole('link', { name: 'Open Expenses' })).first().click()
+    await page.getByRole('button', { name: /^Open Expense/ }).or(page.getByRole('link', { name: /^Open Expense/ })).first().click()
     await page.waitForURL((u) => u.pathname.startsWith('/hrms/expense'), { timeout: 15_000 })
-    check('workspace Expenses tab "Open Expenses" lands on /hrms/expenses', path(page) === '/hrms/expenses', path(page))
+    check('workspace Expenses tab "Open Expense centre" lands on /hrms/expenses', path(page) === '/hrms/expenses', path(page))
     await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30_000 })
     const h1 = await page.getByRole('heading', { level: 1 }).first().innerText()
     check('expenses page renders (not a 404 / NoAccess)', /expense/i.test(h1) && !(await noAccess(page)), h1)

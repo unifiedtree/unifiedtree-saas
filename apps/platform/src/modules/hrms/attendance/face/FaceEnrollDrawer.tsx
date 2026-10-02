@@ -27,12 +27,12 @@ type Step = 'intro' | 'camera' | 'review' | 'done'
 interface Shot { dataUrl: string; base64: string; light: 'dark' | 'bright' | null; state: 'new' | 'accepted' | 'rejected'; error?: string }
 type Shots = Partial<Record<CaptureAngle, Shot>>
 
-const INK = '#0f172a', MUTED = '#64748b', LINE = '#e2e8f0', GREEN = '#059669', DEEP = '#047857'
+const INK = 'var(--u-ink,#0E1B16)', MUTED = 'var(--u-ink3,#6A7A73)', LINE = 'var(--u-ln,#E3E9E6)', GREEN = 'var(--u-br,#0F6E56)', DEEP = 'var(--u-brt,#0F6E56)'
 const note = (tone: 'amber' | 'red' | 'green'): CSSProperties => ({
   margin: 0, padding: '10px 12px', borderRadius: 12, fontSize: 13, lineHeight: 1.5,
-  ...(tone === 'amber' ? { background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }
-    : tone === 'red' ? { background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239' }
-      : { background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46' }),
+  ...(tone === 'amber' ? { background: 'var(--u-gds,#FAF1E1)', border: '1px solid var(--u-gd,#C8912E)', color: 'var(--u-gdt,#8A5A10)' }
+    : tone === 'red' ? { background: 'var(--u-rds,#FCEDEB)', border: '1px solid var(--u-rd,#C4453A)', color: 'var(--u-rdt,#B42318)' }
+      : { background: 'var(--u-brs,#E8F3EE)', border: '1px solid var(--u-brl,#BFDFD1)', color: 'var(--u-brt,#0F6E56)' }),
 })
 
 export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnrolled }: {
@@ -196,18 +196,18 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
   } else if (step === 'intro') {
     body = (
       <div style={{ display: 'grid', gap: 18 }}>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#334155' }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--u-ink2,#4A5A54)' }}>
           We’ll take {angles.length} photos of {self ? 'your' : `${first}’s`} face: looking straight at the camera, then turning a little to the left and to the right. It takes about a minute.
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
           {angles.map((x, i) => (
-            <div key={x} style={{ flex: '1 1 0', minWidth: 0, display: 'grid', justifyItems: 'center', gap: 6, padding: '12px 6px 10px', border: `1px solid ${LINE}`, borderRadius: 14, background: '#f8fafc' }}>
+            <div key={x} style={{ flex: '1 1 0', minWidth: 0, display: 'grid', justifyItems: 'center', gap: 6, padding: '12px 6px 10px', border: `1px solid ${LINE}`, borderRadius: 14, background: 'var(--u-sf2,#F7F9F8)' }}>
               <PoseFace turn={ANGLE[x].turn} size={46} />
               <span style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{i + 1} · {ANGLE[x].label}</span>
             </div>
           ))}
         </div>
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8, fontSize: 13.5, color: '#334155' }}>
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8, fontSize: 13.5, color: 'var(--u-ink2,#4A5A54)' }}>
           {(self
             ? ['Good, even light on your face. Face a window or a lamp.', 'Only you in the frame.', 'No sunglasses, cap or mask.']
             : [`${first} sits in front of this computer’s camera, in good, even light.`, `Only ${first} in the frame.`, 'No sunglasses, cap or mask.']
@@ -247,8 +247,8 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
             <div role="status" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#cbd5e1', fontSize: 13.5 }}>Starting the camera…</div>
           )}
           {camError && (
-            <div role="alert" style={{ position: 'absolute', inset: 0, display: 'grid', placeContent: 'center', justifyItems: 'center', gap: 12, padding: 24, textAlign: 'center', background: '#f8fafc' }}>
-              <span aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 14, display: 'grid', placeItems: 'center', background: '#fff1f2', color: '#be123c' }}>{<Camera size={24} />}</span>
+            <div role="alert" style={{ position: 'absolute', inset: 0, display: 'grid', placeContent: 'center', justifyItems: 'center', gap: 12, padding: 24, textAlign: 'center', background: 'var(--u-sf2,#F7F9F8)' }}>
+              <span aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 14, display: 'grid', placeItems: 'center', background: 'var(--u-rds,#FCEDEB)', color: 'var(--u-rdt,#B42318)' }}>{<Camera size={24} />}</span>
               <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: INK, maxWidth: 280 }}>{camError}</p>
               <HrButton size="sm" variant="ghost" onClick={() => { setCamError(null); setCamTry((n) => n + 1) }}>Try again</HrButton>
             </div>
@@ -273,21 +273,21 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
   } else if (step === 'review') {
     body = (
       <div style={{ display: 'grid', gap: 16 }}>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#334155' }}>Check the photos. Retake any that are blurry, dark or cut off.</p>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--u-ink2,#4A5A54)' }}>Check the photos. Retake any that are blurry, dark or cut off.</p>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${angles.length}, minmax(0, 1fr))`, gap: 10 }}>
           {angles.map((x, i) => {
             const s = shots[x]
-            const border = s?.state === 'accepted' ? '#34d399' : s?.state === 'rejected' ? '#fb7185' : LINE
+            const border = s?.state === 'accepted' ? 'var(--u-g2,#5FB39C)' : s?.state === 'rejected' ? 'var(--u-rd,#C4453A)' : LINE
             return (
               <figure key={x} style={{ margin: 0, display: 'grid', gap: 6, minWidth: 0 }}>
-                <div style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 12, overflow: 'hidden', border: `2px solid ${border}`, background: '#f1f5f9' }}>
+                <div style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 12, overflow: 'hidden', border: `2px solid ${border}`, background: 'var(--u-hv,#F0F4F2)' }}>
                   {s ? <img src={s.dataUrl} alt={`Photo ${i + 1}: ${ANGLE[x].label}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                     : <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 12, color: MUTED }}>Not taken</span>}
-                  {s?.state === 'accepted' && <span aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 99, display: 'grid', placeItems: 'center', background: GREEN, color: '#fff' }}>{dashIcon('check', 13)}</span>}
+                  {s?.state === 'accepted' && <span aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 99, display: 'grid', placeItems: 'center', background: GREEN, color: 'var(--u-sf,#fff)' }}>{dashIcon('check', 13)}</span>}
                 </div>
                 <figcaption style={{ display: 'grid', gap: 2, fontSize: 12.5 }}>
                   <span style={{ fontWeight: 600, color: INK }}>{i + 1} · {ANGLE[x].label}</span>
-                  <span style={{ color: s?.state === 'accepted' ? DEEP : s?.state === 'rejected' ? '#be123c' : MUTED, fontWeight: s?.state ? 600 : 400 }}>
+                  <span style={{ color: s?.state === 'accepted' ? DEEP : s?.state === 'rejected' ? 'var(--u-rdt,#B42318)' : MUTED, fontWeight: s?.state ? 600 : 400 }}>
                     {s?.state === 'accepted' ? 'Accepted' : s?.state === 'rejected' ? 'Not accepted' : s ? 'Ready' : '—'}
                   </span>
                   {s?.state !== 'accepted' && (
@@ -308,7 +308,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
           </div>
         )}
         {error && <p role="alert" style={{ ...note('red'), display: 'grid', gap: 6 }}><span>{error}</span>{offLine && <span>{offLine}</span>}</p>}
-        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px', border: `1px solid ${consent ? '#a7f3d0' : LINE}`, borderRadius: 12, background: consent ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', fontSize: 14, lineHeight: 1.45, color: INK }}>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px', border: `1px solid ${consent ? 'var(--u-brl,#BFDFD1)' : LINE}`, borderRadius: 12, background: consent ? 'var(--u-brs,#E8F3EE)' : 'var(--u-sf2,#F7F9F8)', cursor: 'pointer', fontSize: 14, lineHeight: 1.45, color: INK }}>
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} disabled={busy}
             style={{ flex: '0 0 auto', width: 18, height: 18, marginTop: 1, accentColor: GREEN, cursor: 'pointer' }} />
           <span>{self ? 'I agree to my face being used to mark my attendance.' : `${name} agrees to their face being used to mark their attendance.`}</span>
@@ -329,9 +329,9 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
   } else {
     body = (
       <div role="status" style={{ display: 'grid', justifyItems: 'center', gap: 12, padding: '36px 8px', textAlign: 'center' }}>
-        <span aria-hidden="true" style={{ width: 64, height: 64, borderRadius: 99, display: 'grid', placeItems: 'center', background: '#ecfdf5', color: GREEN, border: '1px solid #a7f3d0' }}>{dashIcon('check', 30)}</span>
+        <span aria-hidden="true" style={{ width: 64, height: 64, borderRadius: 99, display: 'grid', placeItems: 'center', background: 'var(--u-brs,#E8F3EE)', color: GREEN, border: '1px solid var(--u-brl,#BFDFD1)' }}>{dashIcon('check', 30)}</span>
         <h4 style={{ margin: 0, fontFamily: "var(--u-font)", fontSize: 20, fontWeight: 700, color: INK }}>{reenroll ? 'Face re-enrolled' : 'Face enrolled'}</h4>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#334155', maxWidth: 340 }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--u-ink2,#4A5A54)', maxWidth: 340 }}>
           {self ? 'You can now punch in with your face.' : `${first} can now punch in with their face.`}
         </p>
       </div>
@@ -359,7 +359,7 @@ function Guide({ turn, prompt }: { turn: -1 | 0 | 1; prompt: string }) {
         )}
       </svg>
       <div style={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', justifyContent: 'center' }}>
-        <span style={{ padding: '6px 12px', borderRadius: 99, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.35 }}>{prompt}</span>
+        <span style={{ padding: '6px 12px', borderRadius: 99, background: 'rgba(15,23,42,.72)', color: 'var(--u-sf,#fff)', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.35 }}>{prompt}</span>
       </div>
       <div style={{ position: 'absolute', bottom: 12, left: 12, right: 12, display: 'flex', justifyContent: 'center' }}>
         <span style={{ whiteSpace: 'nowrap', padding: '5px 10px', borderRadius: 99, background: 'rgba(15,23,42,.6)', color: '#e2e8f0', fontSize: 12 }}>Good light · one face only</span>
@@ -377,7 +377,7 @@ function Progress({ angles, shots, current }: { angles: CaptureAngle[]; shots: S
         return (
           <li key={x} aria-current={now ? 'step' : undefined} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 99, fontSize: 12.5, fontWeight: 600,
-            border: `1px solid ${now ? GREEN : done ? '#a7f3d0' : LINE}`, background: now ? '#ecfdf5' : done ? '#f0fdf4' : '#fff', color: now || done ? DEEP : MUTED,
+            border: `1px solid ${now ? GREEN : done ? 'var(--u-brl,#BFDFD1)' : LINE}`, background: now ? 'var(--u-brs,#E8F3EE)' : done ? 'var(--u-brs,#E8F3EE)' : 'var(--u-sf,#fff)', color: now || done ? DEEP : MUTED,
           }}>
             {done && !now ? dashIcon('check', 12) : <span>{i + 1}</span>} {ANGLE[x].label}
           </li>
@@ -392,12 +392,12 @@ function PoseFace({ turn, size }: { turn: -1 | 0 | 1; size: number }) {
   const dx = turn * 5
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
-      <ellipse cx="24" cy="24" rx="15" ry="18" fill="#ecfdf5" stroke={GREEN} strokeWidth="2" />
-      <circle cx={18 + dx} cy="21" r="1.8" fill={DEEP} />
-      <circle cx={30 + dx} cy="21" r="1.8" fill={DEEP} />
-      <path d={`M${24 + dx * 1.4},23 l${turn < 0 ? -3 : turn > 0 ? 3 : 0},6 h${turn === 0 ? 2 : 0}`} fill="none" stroke={DEEP} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={`M${19 + dx},33 q5,3 10,0`} fill="none" stroke={DEEP} strokeWidth="1.6" strokeLinecap="round" />
-      {turn !== 0 && <path d={turn < 0 ? 'M6,24 l4,-3 v6z' : 'M42,24 l-4,-3 v6z'} fill={GREEN} />}
+      <ellipse cx="24" cy="24" rx="15" ry="18" strokeWidth="2" style={{ fill: 'var(--u-brs,#E8F3EE)', stroke: GREEN }} />
+      <circle cx={18 + dx} cy="21" r="1.8" style={{ fill: DEEP }} />
+      <circle cx={30 + dx} cy="21" r="1.8" style={{ fill: DEEP }} />
+      <path d={`M${24 + dx * 1.4},23 l${turn < 0 ? -3 : turn > 0 ? 3 : 0},6 h${turn === 0 ? 2 : 0}`} fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: DEEP }} />
+      <path d={`M${19 + dx},33 q5,3 10,0`} fill="none" strokeWidth="1.6" strokeLinecap="round" style={{ stroke: DEEP }} />
+      {turn !== 0 && <path d={turn < 0 ? 'M6,24 l4,-3 v6z' : 'M42,24 l-4,-3 v6z'} style={{ fill: GREEN }} />}
     </svg>
   )
 }

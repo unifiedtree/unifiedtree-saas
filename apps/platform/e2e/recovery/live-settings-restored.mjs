@@ -21,7 +21,7 @@
 //   RECOVERY_APP_URL=<app under test> node e2e/recovery/live-settings-restored.mjs
 //   SETTINGS_ONLY=owner,hrm            runs only those accounts
 //   SETTINGS_BASELINE=<file.json>      another baseline (same shape)
-/* global console, process, URL, document, location, getComputedStyle */
+/* global console, process, URL, document, location, getComputedStyle, window */
 import { chromium } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
@@ -80,6 +80,34 @@ const BUSINESS_APPS = ['CRM', 'Accounts', 'Projects', 'Inventory', 'Purchase']
 const PANEL_FOR_ROW = { 'Settings sections': 'Settings pages', 'HR Setup sections': 'HR setup pages' }
 // Pages' own module bars that the top bar's page tabs show now (the page's copy is hidden).
 const TOP_FOR_BAR = { 'Payroll sections': 'Payroll pages', 'Master sections': 'Workforce pages' }
+// Pages a later redesign package rebuilt on purpose: what the baseline recorded, adjusted to the new page.
+// My profile (P-PROFILE, DECISIONS 17): the tabbed profile. Its heading is the person's name, and its bar is
+// the "Profile sections" tabs with Overview open (the person's own tabs, Preferences last). The old
+// "On this page" sections moved: Face enrollment and Employment to Overview (checked by its anchor below),
+// delegation and notification choices to Preferences, My documents to Documents.
+const REDESIGNED = {
+  '/profile': (was, now) => {
+    const tabs = now.bars.find((b) => b.bar === 'Profile sections')
+    const ok = tabs && tabs.items[0] === 'Overview' && tabs.items.at(-1) === 'Preferences'
+    return { ...was, heading: now.heading.length === 1 ? now.heading : ['(the person’s name)'], bars: [{ bar: 'Profile sections', items: ok ? tabs.items : ['Overview', '…', 'Preferences'], lit: ['Overview'] }] }
+  },
+}
+// The same, for addresses that redirect to a redesigned page (the baseline's `at`). The self-service Home
+// (P-HOME, DECISIONS 12): the baseline's Home had no bars; the redesigned Home has its sections. Their
+// items are live figures (today's team, this month), so the layout is what is compared: the first section
+// ("Your team today" for people with a team, else "Your month at a glance"), then "Quick actions"; a
+// team Home also has "Filter your team", and each team row's icon buttons are a group named after the person.
+const iconRow = (b) => b.items.length > 0 && b.items.every((t) => t === '')
+const REDESIGNED_AT = {
+  '/me': (was, now) => {
+    const names = now.bars.map((b) => b.bar)
+    const team = names[0] === 'Your team today'
+    const ok = (team || names[0] === 'Your month at a glance') && names[1] === 'Quick actions'
+      && now.bars.slice(2).every((b) => (team && b.bar === 'Filter your team') || (team && iconRow(b)))
+      && (!team || names.includes('Filter your team'))
+    return { ...was, bars: ok ? now.bars : [{ bar: 'Your team today or Your month at a glance', items: [] }, { bar: 'Quick actions', items: [] }] }
+  },
+}
 // Bars whose lit item is the chosen tab (the "On this page" jump bars light what is scrolled into view).
 const LIT_BARS = /(sections|views|Master inner sections)$/
 // API answers expected here: the session refresh probe (nothing to refresh), the admin contacts behind
@@ -100,6 +128,18 @@ async function session(email, width, who) {
   const page = await context.newPage()
   const errors = new Set(), failed = new Set()
   page.on('pageerror', (e) => errors.add(String(e.message || e).slice(0, 160)))
+  // Who this is, from the app's own sign-in answers: the employee record and permissions (login), the
+  // workspace's modules (canonical-auth/me). Used for the rows More shows by permission (Org chart).
+  const me = { employeeId: null, permissions: [], modules: [] }
+  page.on('response', async (r) => {
+    const path = new URL(r.url()).pathname
+    if (r.ok() && /\/canonical-auth\/(login|me)$/.test(path)) {
+      const d = await r.json().catch(() => null)
+      if (d?.employeeId) me.employeeId = d.employeeId
+      if (Array.isArray(d?.permissions)) me.permissions = d.permissions
+      if (Array.isArray(d?.activeModules)) me.modules = d.activeModules
+    }
+  })
   page.on('response', (r) => {
     if (!r.url().includes('/api/') || r.status() < 400) return
     const line = `${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`
@@ -110,7 +150,7 @@ async function session(email, width, who) {
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login') && u.pathname !== '/', { timeout: 60_000 })
-  return { context, page, errors, failed, who }
+  return { context, page, errors, failed, who, me }
 }
 
 async function settle(page) {
@@ -262,7 +302,11 @@ try {
 
       const mySpace = groups.find((g) => g.group === 'My space')?.rows ?? []
       const settingsRows = groups.find((g) => g.group === 'Settings')?.rows ?? []
-      check(`${tag}: More has My workspace, My profile, All apps; Preferences, Help & support (the gear and profile menu)`, show(mySpace) === show(['My workspace', 'My profile', 'All apps']) && show(settingsRows) === show(['Preferences', 'Help & support']), show(groups))
+      // Org chart (P-ORG) sits in My space for people the shell offers it to (PlatformShell canSeeOrgChart):
+      // HRMS active, and an employee record or hrms.employee.read.
+      const orgChart = s.me.modules.includes('hrms') && (!!s.me.employeeId || s.me.permissions.includes('hrms.employee.read') || s.me.permissions.includes('*'))
+      const mySpaceWant = ['My workspace', 'My profile', ...(orgChart ? ['Org chart'] : []), 'All apps']
+      check(`${tag}: More has My workspace, My profile${orgChart ? ', Org chart' : ''}, All apps; Preferences, Help & support (the gear and profile menu)`, show(mySpace) === show(mySpaceWant) && show(settingsRows) === show(['Preferences', 'Help & support']), show(groups))
       const lead = async (row, kind = 'link') => {
         await s.page.goto(base + '/profile'); await settle(s.page)
         const box = phone ? await openDrawer(s) : await openMore(s)
@@ -300,6 +344,8 @@ try {
       const docsOpen = openBefore('/settings/documents')
       const compare = async (label, path, was) => {
         let now = await look(s, path)
+        const redo = was && (REDESIGNED[path] || REDESIGNED_AT[was.at])
+        if (redo) was = redo(was, now)
         let diff = []
         const run = async () => {
           diff = []
@@ -336,6 +382,17 @@ try {
         return now
       }
       for (const path of PAGES) await compare(path, path, before.pages[path])
+      // My profile's "On this page" listed Face enrollment; it now lives on the Overview tab under the same anchor.
+      if (before.pages['/profile']?.bars?.some((b) => b.items.includes('Face enrollment'))) {
+        await s.page.goto(base + '/profile#st-face'); await settle(s.page)
+        const face = s.page.locator('#st-face')
+        const shown = await face.getByRole('heading', { name: 'Face enrollment', exact: true }).isVisible().catch(() => false)
+        // In view: its heading sits inside the window (it is the last card, so the page may stop scrolling before it reaches the top).
+        const top = shown ? await face.getByRole('heading', { name: 'Face enrollment', exact: true }).evaluate((el) => el.getBoundingClientRect().top) : Infinity
+        const vh = await s.page.evaluate(() => window.innerHeight)
+        const onOverview = (await s.page.getByRole('tab', { name: 'Overview', exact: true }).getAttribute('aria-selected').catch(() => null)) === 'true'
+        check(`${tag}: /profile#st-face opens My profile's Overview with Face enrollment scrolled into view`, shown && onOverview && top >= 0 && top < vh - 40, `shown ${shown}, overview ${onOverview}, top ${Math.round(top)} of ${vh}`)
+      }
       // ── the hub's addresses open the original page ──
       for (const [hub, page] of HUB) {
         if (before.pages[page]) await compare(`${hub} (the hub's address for ${page})`, hub, before.pages[page])

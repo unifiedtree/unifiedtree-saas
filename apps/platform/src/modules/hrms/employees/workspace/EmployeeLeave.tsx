@@ -11,13 +11,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, Plane } from 'lucide-react'
-import { usePermission } from '@unifiedtree/sdk'
+import { P, usePermission } from '@unifiedtree/sdk'
+import { Button } from '@/design/kit/display'
 import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { Facts, range } from '@/design/module/ModuleKit'
 import { istToday } from '@/design/dc/dates'
 import { useEmployeeLeaveBalances, useEmployeeLeaveRequests, type LeaveApprovalStatus } from '../../api/useLeave'
 import { SectionState, SubSection } from './shared'
+import { ApplyLeaveForPanel } from './OnBehalfPanels'
 
 const STATUS: Record<LeaveApprovalStatus, [string, PillTone]> = {
   PENDING: ['Waiting for manager', 'warn'], PENDING_L2: ['Waiting for HR', 'warn'],
@@ -25,13 +27,16 @@ const STATUS: Record<LeaveApprovalStatus, [string, PillTone]> = {
 }
 const PAGE_SIZE = 10
 const n = (d: number) => (Number.isInteger(d) ? String(d) : d.toFixed(1))
-const days = (d: number) => `${n(d)} ${d === 1 ? 'day' : 'days'}`
 /** An instant as the viewer's calendar day (India for our users), never the UTC date. */
 const onDay = (at?: string) => (at ? new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
 
-export function EmployeeLeave({ employeeId, firstName }: { employeeId: string; firstName: string }) {
+export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: { employeeId: string; firstName: string; companyId?: string; name?: string; self?: boolean }) {
   const navigate = useNavigate()
   const canDecide = usePermission('hrms.leave.approve.l1')
+  // Apply on behalf (BW-43): never for yourself (that is your own request, from Leave).
+  const canOthers = usePermission(P.HRMS_LEAVE_APPLY_OTHERS) && !self && !!companyId
+  const [onBehalf, setOnBehalf] = useState(false)
+  const canApplySelf = usePermission('leave.request.self')
   const year = Number(istToday().slice(0, 4))
   const [page, setPage] = useState(0)
   const balances = useEmployeeLeaveBalances(employeeId, year)
@@ -42,7 +47,9 @@ export function EmployeeLeave({ employeeId, firstName }: { employeeId: string; f
 
   return (
     <div className="flex flex-col gap-3">
-      <SubSection title={`Leave balance · ${year}`} hint={`What ${firstName} has left this year, per leave type.`}>
+      <SubSection title={`Balances · ${year}`} hint="Available after pending requests"
+        action={canOthers ? <Button size={30} variant="secondary" icon="plus" onClick={() => setOnBehalf(true)}>Apply on behalf</Button>
+          : self && canApplySelf ? <Button size={30} variant="secondary" icon="plus" onClick={() => navigate('/hrms/leave?tab=my')}>Apply leave</Button> : undefined}>
         <SectionState
           isLoading={balances.isLoading} error={balances.error} onRetry={() => balances.refetch()}
           isEmpty={!balances.isLoading && !balances.error && bal.length === 0}
@@ -54,8 +61,8 @@ export function EmployeeLeave({ employeeId, firstName }: { employeeId: string; f
           <Facts min={170} items={bal.map((b) => ({
             k: b.leaveTypeName || 'Leave',
             v: <>
-              {days(b.available)} left
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#64748b', marginTop: 2 }}>
+              {`${n(b.available)} of ${n(b.totalEntitlement + (b.carryForward || 0))}`}
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: 'var(--u-ink3,#6A7A73)', marginTop: 2 }}>
                 {`${n(b.used)} used · ${n(b.pending)} pending · ${n(b.totalEntitlement + (b.carryForward || 0))} total`}
               </span>
             </>,
@@ -86,7 +93,7 @@ export function EmployeeLeave({ employeeId, firstName }: { employeeId: string; f
                       <td className="text-text-secondary">{n(r.totalDays)}</td>
                       <td>
                         <HrStatusPill tone={st[1]}>{st[0]}</HrStatusPill>
-                        {r.status === 'REJECTED' && r.approverComment && <span className="mt-1 block text-xs text-[#b91c1c]">{r.approverComment}</span>}
+                        {r.status === 'REJECTED' && r.approverComment && <span className="mt-1 block text-xs" style={{ color: 'var(--u-rdt,#B42318)' }}>{r.approverComment}</span>}
                       </td>
                       <td className="hidden md:table-cell"><span className="block max-w-xs truncate text-text-secondary" title={r.reason || undefined}>{r.reason || '—'}</span></td>
                       <td className="hidden sm:table-cell whitespace-nowrap text-text-secondary">{onDay(r.createdAt)}</td>
@@ -98,6 +105,7 @@ export function EmployeeLeave({ employeeId, firstName }: { employeeId: string; f
           </TableCard>
         </SectionState>
       </SubSection>
+      {canOthers && <ApplyLeaveForPanel open={onBehalf} onClose={() => setOnBehalf(false)} employeeId={employeeId} name={name || firstName} companyId={companyId!} />}
     </div>
   )
 }

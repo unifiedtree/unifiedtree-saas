@@ -197,7 +197,8 @@ try {
 
   // ── 6. Approval delegation on the profile ──
   await screen('Approval delegation', async () => {
-    await page.goto(base + '/profile')
+    // Approval delegation lives in My profile's Preferences tab.
+    await page.goto(base + '/profile?tab=preferences')
     await page.getByRole('button', { name: '+ Add delegation' }).click()
     const from = page.getByRole('combobox', { name: 'From', exact: true })
     const to = page.getByRole('combobox', { name: 'To', exact: true })
