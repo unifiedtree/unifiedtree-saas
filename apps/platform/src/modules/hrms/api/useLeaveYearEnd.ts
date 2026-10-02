@@ -3,6 +3,7 @@
 // and LeaveYearEndController (/v1/leave/accrual, /year-end, /ledger).
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { SHARED_KEYS } from './shared/contracts'
 
 export type EncashmentStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'PAID'
 
@@ -105,10 +106,17 @@ export function useEncashOptionsFor(employeeId: string) {
 }
 export function useDecideEncashment() {
   const done = useInvalidate()
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, approved, note }: { id: string; approved: boolean; note?: string }) =>
       apiJson<Encashment>(`/v1/leave/encashments/${id}/decision`, json('POST', { approved, note })),
-    onSuccess: done,
+    // CONTRACTS.md: every approve/reject hook invalidates the shared Inbox and
+    // Recent decisions keys, so the Approvals inbox and Undo offers stay current.
+    onSuccess: () => {
+      done()
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox })
+      qc.invalidateQueries({ queryKey: SHARED_KEYS.recentDecisions })
+    },
   })
 }
 
