@@ -17,6 +17,7 @@
 import { useMemo, useState } from 'react'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
+import { DateField } from '@/shared/components/calendar'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { useRoles } from '@/shared/hooks/useRoles'
@@ -194,15 +195,19 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
               options={active.map((t) => { const x = (bal.data ?? []).find((y) => y.leaveTypeId === t.id); return { value: t.id, label: `${t.name}${x ? ` · ${days(x.available)} left` : ` · ${t.annualEntitlement} days a year`}` } })} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
+            {/* The shared calendar (DateField) is the one date UI across the app now (see
+                live tests, "Live tests pick dates through the shared calendar"); raw
+                <input type="date"> opens the browser's own picker, which breaks consistency
+                and the test selectors. */}
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--u-ink2,#4A5A54)' }}>From *</span>
-              <input type="date" min={today} value={f.startDate} aria-label="From *"
+              <DateField min={today} value={f.startDate} aria-label="From *"
                 onChange={(e) => setF({ ...f, startDate: e.target.value })}
                 style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 10, background: 'var(--u-sf,#fff)', color: 'inherit' }} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--u-ink2,#4A5A54)' }}>To *</span>
-              <input type="date" min={f.startDate || today} value={end} disabled={half} aria-label="To *"
+              <DateField min={f.startDate || today} value={end} disabled={half} aria-label="To *"
                 onChange={(e) => setF({ ...f, endDate: e.target.value })}
                 style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 10, background: half ? 'var(--u-hv,#F0F4F2)' : 'var(--u-sf,#fff)', color: 'inherit' }} />
             </label>

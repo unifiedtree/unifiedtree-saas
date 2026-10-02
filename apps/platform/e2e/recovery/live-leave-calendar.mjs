@@ -133,9 +133,13 @@ try {
   check('owner view: no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))
   check('owner view: no failed API calls from the page', failedApi.length === 0, failedApi.slice(0, 3).join(' | '))
 
-  // ── Error state + retry (history endpoint forced to fail) ────────────────
+  // ── Error state + retry (calendar endpoint forced to fail) ──────────────
+  // P-LEAVE's redesign reads from the dedicated GET /v1/leave/calendar,
+  // not by walking GET /v1/leave/approvals/history page by page any more
+  // (useLeaveCalendarFeed in api/useLeave.ts). The error-state and Retry
+  // behaviour is kept — only the route the test intercepts changed.
   let fail = true
-  await page.route('**/v1/leave/approvals/history**', (route) => fail ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"injected"}' }) : route.continue())
+  await page.route('**/v1/leave/calendar**', (route) => fail ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"injected"}' }) : route.continue())
   await page.goto(base + '/hrms/leave?tab=calendar')
   await page.getByText("Couldn't load the leave calendar").waitFor({ timeout: 30_000 })
   check('error state shown when the leave list fails', true)
@@ -143,21 +147,12 @@ try {
   await page.getByRole('button', { name: 'Retry' }).click()
   await cell(page, fixture.startDate).getByText('Reader User').waitFor({ timeout: 15_000 })
   check('Retry recovers and re-renders the calendar', true)
-  await page.unroute('**/v1/leave/approvals/history**')
+  await page.unroute('**/v1/leave/calendar**')
 
-  // ── Honest truncation note (history reports more pages than the cap) ─────
-  let seenPages = 0
-  await page.route('**/v1/leave/approvals/history**', async (route) => {
-    seenPages++
-    const res = await route.fetch({ url: route.request().url().replace('//demo.localhost', '//127.0.0.1') })
-    const body = await res.json()
-    await route.fulfill({ response: res, json: { ...body, last: false, totalPages: 999, totalElements: 99_999 } })
-  })
-  await page.goto(base + '/hrms/leave?tab=calendar')
-  const note = page.getByText(/most recently decided requests of 99999\. Older approvals are not placed on this calendar\./)
-  check('page cap shows an honest "showing N of M" note', await note.waitFor({ timeout: 30_000 }).then(() => true, () => false), await note.textContent().catch(() => ''))
-  check('page walk stops at the 10-page cap', seenPages === 10, `${seenPages} history pages requested`)
-  await page.unroute('**/v1/leave/approvals/history**')
+  // The "page cap" / "showing N of M" note belonged to the old pagination
+  // walk. The dedicated calendar endpoint returns everything in range in a
+  // single call, so no cap exists and no honest-truncation note is needed —
+  // flagged as a behavioural change in the T01 PR body.
   await ownerCtx.close()
 
   // ── Employee (own approved leave only) ───────────────────────────────────
