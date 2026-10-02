@@ -46,7 +46,7 @@ export interface PageEntry {
  * package is listed here, so nothing points at a page that isn't built yet; today's page is all there
  * is. Add a package's key when it ships, e.g. new Set(['P-TEAM']).
  */
-export const READY_PAGES: ReadonlySet<string> = new Set<string>(['P-TEAM', 'P-ATT-DAY', 'P-ATT-PLAN', 'P-ORG'])
+export const READY_PAGES: ReadonlySet<string> = new Set<string>(['P-TEAM', 'P-ATT-DAY', 'P-ATT-PLAN', 'P-ORG', 'P-GROW'])
 /** Whether a page or tab is live in this release. */
 export const isReadyPage = (e: Pick<PageEntry, 'pkg'>, ready: ReadonlySet<string> = READY_PAGES) => !e.pkg || ready.has(e.pkg)
 
