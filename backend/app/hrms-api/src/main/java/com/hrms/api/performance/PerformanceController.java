@@ -51,6 +51,7 @@ public class PerformanceController {
     private final ReviewCycleRepository cycleRepository;
     private final PerformanceTeamScope teamScope;
     private final PerformanceInsightService insightService;
+    private final PerformanceCycleService cycles;
 
     public PerformanceController(ReviewCycleService cycleService,
                                  PerformanceReviewService reviewService,
@@ -58,7 +59,8 @@ public class PerformanceController {
                                  EmployeeRepository employeeRepository,
                                  ReviewCycleRepository cycleRepository,
                                  PerformanceTeamScope teamScope,
-                                 PerformanceInsightService insightService) {
+                                 PerformanceInsightService insightService,
+                                 PerformanceCycleService cycles) {
         this.cycleService = cycleService;
         this.reviewService = reviewService;
         this.goalService = goalService;
@@ -66,6 +68,7 @@ public class PerformanceController {
         this.cycleRepository = cycleRepository;
         this.teamScope = teamScope;
         this.insightService = insightService;
+        this.cycles = cycles;
     }
 
     // ─── Review cycles (admin) ───────────────────────────────────────────────
@@ -84,11 +87,59 @@ public class PerformanceController {
                 .body(cycleService.createCycle(companyId, request));
     }
 
+    /** Today's fields, plus each cycle's step dates ({@code milestones}; null until V143.61 is applied). */
     @Operation(summary = "List review cycles")
     @GetMapping("/cycles")
     @PreAuthorize("hasAuthority('hrms.performance.read')")
-    public ResponseEntity<List<ReviewCycleResponse>> listCycles() {
-        return ResponseEntity.ok(cycleService.listCycles());
+    public ResponseEntity<List<PerformanceCycleService.CycleView>> listCycles() {
+        return ResponseEntity.ok(cycles.withMilestones(tenant(), cycleService.listCycles()));
+    }
+
+    // Redesign BW-78/79/84. Literal paths (summary, my-current) are mapped
+    // explicitly; Spring prefers them over the {id} patterns below.
+
+    @Operation(summary = "Reviews and submitted per cycle, in your performance scope")
+    @GetMapping("/cycles/summary")
+    @PreAuthorize("hasAuthority('hrms.performance.read')")
+    public List<PerformanceCycleService.CycleCount> cycleSummary() {
+        return cycles.summary(tenant(), teamScope.visibleEmployeeIds());
+    }
+
+    @Operation(summary = "A cycle's reviews by reviewer type and status, with its dates")
+    @GetMapping("/cycles/{id}/stages")
+    @PreAuthorize("hasAuthority('hrms.performance.read')")
+    public PerformanceCycleService.CycleStages cycleStages(@PathVariable UUID id) {
+        return cycles.stages(tenant(), id, teamScope.visibleEmployeeIds());
+    }
+
+    @Operation(summary = "Submitted manager reviews in a cycle by rating")
+    @GetMapping("/cycles/{id}/ratings")
+    @PreAuthorize("hasAuthority('hrms.performance.read')")
+    public PerformanceCycleService.CycleRatings cycleRatings(@PathVariable UUID id) {
+        return cycles.ratings(tenant(), id, teamScope.visibleEmployeeIds());
+    }
+
+    @Operation(summary = "Set a cycle's step dates and whether feedback waits until it's shared")
+    @PutMapping("/cycles/{id}/milestones")
+    @PreAuthorize("hasAuthority('hrms.performance.write')")
+    public PerformanceCycleService.Milestones saveMilestones(@PathVariable UUID id,
+                                                             @RequestBody PerformanceCycleService.MilestonesRequest request,
+                                                             @AuthenticationPrincipal Jwt jwt) {
+        return cycles.saveMilestones(tenant(), id, request, actorUserId(jwt));
+    }
+
+    @Operation(summary = "Share a cycle's feedback with the people reviewed")
+    @PostMapping("/cycles/{id}/share")
+    @PreAuthorize("hasAuthority('hrms.performance.write')")
+    public PerformanceCycleService.Milestones shareCycle(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return cycles.share(tenant(), id, actorUserId(jwt));
+    }
+
+    @Operation(summary = "My steps in the open cycles I'm reviewed in")
+    @GetMapping("/cycles/my-current")
+    @PreAuthorize("hasAuthority('hrms.performance.review.self')")
+    public List<PerformanceCycleService.MyCycle> myCurrentCycle(@AuthenticationPrincipal Jwt jwt) {
+        return cycles.myCurrent(tenant(), PerformanceInsightController.employeeId(jwt));
     }
 
     @Operation(summary = "Activate a review cycle")
@@ -100,21 +151,39 @@ public class PerformanceController {
 
     // ─── Reviews ─────────────────────────────────────────────────────────────
 
+    /**
+     * Reviews I write and reviews about me. Redesign BW-78: while a cycle holds its
+     * feedback until it's shared, SUBMITTED reviews other people wrote about me in
+     * that cycle are left out until an admin shares the cycle.
+     */
     @Operation(summary = "Get my performance reviews")
     @GetMapping("/reviews/my")
     @PreAuthorize("hasAuthority('hrms.performance.review.self')")
     public ResponseEntity<List<PerformanceReviewResponse>> myReviews(@AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(enrichList(reviewService.getMyReviews(extractEmployeeId(jwt))));
+        UUID me = extractEmployeeId(jwt);
+        List<PerformanceReviewResponse> mine = reviewService.getMyReviews(me);
+        Set<UUID> held = cycles.heldCycles(tenant(), mine.stream().map(PerformanceReviewResponse::cycleId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet()));
+        List<PerformanceReviewResponse> visible = mine.stream()
+                .filter(r -> !PerformanceCycleService.hiddenFrom(me, r.employeeId(), r.reviewerId(),
+                        r.status() == null ? null : r.status().name(), held.contains(r.cycleId())))
+                .toList();
+        return ResponseEntity.ok(enrichList(visible));
     }
 
-    @Operation(summary = "List performance reviews, optionally filtered by cycle")
+    /** {@code status}: WAITING (to write or drafted), SUBMITTED or MISSED; blank = every review, as before. */
+    @Operation(summary = "List performance reviews, optionally filtered by cycle and status")
     @GetMapping("/reviews")
     @PreAuthorize("hasAuthority('hrms.performance.read')")
     public ResponseEntity<PageResponse<PerformanceReviewResponse>> listReviews(
             @RequestParam(required = false) UUID cycleId,
+            @RequestParam(required = false) String status,
             @PageableDefault(size = 20) Pageable pageable) {
+        List<String> statuses = PerformanceCycleService.statusesFor(status);
         // Admin / HR see the company; a department manager sees reviews about their team only.
-        return ResponseEntity.ok(enrichPage(reviewService.listReviews(cycleId, teamScope.visibleEmployeeIds(), pageable)));
+        return ResponseEntity.ok(enrichPage(reviewService.listReviews(cycleId, teamScope.visibleEmployeeIds(),
+                statuses == null ? null : statuses.stream().map(com.hrms.performance.enums.ReviewStatus::valueOf).toList(),
+                pageable)));
     }
 
     @Operation(summary = "Create a performance review for an employee")
@@ -137,23 +206,44 @@ public class PerformanceController {
         return ResponseEntity.ok(enrichOne(reviewService.submitReview(id, extractEmployeeId(jwt), request)));
     }
 
+    /** Body of the draft save: every field optional; the rating, when given, is 0 to 5. */
+    public record ReviewDraftRequest(java.math.BigDecimal overallRating,
+                                     @jakarta.validation.constraints.Size(max = 5000) String strengths,
+                                     @jakarta.validation.constraints.Size(max = 5000) String improvements) {}
+
+    /** Redesign BW-84: save a review you write as a draft (it becomes IN_PROGRESS). */
+    @Operation(summary = "Save a review you write as a draft")
+    @PutMapping("/reviews/{id}/draft")
+    @PreAuthorize("hasAuthority('hrms.performance.review.self')")
+    public ResponseEntity<PerformanceReviewResponse> saveDraft(
+            @PathVariable UUID id,
+            @Valid @RequestBody ReviewDraftRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(enrichOne(reviewService.saveDraft(id, PerformanceInsightController.employeeId(jwt),
+                request.overallRating(), request.strengths(), request.improvements())));
+    }
+
     // ─── Goals (employee self-service) ───────────────────────────────────────
 
+    /** Redesign BW-84: each goal also carries its due date and its last progress update. */
     @Operation(summary = "Get my goals")
     @GetMapping("/goals/my")
     @PreAuthorize("hasAuthority('hrms.performance.review.self')")
     public ResponseEntity<List<GoalResponse>> myGoals(@AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(goalService.getMyGoals(extractEmployeeId(jwt)));
+        UUID me = extractEmployeeId(jwt);
+        return ResponseEntity.ok(insightService.withExtras(tenant(), me, goalService.getMyGoals(me)));
     }
 
+    /** Redesign BW-84: an optional due date (and company KPI, BW-83) is saved with the goal. */
     @Operation(summary = "Create a goal")
     @PostMapping("/goals")
     @PreAuthorize("hasAuthority('hrms.performance.review.self')")
     public ResponseEntity<GoalResponse> createGoal(
             @Valid @RequestBody GoalRequest request,
             @AuthenticationPrincipal Jwt jwt) {
+        UUID me = extractEmployeeId(jwt);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(goalService.createGoal(extractEmployeeId(jwt), request));
+                .body(insightService.createMyGoal(tenant(), me, request, actorUserId(jwt)));
     }
 
     @Operation(summary = "Update progress on a goal")
@@ -174,13 +264,11 @@ public class PerformanceController {
     // The performance module has no dependency on hrms-employee, so the
     // reviewee's / reviewer's name + code are resolved here (the API layer) and
     // folded into the response so admin/self cards can show WHO is involved.
+    // Redesign BW-81: also the reviewer type, the reviewee's department and the
+    // review's due date (JDBC; the entity doesn't map reviewer_type).
 
     private PageResponse<PerformanceReviewResponse> enrichPage(PageResponse<PerformanceReviewResponse> page) {
-        Map<UUID, Employee> employeeMap = loadEmployees(page.content());
-        Map<UUID, String> cycleNames = loadCycleNames(page.content());
-        List<PerformanceReviewResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap, cycleNames))
-                .toList();
+        List<PerformanceReviewResponse> enriched = enrichList(page.content());
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
     }
@@ -188,11 +276,13 @@ public class PerformanceController {
     private List<PerformanceReviewResponse> enrichList(List<PerformanceReviewResponse> reviews) {
         Map<UUID, Employee> employeeMap = loadEmployees(reviews);
         Map<UUID, String> cycleNames = loadCycleNames(reviews);
-        return reviews.stream().map(r -> enrich(r, employeeMap, cycleNames)).toList();
+        Map<UUID, PerformanceCycleService.ReviewExtras> extras =
+                cycles.extras(tenant(), reviews.stream().map(PerformanceReviewResponse::id).toList());
+        return reviews.stream().map(r -> enrich(r, employeeMap, cycleNames, extras.get(r.id()))).toList();
     }
 
     private PerformanceReviewResponse enrichOne(PerformanceReviewResponse r) {
-        return enrich(r, loadEmployees(List.of(r)), loadCycleNames(List.of(r)));
+        return enrichList(List.of(r)).get(0);
     }
 
     private Map<UUID, String> loadCycleNames(List<PerformanceReviewResponse> reviews) {
@@ -215,7 +305,8 @@ public class PerformanceController {
                 .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
     }
 
-    private PerformanceReviewResponse enrich(PerformanceReviewResponse r, Map<UUID, Employee> employeeMap, Map<UUID, String> cycleNames) {
+    private PerformanceReviewResponse enrich(PerformanceReviewResponse r, Map<UUID, Employee> employeeMap,
+                                             Map<UUID, String> cycleNames, PerformanceCycleService.ReviewExtras extra) {
         Employee employee = r.employeeId() != null ? employeeMap.get(r.employeeId()) : null;
         Employee reviewer = r.reviewerId() != null ? employeeMap.get(r.reviewerId()) : null;
         String employeeName = fullName(employee);
@@ -224,11 +315,17 @@ public class PerformanceController {
         return new PerformanceReviewResponse(
                 r.id(), r.cycleId(), r.employeeId(), employeeName, employeeCode,
                 r.reviewerId(), reviewerName, r.status(), r.overallRating(),
-                r.strengths(), r.improvements(), r.submittedAt(), r.createdAt(), cycleNames.get(r.cycleId()));
+                r.strengths(), r.improvements(), r.submittedAt(), r.createdAt(), cycleNames.get(r.cycleId()),
+                extra == null ? null : extra.reviewerType(), extra == null ? null : extra.department(),
+                extra == null ? null : extra.dueDate());
     }
 
     private String fullName(Employee employee) {
         return employee != null ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim() : null;
+    }
+
+    private static UUID tenant() {
+        return com.unifiedtree.security.tenant.TenantContext.getTenantId();
     }
 
     private static UUID actorUserId(Jwt jwt) {

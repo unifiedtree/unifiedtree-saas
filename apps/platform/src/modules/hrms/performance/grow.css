@@ -1,0 +1,107 @@
+/* hand-owned */
+/* Local layout for the Performance, Learning and Resignation & exit pages (P-GROW).
+   Tokens only (var(--u-*, light fallback)); no raw colours. The kit draws every card,
+   table, pill and panel; these classes only place them. */
+
+.grw-page { min-width: 0; }
+.grw-stack { display: grid; gap: 16px; min-width: 0; }
+.grw-stack--tight { gap: 10px; }
+.grw-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
+.grw-row--between { justify-content: space-between; }
+.grw-grow { flex: 1 1 220px; min-width: 0; }
+.grw-muted { color: var(--u-ink3, #6A7A73); font-size: 12.5px; }
+.grw-num { font-variant-numeric: tabular-nums; }
+.grw-strong { font-weight: 500; color: var(--u-ink, #0E1B16); }
+.grw-clip { display: block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grw-link {
+  border: 0; padding: 0; background: none; font: inherit; color: var(--u-brt, #0F6E56); cursor: pointer; text-align: left;
+}
+.grw-link:hover { text-decoration: underline; }
+.grw-link:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); border-radius: 6px; }
+
+/* Filters above a table: search box and selects in one wrapping row. */
+.grw-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; min-width: 0; }
+.grw-filters > * { flex: 1 1 200px; min-width: 0; }
+.grw-filters > .grw-filters__fixed { flex: 0 1 220px; }
+
+/* Panel bodies */
+.grw-form { display: grid; gap: 14px; min-width: 0; }
+.grw-sub { margin: 0; font-size: 13px; font-weight: 500; color: var(--u-ink2, #4A5A54); }
+.grw-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.grw-list > li {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+  padding: 10px 12px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff);
+}
+.grw-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.grw-result {
+  display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px;
+  border: 0; border-bottom: 1px solid var(--u-ln2, #EDF1EF); background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+.grw-result:last-child { border-bottom: 0; }
+.grw-result:hover, .grw-result[aria-pressed="true"] { background: var(--u-hv, #F0F4F2); }
+.grw-result:disabled { cursor: not-allowed; opacity: .6; }
+.grw-results {
+  max-height: 260px; overflow-y: auto; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff);
+}
+
+/* My reviews: the cycle card, the self-review and kind words side by side, goal cards */
+.grw-split { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; min-width: 0; }
+.grw-split > :first-child { flex: 3 1 520px; min-width: 0; }
+.grw-split > :last-child { flex: 2 1 300px; min-width: 0; }
+.grw-cyclehead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.grw-cyclehead__name { font-size: 13px; color: var(--u-ink3, #6A7A73); }
+.grw-cyclehead__title { margin-top: 2px; font-size: 22px; font-weight: 500; letter-spacing: -.01em; color: var(--u-ink, #0E1B16); }
+.grw-bars { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.grw-bars > li { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.grw-bars__bar { height: 4px; border-radius: 2px; background: var(--u-ln, #E3E9E6); }
+.grw-bars__bar[data-state="done"] { background: var(--u-br, #0F6E56); }
+.grw-bars__bar[data-state="current"] { background: var(--u-gd, #C8912E); }
+.grw-bars__label { font-size: 13.5px; font-weight: 500; color: var(--u-ink, #0E1B16); }
+.grw-bars__meta { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+
+.grw-rates { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.grw-rate {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; cursor: pointer; transition: border-color .2s;
+}
+.grw-rate:hover { border-color: var(--u-br, #0F6E56); }
+.grw-rate:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); border-color: var(--u-br, #0F6E56); }
+.grw-rate[aria-pressed="true"] { background: var(--u-brs, #E8F3EE); border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 1px var(--u-br, #0F6E56); }
+.grw-rate__n { font-size: 18px; font-weight: 500; }
+.grw-rate__t { font-size: 11.5px; color: var(--u-ink3, #6A7A73); text-align: center; }
+@media (max-width: 420px) { .grw-rate { padding: 8px 2px; } .grw-rate__t { font-size: 10.5px; } }
+
+.grw-quotes { margin: 0; padding: 0; display: grid; }
+.grw-quote { margin: 0; padding: 12px 0; box-shadow: inset 0 -1px 0 var(--u-ln2, #EDF1EF); }
+.grw-quote:last-child { box-shadow: none; }
+.grw-quote blockquote { margin: 0; font-size: 14px; line-height: 1.5; color: var(--u-ink, #0E1B16); }
+.grw-quote figcaption { margin-top: 6px; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+
+.grw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.grw-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 18px; min-width: 0;
+  background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); box-shadow: var(--u-shc, 0 1px 2px rgba(14,27,22,.05));
+}
+.grw-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.grw-card__title { margin: 0; font-size: 14.5px; font-weight: 500; line-height: 1.35; color: var(--u-ink, #0E1B16); overflow-wrap: anywhere; }
+.grw-card__pct { font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--u-ink, #0E1B16); }
+.grw-h2 { margin: 0; font-size: 17px; font-weight: 500; color: var(--u-ink, #0E1B16); }
+
+/* Learning: course rows and catalogue tiles (EmpGrowth e-learn, without progress rings) */
+.grw-course {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 18px 20px; border-radius: 18px;
+  background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); box-shadow: var(--u-shc, 0 1px 2px rgba(14,27,22,.05));
+}
+.grw-course__body { flex: 1 1 240px; min-width: 0; }
+.grw-course__title { font-size: 15px; font-weight: 500; color: var(--u-ink, #0E1B16); overflow-wrap: anywhere; }
+.grw-tile {
+  display: flex; flex-direction: column; gap: 6px; padding: 18px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 18px;
+  background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16); font: inherit; text-align: left; cursor: pointer; min-width: 0;
+}
+.grw-tile:hover { border-color: var(--u-br, #0F6E56); }
+.grw-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); border-color: var(--u-br, #0F6E56); }
+.grw-tile:disabled { cursor: default; opacity: .65; }
+.grw-tile__t { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
+.grw-tile__go { margin-top: 6px; font-size: 13px; font-weight: 500; color: var(--u-brt, #0F6E56); }

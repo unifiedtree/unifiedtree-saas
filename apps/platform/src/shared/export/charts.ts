@@ -4,6 +4,12 @@
 import { esc } from './fileExport'
 
 const FONT = "Inter,Segoe UI,Arial,sans-serif"
+/**
+ * A colour a standalone SVG can use: the pages pass design tokens
+ * ("var(--u-br,#0F6E56)"), which a downloaded file can't resolve, so the
+ * token's light fallback is used (PNGs are always on white).
+ */
+export const solid = (c: string) => c.replace(/var\(--[\w-]+\s*,\s*([^)]+)\)/g, '$1').trim()
 const niceStep = (raw: number) => [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000].find((x) => x >= raw) || Math.ceil(raw / 10000) * 10000
 const text = (x: number, y: number, s: string, o: { size?: number; weight?: number; fill?: string; anchor?: string } = {}) =>
   `<text x="${x}" y="${y}" font-family="${FONT}" font-size="${o.size ?? 12}" font-weight="${o.weight ?? 600}" fill="${o.fill ?? '#334155'}" text-anchor="${o.anchor ?? 'start'}">${esc(s)}</text>`
@@ -13,7 +19,7 @@ const legend = (w: number, items: [string, string][], y = 34) => {
   for (const [label, color] of [...items].reverse()) {
     const lw = label.length * 6.6 + 18
     x -= lw
-    out += `<rect x="${x}" y="${y - 9}" width="10" height="10" rx="3" fill="${color}"/>` + text(x + 15, y, label, { size: 11.5 })
+    out += `<rect x="${x}" y="${y - 9}" width="10" height="10" rx="3" fill="${solid(color)}"/>` + text(x + 15, y, label, { size: 11.5 })
     x -= 12
   }
   return out
@@ -32,7 +38,7 @@ export function stackedBarsSvg(o: { title: string; subtitle?: string; bars: { la
   o.bars.forEach((b, i) => {
     const cx = left + slot * i + slot / 2
     let y = top + ch
-    b.parts.forEach((v, j) => { if (!v) return; const hgt = (v / topV) * ch; y -= hgt; g += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${hgt}" rx="${j === 0 ? 3 : 2}" fill="${o.series[j][1]}"/>` })
+    b.parts.forEach((v, j) => { if (!v) return; const hgt = (v / topV) * ch; y -= hgt; g += `<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${hgt}" rx="${j === 0 ? 3 : 2}" fill="${solid(o.series[j][1])}"/>` })
     const total = b.parts.reduce((a, v) => a + v, 0)
     g += text(cx, y - 6, total.toLocaleString('en-IN'), { size: 11.5, weight: 700, anchor: 'middle' })
     const lbl = b.label.length > 16 ? b.label.slice(0, 15) + '…' : b.label
@@ -49,13 +55,13 @@ export function donutSvg(o: { title: string; subtitle?: string; parts: { label: 
   let acc = 0, rings = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f1f5f9" stroke-width="22"/>`
   for (const p of o.parts) {
     const len = tot ? (p.value / tot) * C : 0
-    rings += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${p.color}" stroke-width="22" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`
+    rings += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${solid(p.color)}" stroke-width="22" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`
     acc += len
   }
   let rows = ''
   o.parts.forEach((p, i) => {
     const y = 132 + i * 30
-    rows += `<rect x="250" y="${y - 10}" width="10" height="10" rx="3" fill="${p.color}"/>` + text(268, y, p.label, { size: 13 }) + text(W - 80, y, p.value.toLocaleString('en-IN'), { size: 13, weight: 800, fill: '#0f172a', anchor: 'end' }) + text(W - 24, y, `${tot ? Math.round((p.value / tot) * 100) : 0}%`, { size: 13, fill: '#64748b', anchor: 'end' })
+    rows += `<rect x="250" y="${y - 10}" width="10" height="10" rx="3" fill="${solid(p.color)}"/>` + text(268, y, p.label, { size: 13 }) + text(W - 80, y, p.value.toLocaleString('en-IN'), { size: 13, weight: 800, fill: '#0f172a', anchor: 'end' }) + text(W - 24, y, `${tot ? Math.round((p.value / tot) * 100) : 0}%`, { size: 13, fill: '#64748b', anchor: 'end' })
   })
   const center = text(cx, cy + 4, tot.toLocaleString('en-IN'), { size: 24, weight: 800, fill: '#0f172a', anchor: 'middle' }) + text(cx, cy + 22, (o.centerLabel || 'PEOPLE').toUpperCase(), { size: 10, weight: 700, fill: '#64748b', anchor: 'middle' })
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#fff"/>${header(W, o.title, o.subtitle)}${rings}${center}${rows}</svg>`

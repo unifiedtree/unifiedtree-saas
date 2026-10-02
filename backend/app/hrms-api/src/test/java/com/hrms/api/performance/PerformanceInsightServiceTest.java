@@ -30,7 +30,7 @@ class PerformanceInsightServiceTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final PerformanceTeamScope teamScope = mock(PerformanceTeamScope.class);
     private final PerformanceInsightService service =
-            new PerformanceInsightService(jdbc, teamScope, mock(KpiService.class), mock(GoalService.class));
+            new PerformanceInsightService(jdbc, teamScope, mock(KpiService.class), mock(GoalService.class), null);
 
     @AfterEach void clear() {
         SecurityContextHolder.clearContext();

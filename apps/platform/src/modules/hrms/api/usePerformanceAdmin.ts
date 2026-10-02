@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
-import type { EmployeeKpiRow, KpiPage } from './usePerformance'
+import type { CycleMilestones, EmployeeKpiRow, KpiPage } from './usePerformance'
+import { asAvailable, useAvailableMutation, useAvailableQuery } from './shared/available'
 
 export type KpiStatus = 'ACTIVE' | 'AT_RISK' | 'COMPLETED' | 'DROPPED'
 export type KpiDirection = 'HIGHER_IS_BETTER' | 'LOWER_IS_BETTER' | 'TARGET_EXACT'
@@ -16,6 +17,9 @@ export interface KpiPayload {
   weight: number
   dueDate?: string
   status?: KpiStatus
+  /** BW-83: link to a company KPI; `clearCompanyKpi` removes the link (edit only). */
+  companyKpiId?: string
+  clearCompanyKpi?: boolean
 }
 export interface KpiProgressEntry {
   id: string
@@ -126,5 +130,147 @@ export function useCloseCycle() {
   return useMutation({
     mutationFn: (id: string) => apiJson<{ cycleId: string; missedMarked: number; reviewsMissedMarked: number }>(`/v1/performance/cycles/${id}/close`, { method: 'POST' }),
     onSuccess: refresh,
+  })
+}
+
+// ── Redesign P-GROW (BW-78 … BW-83) ─────────────────────────────────────────
+// Writes and reads over V143.61's tables come back as "not available" (never an
+// error, never retried) until the migration is applied: the page hides that block.
+
+/** Reviews and submitted per cycle, in your performance scope (BW-79). */
+export interface CycleCount { cycleId: string; reviews: number; submitted: number; missed: number; waiting: number }
+
+export function useCycleSummary(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'cycles', 'summary'],
+    queryFn: () => apiJson<CycleCount[]>('/v1/performance/cycles/summary'),
+    staleTime: 15_000,
+    enabled,
+  })
+}
+
+export interface StageRow { reviewerType: string; total: number; submitted: number; waiting: number; missed: number }
+export interface CycleStages {
+  cycleId: string
+  name: string
+  status: string
+  periodStart?: string | null
+  periodEnd?: string | null
+  reviewees: number
+  rows: StageRow[]
+  milestones?: CycleMilestones | null
+}
+
+export function useCycleStages(id: string | undefined) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'cycles', 'stages', id],
+    queryFn: () => apiJson<CycleStages>(`/v1/performance/cycles/${id}/stages`),
+    enabled: !!id,
+    staleTime: 15_000,
+  })
+}
+
+export interface CycleRatings { cycleId: string; total: number; average: number | null; buckets: { rating: number; count: number }[] }
+
+export function useCycleRatings(id: string | undefined) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'cycles', 'ratings', id],
+    queryFn: () => apiJson<CycleRatings>(`/v1/performance/cycles/${id}/ratings`),
+    enabled: !!id,
+    staleTime: 15_000,
+  })
+}
+
+export interface MilestonesPayload {
+  goalsBy?: string | null
+  selfReviewBy?: string | null
+  managerReviewBy?: string | null
+  shareOn?: string | null
+  holdUntilShared?: boolean
+}
+
+/** PUT a cycle's step dates (hrms.performance.write). Resolves {available:false} before V143.61. */
+export function useSaveMilestones() {
+  const refresh = useRefreshPerformance()
+  return useAvailableMutation<CycleMilestones, { id: string } & MilestonesPayload>({
+    mutationFn: ({ id, ...body }) => asAvailable(() => apiJson<CycleMilestones>(`/v1/performance/cycles/${id}/milestones`, { method: 'PUT', body: JSON.stringify(body) })),
+    onSuccess: refresh,
+  })
+}
+
+/** Share a cycle's held feedback with the people reviewed (hrms.performance.write). */
+export function useShareCycle() {
+  const refresh = useRefreshPerformance()
+  return useAvailableMutation<CycleMilestones, string>({
+    mutationFn: (id) => asAvailable(() => apiJson<CycleMilestones>(`/v1/performance/cycles/${id}/share`, { method: 'POST' })),
+    onSuccess: refresh,
+  })
+}
+
+/** Remind a reviewer (hrms.performance.write): sends them a notification; once a day per review. */
+export function useRemindReview() {
+  const refresh = useRefreshPerformance()
+  return useMutation({
+    mutationFn: (id: string) => apiJson<{ reviewId: string; newReminderCount: number; sentAt: string }>(`/v1/performance/reviews/${id}/remind`, { method: 'POST' }),
+    onSuccess: refresh,
+  })
+}
+
+/** Goals & KPIs tiles, in the same scope as the list (BW-82). */
+export interface KpiSummary { total: number; completed: number; atRisk: number; reachedPct: number; averageProgress: number }
+
+export function useKpiSummary(enabled = true) {
+  return useQuery({
+    queryKey: ['performance', 'kpis', 'summary'],
+    queryFn: () => apiJson<KpiSummary>('/v1/performance/kpis/summary'),
+    staleTime: 15_000,
+    enabled,
+  })
+}
+
+/** A company KPI with the weighted average progress of the goals linked to it (BW-83). */
+export interface CompanyKpi {
+  id: string
+  companyId: string
+  title: string
+  description?: string | null
+  targetValue?: number | null
+  unit?: string | null
+  dueDate?: string | null
+  status: 'ACTIVE' | 'COMPLETED' | 'DROPPED'
+  /** Null when no goal is linked yet. */
+  progress: number | null
+  linkedGoals: number
+}
+
+export function useCompanyKpis(opts?: { companyId?: string; includeDropped?: boolean; enabled?: boolean }) {
+  const qs = new URLSearchParams()
+  if (opts?.companyId) qs.set('companyId', opts.companyId)
+  if (opts?.includeDropped) qs.set('includeDropped', 'true')
+  return useAvailableQuery<CompanyKpi[]>({
+    queryKey: ['performance', 'company-kpis', opts?.companyId ?? 'all', !!opts?.includeDropped],
+    queryFn: () => asAvailable(() => apiJson<CompanyKpi[]>(`/v1/performance/company-kpis${qs.size ? `?${qs}` : ''}`)),
+    enabled: opts?.enabled ?? true,
+    staleTime: 30_000,
+  })
+}
+
+export interface CompanyKpiPayload {
+  companyId?: string
+  title?: string
+  description?: string
+  targetValue?: number | null
+  unit?: string
+  dueDate?: string | null
+  status?: 'ACTIVE' | 'COMPLETED' | 'DROPPED'
+}
+
+export function useSaveCompanyKpi() {
+  const qc = useQueryClient()
+  return useAvailableMutation<CompanyKpi, { id?: string; payload: CompanyKpiPayload }>({
+    mutationFn: ({ id, payload }) => asAvailable(() => apiJson<CompanyKpi>(`/v1/performance/company-kpis${id ? `/${id}` : ''}`, {
+      method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+    })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['performance'] }),
   })
 }

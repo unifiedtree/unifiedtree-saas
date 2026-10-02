@@ -70,6 +70,7 @@ public class SkillService {
     private EmployeeSkillResponse toResponse(EmployeeSkill s) {
         return new EmployeeSkillResponse(
                 s.getId(), s.getEmployeeId(), s.getSkillName(), s.getProficiency(),
-                s.isCertified(), s.getCertificationName(), s.getCertifiedOn(), s.getCreatedAt(), s.getExpiresOn());
+                s.isCertified(), s.getCertificationName(), s.getCertifiedOn(), s.getCreatedAt(), s.getExpiresOn(),
+                s.getUpdatedAt());
     }
 }

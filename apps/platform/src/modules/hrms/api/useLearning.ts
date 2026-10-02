@@ -50,6 +50,8 @@ export interface TrainingProgram {
   createdAt: string
   updatedAt?: string
   mode?: ProgramMode | null
+  /** BW-85: where it happens (null when not set, or before V143.61). */
+  location?: string | null
 }
 
 /**
@@ -76,6 +78,12 @@ export interface Enrollment {
   completedAt?: string | null
   createdAt: string
   updatedAt?: string | null
+  /** BW-85: the person's department, and the program's dates, mode and place. */
+  department?: string | null
+  programStartDate?: string | null
+  programEndDate?: string | null
+  programMode?: ProgramMode | null
+  programLocation?: string | null
 }
 
 export interface EmployeeSkill {
@@ -88,6 +96,8 @@ export interface EmployeeSkill {
   expiresOn?: string
   certifiedOn?: string
   createdAt: string
+  /** BW-85: when the record last changed. */
+  updatedAt?: string | null
 }
 
 export interface Page<T> {
@@ -157,6 +167,8 @@ export interface CreateProgramPayload {
   endDate?: string
   capacity?: number | null
   mode?: ProgramMode
+  /** BW-85 */
+  location?: string
 }
 
 /**
@@ -176,6 +188,8 @@ export interface UpdateProgramPayload {
   capacity?: number
   unlimitedSeats?: boolean
   mode?: ProgramMode | ''
+  /** BW-85: undefined leaves it, '' clears it. */
+  location?: string
 }
 
 export function useUpdateProgram() {
@@ -369,6 +383,8 @@ export interface SkillAssessment {
   decidedAt?: string | null
   decisionNote?: string | null
   createdAt: string
+  /** BW-85: the certification named with the proposal. */
+  certificationName?: string | null
 }
 
 export function useMySkillAssessments(enabled = true) {
@@ -383,7 +399,7 @@ export function useMySkillAssessments(enabled = true) {
 export function useProposeSkillLevel() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { skillName: string; proposedProficiency: number; note?: string }) =>
+    mutationFn: (body: { skillName: string; proposedProficiency: number; note?: string; certificationName?: string }) =>
       apiJson<SkillAssessment>('/v1/learning/skill-assessments', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skill-assessments'] }),
   })
@@ -419,7 +435,68 @@ export function useDecideSkillAssessment() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skill-assessments'] }),
         qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skills'] }),
+        qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'certifications'] }),
       ])
     },
+  })
+}
+
+// ── Redesign P-GROW (BW-85) ──────────────────────────────────────────────────
+
+/** Programs tiles, plus whether V143.61's place and certification-name fields are switched on. */
+export interface ProgramsSummary {
+  inCatalogue: number
+  ongoing: number
+  planned: number
+  enrollmentsThisYear: number
+  year: number
+  locations: boolean
+  certificationNames: boolean
+}
+
+export function useProgramsSummary(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'learning', 'programs-summary'],
+    queryFn: () => apiJson<ProgramsSummary>('/v1/learning/programs/summary'),
+    staleTime: 30_000,
+    enabled,
+  })
+}
+
+/** The categories programs already use (for the program form's list). */
+export function useProgramCategories(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'learning', 'categories'],
+    queryFn: () => apiJson<string[]>('/v1/learning/programs/categories'),
+    staleTime: 60_000,
+    enabled,
+  })
+}
+
+export type CertificationStatus = 'CERTIFIED' | 'EXPIRING' | 'EXPIRED'
+export interface Certification {
+  skillId: string
+  employeeId: string
+  employeeName: string
+  employeeCode?: string | null
+  department?: string | null
+  skillName: string
+  certificationName?: string | null
+  certifiedOn?: string | null
+  expiresOn?: string | null
+  status: CertificationStatus
+  daysLeft?: number | null
+}
+
+/** Everyone's certifications on file (hrms.learning.skill.read). */
+export function useCertifications(filters: { status?: 'all' | 'valid' | 'expiring' | 'expired'; search?: string; page?: number; size?: number }, enabled = true) {
+  const { status = 'all', search = '', page = 0, size = 25 } = filters
+  const qs = new URLSearchParams({ status, page: String(page), size: String(size) })
+  if (search.trim()) qs.set('search', search.trim())
+  return useQuery({
+    queryKey: ['hrms', 'learning', 'certifications', status, search.trim(), page, size],
+    queryFn: () => apiJson<{ items: Certification[]; page: number; size: number; total: number }>(`/v1/learning/certifications?${qs}`),
+    staleTime: 30_000,
+    enabled,
   })
 }

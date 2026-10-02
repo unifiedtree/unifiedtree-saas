@@ -44,6 +44,7 @@ public class SkillAssessmentService {
     private static final Logger log = LoggerFactory.getLogger(SkillAssessmentService.class);
     static final int MAX_NOTE = 1000;
     static final int MAX_SKILL = 120;
+    static final int MAX_CERTIFICATION = 200;
     static final Set<String> DECISIONS = Set.of("APPROVED", "REJECTED");
 
     private final JdbcTemplate jdbc;
@@ -62,7 +63,18 @@ public class SkillAssessmentService {
             UUID id, UUID employeeId, String employeeName, String employeeCode, String department,
             UUID skillId, String skillName, Integer currentProficiency, int proposedProficiency,
             String employeeNote, String status, String decidedByName, String decidedAt,
-            String decisionNote, String createdAt) {}
+            String decisionNote, String createdAt,
+            // Redesign BW-85 (added): the certification named with the proposal (V143.61).
+            String certificationName) {
+
+        public AssessmentDto(UUID id, UUID employeeId, String employeeName, String employeeCode, String department,
+                             UUID skillId, String skillName, Integer currentProficiency, int proposedProficiency,
+                             String employeeNote, String status, String decidedByName, String decidedAt,
+                             String decisionNote, String createdAt) {
+            this(id, employeeId, employeeName, employeeCode, department, skillId, skillName, currentProficiency,
+                    proposedProficiency, employeeNote, status, decidedByName, decidedAt, decisionNote, createdAt, null);
+        }
+    }
 
     public record ProposeRequest(
             @jakarta.validation.constraints.NotBlank
@@ -70,7 +82,9 @@ public class SkillAssessmentService {
             @jakarta.validation.constraints.NotNull
             @jakarta.validation.constraints.Min(1)
             @jakarta.validation.constraints.Max(5) Integer proposedProficiency,
-            @jakarta.validation.constraints.Size(max = MAX_NOTE) String note) {}
+            @jakarta.validation.constraints.Size(max = MAX_NOTE) String note,
+            // BW-85, optional: the certification that backs the level; written to the skill when approved.
+            @jakarta.validation.constraints.Size(max = MAX_CERTIFICATION) String certificationName) {}
 
     public record DecideRequest(
             @jakarta.validation.constraints.NotBlank String decision,
@@ -98,6 +112,9 @@ public class SkillAssessmentService {
         String skill = validateSkillName(req.skillName());
         int level = validateLevel(req.proposedProficiency());
         String note = cleanNote(req.note());
+        String certification = cleanCertification(req.certificationName());
+        // BW-85: the column comes with V143.61; refuse before writing anything without it.
+        if (certification != null && !certificationNamesReady()) throw new com.hrms.core.exception.FeatureNotReady();
 
         Integer activeEmployee = jdbc.queryForObject(
                 "SELECT count(*) FROM hrms.employees WHERE tenant_id = ? AND id = ? AND is_active",
@@ -137,6 +154,10 @@ public class SkillAssessmentService {
                     RETURNING id
                     """, UUID.class, tenantId, employeeId, skillId, skill, currentLevel, level, note,
                     tag(actorUserId), tag(actorUserId));
+            if (certification != null) {
+                jdbc.update("UPDATE learning_mgmt.skill_assessments SET certification_name = ? WHERE tenant_id = ? AND id = ?",
+                        certification, tenantId, id);
+            }
         } catch (DuplicateKeyException race) {
             throw new BusinessRuleException("You already have a proposal for " + skill
                     + " waiting for approval.", "SKILL_ASSESSMENT_PENDING");
@@ -254,15 +275,50 @@ public class SkillAssessmentService {
                        SET proficiency = ?, updated_at = now(), updated_by = ?, version = version + 1
                      WHERE tenant_id = ? AND id = ?
                     """, row.proposedLevel(), tag(actorUserId), tenantId, existing);
+            applyCertification(tenantId, existing, row.certificationName(), actorUserId);
             return existing;
         }
-        return jdbc.queryForObject("""
+        UUID created = jdbc.queryForObject("""
                 INSERT INTO learning_mgmt.employee_skills
                     (tenant_id, employee_id, skill_name, proficiency, certified, created_by, updated_by)
                 VALUES (?, ?, ?, ?, FALSE, ?, ?)
                 RETURNING id
                 """, UUID.class, tenantId, row.employeeId(), row.skillName(), row.proposedLevel(),
                 tag(actorUserId), tag(actorUserId));
+        applyCertification(tenantId, created, row.certificationName(), actorUserId);
+        return created;
+    }
+
+    /**
+     * BW-85: a proposal that named a certification marks the skill certified with that
+     * name when approved. The dates stay as they are (HR records them on the skill).
+     */
+    private void applyCertification(UUID tenantId, UUID skillId, String certification, UUID actorUserId) {
+        if (certification == null) return;
+        jdbc.update("""
+                UPDATE learning_mgmt.employee_skills
+                   SET certified = TRUE, certification_name = ?, updated_at = now(), updated_by = ?
+                 WHERE tenant_id = ? AND id = ?
+                """, certification, tag(actorUserId), tenantId, skillId);
+    }
+
+    boolean certificationNamesReady() {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                                WHERE table_schema = 'learning_mgmt' AND table_name = 'skill_assessments'
+                                  AND column_name = 'certification_name')
+                """, Boolean.class));
+    }
+
+    static String cleanCertification(String name) {
+        if (name == null) return null;
+        String t = name.trim().replaceAll("\\s+", " ");
+        if (t.isEmpty()) return null;
+        if (t.length() > MAX_CERTIFICATION) {
+            throw new BusinessRuleException("A certification name can be at most " + MAX_CERTIFICATION + " characters",
+                    "CERTIFICATION_NAME_TOO_LONG");
+        }
+        return t;
     }
 
     // ── Scope and approver ────────────────────────────────────────────────────
@@ -375,14 +431,16 @@ public class SkillAssessmentService {
               LEFT JOIN hrms.employees dm ON dm.id = a.decided_by_employee_id AND dm.tenant_id = a.tenant_id
             """;
 
-    private record Row(UUID employeeId, UUID skillId, String skillName, int proposedLevel, String status) {}
+    private record Row(UUID employeeId, UUID skillId, String skillName, int proposedLevel, String status,
+                       String certificationName) {}
 
     private Row load(UUID tenantId, UUID id) {
+        // SELECT *: certification_name exists only once V143.61 is applied.
         Row row = jdbc.query("""
-                SELECT employee_id, skill_id, skill_name, proposed_proficiency, status
-                  FROM learning_mgmt.skill_assessments WHERE tenant_id = ? AND id = ? FOR UPDATE
-                """, rs -> rs.next() ? new Row(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class),
-                        rs.getString(3), rs.getInt(4), rs.getString(5)) : null, tenantId, id);
+                SELECT * FROM learning_mgmt.skill_assessments WHERE tenant_id = ? AND id = ? FOR UPDATE
+                """, rs -> rs.next() ? new Row(rs.getObject("employee_id", UUID.class), rs.getObject("skill_id", UUID.class),
+                        rs.getString("skill_name"), rs.getInt("proposed_proficiency"), rs.getString("status"),
+                        optional(rs, "certification_name")) : null, tenantId, id);
         if (row == null) throw new ResourceNotFoundException("Skill assessment", id);
         return row;
     }
@@ -413,7 +471,18 @@ public class SkillAssessmentService {
                 rs.getString("decided_by_name"),
                 ts(rs.getTimestamp("decided_at")),
                 rs.getString("decision_note"),
-                ts(rs.getTimestamp("created_at")));
+                ts(rs.getTimestamp("created_at")),
+                optional(rs, "certification_name"));
+    }
+
+    /** A column that may not exist yet (before its migration): null then. */
+    static String optional(ResultSet rs, String column) throws SQLException {
+        java.sql.ResultSetMetaData md = rs.getMetaData();
+        if (md == null) return null;
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            if (column.equalsIgnoreCase(md.getColumnLabel(i))) return rs.getString(i);
+        }
+        return null;
     }
 
     private static String words(String status) {

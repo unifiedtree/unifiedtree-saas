@@ -48,6 +48,56 @@ class ReportPeriodsTest {
     }
 
     @Test
+    void dailyRunsTomorrowAndCoversYesterday() {
+        LocalDate fri = LocalDate.of(2026, 10, 2);
+        assertThat(ReportPeriods.nextRun(Frequency.DAILY, null, null, fri)).isEqualTo(LocalDate.of(2026, 10, 3));
+        ReportPeriods.Period p = ReportPeriods.periodFor(Frequency.DAILY, fri);
+        assertThat(p.from()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(p.to()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(p.label()).isEqualTo("1 Oct 2026");
+    }
+
+    @Test
+    void weekdaysSkipTheWeekendAndMondayCoversFridayToSunday() {
+        LocalDate fri = LocalDate.of(2026, 10, 2), sat = fri.plusDays(1), mon = fri.plusDays(3), tue = fri.plusDays(4);
+        assertThat(ReportPeriods.nextRun(Frequency.WEEKDAYS, null, null, fri)).isEqualTo(mon);
+        assertThat(ReportPeriods.nextRun(Frequency.WEEKDAYS, null, null, sat)).isEqualTo(mon);
+        assertThat(ReportPeriods.nextRun(Frequency.WEEKDAYS, null, null, mon)).isEqualTo(tue);
+        ReportPeriods.Period monday = ReportPeriods.periodFor(Frequency.WEEKDAYS, mon);
+        assertThat(monday.from()).isEqualTo(fri);
+        assertThat(monday.to()).isEqualTo(fri.plusDays(2));
+        ReportPeriods.Period tuesday = ReportPeriods.periodFor(Frequency.WEEKDAYS, tue);
+        assertThat(tuesday.from()).isEqualTo(mon);
+        assertThat(tuesday.to()).isEqualTo(mon);
+    }
+
+    @Test
+    void anEmailGoesOutOnlyOnItsDayAndFromItsHour() {
+        LocalDate today = LocalDate.of(2026, 10, 2);
+        // No send hour: the first run of the day (07:05), as before V143.62.
+        assertThat(ReportPeriods.sendsNow(today, null, today, 7)).isTrue();
+        // A send hour waits for that hour's run, then goes out (and on later runs if one was missed).
+        assertThat(ReportPeriods.sendsNow(today, 11, today, 10)).isFalse();
+        assertThat(ReportPeriods.sendsNow(today, 11, today, 11)).isTrue();
+        assertThat(ReportPeriods.sendsNow(today, 11, today, 15)).isTrue();
+        // Not due yet: never, whatever the hour.
+        assertThat(ReportPeriods.sendsNow(today.plusDays(1), null, today, 23)).isFalse();
+        assertThat(ReportPeriods.sendsNow(today.plusDays(1), 7, today, 23)).isFalse();
+        // Missed on an earlier day: goes out on the next run, even before its hour.
+        assertThat(ReportPeriods.sendsNow(today.minusDays(1), 22, today, 7)).isTrue();
+    }
+
+    @Test
+    void frequencyWordsAndWhichNeedTheMigration() {
+        assertThat(Frequency.DAILY.needsScheduleOptions()).isTrue();
+        assertThat(Frequency.WEEKDAYS.needsScheduleOptions()).isTrue();
+        assertThat(Frequency.WEEKLY.needsScheduleOptions()).isFalse();
+        assertThat(Frequency.MONTHLY.needsScheduleOptions()).isFalse();
+        assertThat(Frequency.WEEKDAYS.word()).isEqualTo("weekday");
+        assertThat(Frequency.MONTHLY.word()).isEqualTo("monthly");
+    }
+
+    @Test
     void reportFiltersFollowThePeriod() {
         ReportPeriods.Period p = new ReportPeriods.Period(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
         ReportPdfService.Params head = ReportPeriods.params(ReportKind.HEADCOUNT, CO, p);

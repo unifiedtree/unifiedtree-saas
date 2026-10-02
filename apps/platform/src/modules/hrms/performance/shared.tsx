@@ -1,10 +1,11 @@
-// Pieces shared by My goals, the review cards, the admin review drawer and the
-// per-employee performance page. Built from the module kit only.
-import { HrStatusPill, type PillTone } from '@/shared/components/hr'
-import { Note, Row, RowList, State, SubHeading, dmy, stamp } from '@/design/module/ModuleKit'
+// Pieces shared by My goals, the review panels and the per-employee performance page,
+// on the redesign kit (tokens only).
+import { Callout, ListRow, ListRows, SkeletonList, StatusPill, type StatusTone } from '@/design/kit/display'
+import { stamp } from '@/design/module/ModuleKit'
 import { useReviewGoals, type GoalProgressEntry, type ReviewGoal } from '../api/usePerformance'
+import { dayMon, kpiStatus } from './growModel'
 
-export const GOAL_STATUS_TONE: Record<string, PillTone> = { ACTIVE: 'info', AT_RISK: 'warn', COMPLETED: 'ok', DROPPED: 'gray' }
+export const GOAL_STATUS_TONE: Record<string, StatusTone> = { ACTIVE: 'info', AT_RISK: 'warning', COMPLETED: 'success', DROPPED: 'muted' }
 /** "AT_RISK" → "At risk" */
 export const statusWords = (v?: string | null) => (v || '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 const num = (n?: number | null) => (n == null ? '0' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }))
@@ -19,31 +20,31 @@ export function goalMeasure(g: { kpi?: boolean; targetValue?: number | null; cur
 
 /**
  * The reviewee's goals and KPIs for the review's cycle, shown while the review
- * is written (and in the admin review drawer). GET /v1/performance/reviews/{id}/goals.
+ * is written (and in the admin review panel). GET /v1/performance/reviews/{id}/goals.
  */
 export function ReviewGoalsPanel({ reviewId, selfReview }: { reviewId: string; selfReview?: boolean }) {
   const q = useReviewGoals(reviewId)
-  if (q.isLoading) return <State kind="loading" height={72} />
-  if (q.isError) return <Note tone="red">{`Couldn’t load the goals for this review. ${(q.error as Error)?.message || ''}`.trim()}</Note>
+  if (q.isLoading) return <SkeletonList rows={2} />
+  if (q.isError) return <Callout tone="danger">{`Couldn’t load the goals for this review. ${(q.error as Error)?.message || ''}`.trim()}</Callout>
   const data = q.data
   const goals: ReviewGoal[] = data?.goals ?? []
   const who = selfReview ? 'Your' : data?.employeeName ? `${data.employeeName}’s` : 'Their'
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <SubHeading>{`${who} goals & KPIs${data?.cycleName ? ` · ${data.cycleName}` : ''}`}</SubHeading>
+    <div className="grw-stack grw-stack--tight">
+      <h3 className="grw-sub">{`${who} goals & KPIs${data?.cycleName ? ` · ${data.cycleName}` : ''}`}</h3>
       {goals.length === 0
-        ? <Note>{selfReview ? 'You had no goals or KPIs set for this cycle.' : 'No goals or KPIs were set for this person in this cycle.'}</Note>
+        ? <Callout tone="neutral">{selfReview ? 'You had no goals or KPIs set for this cycle.' : 'No goals or KPIs were set for this person in this cycle.'}</Callout>
         : (
-          <RowList>
+          <ListRows>
             {goals.map((g) => (
-              <Row key={g.id} title={g.title}
-                meta={[goalMeasure(g), g.dueDate ? `due ${dmy(g.dueDate)}` : null, g.category].filter(Boolean).join(' · ')}
-                trail={<>
-                  {g.kpi && <HrStatusPill tone="purple">KPI</HrStatusPill>}
-                  <HrStatusPill tone={GOAL_STATUS_TONE[g.status] || 'gray'}>{statusWords(g.status)}</HrStatusPill>
-                </>} />
+              <ListRow key={g.id} variant="divided" density="compact" title={g.title}
+                sub={[goalMeasure(g), g.dueDate ? `due ${dayMon(g.dueDate)}` : null, g.category].filter(Boolean).join(' · ')}
+                end={<span className="grw-row">
+                  {g.kpi && <StatusPill tone="holiday" size="sm">KPI</StatusPill>}
+                  <StatusPill tone={kpiStatus(g.status).tone} size="sm">{kpiStatus(g.status).label}</StatusPill>
+                </span>} />
             ))}
-          </RowList>
+          </ListRows>
         )}
     </div>
   )
@@ -51,16 +52,16 @@ export function ReviewGoalsPanel({ reviewId, selfReview }: { reviewId: string; s
 
 /** A goal's progress history: each update's value, when, who and the note. */
 export function GoalHistoryList({ entries, kpi, unit }: { entries: GoalProgressEntry[]; kpi: boolean; unit?: string | null }) {
-  if (!entries.length) return <Note>No progress updates recorded yet.</Note>
+  if (!entries.length) return <p className="grw-muted" style={{ margin: 0 }}>No progress updates recorded yet.</p>
   const value = (v?: number | null) => (v == null ? '—' : kpi ? `${num(v)}${unit ? ` ${unit}` : ''}` : `${num(v)}%`)
   return (
-    <RowList>
+    <ListRows>
       {entries.map((e) => (
-        <Row key={e.id}
+        <ListRow key={e.id} variant="divided" density="compact"
           title={e.previousValue == null ? `Started at ${value(e.newValue)}` : `${value(e.previousValue)} → ${value(e.newValue)}`}
-          meta={[stamp(e.updatedAt), e.updatedByName ? `by ${e.updatedByName}` : null, kpi ? `${Math.round(Number(e.progressPct ?? 0))}% of target` : null].filter(Boolean).join(' · ')}
-          note={e.notes || undefined} />
+          sub={[stamp(e.updatedAt), e.updatedByName ? `by ${e.updatedByName}` : null, kpi ? `${Math.round(Number(e.progressPct ?? 0))}% of target` : null].filter(Boolean).join(' · ')}
+          meta={e.notes || undefined} />
       ))}
-    </RowList>
+    </ListRows>
   )
 }
