@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { usePermission } from '@unifiedtree/sdk'
 import { Button, EmptyState, ErrorState, Section, Skeleton, type CalendarDay, type StatusTone } from '@/design/kit/display'
-import { useToast } from '@/design/kit/overlays'
+import { Dialog, PanelButton, useToast } from '@/design/kit/overlays'
+import { useNavigationGuard } from '@/design/shell/navigationGuard'
 import { SettingsPage, SettingsSection, SettingsToggleRow, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { istToday } from '@/design/dc/dates'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
@@ -208,7 +209,20 @@ export const Profile: React.FC = () => {
   const d = draft ?? original
   const nameError = !d.displayName.trim() ? 'Enter the name to show' : undefined
   const phoneError = d.phone.trim() && !PHONE_RX.test(d.phone.trim()) ? 'Enter a phone number (digits, spaces, + and - only)' : undefined
-  const changed = d.displayName.trim() !== original.displayName.trim() || d.phone.trim() !== original.phone.trim()
+  const changeCount = (d.displayName.trim() !== original.displayName.trim() ? 1 : 0) + (d.phone.trim() !== original.phone.trim() ? 1 : 0)
+  const changed = changeCount > 0
+  const discardCard = () => setDraft({ ...original })
+  // Typed changes in the card are never dropped silently: closing or reloading the tab asks (beforeunload),
+  // and moving away inside the app (rail, top tabs, More) asks first too. Switching the profile's own
+  // tabs keeps the card, so nothing is lost there.
+  const [leave, setLeave] = useState<null | (() => void)>(null)
+  useEffect(() => {
+    if (!changed) return
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [changed])
+  useNavigationGuard(changed ? (proceed) => { setLeave(() => proceed); return true } : null)
   const saveCard = async () => {
     if (!user || nameError || phoneError || !changed) return
     const patch: Partial<CurrentUser> = {}
@@ -294,6 +308,13 @@ export const Profile: React.FC = () => {
     <>
       <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} hidden onChange={(e) => onFilePicked(e.target.files?.[0])} />
       <p className="upf-note">Mobile is used for account recovery. Your name, city and emergency contacts are kept by HR; ask them to change these.</p>
+      {changed && (
+        <div role="region" aria-label="Unsaved changes" className="upf-unsaved">
+          <span aria-hidden="true" className="upf-unsaved__dot" />
+          <span className="upf-unsaved__t">{`${changeCount} ${changeCount === 1 ? 'change' : 'changes'} · not saved yet`}</span>
+          <Button size={30} variant="ghost" onClick={discardCard}>Discard</Button>
+        </div>
+      )}
       <div className="upf-update" style={{ justifyContent: 'space-between', gap: 8 }}>
         <Button size={40} variant="secondary" icon="upload" loading={upload.isPending} onClick={() => inputRef.current?.click()}>Change photo</Button>
         <Button size={40} variant="primary" loading={update.isPending} disabled={!changed || !!nameError || !!phoneError}
@@ -431,6 +452,12 @@ export const Profile: React.FC = () => {
 
   return (
     <div ref={rootRef}>
+      <Dialog open={!!leave} onClose={() => setLeave(null)} title="Leave without saving?" icon="alertTriangle" tone="warning"
+        sub={`Your ${changeCount === 1 ? 'change' : `${changeCount} changes`} to your profile card ${changeCount === 1 ? 'isn’t' : 'aren’t'} saved yet.`}
+        footer={<>
+          <PanelButton onClick={() => setLeave(null)}>Keep editing</PanelButton>
+          <PanelButton variant="danger" onClick={() => { const go = leave; setLeave(null); discardCard(); go?.() }}>Leave without saving</PanelButton>
+        </>} />
       <ProfileFrame
         screenLabel="My profile"
         avatar={{ name: fullName, src: user.avatarUrl, checkedIn: !!w?.days?.find((x) => x.date === today && x.checkInTime && !x.checkOutTime) }}

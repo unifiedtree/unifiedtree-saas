@@ -327,6 +327,18 @@ try {
     check('reader: My profile tabs by own permissions, with Attendance and Preferences', ['Overview', 'Personal', 'Job', 'Attendance', 'My pay', 'Leave', 'Expenses', 'Documents', 'Letters', 'Performance', 'Preferences'].every((x) => t.includes(x)) && !t.includes('Exit') && !t.includes('Access'), t.join(','))
     check('reader: the left card lets them change display name and Mobile only', await s.page.getByLabel('Display name').count() === 1 && await s.page.getByLabel('Mobile').count() === 1 && await s.page.getByLabel('First name').count() === 0)
     await s.shot('me-overview-1440-light')
+    // Typed but unsaved: the card says so, and moving away inside the app asks first.
+    const dn = s.page.getByLabel('Display name', { exact: true })
+    const dn0 = await dn.inputValue()
+    await dn.fill(dn0 + ' x')
+    check('reader: an unsaved change shows in the card', await s.page.getByRole('region', { name: 'Unsaved changes' }).getByText('1 change · not saved yet').count() === 1)
+    await s.page.locator('.ut-railwrap nav[aria-label="Primary"] a.ut-rail__item').first().click()
+    const ask = s.page.getByRole('dialog', { name: 'Leave without saving?' })
+    const asked = await ask.waitFor({ timeout: 5000 }).then(() => true, () => false)
+    if (asked) await ask.getByRole('button', { name: 'Keep editing' }).click()
+    check('reader: leaving with an unsaved change asks first, and Keep editing keeps it', asked && new URL(s.page.url()).pathname === '/profile' && (await dn.inputValue()) === dn0 + ' x')
+    await s.page.getByRole('region', { name: 'Unsaved changes' }).getByRole('button', { name: 'Discard' }).click()
+    check('reader: Discard puts the card back', (await dn.inputValue()) === dn0 && await s.page.getByRole('region', { name: 'Unsaved changes' }).count() === 0)
     for (const tab of t.filter((x) => x !== 'Overview')) {
       s.errors.length = 0
       await s.page.getByRole('tab', { name: new RegExp('^' + tab) }).click(); await s.settle()

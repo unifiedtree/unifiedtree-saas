@@ -107,7 +107,9 @@ async function visit(s, who, theme, path) {
   const restricted = await s.page.getByText(/Access restricted|don.t have access|Access Restricted/).count()
   check(`${tag}: the page renders (${restricted ? 'closed to this role' : `"${(h1 || '').trim()}"`})`, !!(h1 || '').trim() || restricted > 0)
   check(`${tag}: theme is ${theme}`, (await s.page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === theme)
-  if (!restricted) check(`${tag}: the kit page header`, (await s.page.locator('.uk-ph__title').count()) >= 1)
+  // My profile (P-PROFILE) has the profile frame's header (banner, the person's name) instead of the kit page header.
+  const header = path.startsWith('/profile') ? '.upf-name' : '.uk-ph__title'
+  if (!restricted) check(`${tag}: the ${path.startsWith('/profile') ? 'profile frame' : 'kit page'} header`, (await s.page.locator(header).count()) >= 1)
   const p = await probe(s.page)
   check(`${tag}: rebuilt pieces readable (${p.n} checked)`, p.n > 0 && p.low.length === 0, p.low.slice(0, 3).join(' | '))
   if (theme === 'dark') {
@@ -167,17 +169,20 @@ try {
   const PROGRAMS = /\/api\/v1\/learning\/programs\?/
   await page.route(PROGRAMS, (r) => (failNext ? r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Local check: programs are unavailable' }) }) : r.continue()))
   await page.goto(base + '/hrms/learning'); await o.settle()
-  const alert = page.getByRole('alert').filter({ hasText: 'Couldn’t load programs' })
+  // Learning (P-GROW) shows the kit error state in its "All programs" card; the reason is the server's message.
+  const alert = page.getByRole('alert').filter({ hasText: 'Local check: programs are unavailable' })
   await alert.waitFor({ timeout: 20_000 }).catch(() => {})
   check('owner: a failed load shows the error state (role=alert, the reason)', (await alert.count()) === 1 && (await alert.innerText()).includes('Local check: programs are unavailable'))
   failNext = false
   await alert.getByRole('button', { name: 'Try again', exact: true }).click().catch(() => {})
   await page.waitForTimeout(1500)
-  check('owner: "Try again" loads it again', (await page.getByRole('alert').filter({ hasText: 'Couldn’t load programs' }).count()) === 0)
+  check('owner: "Try again" loads it again', (await page.getByRole('alert').filter({ hasText: 'Local check: programs are unavailable' }).count()) === 0)
   await page.unroute(PROGRAMS)
   o.injected.delete('/v1/learning/programs')
 
-  // Unsaved-changes bar and the tab-close guard (Profile). Nothing is saved.
+  // Unsaved changes and the tab-close guard (My profile). The redesigned profile edits display name and
+  // Mobile in its left card: the card's "Unsaved changes" note counts the change, with Discard there and
+  // Update to save. Nothing is saved.
   o.errors.length = 0; o.failed.length = 0
   await page.goto(base + '/profile'); await o.settle()
   const nameField = page.getByLabel('Display name', { exact: true })
@@ -186,7 +191,7 @@ try {
   await nameField.fill(name0 + ' x')
   const bar = page.getByRole('region', { name: 'Unsaved changes' })
   check('owner: an edit shows the unsaved-changes bar with its count', (await bar.count()) === 1 && (await bar.getByText('1 change · not saved yet').count()) === 1)
-  check('owner: the bar offers Discard and Save settings', (await bar.getByRole('button', { name: 'Discard' }).count()) === 1 && (await bar.getByRole('button', { name: 'Save settings' }).count()) === 1)
+  check('owner: the note offers Discard, and Update saves', (await bar.getByRole('button', { name: 'Discard' }).count()) === 1 && await page.getByRole('button', { name: 'Update', exact: true }).isEnabled())
   const guarded = await page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented })
   check('owner: with unsaved changes the tab-close guard is on', guarded)
   let dialogType = ''
@@ -287,7 +292,9 @@ try {
   await phoneName.fill(pn0 + ' x')
   const pbar = m.page.getByRole('region', { name: 'Unsaved changes' })
   const pb = await pbar.evaluate((el) => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), pos: getComputedStyle(el).position } }).catch(() => null)
-  check('phone: the unsaved bar is the full-width sticky strip', !!pb && pb.pos === 'sticky' && pb.w >= 380, JSON.stringify(pb))
+  // On a phone the note sits in the profile card, which spans the screen.
+  const ov = await m.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  check('phone: the unsaved note spans the profile card, no sideways scroll', !!pb && pb.w >= 300 && ov <= 1, JSON.stringify({ ...pb, ov }))
   await pbar.getByRole('button', { name: 'Discard' }).click()
   check('phone: Discard clears it', (await pbar.count()) === 0)
   check('phone: no page errors', !m.errors.length, m.errors[0] || '')
