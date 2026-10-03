@@ -2,7 +2,7 @@ name: Canonical Integration Tests
 
 # Focused gate for all canonical IT classes.
 # Each class spins up its own Testcontainers Postgres (no external services needed).
-# Covers: AttendanceFlowIT (5) + LeaveFlowIT (5) + AuditControllerIT (5) + LetterFlowIT (8) = 23 tests.
+# Covers: AttendanceFlowIT (5) + LeaveFlowIT (5) + AuditControllerIT (5) + LetterFlowIT (10) = 25 tests.
 # Target runtime: under 8 minutes from push to green checkmark.
 
 on:
@@ -39,7 +39,7 @@ concurrency:
 
 jobs:
   canonical-it:
-    name: Canonical IT (23 tests)
+    name: Canonical IT (25 tests)
     runs-on: ubuntu-latest
 
     steps:

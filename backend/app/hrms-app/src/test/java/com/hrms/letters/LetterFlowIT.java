@@ -80,6 +80,9 @@ class LetterFlowIT extends AbstractIntegrationTest {
             UUID.fromString("aaaaaaaa-cccc-cccc-cccc-aaaaaaaaaaaa");
     private static final UUID EMP_ID =
             UUID.fromString("22222222-2222-2222-2222-222222222222");
+    /** EMP001, the admin's own employee record: a letter the reader must never open. */
+    private static final UUID OTHER_EMP_ID =
+            UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     private String adminToken() {
         return (String) login(TENANT_A, "admin@unifiedtree.demo", "Hrms@12345").get("accessToken");
@@ -87,6 +90,18 @@ class LetterFlowIT extends AbstractIntegrationTest {
 
     private String readerToken() {
         return (String) login(TENANT_A, "reader@unifiedtree.demo", "Hrms@12345").get("accessToken");
+    }
+
+    /** The ids in the reader's own letter list (GET /v1/letters/my). */
+    @SuppressWarnings("unchecked")
+    private List<Object> myLetterIds() {
+        Map<String, Object> resp = http().get()
+                .uri("/v1/letters/my")
+                .header("Authorization", "Bearer " + readerToken())
+                .retrieve()
+                .body(Map.class);
+        List<Map<String, Object>> content = (List<Map<String, Object>>) resp.get("content");
+        return content.stream().map(e -> e.get("id")).toList();
     }
 
     // ── 1. HR admin creates an OFFER template ───────────────────────────────
@@ -143,7 +158,10 @@ class LetterFlowIT extends AbstractIntegrationTest {
         LETTER_ID = (String) resp.get("id");
 
         verify(pdfRenderer, atLeastOnce()).render(any());
-        verify(emailService, never()).send(any(), any(), any(), any(), any(), any());
+        // Production sends through the seven-argument overload (it carries the
+        // company as sender name); the six-argument one only delegates to it, so
+        // asserting never() on that one could not fail.
+        verify(emailService, never()).send(any(), any(), any(), any(), any(), any(), any());
     }
 
     // ── 3. Cross-tenant isolation ────────────────────────────────────────────
@@ -172,44 +190,55 @@ class LetterFlowIT extends AbstractIntegrationTest {
         assertThat(ex.getStatusCode().value()).isIn(403, 404);
     }
 
-    // ── 4. Employee can read own letter via /my ──────────────────────────────
+    // ── 4. An unsent letter is not yet the employee's to see ─────────────────
+    // BW-75: HR's draft stays out of the employee's list until it is sent.
+    // Test 7 sends it and asserts the employee can then see it.
     @Test @Order(4)
-    void employeeCanReadOwnLetterViaMyEndpoint() {
+    void unsentLetterIsHiddenFromItsEmployee() {
         assertThat(LETTER_ID).as("letter must be generated in test 2").isNotNull();
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> resp = http().get()
-                .uri("/v1/letters/my")
-                .header("Authorization", "Bearer " + readerToken())
-                .retrieve()
-                .body(Map.class);
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> content = (List<Map<String, Object>>) resp.get("content");
-        assertThat(content).isNotEmpty();
-        assertThat(content).extracting(e -> e.get("id")).contains(LETTER_ID);
+        assertThat(myLetterIds()).doesNotContain(LETTER_ID);
     }
 
-    // ── 5. Employee cannot read another employee's letter (403) ──────────────
+    // ── 5. Another employee's letter is refused; the employee's own unsent
+    //       letter is 404, not 403 ───────────────────────────────────────────
     @Test @Order(5)
     void employeeCannotReadAnotherEmployeeLetter() {
         assertThat(LETTER_ID).as("letter must be generated in test 2").isNotNull();
+        when(pdfRenderer.render(any())).thenReturn("PDF-BYTES".getBytes());
 
-        // reader@unifiedtree.demo is EMP002 — the letter IS theirs, so we test
-        // that a letter for a DIFFERENT employee would 403. We verify the ownership
-        // check by directly accessing the generated endpoint with the reader token
-        // and verifying the reader CAN see their own (sanity) and that the controller
-        // logic rejects cross-employee access (tested structurally in test 4+).
-        // Since the seed only has one employee matching our reader, we just assert
-        // the /my response contains the letter and the employee sees it.
+        Map<String, Object> req = new HashMap<>();
+        req.put("templateId", TEMPLATE_ID);
+        req.put("employeeId", OTHER_EMP_ID.toString());
+        req.put("sendImmediately", false);
         @SuppressWarnings("unchecked")
-        Map<String, Object> detail = http().get()
+        Map<String, Object> other = http().post()
+                .uri("/v1/letters/generate")
+                .header("Authorization", "Bearer " + adminToken())
+                .header("Content-Type", "application/json")
+                .body(req)
+                .retrieve()
+                .body(Map.class);
+        String otherLetterId = (String) other.get("id");
+
+        HttpClientErrorException foreign = expectError(() -> http().get()
+                .uri("/v1/letters/generated/" + otherLetterId)
+                .header("Authorization", "Bearer " + readerToken())
+                .retrieve()
+                .body(Map.class));
+        assertThat(foreign.getStatusCode().value())
+                .as("another employee's letter → 403 ACCESS_DENIED")
+                .isEqualTo(403);
+
+        // Own letter, not yet sent: ownership is checked first and passes, then
+        // the unsent-draft rule answers 404. A 403 here would mean the reader was
+        // not recognised as the letter's owner.
+        HttpClientErrorException ownUnsent = expectError(() -> http().get()
                 .uri("/v1/letters/generated/" + LETTER_ID)
                 .header("Authorization", "Bearer " + readerToken())
                 .retrieve()
-                .body(Map.class);
-
-        assertThat(detail.get("employeeId")).isEqualTo(EMP_ID.toString());
+                .body(Map.class));
+        assertThat(ownUnsent.getStatusCode().value()).isEqualTo(404);
+        assertThat(ownUnsent.getResponseBodyAsString()).contains("LETTER_NOT_FOUND");
     }
 
     // ── 6. Unresolved merge field renders placeholder, doesn't crash ─────────
@@ -258,7 +287,7 @@ class LetterFlowIT extends AbstractIntegrationTest {
     void sendLetterUpdatesStatusAndCallsEmail() {
         assertThat(LETTER_ID).as("letter must be generated in test 2").isNotNull();
         when(pdfRenderer.render(any())).thenReturn("PDF-BYTES".getBytes());
-        doNothing().when(emailService).send(any(), any(), any(), any(), any(), any());
+        doNothing().when(emailService).send(any(), any(), any(), any(), any(), any(), any());
 
         @SuppressWarnings("unchecked")
         Map<String, Object> resp = http().post()
@@ -272,7 +301,17 @@ class LetterFlowIT extends AbstractIntegrationTest {
         assertThat(resp.get("status")).isEqualTo("SENT");
         assertThat(resp.get("sentToEmail")).isEqualTo("reader@unifiedtree.demo");
         verify(emailService, atLeastOnce()).send(
-                eq("reader@unifiedtree.demo"), any(), any(), any(), any(), any());
+                eq("reader@unifiedtree.demo"), any(), any(), any(), any(), any(), any());
+
+        // Sent, so it is now the reader's to see: in their list and directly.
+        assertThat(myLetterIds()).contains(LETTER_ID);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> detail = http().get()
+                .uri("/v1/letters/generated/" + LETTER_ID)
+                .header("Authorization", "Bearer " + readerToken())
+                .retrieve()
+                .body(Map.class);
+        assertThat(detail.get("employeeId")).isEqualTo(EMP_ID.toString());
     }
 
     // ── 8. Void letter → status VOID, record still readable ─────────────────
