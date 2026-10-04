@@ -28,6 +28,8 @@ export interface SyncEnv {
   gradeIdOf: (code: string, co: string) => string | undefined
   /** A side step failed after the main save worked (shift, invitation). */
   warn: (msg: string) => void
+  /** Told the id of each record the server creates (Add employee → "Create" selects it in the form). */
+  created?: (id: string | undefined) => void
 }
 
 /** Compare records by `_key`. A record without one (or a second copy of one) is new. */
@@ -138,10 +140,11 @@ async function companies({ added, changed }: Diff) {
 
 // One head office per company: the server switches the previous one back to a
 // branch in the same save (BranchService, V143.14), so no second call is needed.
-async function branches({ added, changed }: Diff) {
+async function branches({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
     const hq = r.kind === 'Head office'
-    await apiJson<{ id: string }>('/v1/hrms/branches', json('POST', { companyId: r.co, name: String(r.name).trim(), code: blank(r.code), city: blank(r.city), state: blank(r.state), isHeadquarters: hq, branchType: BRANCH_KIND_CODE[r.kind] || 'BRANCH' }))
+    const c = await apiJson<{ id: string }>('/v1/hrms/branches', json('POST', { companyId: r.co, name: String(r.name).trim(), code: blank(r.code), city: blank(r.city), state: blank(r.state), isHeadquarters: hq, branchType: BRANCH_KIND_CODE[r.kind] || 'BRANCH' }))
+    env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
     const hq = r.kind === 'Head office'
@@ -153,11 +156,12 @@ async function branches({ added, changed }: Diff) {
 
 async function depts({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    await apiJson('/v1/hrms/departments', json('POST', {
+    const c = await apiJson<{ id: string }>('/v1/hrms/departments', json('POST', {
       companyId: (r.parent && env.coOfDept(r.parent)) || env.defaultCo, name: String(r.name).trim(), code: blank(r.code),
       parentDepartmentId: r.parent || undefined, colorHex: TONE_HEX[r.t] || undefined, iconKey: r.icon || undefined,
       branchIds: r.branches?.length ? r.branches : undefined,
     }))
+    env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/departments/${r._key}`
@@ -174,7 +178,8 @@ async function depts({ added, changed }: Diff, env: SyncEnv) {
 
 async function desigs({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    await apiJson('/v1/hrms/designations', json('POST', { companyId: (r.dept && env.coOfDept(r.dept)) || env.defaultCo, title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, (r.dept && env.coOfDept(r.dept)) || env.defaultCo), grade: blank(r.grade), code: blank(r.code), departmentId: r.dept || undefined }))
+    const c = await apiJson<{ id: string }>('/v1/hrms/designations', json('POST', { companyId: (r.dept && env.coOfDept(r.dept)) || env.defaultCo, title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, (r.dept && env.coOfDept(r.dept)) || env.defaultCo), grade: blank(r.grade), code: blank(r.code), departmentId: r.dept || undefined }))
+    env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/designations/${r._key}`
@@ -210,10 +215,11 @@ const agencyBody = (r: Rec) => ({
 async function agencies({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
     const b = agencyBody(r)
-    await apiJson('/v1/hrms/contractors', json('POST', {
+    const c = await apiJson<{ id: string }>('/v1/hrms/contractors', json('POST', {
       ...b, companyId: env.defaultCo, registrationNumber: blank(b.registrationNumber), contactPersonName: blank(b.contactPersonName), contactEmail: blank(b.contactEmail),
       contactPhone: blank(b.contactPhone), serviceType: blank(b.serviceType), licenceNumber: blank(b.licenceNumber), licenceValidUntil: blank(b.licenceValidUntil),
     }))
+    env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/contractors/${r._key}`
@@ -225,7 +231,10 @@ async function agencies({ added, changed }: Diff, env: SyncEnv) {
 }
 
 async function classes({ added, changed }: Diff, env: SyncEnv) {
-  for (const r of added) await apiJson('/v1/hrms/employment-types', json('POST', { companyId: env.defaultCo, name: String(r.name).trim(), code: String(r.code || '').trim().toUpperCase(), payrollEligible: true, active: true }))
+  for (const r of added) {
+    const c = await apiJson<{ id: string }>('/v1/hrms/employment-types', json('POST', { companyId: env.defaultCo, name: String(r.name).trim(), code: String(r.code || '').trim().toUpperCase(), payrollEligible: true, active: true }))
+    env.created?.(c?.id)
+  }
   await each(changed, async ([o, r]) => {
     if (!changedAny(o, r, ['name', 'code', 'status'])) return
     if (r._raw?.system) throw new Error('Built-in employment types can’t be changed')
@@ -248,7 +257,10 @@ const shiftBody = (r: Rec) => ({
   weeklyOffDays: Array.isArray(r.offs) ? r.offs.map((d: string) => WEEK.indexOf(d) + 1).filter((d: number) => d > 0) : undefined,
 })
 async function shifts({ added, changed }: Diff, env: SyncEnv) {
-  for (const r of added) await apiJson(`/v1/shifts?companyId=${env.defaultCo}`, json('POST', { ...shiftBody(r), gracePeriodMinutes: r.grace ?? 0 }))
+  for (const r of added) {
+    const c = await apiJson<{ id: string }>(`/v1/shifts?companyId=${env.defaultCo}`, json('POST', { ...shiftBody(r), gracePeriodMinutes: r.grace ?? 0 }))
+    env.created?.(c?.id)
+  }
   await each(changed, async ([o, r]) => {
     if (r.status !== o.status && r.status !== 'Active') { await apiJson(`/v1/shifts/${r._key}`, json('DELETE')); return }
     await apiJson(`/v1/shifts/${r._key}`, json('PUT', shiftBody(r)))

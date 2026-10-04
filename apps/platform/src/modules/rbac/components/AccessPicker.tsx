@@ -7,7 +7,10 @@
 // has a login (see api/newPersonAccess.ts). The same levels rules as Users &
 // access are shown up front: only roles and permissions you could give, critical
 // ones only by the owner, high-risk ones after reading the warning.
-import { useEffect, useMemo, useState } from 'react'
+// Add employee also gets "Create" beside Roles (allowCreateRole): Roles &
+// permissions' own role fields in a panel over the form; the new role is then
+// offered through the same list of roles you may give, never around it.
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronDown, ChevronRight, Minus, Search } from 'lucide-react'
@@ -16,9 +19,12 @@ import { apiJson } from '@/core/api/client'
 import { useAuthStore } from '@/core/auth/authStore'
 import { Note } from '@/design/module/ModuleKit'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
-import { usePermissionsCatalogue, RISK_LABEL, RISK_TONE, isRisky, type RbacPermission, type RbacRole, type RiskLevel } from '../api/useRbac'
+import { useToast } from '@/design/kit/overlays'
+import { CreateButton, CreatePanel, needPermission, useCreatePanel } from '@/shared/components/inlineCreate/InlineCreate'
+import { usePermissionsCatalogue, useCreateRole, RISK_LABEL, RISK_TONE, isRisky, type RbacPermission, type RbacRole, type RiskLevel } from '../api/useRbac'
 import { useAssignableRoles, type AssignableRole } from '../api/useWorkspaceAccess'
-import { BASE_ROLE, DEFAULT_REASON, useNewPersonAccessRights, type AccessDraft } from '../api/newPersonAccess'
+import { BASE_ROLE, DEFAULT_REASON, pickCreatedRole, useNewPersonAccessRights, type AccessDraft, type CreatedRolePick } from '../api/newPersonAccess'
+import { RoleFields, newRoleBody, roleDraftFor, roleDraftProblem, type RoleDraft } from './RoleFields'
 
 const MODULE_LABEL: Record<string, string> = {
   advance: 'Salary advances', attendance: 'Attendance', audit: 'Audit log', compliance: 'Compliance', document: 'Documents',
@@ -92,7 +98,12 @@ function RiskConfirm({ c, onCancel, onYes }: { c: Confirm; onCancel: () => void;
   )
 }
 
-export function AccessPicker({ value, onChange }: { value: AccessDraft; onChange: (next: AccessDraft) => void }) {
+export function AccessPicker({ value, onChange, allowCreateRole = false }: {
+  value: AccessDraft
+  onChange: (next: AccessDraft) => void
+  /** Add employee: "Create" beside Roles, to make a role without leaving the form. */
+  allowCreateRole?: boolean
+}) {
   const rights = useNewPersonAccessRights()
   const rolesQ = useAssignableRoles()
   const catQ = usePermissionsCatalogue()
@@ -171,6 +182,41 @@ export function AccessPicker({ value, onChange }: { value: AccessDraft; onChange
     setConfirm(null); onChange(add(value))
   }
 
+  // ── create a role (Add employee) ──
+  const roleCreate = useCreatePanel()
+  const createRole = useCreateRole()
+  const toast = useToast()
+  const [roleDraft, setRoleDraft] = useState<RoleDraft>(() => roleDraftFor('create'))
+  const rolesGroup = useRef<HTMLDivElement>(null)
+  const live = useRef({ value, onChange, clickRole })
+  live.current = { value, onChange, clickRole }
+  // Making a role is rbac.role.write (the code canReadRolePermissions checks); giving one is workspace.users.manage.
+  const createRoleBlocked = !rights.canRoles ? 'You need permission to give people roles — ask an admin.'
+    : !rights.canReadRolePermissions ? needPermission('roles') : null
+  const startCreateRole = () => { setRoleDraft(roleDraftFor('create')); roleCreate.start() }
+  const saveRole = () => void roleCreate.save(async (): Promise<CreatedRolePick> => {
+    const missing = roleDraftProblem(roleDraft, true)
+    if (missing) throw new Error(missing)
+    const created = await createRole.mutateAsync(newRoleBody(roleDraft))
+    // Read the list of roles you may give again: the new role is offered only through it.
+    const fresh = await rolesQ.refetch()
+    if (fresh.isError) return { kind: 'skip', reason: `${created.displayName} was created, but the list of roles couldn’t be loaded again, so it wasn’t selected. Pick it once the list is back.` }
+    return pickCreatedRole(created.code, created.displayName, fresh.data ?? [])
+  }, {
+    then: (pick) => {
+      if (pick.kind === 'skip') { toast.info(pick.reason, { duration: 7000 }); return }
+      if (pick.kind === 'confirm') {
+        toast.info(`${pick.role.displayName} was created. It gives high-risk permissions, so read the warning under Roles to give it.`, { duration: 7000 })
+        live.current.clickRole(pick.role)
+        return
+      }
+      const v = live.current.value
+      if (!v.roles.includes(pick.role.roleCode)) live.current.onChange({ ...v, roles: [...v.roles, pick.role.roleCode] })
+      toast.success(`${pick.role.displayName} created and selected`, { detail: 'It has no permissions yet. Choose what it can do in Roles & permissions.' })
+    },
+    focus: (pick) => (pick.kind === 'skip' ? null : rolesGroup.current?.querySelector<HTMLElement>(`[data-role="${pick.role.roleCode}"]`)),
+  })
+
   // ── permissions ──
   const clickPerm = (p: RbacPermission) => {
     if (!canEditPerms) return
@@ -232,21 +278,24 @@ export function AccessPicker({ value, onChange }: { value: AccessDraft; onChange
     <div className="grid gap-5" data-access-picker>
       {/* ── Roles ── */}
       <div className="grid gap-2.5">
-        <div>
-          <p className="text-[13px] font-semibold text-text-primary">Roles</p>
-          <p className="text-[12px] text-text-secondary">Every new person starts as Employee. Add roles for more.</p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[13px] font-semibold text-text-primary">Roles</p>
+            <p className="text-[12px] text-text-secondary">Every new person starts as Employee. Add roles for more.</p>
+          </div>
+          {allowCreateRole && <CreateButton ref={roleCreate.trigger} noun="role" blockedReason={createRoleBlocked} onClick={startCreateRole} />}
         </div>
         {rolesQ.isLoading ? <Note>Loading roles…</Note>
           : rolesQ.isError ? (
             <Note tone="red">Couldn’t load the roles: {errText(rolesQ.error)}{' '}
               <button type="button" className="font-semibold underline" onClick={() => rolesQ.refetch()}>Try again</button></Note>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Roles">
+            <div ref={rolesGroup} className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Roles">
               {roles.map((r) => {
                 const on = r.roleCode === BASE_ROLE || value.roles.includes(r.roleCode)
                 const locked = roleLocked(r)
                 return (
-                  <button key={r.roleCode} type="button" role="checkbox" aria-checked={on} aria-label={r.displayName}
+                  <button key={r.roleCode} type="button" role="checkbox" aria-checked={on} aria-label={r.displayName} data-role={r.roleCode}
                     disabled={!!locked} onClick={() => clickRole(r)} title={locked ?? undefined}
                     className={clsx(
                       'flex min-w-0 items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors',
@@ -398,6 +447,14 @@ export function AccessPicker({ value, onChange }: { value: AccessDraft; onChange
             </>
           )}
       </div>
+
+      {allowCreateRole && (
+        <CreatePanel open={roleCreate.open} title="New role" cta="Create role" busy={roleCreate.busy} error={roleCreate.error}
+          sub="It starts with no permissions. Choose what it can do in Roles & permissions."
+          onCancel={roleCreate.cancel} onSubmit={saveRole}>
+          <RoleFields draft={roleDraft} onChange={setRoleDraft} showCode />
+        </CreatePanel>
+      )}
     </div>
   )
 }

@@ -125,7 +125,7 @@ function Stat({icon,label,value,unit,sub,t='blue',on,onClick,z}){return <div cla
 function Popover({anchor,open,onClose,align,width,children}){
 const [pos,setPos]=React.useState(null);const pop=React.useRef(null);
 React.useLayoutEffect(()=>{if(!open||!anchor.current)return;const r=anchor.current.getBoundingClientRect();const w=width||Math.max(r.width,210);let left=align==='right'?r.right-w:r.left;left=Math.max(8,Math.min(left,window.innerWidth-w-8));const below=window.innerHeight-r.bottom;setPos(below<300&&r.top>below?{left,bottom:window.innerHeight-r.top+6,width:w}:{left,top:r.bottom+6,width:w})},[open]);
-React.useEffect(()=>{if(!open)return;const inPop=e=>pop.current&&pop.current.contains(e.target);const md=e=>{if(!inPop(e)&&!(anchor.current&&anchor.current.contains(e.target)))onClose()};const key=e=>{if(e.key==='Escape')onClose()};const sc=e=>{if(!inPop(e))onClose()};document.addEventListener('mousedown',md);document.addEventListener('keydown',key);window.addEventListener('scroll',sc,true);window.addEventListener('resize',onClose);return()=>{document.removeEventListener('mousedown',md);document.removeEventListener('keydown',key);window.removeEventListener('scroll',sc,true);window.removeEventListener('resize',onClose)}},[open]);
+React.useEffect(()=>{if(!open)return;const inPop=e=>pop.current&&pop.current.contains(e.target);const md=e=>{if(!inPop(e)&&!(anchor.current&&anchor.current.contains(e.target)))onClose()};const key=e=>{if(e.key==='Escape'){e.preventDefault();onClose()}};const sc=e=>{if(!inPop(e))onClose()};document.addEventListener('mousedown',md);document.addEventListener('keydown',key);window.addEventListener('scroll',sc,true);window.addEventListener('resize',onClose);return()=>{document.removeEventListener('mousedown',md);document.removeEventListener('keydown',key);window.removeEventListener('scroll',sc,true);window.removeEventListener('resize',onClose)}},[open]);
 if(!open||!pos)return null;
 return ReactDOM.createPortal(<div ref={pop} className="pop" style={Object.assign({position:'fixed'},pos)}>{children}</div>,portalHost());
 }
@@ -146,7 +146,8 @@ const ref=React.useRef(null);const [open,setOpen]=React.useState(false);const tg
 return <>{children?<button type="button" ref={ref} className={btn} onClick={tg}>{children}</button>:<button type="button" ref={ref} className={'ib'+(open?' on':'')} aria-label={label} onClick={tg}><Icon name="more-vertical" size={17}/></button>}
 <Popover anchor={ref} open={open} onClose={()=>setOpen(false)} align={align} width={224}><div className="pop-list" onClick={e=>e.stopPropagation()}>{items.filter(Boolean).map((it,i)=>it==='-'?<div key={i} className="sep"></div>:<div key={i} className={'opt'+(it.danger&&!it.soon?' danger':'')} title={it.soon?(it.tip||'Coming soon'):undefined} style={it.soon?{cursor:'not-allowed',color:'var(--text-disabled)'}:undefined} onClick={()=>{if(it.soon)return;setOpen(false);it.on&&it.on()}}>{it.icon&&<Icon name={it.icon} size={16}/>}<span>{it.label}</span>{it.soon&&<small>{it.soonLabel||'Coming soon'}</small>}</div>)}</div></Popover></>
 }
-const noLayerOpen=()=>!document.querySelector('#utm-portal>.pop');
+// A kit layer open on top (Add employee → the Create panel) takes Escape; the drawer under it stays open.
+const noLayerOpen=()=>!document.querySelector('#utm-portal>.pop')&&!document.querySelector('[data-uko-layer]');
 function Drawer({title,sub,icon,t='brand',lead,onClose,children,footer,width}){
 React.useEffect(()=>{const k=e=>{if(e.key==='Escape'&&noLayerOpen()&&!document.querySelector('.modal'))onClose()};document.addEventListener('keydown',k);return()=>document.removeEventListener('keydown',k)},[]);
 return ReactDOM.createPortal(<><div className="scrim" onClick={onClose}></div><aside className="drawer" role="dialog" aria-label={title} style={width?{width:'min('+width+'px,100vw)'}:undefined}><div className="dr-h">{lead||(icon&&<span className="tile" style={tone(t)}><Icon name={icon} size={19}/></span>)}<div><h3>{title}</h3>{sub&&<p>{sub}</p>}</div><button className="ib" onClick={onClose} aria-label="Close"><Icon name="x" size={18}/></button></div><div className="dr-b">{children}</div>{footer&&<div className="dr-f">{footer}</div>}</aside></>,portalHost());
@@ -158,7 +159,8 @@ return ReactDOM.createPortal(<><div className="scrim" style={{zIndex:210}} onCli
 function Toasts({items}){return <div className="toasts">{items.map(x=><div key={x.id} className="toast"><span className={'ti'+(x.kind==='info'?' info':x.kind==='error'?' err':'')}><Icon name={x.kind==='info'?'info':x.kind==='error'?'alert-triangle':'check'} size={15} stroke={2.6}/></span>{x.msg}</div>)}</div>}
 function Switch({on,onChange,sm,label,disabled,title}){return <button type="button" role="switch" aria-checked={!!on} aria-label={label} disabled={disabled} title={title} className={'sw'+(on?' on':'')+(sm?' sm':'')} onClick={e=>{e.stopPropagation();if(!disabled)onChange(!on)}}></button>}
 function Seg({value,options,onChange,full,disabled}){return <div className={'seg'+(full?' full':'')}>{options.map(o=>{const x=typeof o==='string'?{v:o,l:o}:o;return <button type="button" key={x.v} disabled={disabled||x.disabled} title={x.disabled?(x.tip||'Coming soon'):undefined} className={value===x.v?'on':''} onClick={()=>onChange(x.v)}>{x.icon&&<Icon name={x.icon} size={15}/>}{x.l}{x.n!=null&&<span className="n">{x.n}</span>}</button>})}</div>}
-function Field({label,req,hint,err,span2,children}){return <div className={'field'+(span2?' span2':'')+(err?' err':'')}><label>{label}{req&&<em>*</em>}</label>{children}{(err||hint)&&<div className={'hint'+(err?' e':'')}>{err||hint}</div>}</div>}
+// side: shown at the end of the label row (Add employee → "Create" beside a field).
+function Field({label,req,hint,err,span2,side,children}){const lab=<label>{label}{req&&<em>*</em>}</label>;return <div className={'field'+(span2?' span2':'')+(err?' err':'')}>{side?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,minWidth:0}}>{lab}<span style={{display:'inline-flex',margin:'-4px 0'}}>{side}</span></div>:lab}{children}{(err||hint)&&<div className={'hint'+(err?' e':'')}>{err||hint}</div>}</div>}
 function FormField({f,v,set,err}){
 const val=v[f.k];const opts=typeof f.options==='function'?f.options(v):f.options;const ph=typeof f.placeholder==='function'?f.placeholder(v):f.placeholder;
 if(f.type==='custom')return f.render(v,set,err);
@@ -171,16 +173,21 @@ else if(f.type==='radio')c=<div className="rgrid">{opts.map(o=><button type="but
 else if(f.type==='textarea')c=<textarea className="input" disabled={f.disabled} rows={f.rows||5} value={val||''} placeholder={ph} onChange={e=>set(f.k,e.target.value)}></textarea>;
 else if(f.type==='date')c=<DateField className="input" aria-label={f.label} disabled={f.disabled} value={val==null?'':val} placeholder={ph} min={f.min} max={f.max} clearable={!f.req} onChange={e=>set(f.k,e.target.value)}/>;
 else{const inp=<input className="input" disabled={f.disabled} type={f.type||'text'} value={val==null?'':val} placeholder={ph} min={f.min} max={f.max} step={f.step} style={f.suffix?{paddingRight:76}:undefined} onChange={e=>{let x=e.target.value;if(f.type==='number')x=x===''?'':Number(x);else if(f.upper)x=x.toUpperCase().replace(/\s+/g,'_');set(f.k,x)}}/>;c=(f.suffix||f.prefix)?<div className={'iw'+(f.prefix?' has-pre':'')}>{f.prefix&&<span className="pre">{f.prefix}</span>}{inp}{f.suffix&&<span className="suf">{f.suffix}</span>}</div>:inp}
-return <Field label={f.label} req={f.req} hint={f.hint} err={err} span2={f.span2}>{c}</Field>
+return <Field label={f.label} req={f.req} hint={f.hint} err={err} span2={f.span2} side={f.create&&f.create(v,set)}>{c}</Field>
 }
+// Who draws a RecordForm's frame when it is shown somewhere other than its drawer (Add employee →
+// Create beside a field shows the Master page's add form in a side panel). null: the drawer, as always.
+const FormFrame=React.createContext(null);
 function RecordForm({title,sub,icon,t,sections,initial,onSave,onClose,preview,cta='Save',secondary,danger}){
 const [v,setV]=React.useState(()=>Object.assign({},initial));const [errs,setErrs]=React.useState({});
 const all=sections.flatMap(s=>s.fields);
 const set=(k,x)=>{const f=all.find(y=>y.k===k);setV(o=>{const n=Object.assign({},o,{[k]:x});((f&&f.clears)||[]).forEach(c=>{n[c]=''});return n});setErrs(e=>Object.assign({},e,{[k]:null}))};
 const submit=mode=>{const e={};all.forEach(f=>{if(f.when&&!f.when(v))return;if(f.disabled)return;const x=v[f.k];if(f.req&&(x===undefined||x===null||String(x).trim()===''))e[f.k]='Required';else if(f.validate){const m=f.validate(x,v);if(m)e[f.k]=m}});setErrs(e);if(Object.keys(e).length)return;onSave(v,mode)};
+const body=<>{sections.map((s,i)=><div className="fsec" key={i}>{s.title&&<h4>{s.title}</h4>}<div className="fgrid">{s.fields.filter(f=>!f.when||f.when(v)).map(f=><FormField key={f.k} f={f} v={v} set={set} err={errs[f.k]}/>)}</div></div>)}{preview&&preview(v)}</>;
+const Frame=React.useContext(FormFrame);
+if(Frame)return <Frame title={title} sub={sub} cta={cta} onClose={onClose} onSubmit={()=>submit('save')}>{body}</Frame>;
 return <Drawer title={title} sub={sub} icon={icon} t={t} onClose={onClose} footer={<>{danger}<span className="sp"></span><button className="btn" onClick={onClose}>Cancel</button>{secondary&&<button className="btn" onClick={()=>submit(secondary.mode)}>{secondary.label}</button>}<button className="btn pri" onClick={()=>submit('save')}><Icon name="check" size={17}/>{cta}</button></>}>
-{sections.map((s,i)=><div className="fsec" key={i}>{s.title&&<h4>{s.title}</h4>}<div className="fgrid">{s.fields.filter(f=>!f.when||f.when(v)).map(f=><FormField key={f.k} f={f} v={v} set={set} err={errs[f.k]}/>)}</div></div>)}
-{preview&&preview(v)}
+{body}
 </Drawer>
 }
 function Tip({children}){return <span className="tip" tabIndex={0}><Icon name="info" size={14}/><span className="tip-b">{children}</span></span>}
@@ -300,17 +307,19 @@ return <Drawer title="Employee profile" sub={e.code+' · on record since '+fmtDa
 function EmpForm({emp,onClose}){
 const {db,update,toast,act}=useApp();const M=useMaps();const isEdit=!!emp;
 const next=act.nextCode||'Assigned when saved';
+// Add employee → "Create" beside a field: the container draws it (MasterCreateField) and selects what was created.
+const mk=k=>!isEdit&&act.inlineCreate?(v,set)=>act.inlineCreate(k,v,set):undefined;
 const initial=isEdit?Object.assign({},emp):{co:act.defaultCo,branch:(db.branches.find(b=>b.co===act.defaultCo&&b.kind==='Head office')||{}).id||'',type:'Full-time',joined:TODAY_ISO,shift:''};
 const sections=[
 {title:'Personal',fields:[{k:'first',label:'First name',req:true,placeholder:'e.g. Ananya'},{k:'last',label:'Last name',req:true,placeholder:'e.g. Sharma'},{k:'email',label:'Work email',req:true,type:'email',placeholder:'name@company.com',validate:x=>/^\S+@\S+\.\S+$/.test(x)?null:'Enter a valid email address'},{k:'phone',label:'Mobile',placeholder:'+91 98xxx xxxxx'}]},
 {title:'Employment',fields:[
 {k:'co',label:'Company',type:'select',req:true,disabled:isEdit,hint:isEdit?'Moving someone to another company isn’t supported yet':undefined,options:db.companies.map(c=>({v:c.id,l:c.name})),clears:['branch']},
-{k:'branch',label:'Branch',type:'select',req:true,options:v=>db.branches.filter(b=>b.co===v.co).map(b=>({v:b.id,l:b.name,sub:b.city}))},
-{k:'dept',label:'Department',type:'select',req:true,search:true,options:v=>deptOptions(db).filter(o=>(db.depts.find(x=>x.id===o.v)||{}).co===v.co),clears:['desig']},
-{k:'desig',label:'Designation',type:'select',req:true,options:v=>db.desigs.filter(x=>x.co===v.co&&(x.dept===v.dept||!x.dept)).map(x=>({v:x.id,l:x.name,sub:x.grade||undefined})),placeholder:v=>v.dept?'Select…':'Pick a department first'},
-{k:'type',label:'Employment type',type:'seg',span2:true,options:v=>act.typeOptions(v.type)},
+{k:'branch',label:'Branch',type:'select',req:true,create:mk('branches'),options:v=>db.branches.filter(b=>b.co===v.co).map(b=>({v:b.id,l:b.name,sub:b.city}))},
+{k:'dept',label:'Department',type:'select',req:true,search:true,create:mk('depts'),options:v=>deptOptions(db).filter(o=>(db.depts.find(x=>x.id===o.v)||{}).co===v.co),clears:['desig']},
+{k:'desig',label:'Designation',type:'select',req:true,create:mk('desigs'),options:v=>db.desigs.filter(x=>x.co===v.co&&(x.dept===v.dept||!x.dept)).map(x=>({v:x.id,l:x.name,sub:x.grade||undefined})),placeholder:v=>v.dept?'Select…':'Pick a department first'},
+{k:'type',label:'Employment type',type:'seg',span2:true,create:mk('classes'),options:v=>act.typeOptions(v.type)},
 {k:'joined',label:'Date of joining',type:'date',req:true},
-{k:'shift',label:'Shift',type:'select',disabled:!act.canAssignShift,hint:act.canAssignShift?undefined:'You don’t have access to assign shifts',options:db.shifts.filter(s=>s.status==='Active').map(s=>({v:s.id,l:s.name,sub:s.kind==='Flexible'?'Flexible':hm(s.start)+'–'+hm(s.end)}))},{k:'agency',label:'Staffing agency',type:'select',span2:true,when:v=>v.type==='Contract'&&act.showAgency,disabled:!act.canAgency,hint:act.canAgency?'The agency that supplies this contract worker. Its worker count on Contractor Master is counted from these links.':'You don’t have access to change the agency',options:v=>[{v:'',l:'No agency'}].concat(db.agencies.filter(a=>a.co===v.co&&(a.status==='Active'||a.id===v.agency)).map(a=>({v:a.id,l:a.name,sub:a.service||undefined})))}]}];
+{k:'shift',label:'Shift',type:'select',disabled:!act.canAssignShift,create:mk('shifts'),hint:act.canAssignShift?undefined:'You don’t have access to assign shifts',options:db.shifts.filter(s=>s.status==='Active').map(s=>({v:s.id,l:s.name,sub:s.kind==='Flexible'?'Flexible':hm(s.start)+'–'+hm(s.end)}))},{k:'agency',label:'Staffing agency',type:'select',span2:true,create:mk('agencies'),when:v=>v.type==='Contract'&&act.showAgency,disabled:!act.canAgency,hint:act.canAgency?'The agency that supplies this contract worker. Its worker count on Contractor Master is counted from these links.':'You don’t have access to change the agency',options:v=>[{v:'',l:'No agency'}].concat(db.agencies.filter(a=>a.co===v.co&&(a.status==='Active'||a.id===v.agency)).map(a=>({v:a.id,l:a.name,sub:a.service||undefined})))}]}];
 const preview=v=>{const cls=db.classes.find(c=>c.type===v.type);const ds=v.desig&&M.desig[v.desig];const g=ds&&M.grade[ds.grade];return <div className="preview"><div className="preview-h">{isEdit?'Employee code':'Employee code will be'}<span>{isEdit?'Codes never change':'Auto-generated'}</span></div><div className="ic-row" style={{flexWrap:'wrap'}}><span className="code" style={{fontSize:14,padding:'5px 10px'}}>{isEdit?emp.code:next}</span>{g&&<span className="chip">{g.id} · {g.name}{g.min!=null?' · '+fmtL(g.min)+'–'+fmtL(g.max):''}</span>}</div>{cls&&<div className="note" style={tone('blue')}><Icon name="info" size={16}/><span><b>{cls.name} rules apply</b> — probation {cls.probation.toLowerCase()}, notice {cls.notice?cls.notice+' days':'—'}{cls.pf===true?', PF & ESI eligible':''}.</span></div>}</div>};
 const onSave=v=>{const first=v.first.trim(),last=v.last.trim(),name=first+' '+last;const ds=M.desig[v.desig];const rec=Object.assign({},isEdit?emp:{},v,{name,first,last,grade:ds.grade,co:M.branch[v.branch].co,id:isEdit?emp.id:next,status:isEdit?emp.status:'Probation',agency:v.type==='Contract'?(v.agency||''):''});update('employees',L=>isEdit?L.map(x=>x.id===emp.id?rec:x):L.concat([rec]));toast(isEdit?'Saved changes to '+name:name+(act.nextCode?' added as '+next:' added'));onClose()};
 return <RecordForm title={isEdit?'Edit '+emp.name:'Add employee'} sub={isEdit?emp.code+' · changes apply from the next payroll run':'They get an employee code, login invite and the rules for their classification.'} icon={isEdit?'pencil':'user-plus'} sections={!isEdit&&act.accessStep?sections.concat([{title:'Access',fields:[{k:'access',type:'custom',render:(v,set)=>act.accessStep(v.access,x=>set('access',x))}]}]):sections} initial={initial} onSave={onSave} onClose={onClose} preview={preview} cta={isEdit?'Save changes':'Add employee'}/>
@@ -693,5 +702,13 @@ return <>
 <div className="flags">{f.length?f.map((x,i)=><div key={i} className="flag click" style={tone(x.t)} onClick={x.go}><Icon name={x.icon} size={16}/>{x.txt}<Icon name="arrow-right" size={15} className="go"/></div>):<div className="flag" style={tone('green')}><Icon name="check-circle" size={16}/>Nothing needs attention</div>}</div></div>})}</div>
 </>
 }
+// The Master pages' add forms that Add employee → "Create" shows (with each page's own starting values).
+const CREATE_FORMS={
+branches:(v,onClose)=><BranchForm b={null} init={{co:v.co,kind:'Branch',status:'Active'}} onClose={onClose}/>,
+depts:(v,onClose)=><DeptForm x={null} init={{t:'teal',icon:'briefcase'}} onClose={onClose}/>,
+desigs:(v,onClose)=><DesigForm x={null} init={{dept:v.dept||'',grade:''}} onClose={onClose}/>,
+classes:(v,onClose)=><ClassForm c={null} onClose={onClose}/>,
+shifts:(v,onClose)=><ShiftForm s={null} onClose={onClose}/>,
+agencies:(v,onClose)=><AgencyForm a={null} onClose={onClose}/>};
 const PAGES={overview:OverviewPage,employees:EmployeesPage,contractors:ContractorsPage,classes:ClassesPage,companies:CompaniesPage,branches:BranchesPage,departments:DepartmentsPage,designations:DesignationsPage,grades:GradesPage,shifts:ShiftsPage,leaves:LeavesPage,policies:PoliciesPage,components:ComponentsPage,statutory:StatutoryPage};
-export { AppCtx, NAV, TopTabs, PAGES, Toasts, Icon, ICONS, Empty, Hero, tone, deriveDB, STATUS_TONE, TYPE_TONE }
+export { AppCtx, NAV, TopTabs, PAGES, Toasts, Icon, ICONS, Empty, Hero, tone, deriveDB, STATUS_TONE, TYPE_TONE, FormFrame, CREATE_FORMS, EmpForm }

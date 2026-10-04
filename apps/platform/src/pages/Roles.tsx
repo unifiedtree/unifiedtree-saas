@@ -14,14 +14,10 @@ import {
 } from '@/modules/rbac/api/useRbac'
 import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
 import { useWorkspaceUsers, useAssignableRoles, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
+import { RoleFields, newRoleBody, roleDraftFor, roleDraftProblem, type RoleDraft } from '@/modules/rbac/components/RoleFields'
 
 type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
-/** "Senior manager" → "SENIOR_MANAGER" (the same rule the server uses when no code is given). */
-const codeFromName = (name: string) => {
-  const c = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-  return (c && /^[A-Z]/.test(c) ? c : c ? `ROLE_${c}` : '').slice(0, 50)
-}
 const errorText = (e: unknown) => (e as { message?: string })?.message || 'Please try again.'
 
 // ── Permission Drawer ──────────────────────────────────────────────────────────
@@ -391,21 +387,17 @@ function RoleEditorModal({ state, onClose, onCreated }: { state: RoleEditorState
   const duplicate = useDuplicateRole()
   const update = useUpdateRole()
 
-  const [displayName, setDisplayName] = useState(
-    mode === 'edit' && role ? role.displayName : mode === 'clone' && role ? `${role.displayName} (copy)` : '',
-  )
-  // The code follows the name until someone types their own.
-  const [code, setCode] = useState(mode === 'clone' && role ? codeFromName(`${role.displayName} copy`) : '')
-  const [codeEdited, setCodeEdited] = useState(false)
-  const [description, setDescription] = useState(mode === 'edit' && role ? role.description ?? '' : mode === 'clone' && role ? role.description ?? '' : '')
+  // The fields are shared with Add employee → Access → Create role (RoleFields). The code follows the name until someone types their own.
+  const [draft, setDraft] = useState<RoleDraft>(() => roleDraftFor(mode, role))
 
   const busy = create.isPending || update.isPending || duplicate.isPending
   const title = mode === 'create' ? 'New role' : mode === 'clone' ? `Duplicate “${role?.displayName}”` : `Edit “${role?.displayName}”`
 
   const submit = () => {
     if (isCreate) {
-      if (!code.trim() || !displayName.trim()) { toast.error('Role code and name are required'); return }
-      const body = { code: codeFromName(code), displayName: displayName.trim(), description: description.trim() || undefined }
+      const missing = roleDraftProblem(draft, true)
+      if (missing) { toast.error(missing); return }
+      const body = newRoleBody(draft)
       const done = {
         onSuccess: (created: RbacRole) => {
           toast.success(mode === 'clone' ? `${created.displayName} created from ${role?.displayName}` : 'Role created',
@@ -418,9 +410,10 @@ function RoleEditorModal({ state, onClose, onCreated }: { state: RoleEditorState
       if (mode === 'clone' && role) duplicate.mutate({ roleId: role.id, ...body }, done)
       else create.mutate(body, done)
     } else {
-      if (!displayName.trim()) { toast.error('Name is required'); return }
+      const missing = roleDraftProblem(draft, false)
+      if (missing) { toast.error(missing); return }
       update.mutate(
-        { roleId: role!.id, displayName: displayName.trim(), description: description.trim() || undefined },
+        { roleId: role!.id, displayName: draft.displayName.trim(), description: draft.description.trim() || undefined },
         {
           onSuccess: () => { toast.success('Role updated'); onClose() },
           onError: (e) => toast.error('Couldn’t update the role', { description: errorText(e) }),
@@ -432,37 +425,7 @@ function RoleEditorModal({ state, onClose, onCreated }: { state: RoleEditorState
   return (
     <Drawer open onOpenChange={(o) => { if (!o) onClose() }} title={title}>
       <div className="space-y-4">
-        {isCreate && (
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Role code <span className="text-danger">*</span></label>
-            <input
-              value={code}
-              onChange={(e) => { setCode(e.target.value); setCodeEdited(true) }}
-              placeholder="e.g. REGIONAL_HR"
-              className="ut-input"
-            />
-            <p className="mt-1 text-xs text-text-tertiary">Uppercase identifier, unique within your workspace. Spaces become underscores. It can’t be a built-in role’s code.</p>
-          </div>
-        )}
-        <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Display name <span className="text-danger">*</span></label>
-          <input
-            value={displayName}
-            onChange={(e) => { setDisplayName(e.target.value); if (isCreate && !codeEdited) setCode(codeFromName(e.target.value)) }}
-            placeholder="e.g. Regional HR"
-            className="ut-input"
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="What is this role for?"
-            className="w-full rounded-xl border border-border/60 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
-          />
-        </div>
+        <RoleFields draft={draft} onChange={setDraft} showCode={isCreate} />
         {mode === 'clone' && role && (
           <p className="rounded-lg bg-slate-50 border border-border-default px-3 py-2 text-xs text-text-secondary">
             Every permission of <span className="font-medium text-text-primary">{role.displayName}</span> is copied into the new role, and its permissions open next so you can add or remove some. {role.displayName} itself doesn’t change. You can only copy permissions you hold yourself.

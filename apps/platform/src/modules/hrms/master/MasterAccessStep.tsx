@@ -9,7 +9,7 @@ import { emptyAccess, type AccessDraft } from '@/modules/rbac/api/newPersonAcces
 export function MasterAccessStep({ value, onChange, canInvite }: { value: AccessDraft | undefined; onChange: (next: AccessDraft) => void; canInvite: boolean }) {
   return (
     <div style={{ gridColumn: '1 / -1', minWidth: 0 }} data-access-step>
-      {canInvite ? <AccessPicker value={value ?? emptyAccess()} onChange={onChange} />
+      {canInvite ? <AccessPicker value={value ?? emptyAccess()} onChange={onChange} allowCreateRole />
         : <NoLoginNote why="You can’t send login invites, so someone who can will need to invite them from their profile." />}
     </div>
   )

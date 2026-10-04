@@ -29,6 +29,8 @@ import {
 } from './masterData'
 import { SYNC, diff, type SyncEnv } from './masterSync'
 import { MasterAccessStep } from './MasterAccessStep'
+import { MasterCreateField } from './MasterCreateField'
+import type { CreateKind } from './masterCreate'
 import { useNewPersonAccessRights, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
 import { saveAndRecord } from '@/shared/export/fileExport'
 import { isValidRange, rangeLabel, type DateRange } from '@/design/dc/milestoneRange'
@@ -290,6 +292,19 @@ export function MasterContainer() {
     const settle = () => { inflight.current[k] -= 1; if (!inflight.current[k]) setOver((o) => { const n = { ...o }; delete n[k]; return n }) }
     p.then(async (keys) => { await Promise.all(keys.map((key) => qc.invalidateQueries({ queryKey: key }))); settle() }, (e) => { settle(); show(errText(e), 'error') })
   }, [qc, show])
+  /**
+   * Add employee → "Create" beside a field: saves one new record in the employee's company (the same
+   * handler as the Master page's own add), waits for its list to refresh, and resolves to the new id.
+   * Nothing is shown before the server accepts it; a refusal throws, so the Create panel says why.
+   */
+  const createInline = useCallback(async (k: CreateKind, rec: Rec, co: string) => {
+    const sync = SYNC[k]
+    if (!writableRef.current[k] || !sync) throw new Error('You don’t have access to add this')
+    const made: { id: string | null } = { id: null }
+    const keys = await sync({ added: [rec], changed: [], removed: [] }, { ...envRef.current!, defaultCo: co, created: (x) => { made.id = x || null } })
+    await Promise.all(keys.map((key) => qc.invalidateQueries({ queryKey: key })))
+    return made.id
+  }, [qc])
   const toast = useCallback((msg: string, kind?: string) => {
     const ps = tick.current
     if (ps && ps.length) Promise.all(ps).then(() => show(msg, kind), () => {})
@@ -310,6 +325,9 @@ export function MasterContainer() {
     accessStep: accessRights.visible
       ? (value: AccessDraft | undefined, onChange: (next: AccessDraft) => void) => <MasterAccessStep value={value} onChange={onChange} canInvite={canInvite} />
       : null,
+    /** Add employee → "Create" beside a field (MasterCreateField): shown to everyone, inactive with the reason without the permission. */
+    inlineCreate: (kind: CreateKind, v: Rec, set: (k: string, x: unknown) => void) =>
+      <MasterCreateField kind={kind} values={v} set={set} allowed={!!writable[kind]} create={createInline} />,
     /** The Branches page's status filter lives in the URL (?archived=1). */
     showArchivedBranches: (on: boolean, co: string) => navigate(MASTER_ROUTES.branches + '?' + new URLSearchParams(Object.entries({ co, archived: on ? '1' : '' }).filter(([, v]) => v)).toString()),
     importEmployees: () => (canImport ? navigate('/hrms/employees/import') : show('You don’t have access to import employees', 'error')),

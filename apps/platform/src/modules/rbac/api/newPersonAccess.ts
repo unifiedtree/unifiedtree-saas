@@ -8,6 +8,7 @@
 // and the server applies the same levels rules and audit there.
 import { usePermission, P } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
+import { isRisky } from './useRbac'
 import type { AssignableRole, OverrideInput, UserPermissionsView, WorkspaceUser } from './useWorkspaceAccess'
 
 export interface AccessDraft {
@@ -107,4 +108,25 @@ export async function applyNewPersonAccess(employeeId: string, email: string | n
     } catch (e) { problems.push(`the single permission changes weren’t saved (${errText(e)})`) }
   }
   return { problems }
+}
+
+/** What the Access step does with a role just made from Add employee → Access → Create role. */
+export type CreatedRolePick =
+  | { kind: 'select'; role: AssignableRole }
+  /** A high-risk role: the step's own warning first, as when it is ticked by hand. */
+  | { kind: 'confirm'; role: AssignableRole }
+  | { kind: 'skip'; reason: string }
+
+/**
+ * A new role is offered only through the same list as every other role
+ * (GET /v1/workspace/assignable-roles, where the server applies the levels
+ * rules), so creating a role never lets someone give more than they could.
+ * `list` is that list fetched after the role was created.
+ */
+export function pickCreatedRole(code: string, name: string, list: AssignableRole[]): CreatedRolePick {
+  const role = list.find((r) => r.roleCode === code)
+  if (!role) return { kind: 'skip', reason: `${name} was created, but it isn’t in the list of roles you can give, so it wasn’t selected.` }
+  if (!role.moduleActive) return { kind: 'skip', reason: `${name} was created, but it wasn’t selected: its module isn’t active in this workspace.` }
+  if (role.canGrant === false) return { kind: 'skip', reason: `${name} was created, but it wasn’t selected. ${role.grantBlockedReason ?? 'You can’t give this role.'}` }
+  return isRisky(role.riskLevel) ? { kind: 'confirm', role } : { kind: 'select', role }
 }
