@@ -166,11 +166,12 @@ export function ExitCenter() {
         {(s || c) && (
           <MiniStatGrid>
             <MiniStat label="On notice" value={s ? s.counts.notice : c?.notice ?? 0} note="Serving their notice period" tone="warning" />
-            {/* exitedThisYear counts EXITED *and* TERMINATED with a last working day this year, so say
-                so. The split can't be exact: the only terminated figure on the response is all-time
-                (counts.terminated), not this year's — so it's labelled as the all-time total, not subtracted. */}
+            {/* terminatedThisYear is the terminated share of exitedThisYear (same people, same year); a server
+                from before it existed doesn't send it, so that case keeps the plain wording. */}
             <MiniStat label="Exited" value={s ? s.exitedThisYear : c?.exited ?? 0} tone="neutral"
-              note={s ? `Left this year, including terminations · ${s.counts.terminated} terminated in all (the rest resigned or left for other reasons)`
+              note={s ? (typeof s.terminatedThisYear === 'number'
+                ? `This year: ${s.exitedThisYear - s.terminatedThisYear} resigned or left, ${s.terminatedThisYear} terminated`
+                : 'Left this year, including terminations')
                 : `Left the company, including terminations · ${c?.terminated ?? 0} terminated in all`} />
             <MiniStat label="Terminated" value={s ? s.counts.terminated : c?.terminated ?? 0} note="Employment ended by the company" tone="danger" />
           </MiniStatGrid>

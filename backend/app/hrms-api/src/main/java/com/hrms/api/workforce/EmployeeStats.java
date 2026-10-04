@@ -24,6 +24,9 @@ import java.util.UUID;
  *   <li><b>left, exits, attrition</b>: a leaver is someone EXITED, TERMINATED or
  *       RESIGNED, dated by the last working day, else the termination date, as
  *       the attrition report ({@code ReportService.attritionReport}) does.</li>
+ *   <li><b>exitedThisYear / terminatedThisYear</b>: EXITED or TERMINATED people
+ *       who left in this calendar year, and the TERMINATED ones among them (same
+ *       people, same dates), so the difference is who resigned or left otherwise.</li>
  *   <li><b>attrition %</b>: this year's leavers (1 January to today) over the
  *       average of the headcount on 1 January and today, with the report's
  *       opening/closing rules, to two decimals.</li>
@@ -58,6 +61,7 @@ public final class EmployeeStats {
                            long noticeStartedLast7Days,
                            long probationReviewsDueNextMonth,
                            long exitedThisYear,
+                           long terminatedThisYear,
                            BigDecimal attritionPercent,
                            List<SeriesPoint> activeSeries,
                            List<SuspendedSince> suspendedSince) {}
@@ -95,6 +99,7 @@ public final class EmployeeStats {
                                    Map<UUID, LocalDate> suspendedSince) {
         long total = 0, active = 0, probation = 0, notice = 0, suspended = 0, exited = 0, terminated = 0;
         long joinedThisMonth = 0, leftThisMonth = 0, noticeLast7 = 0, reviewsNextMonth = 0, exitedThisYear = 0;
+        long terminatedThisYear = 0;
         long yearLeavers = 0, opening = 0, closing = 0;
 
         LocalDate monthStart = today.withDayOfMonth(1);
@@ -123,7 +128,10 @@ public final class EmployeeStats {
             if ("PROBATION".equals(s) && p.probationEnd() != null && YearMonth.from(p.probationEnd()).equals(nextMonth)) {
                 reviewsNextMonth++;
             }
-            if (EXIT_TAB_STATUSES.contains(s) && within(left, yearStart, yearEnd)) exitedThisYear++;
+            if (EXIT_TAB_STATUSES.contains(s) && within(left, yearStart, yearEnd)) {
+                exitedThisYear++;
+                if ("TERMINATED".equals(s)) terminatedThisYear++;
+            }
             // The attrition report's opening / closing / leaver rules, over the year so far.
             if (within(left, yearStart, today)) yearLeavers++;
             if (p.joined() != null && p.joined().isBefore(yearStart) && (left == null || !left.isBefore(yearStart))) opening++;
@@ -150,7 +158,7 @@ public final class EmployeeStats {
 
         return new Response(new Counts(total, active, probation, notice, suspended, exited, terminated),
                 joinedThisMonth, leftThisMonth, noticeLast7, reviewsNextMonth, exitedThisYear,
-                attritionPercent, List.copyOf(series), List.copyOf(since));
+                terminatedThisYear, attritionPercent, List.copyOf(series), List.copyOf(since));
     }
 
     private static boolean within(LocalDate d, LocalDate from, LocalDate to) {
