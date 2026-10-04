@@ -35,6 +35,8 @@ export const NOTIFICATION_TYPES = [
   'DECISION_UNDONE', 'CHECKIN_REMINDER', 'PERFORMANCE_REVIEW_REMINDER', 'TEAM_MESSAGE', 'ASSET_ISSUE_REPORTED',
   'PAYSLIP_QUERY_RAISED', 'PAYSLIP_QUERY_ANSWERED', 'LEAVE_APPLIED_ON_BEHALF', 'EXPENSE_CLAIM_RAISED_FOR_YOU',
   'TIMESHEET_SUBMITTED', 'TIMESHEET_DECIDED', 'LETTER_SIGNATURE_REQUESTED', 'PROBATION_TEAM_DECISION',
+  // Punch-in alerts (V143_72): when, how and where someone punched in, with a map link.
+  'PUNCH_IN_ALERT',
   'GENERAL',
 ] as const
 
@@ -45,7 +47,7 @@ export function groupFor(type: string): string {
   if (type === 'WFH_SUBMITTED' || type.startsWith('WFH_')) return 'Work from home'
   if (type.startsWith('LEAVE_')) return 'Leave'
   if (type.startsWith('CORRECTION_') || type.startsWith('OVERTIME_') || type.startsWith('FACE_ENROLLMENT_') || type.startsWith('TIMESHEET_')
-    || type === 'ATTENDANCE_STATUS_CHANGED' || type === 'CHECKIN_REMINDER') return 'Attendance'
+    || type === 'ATTENDANCE_STATUS_CHANGED' || type === 'CHECKIN_REMINDER' || type === 'PUNCH_IN_ALERT') return 'Attendance'
   if (type.startsWith('SHIFT_CHANGE_')) return 'Shifts'
   if (type.startsWith('EXPENSE_') || type.startsWith('ADVANCE_')) return 'Expenses and advances'
   if (type === 'DECISION_UNDONE') return 'Approvals'
@@ -161,6 +163,8 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
     case 'OVERTIME_REQUESTED': return '/hrms/shifts?tab=overtime'
     case 'OVERTIME_APPROVED': case 'OVERTIME_REJECTED': return '/hrms/attendance?tab=my'
     case 'CHECKIN_REMINDER': return '/me'
+    // Someone punched in: today's Daily Logs (the row also links to the map, mapUrlFor).
+    case 'PUNCH_IN_ALERT': return livePath('/hrms/attendance?tab=team', '/hrms/attendance')
     case 'TIMESHEET_SUBMITTED': return livePath('/team?view=approvals', '/team')
     case 'TIMESHEET_DECIDED': return livePath('/hrms/attendance?tab=timesheet', '/hrms/attendance')
     // Shifts
@@ -231,6 +235,24 @@ export function timeAgo(iso: string, now: Date = new Date()): string {
   const yesterday = new Date(start.getTime() - 86_400_000)
   if (t >= yesterday) return 'Yesterday'
   return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(t.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) })
+}
+
+const GOOGLE_MAPS = 'https://www.google.com/maps?q='
+
+/**
+ * The map link of a punch-in alert (PUNCH_IN_ALERT), or null. Built from the payload's own
+ * coordinates when they are real numbers; otherwise only a Google Maps link the server sent is
+ * used, so a notification can never open anywhere else.
+ */
+export function mapUrlFor(type: string, data?: Record<string, unknown> | null): string | null {
+  if (type !== 'PUNCH_IN_ALERT' || !data) return null
+  const lat = typeof data.latitude === 'number' ? data.latitude : Number.NaN
+  const lng = typeof data.longitude === 'number' ? data.longitude : Number.NaN
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0)) {
+    return `${GOOGLE_MAPS}${lat.toFixed(6)},${lng.toFixed(6)}`
+  }
+  const sent = typeof data.mapUrl === 'string' ? data.mapUrl : ''
+  return /^https:\/\/www\.google\.com\/maps\?q=-?\d{1,2}(\.\d+)?,-?\d{1,3}(\.\d+)?$/.test(sent) ? sent : null
 }
 
 export const LAST_DAYS = 7

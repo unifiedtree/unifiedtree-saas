@@ -22,6 +22,8 @@ import { useProbationConfig, useUpdateProbationConfig, useProbationReminders, us
 import { useAttendancePolicy, useSaveAttendancePolicy, type AttendancePolicy, type AllowancePeriod, type AfterAllowance } from '../api/useAttendanceReview'
 import { useSaveWebPunchSetting, useWebPunchSetting } from '../api/shared/useWebPunchSetting'
 import type { WebPunchSetting } from '../api/shared/contracts'
+import { usePunchAlertOptions, usePunchAlertSetting, useSavePunchAlertSetting, type PunchAlertSetting } from '../api/shared/usePunchAlertSetting'
+import { PunchAlertsSection, type PunchAlertsForm } from './PunchAlertsSection'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']] as const
 const DAY_NAME: Record<number, string> = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' }
@@ -37,6 +39,8 @@ interface Form {
   geofence: boolean; wfh: boolean; fullDayHours: string; halfDayHours: string; earlyLeave: string
   /** "Allow web check-in" (V143.53, on by default); null while the server doesn't offer it. */
   webPunch: boolean | null
+  /** Punch-in alerts (V143.72); null while the server doesn't offer them. */
+  alerts: PunchAlertsForm | null
   fiscal: string
 }
 const num = (v: string) => (v === '' ? NaN : Number(v))
@@ -48,7 +52,18 @@ const AFTER: { value: AfterAllowance; label: string }[] = [
 ]
 const AFTER_WORD: Record<AfterAllowance, string> = { KEEP_LATE: 'late', HALF_DAY: 'a half day', LOSS_OF_PAY: 'loss of pay' }
 
-function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined, w?: WebPunchSetting): Form {
+/** The Punch-in alerts part of the form, from the server's setting (people and roles in the order they were picked). */
+function alertsOf(s: PunchAlertSetting | undefined): PunchAlertsForm | null {
+  if (!s) return null
+  return {
+    manager: s.notifyManager,
+    people: s.people.map((p) => ({ id: p.employeeId, name: p.name || p.employeeCode || 'Unnamed', working: p.working })),
+    roles: s.roles.map((r) => ({ id: r.roleId, name: r.name, builtIn: r.builtIn })),
+    on: s.alertOn,
+  }
+}
+
+function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined, w?: WebPunchSetting, pa?: PunchAlertSetting): Form {
   const pad = c?.employeeCodePadding ?? 4
   return {
     prefix: c?.employeeCodePrefix ?? 'EMP', next: String(c?.employeeCodeNextNumber ?? 1).padStart(pad, '0'),
@@ -61,6 +76,7 @@ function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number
     geofence: !!c?.enforceGeofencingForMobile, wfh: !!c?.allowWorkFromHome, webPunch: w ? w.allowWebPunch : null,
     fullDayHours: a?.fullDayMinHours != null ? String(a.fullDayMinHours) : '', halfDayHours: a?.halfDayMinHours != null ? String(a.halfDayMinHours) : '',
     earlyLeave: String(a?.earlyLeaveMinutes ?? 0),
+    alerts: alertsOf(pa),
     fiscal: (c?.fiscalYearStart || 'APRIL').toUpperCase(),
   }
 }
@@ -81,16 +97,23 @@ export function HrConfigurationPage() {
   // Web check-in switch (P-ATT-DAY BW-24): anyone signed in reads it; settings.hrconfig.write or attendance.policy.manage changes it.
   const webQ = useWebPunchSetting(co || undefined)
   const saveWeb = useSaveWebPunchSetting(co)
+  // Punch-in alerts (V143_72): read with HR configuration's read permissions, changed with the ones that edit attendance settings.
+  const canAlertsRead = canHrWrite || canPolicy || canSettingsRead, canAlertsWrite = canHrWrite || canPolicy
+  const alertsQ = usePunchAlertSetting(co || undefined, { enabled: canAlertsRead })
+  const alertOptionsQ = usePunchAlertOptions(co || undefined, { enabled: canAlertsWrite && !!alertsQ.data })
+  const saveAlerts = useSavePunchAlertSetting(co)
   const saveHr = useUpdateHrConfig(), saveProb = useUpdateProbationConfig(), savePolicy = useSaveAttendancePolicy()
   const { toast, show, dismiss } = useSettingsToast()
 
-  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data, webQ.data), [hrQ.data, probQ.data, policyQ.data, webQ.data])
+  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data, webQ.data, alertsQ.data), [hrQ.data, probQ.data, policyQ.data, webQ.data, alertsQ.data])
   const [edit, setEdit] = useState<Form | null>(null)
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
   useEffect(() => { setEdit(null); setTried(false) }, [co])
   const hrEdit = canHrWrite, probEdit = canProbWrite, polEdit = canPolicy && !!policyQ.data, webEdit = (canHrWrite || canPolicy) && !!webQ.data
-  const f = edit || saved
+  const alertEdit = canAlertsWrite && !!alertsQ.data
+  // Alerts that arrive after editing began aren't a change.
+  const f = edit ? (edit.alerts === null && saved.alerts !== null ? { ...edit, alerts: saved.alerts } : edit) : saved
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setEdit((cur) => ({ ...(cur || saved), [k]: v }))
 
   // Validation (only fields the person can change)
@@ -161,7 +184,13 @@ export function HrConfigurationPage() {
       if (webEdit && changed.includes('webPunch') && f.webPunch != null) {
         await saveWeb.mutateAsync({ allowWebPunch: f.webPunch })
       }
-      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch(), webQ.refetch()])
+      if (alertEdit && changed.includes('alerts') && f.alerts) {
+        const r = await saveAlerts.mutateAsync({
+          notifyManager: f.alerts.manager, employeeIds: f.alerts.people.map((p) => p.id), roleIds: f.alerts.roles.map((x) => x.id), alertOn: f.alerts.on,
+        })
+        if (!r.available) throw new Error('Punch-in alerts aren’t switched on yet, so they weren’t saved.')
+      }
+      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch(), webQ.refetch(), ...(canAlertsRead ? [alertsQ.refetch()] : [])])
       setEdit(null); setTried(false); show('ok', 'HR settings saved')
     } catch (e) {
       show('error', 'Couldn’t save HR settings', `${e instanceof Error && e.message ? 'Server: “' + e.message + '” ' : ''}Your changes are still here.`)
@@ -169,7 +198,7 @@ export function HrConfigurationPage() {
   }
 
   const readableHr = canHrWrite || canSettingsRead || !!hrQ.data
-  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit || webEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
+  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit || webEdit || alertEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
   const status: 'loading' | 'error' | 'live' = (co && (hrQ.isLoading || policyQ.isLoading)) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
   const preview = !E.prefix && !E.next ? `${f.prefix.toUpperCase()}-${f.next}` : '—'
   const weekendText = f.weekend.length ? f.weekend.map((d) => DAY_NAME[d]).join(' & ') : 'None'
@@ -180,6 +209,7 @@ export function HrConfigurationPage() {
     { key: 'week', label: 'Work week', state: 'on', errors: secErr('week') },
     { key: 'late', label: 'Late arrival', state: 'on', errors: secErr('late') },
     { key: 'attendance', label: 'Attendance rules', state: 'on', errors: secErr('attendance') },
+    ...(canAlertsRead && co ? [{ key: 'alerts', label: 'Punch-in alerts', state: alertsQ.data ? 'on' : alertsQ.notAvailable ? 'soon' : 'none' } satisfies SettingsNavItem] : []),
     { key: 'fiscal', label: 'Fiscal year', state: 'on' },
   ]
   const ro = !hrEdit, pro = !probEdit, pol = !polEdit
@@ -305,6 +335,20 @@ export function HrConfigurationPage() {
           <SettingsNote>An approved work-from-home day still lets that person check in from anywhere, and requests already approved still count if you turn work from home off. Early leaving is shown for review; it doesn’t change the day by itself.</SettingsNote>
           {(f.fullDayHours || f.halfDayHours) && <SettingsNote tone="amber">Warning: days under the minimum hours count as half days or absences, which payroll can deduct. People who forget to check out aren’t judged on hours; they show as “No check-out” for review.</SettingsNote>}
         </SettingsSection>
+
+        {canAlertsRead && !!co && (
+          <PunchAlertsSection
+            value={alertsQ.notAvailable ? undefined : f.alerts}
+            error={alertsQ.isError && !alertsQ.data}
+            onChange={(next) => set('alerts', next)}
+            readOnly={!alertEdit}
+            options={alertOptionsQ.data}
+            optionsLoading={alertOptionsQ.isLoading}
+            optionsError={alertOptionsQ.isError || alertOptionsQ.notAvailable}
+            updatedByName={alertsQ.data?.updatedByName}
+            updatedAt={alertsQ.data?.updatedAt}
+          />
+        )}
 
         <SettingsSection id="fiscal" icon="calendar" title="Fiscal year" summary={`Starts in ${title(f.fiscal)}`}>
           <SettingsGrid>
