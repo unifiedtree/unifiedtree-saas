@@ -63,7 +63,7 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
   const today = istToday()
   const weekAgo = addDays(today, -6)
   const recent = useFaceReviewEvents(weekAgo, today, true)
-  const roster = useTeamDashboard(today, undefined, perms.team)
+  const roster = useTeamDashboard(today, undefined, perms.team, false, true)
   const decide = useDecideFacePunch()
   const [busy, setBusy] = useState<string | null>(null)
   const [target, setTarget] = useState<StatusTarget | null>(null)

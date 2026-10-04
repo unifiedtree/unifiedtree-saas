@@ -403,8 +403,9 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean includeLeavers,
+            @RequestParam(required = false) Boolean includeOff,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(teamDay(jwt, date, departmentId, includeLeavers));
+        return ResponseEntity.ok(teamDay(jwt, date, departmentId, includeLeavers, Boolean.TRUE.equals(includeOff)));
     }
 
     /**
@@ -413,6 +414,17 @@ public class AttendanceController {
      * writes exactly these rows.
      */
     public TeamDashboardResponse teamDay(Jwt jwt, LocalDate date, UUID departmentId, Boolean includeLeavers) {
+        return teamDay(jwt, date, departmentId, includeLeavers, false);
+    }
+
+    /**
+     * {@code includeOff} (the web's team views): the people whose weekly off the
+     * date is, and who did not punch, come back too, as WEEKLY_OFF rows that no
+     * tile counts. Without them a team that is all off on a Sunday read "No one
+     * in your team yet" and "Weekly off 0". Off by default, so the mobile app and
+     * the register export keep the working roster they were built on.
+     */
+    public TeamDashboardResponse teamDay(Jwt jwt, LocalDate date, UUID departmentId, Boolean includeLeavers, boolean includeOff) {
         LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         // includeLeavers (the admin dashboard's history view): the team as it was
         // on the date, so people who have left since still count on the days
@@ -502,13 +514,38 @@ public class AttendanceController {
                         leaveFacts.get(employee.getId())))
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
+        AttendanceSummaryCounts counts = effective.isEmpty()
+                ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
+                : countSummaryFromRows(staff, onLeaveIds);
+        if (!includeOff) return new TeamDashboardResponse(selectedDate, counts, staff);
 
-        return new TeamDashboardResponse(
-                selectedDate,
-                effective.isEmpty()
-                        ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
-                        : countSummaryFromRows(staff, onLeaveIds),
-                staff);
+        // The tiles above are the working roster's; the people off that day are
+        // only listed, so "x of y working" and Absent stay what they were.
+        List<Employee> off = rosterAll.stream()
+                .filter(emp -> !punchedIds.contains(emp.getId()) && onWeeklyOff(selectedDate,
+                        joins.get(emp.getId()), lastDays.get(emp.getId()), weekOffs.get(emp.getId())))
+                .toList();
+        if (off.isEmpty()) return new TeamDashboardResponse(selectedDate, counts, staff);
+        Map<UUID, String> offDepartments = departmentNames(off);
+        Map<UUID, String> offBranches = branchNames(off);
+        List<StaffStatusResponse> rows = java.util.stream.Stream.concat(staff.stream(), off.stream()
+                        .map(emp -> weeklyOffRow(emp, fullName(emp),
+                                emp.getDepartmentId() != null ? offDepartments.get(emp.getDepartmentId()) : null,
+                                emp.getBranchId() != null ? offBranches.get(emp.getBranchId()) : null)))
+                .sorted(Comparator.comparing(StaffStatusResponse::fullName))
+                .toList();
+        return new TeamDashboardResponse(selectedDate, counts, rows);
+    }
+
+    /** A row for someone whose weekly off the day is and who didn't punch: listed, never counted. */
+    static StaffStatusResponse weeklyOffRow(Employee employee, String fullName, String departmentName, String branchName) {
+        String off = com.hrms.attendance.policy.EffectiveDay.WEEKLY_OFF;
+        return withRosterFacts(new StaffStatusResponse(
+                employee.getId(), employee.getEmployeeCode(), fullName, employee.getJobTitle(),
+                employee.getDepartmentId(), departmentName, employee.getProfilePhotoUrl(),
+                off, null, null, null, null, null, false, null, false,
+                null, null, null, null,
+                off, "Weekly off", false, false, false, false, false, null, null), branchName, null, null);
     }
 
     /**

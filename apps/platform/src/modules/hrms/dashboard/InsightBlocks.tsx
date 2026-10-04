@@ -14,19 +14,20 @@ const bar = (pct: number, tone?: 'gold' | 'red' | 'mint') => (
 )
 
 // ── People ───────────────────────────────────────────────────────────────────
-export function DeptCard({ rows, sub, onPick, ...c }: Common & { rows: { id: string | null; name: string; active: number }[]; sub: string; onPick: (id: string | null) => void }) {
-  const max = Math.max(1, ...rows.map((r) => r.active))
-  const sorted = [...rows].sort((a, b) => b.active - a.active)
+/** Everyone on the roll per department: confirmed, on probation and serving notice (the people a bar's click lists). */
+export function DeptCard({ rows, sub, onPick, ...c }: Common & { rows: { id: string | null; name: string; people: number }[]; sub: string; onPick: (id: string | null) => void }) {
+  const max = Math.max(1, ...rows.map((r) => r.people))
+  const sorted = [...rows].sort((a, b) => b.people - a.people)
   return (
     <Section variant="dashboard" level={3} title="Dept distribution" sub={sub} body="list" {...c}
       empty={!rows.length ? { title: 'No records for this period.', icon: 'chart' } : undefined}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 4px 8px' }}>
         {sorted.map((d, i) => (
           <button key={d.id ?? 'none'} type="button" className="ud-dept" onClick={() => onPick(d.id)} title={`Filter the directory to ${d.name}`}
-            aria-label={`${d.name}: ${d.active} active. Filter the directory`}>
+            aria-label={`${d.name}: ${d.people} ${d.people === 1 ? 'person' : 'people'}. Filter the directory`}>
             <span className="ud-dept__name">{d.name}</span>
-            {bar((d.active / max) * 100, i === 0 ? undefined : 'mint')}
-            <span className="ud-dept__n">{d.active}</span>
+            {bar((d.people / max) * 100, i === 0 ? undefined : 'mint')}
+            <span className="ud-dept__n">{d.people}</span>
           </button>
         ))}
       </div>

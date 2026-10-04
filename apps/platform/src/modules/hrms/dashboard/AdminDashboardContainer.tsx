@@ -42,13 +42,14 @@ import { endOfIstDay, monthToDate, parseDashboardDate } from './dashboardDate'
 import { useInboxCounts } from './NeedsAction'
 import { AdminDashboard, type DashboardVm } from '@/design/dc/AdminDashboard'
 import {
-  lateNote, monthSpan, payrollHint, payrollMonths, pctOf, quickActions, relTime, scheduledOf, trendColumns, workingWindow,
-  type DashSection,
+  lateNote, monthSpan, payrollHint, payrollMonths, pctOf, quickActions, relTime, rollNote, rollTotal, scheduledOf, trendColumns, workingWindow,
+  type DashSection, type RollStats,
 } from './dashboardModel'
+import { useMyDay } from '../attendance/webpunch/useMyDay'
+import { WebPunchDialog } from '../attendance/webpunch/WebPunchDialog'
 
-interface Stats { activeEmployees?: number; openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string
-  /** Past dates only (the history view): everyone on the roll that day, and the month's joiners / leavers up to it. */
-  headcount?: number; joinedInMonth?: number; leftInMonth?: number }
+/** The people figures (RollStats) come with hrms.employee.read; the month's joiners / leavers on a past day only. */
+interface Stats extends RollStats { openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string }
 interface Alert { type: string; count: number; label: string; path: string }
 interface Notice { id: string; title: string; body: string; expiresOn?: string; createdAt: string }
 interface Project { id: string; name: string; status: string; total: number; completed: number }
@@ -98,6 +99,7 @@ export function AdminDashboardContainer() {
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [noticePage, setNoticePage] = useState(0)
+  const [punch, setPunch] = useState<'in' | 'out' | null>(null)
 
   // ── permissions ────────────────────────────────────────────────────────────
   const ctx = useAccessContext()
@@ -117,6 +119,7 @@ export function AdminDashboardContainer() {
   const canApproveWfh = usePermission(P.WFH_APPROVE)
   const canShiftAdmin = usePermission('attendance.workforce.admin' as any)
   const canRequestLeave = usePermission(P.LEAVE_REQUEST_SELF)
+  const canCheckIn = usePermission(P.ATTENDANCE_CHECKIN_SELF)
   const canExport = usePermission(P.HRMS_REPORT_HEADCOUNT)
   const canAddEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
   const canReportAttrition = usePermission(P.HRMS_REPORT_ATTRITION)
@@ -134,7 +137,7 @@ export function AdminDashboardContainer() {
   const greetName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
 
   // ── data (query keys as before) ────────────────────────────────────────────
-  const { data: companies = [] } = useCompanies()
+  const { data: companies = [], isLoading: companiesLoading } = useCompanies()
   const companyId = companies[0]?.id as string | undefined
   // Attendance: today's view keeps its hooks; a past day asks for the team as it was then
   // (includeLeavers: people who have left since count on the days they worked) and a trend ending on it.
@@ -144,8 +147,11 @@ export function AdminDashboardContainer() {
   const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast)
   const trendPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'history', sel], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${addDays(sel, -30)}&to=${sel}&includeLeavers=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
   const trend = isPast ? trendPast : trendToday
-  const directory = useEmployeeDirectory({ companyId, pageSize: 1 }, { enabled: canReadEmployees && !!companyId && !canReadTeam && !isPast })
   const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId, date], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}${dq}`), enabled: canReadCompany && !!companyId })
+  // Total employees comes from the summary's headcount (rollTotal). Only a viewer who gets neither it nor the
+  // headcount report (a server before the Home fix, today) falls back to the directory's count.
+  const noRollTotal = !canReadCompany || (stats.isSuccess && stats.data?.headcount == null)
+  const directory = useEmployeeDirectory({ companyId, pageSize: 1 }, { enabled: canReadEmployees && !!companyId && !isPast && !canExport && noRollTotal })
   const alerts = useQuery({ queryKey: ['dashboard', 'alerts', companyId, date], queryFn: () => apiJson<Alert[]>(`/v1/admin/dashboard/alerts${isPast ? `?date=${sel}` : ''}`), enabled: canReadCompany && !!companyId })
   // Seats: read for the billing line, and for Add employee (disabled with the reason when every seat is used).
   const seats = useSeatsUsage({ enabled: canBilling || canAddEmployee })
@@ -170,6 +176,11 @@ export function AdminDashboardContainer() {
   // A past day: people on probation then whose probation ended within 30 days of it.
   const probationsPast = useQuery({ queryKey: ['hrms', 'probation', 'upcoming', 30, 'on', sel], queryFn: () => apiJson<UpcomingProbation[]>(`/v1/probation/upcoming?days=30&date=${sel}`), enabled: canReadEmployees && isPast, staleTime: 60_000 })
   const probations = isPast ? probationsPast : probationsToday
+  // Check in / out from the dashboard (today's view): the same "Your day" read and face punch as Home at /me, for
+  // people who punch too and whose Home this dashboard is. Shown only where the company allows web check-in.
+  const day = useMyDay({ enabled: canCheckIn && !isPast })
+  const myDay = day.notAvailable ? undefined : day.data
+  const punchMode = isPast || !myDay?.webPunchAllowed ? null : !myDay.checkedIn ? 'in' as const : !myDay.checkedOut ? 'out' as const : null
 
   // ── Needs your action: the counts behind the tiles and the greeting ────────
   const pastAlert = (type: string) => (isPast && alerts.data ? alerts.data.find((a) => a.type === type)?.count ?? 0 : undefined)
@@ -205,8 +216,11 @@ export function AdminDashboardContainer() {
   // ── the view model ─────────────────────────────────────────────────────────
   const vm: DashboardVm = useMemo(() => {
     const staff = team.data?.staffStatuses ?? []
-    const total = team.data ? staff.length : isPast ? stats.data?.headcount ?? 0 : directory.data?.totalElements ?? 0
-    const c: DayBuckets = team.data ? dayBuckets(team.data, today) : { ...ZERO, total }
+    // Everyone on the roll (rollTotal), not the day's attendance roster: that leaves out people on their weekly
+    // off and the viewer, so it read 0 every Sunday and one short on other days.
+    const total = rollTotal(stats.data, headcount.data, directory.data?.totalElements)
+    const totalLoading = total == null && (companiesLoading || stats.isLoading || headcount.isLoading || directory.isLoading)
+    const c: DayBuckets = team.data ? dayBuckets(team.data, today) : ZERO
     const daily: Record<string, DayBuckets> = {}
     for (const r of trend.data ?? []) daily[r.date] = trendBuckets(r, today)
     if (team.data) daily[sel] = c
@@ -270,23 +284,20 @@ export function AdminDashboardContainer() {
       greetSub: canReadTeam && team.data
         ? { inN: c.present, sched, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null }
         : { inN: null, sched: null, needN, past: isPast ? fmtShort(sel).slice(0, -5) : null },
-      // Nobody on the roll yet (the company's active count, or the directory's when that isn't readable).
-      emptyWorkspace: !isPast && (st ? st.activeEmployees === 0 : canReadEmployees && !canReadTeam && directory.data?.totalElements === 0),
+      // Nobody on the roll yet. It used to read the confirmed (ACTIVE) count, so a company whose people were all
+      // still on probation was told to add its first employees.
+      emptyWorkspace: !isPast && canReadEmployees && total === 0,
       sections,
       daily, holidays: hol,
       // ── stat cards ──
       counts: c, staff,
-      liveLoading: canReadTeam ? team.isLoading : directory.isLoading || (isPast && stats.isLoading),
+      liveLoading: canReadTeam ? team.isLoading : totalLoading,
       liveError: canReadTeam ? team.error : null,
       stats: {
         showTotal: canReadEmployees, showAtt: canReadTeam,
-        total,
-        totalNote: (() => {
-          // Company summary's active employees live in this note (§5.5); a past date adds the month's joiners and leavers.
-          const active = st?.activeEmployees
-          if (active == null) return 'Employee directory'
-          return isPast && st?.joinedInMonth != null ? `${active} active · ${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${monthToDate(sel)}` : `${active} active · employee directory`
-        })(),
+        total, totalLoading,
+        // Who is confirmed, on probation and serving notice; a past date: the month's joiners and leavers (§5.5).
+        totalNote: rollNote(st, isPast, monthToDate(sel)),
         presentNote: sched ? `${pctOf(c.present, sched)}% of ${sched} scheduled` : isPast ? 'Nobody was scheduled' : 'Nobody scheduled today',
         leaveNote: `Approved leave · ${pctOf(c.onLeave, c.total)}%`,
         lateNote: lateNote(staff, c.late),
@@ -298,6 +309,7 @@ export function AdminDashboardContainer() {
       seats: canBilling && seatsData && seatsData.total > 0 ? seatsData : null,
       addEmployee: canAddEmployee ? { disabledReason: seatsFull ? `All ${seatsData!.total} seats are in use. Add seats to add employees.` : null } : null,
       canExport, exporting, exportName: headcountFileName(companies[0]?.name as string | undefined, sel),
+      punch: punchMode,
       // ── needs your action / today's attendance ──
       inbox, canAtt: canReadTeam, canFix: canApproveCorrections, canLeave: canApproveLeave, canWfh: canApproveWfh,
       trendCols: trendColumns(daily, sel, new Set(hol.map((h) => h.date))),
@@ -314,7 +326,8 @@ export function AdminDashboardContainer() {
       canDecideProbation: canAddEmployee, canProbationConfig,
       // ── people ──
       showDept: canReadEmployees && canExport, showPerformers: canReadPerformance, showOnboarding: canReadOnboarding,
-      departments: (headcount.data ?? []).map((r) => ({ id: r.department_id ?? null, name: r.department ?? 'No department', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
+      // Everyone on the roll per department (confirmed, on probation and serving notice), as the directory a bar opens.
+      departments: (headcount.data ?? []).map((r) => ({ id: r.department_id ?? null, name: r.department ?? 'No department', people: Number(r.total ?? 0) })).filter((d) => d.people > 0),
       deptLoading: headcount.isLoading, deptError: headcount.error,
       performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: x.department || '', reviews: x.reviews, rating: x.rating })),
       performersLoading: performers.isLoading, performersError: performers.error,
@@ -337,7 +350,7 @@ export function AdminDashboardContainer() {
   }, [team.data, team.isLoading, team.error, trend.data, trend.isLoading, trend.error, directory.data, directory.isLoading, stats.data, stats.isLoading, alerts.data, seats.data, holidays.data, headcount.data, headcount.isLoading, headcount.error,
     performers.data, performers.isLoading, performers.error, onboarding.data, onboarding.isLoading, onboarding.error, hiring.data, hiring.isLoading, hiring.error, projects.data, projects.isLoading, projects.error,
     runs.data, runs.isLoading, runs.error, activity.data, activity.isLoading, activity.error, notices.data, notices.isLoading, notices.isError, probations.data, probations.isLoading, probations.error,
-    inbox, sel, today, greetName, isPast, noticePage, noticePages, ctx, exporting, companies])
+    inbox, sel, today, greetName, isPast, noticePage, noticePages, ctx, exporting, companies, companiesLoading, punchMode])
 
   const refetch = {
     live: () => { team.refetch(); trend.refetch(); directory.refetch() }, trend: () => trend.refetch(), notices: () => notices.refetch(), probations: () => probations.refetch(),
@@ -348,35 +361,39 @@ export function AdminDashboardContainer() {
   const onNavigate = (path: string) => navigate(path)
 
   return (
-    <AdminDashboard
-      vm={vm}
-      refetch={refetch}
-      onNavigate={onNavigate}
-      onDate={setDate}
-      onExport={exportHeadcount}
-      onNoticePage={setNoticePage}
-      onSaveNotice={async (n) => {
-        try {
-          await noticeMutation.mutateAsync(n)
-          toast.success(n.id ? 'Notice updated' : 'Notice published')
-          return true
-        } catch (e) {
-          toast.error('Could not save the notice', { detail: (e as Error)?.message })
-          return false
-        }
-      }}
-      onArchiveNotice={async (id) => {
-        if (!(await confirm({ title: 'Archive notice?', body: 'This notice will no longer appear on the dashboard.', confirmLabel: 'Archive', tone: 'danger' }))) return
-        try {
-          await noticeMutation.mutateAsync({ id, archive: true })
-          toast.success('Notice archived')
-        } catch (e) {
-          toast.error('Could not archive the notice', { detail: (e as Error)?.message })
-        }
-      }}
-      projectsOpen={projectsOpen}
-      onProjects={setProjectsOpen}
-    />
+    <>
+      <AdminDashboard
+        vm={vm}
+        refetch={refetch}
+        onNavigate={onNavigate}
+        onDate={setDate}
+        onPunch={setPunch}
+        onExport={exportHeadcount}
+        onNoticePage={setNoticePage}
+        onSaveNotice={async (n) => {
+          try {
+            await noticeMutation.mutateAsync(n)
+            toast.success(n.id ? 'Notice updated' : 'Notice published')
+            return true
+          } catch (e) {
+            toast.error('Could not save the notice', { detail: (e as Error)?.message })
+            return false
+          }
+        }}
+        onArchiveNotice={async (id) => {
+          if (!(await confirm({ title: 'Archive notice?', body: 'This notice will no longer appear on the dashboard.', confirmLabel: 'Archive', tone: 'danger' }))) return
+          try {
+            await noticeMutation.mutateAsync({ id, archive: true })
+            toast.success('Notice archived')
+          } catch (e) {
+            toast.error('Could not archive the notice', { detail: (e as Error)?.message })
+          }
+        }}
+        projectsOpen={projectsOpen}
+        onProjects={setProjectsOpen}
+      />
+      {canCheckIn && <WebPunchDialog open={punch !== null} mode={punch ?? 'in'} onClose={() => setPunch(null)} />}
+    </>
   )
 }
 

@@ -53,8 +53,8 @@ export function MusterRoll() {
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)
-  const dash = useTeamDashboard(date, deptId || undefined)
-  const all = useTeamDashboard(date)
+  const dash = useTeamDashboard(date, deptId || undefined, true, false, true)
+  const all = useTeamDashboard(date, undefined, true, false, true)
   const logs = useAttendanceLogs(date, deptId || undefined)
   const isToday = date === today
 

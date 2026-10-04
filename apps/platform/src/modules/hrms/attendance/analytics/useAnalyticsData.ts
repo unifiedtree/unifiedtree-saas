@@ -30,7 +30,7 @@ export function useAnalyticsData(m: { month: string; past: boolean; from: string
   const { data: companies = [] } = useCompanies()
   const companyId: string = companies[0]?.id ?? ''
 
-  const teamToday = useTeamDashboard(today, undefined, canTeam)
+  const teamToday = useTeamDashboard(today, undefined, canTeam, false, true)
   const trend = useAttendanceTrend(m.from, m.to, undefined, canTeam)
   const sources = useAttendanceSources(today, undefined, canTeam && !m.past)
   // A past month: every check-in of the month. A server without the range answers for today, which is dropped.

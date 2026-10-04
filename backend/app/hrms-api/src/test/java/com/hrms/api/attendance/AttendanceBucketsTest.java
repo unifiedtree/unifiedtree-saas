@@ -69,4 +69,25 @@ class AttendanceBucketsTest {
         assertFalse(AttendanceController.isPresentBucket(record("ON_TIME", "WFH", true)));
         assertTrue(AttendanceController.isPresentBucket(record("ON_TIME", null, true)));
     }
+
+    @Test void aWeeklyOffRowIsListedAsWeeklyOffAndNoTileCountsIt() {
+        com.hrms.employee.entity.Employee e = new com.hrms.employee.entity.Employee();
+        e.setId(java.util.UUID.randomUUID());
+        e.setEmployeeCode("EMP-9");
+        var off = AttendanceController.weeklyOffRow(e, "Aisha Khan", "Sales", "Hyderabad");
+        assertEquals(e.getId(), off.employeeId());
+        assertEquals("Aisha Khan", off.fullName());
+        assertEquals("WEEKLY_OFF", off.status());
+        assertEquals("WEEKLY_OFF", off.effectiveStatus());
+        assertEquals("Sales", off.departmentName());
+        assertEquals("Hyderabad", off.branchName());
+        assertNull(off.checkInAt());
+        assertFalse(off.onLeave());
+        // Listed with the working roster, it changes no tile: not "not marked", not absent, not on leave.
+        var counts = AttendanceController.countSummaryFromRows(List.of(off), Set.of());
+        assertEquals(0, counts.notMarked());
+        assertEquals(0, counts.absent());
+        assertEquals(0, counts.onLeave());
+        assertEquals(0, counts.present());
+    }
 }

@@ -371,14 +371,21 @@ export function useAttendanceTrend(from?: string, to?: string, departmentId?: st
 /**
  * `includeLeavers` (a past day): the team as it was then, so people who have
  * left since still show on the days they worked. Off: today's team (as before).
+ * `includeOff`: the people whose weekly off the day is come back too, as
+ * WEEKLY_OFF rows no tile counts (dayBuckets puts them in `other`). Without it
+ * a team that is all off reads as nobody at all. Servers before it ignore it.
  */
-export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true, includeLeavers: boolean = false) {
+export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true, includeLeavers: boolean = false, includeOff: boolean = false) {
   const params = new URLSearchParams()
   if (date) params.set('date', date)
   if (departmentId) params.set('departmentId', departmentId)
   if (includeLeavers) params.set('includeLeavers', 'true')
+  if (includeOff) params.set('includeOff', 'true')
+  const key: unknown[] = ['hrms', 'attendance', 'dashboard', date, departmentId]
+  if (includeLeavers) key.push('leavers')
+  if (includeOff) key.push('off')
   return useQuery({
-    queryKey: includeLeavers ? ['hrms', 'attendance', 'dashboard', date, departmentId, 'leavers'] : ['hrms', 'attendance', 'dashboard', date, departmentId],
+    queryKey: key,
     queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?${params}`),
     staleTime: 5_000,
     refetchInterval: 60_000,

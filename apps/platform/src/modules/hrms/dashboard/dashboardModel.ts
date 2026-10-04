@@ -41,6 +41,47 @@ export function niceScale(max: number, steps = 4): { max: number; ticks: number[
   return { max: top, ticks: Array.from({ length: steps + 1 }, (_, i) => top - i * step) }
 }
 
+// ── Total employees ──────────────────────────────────────────────────────────
+/** The summary's people figures (GET /v1/admin/dashboard/stats, with hrms.employee.read). */
+export interface RollStats {
+  /** Everyone on the roll on the day. Servers before the Home fix sent it for a past day only. */
+  headcount?: number
+  /** Confirmed (ACTIVE) people. */
+  activeEmployees?: number
+  probation?: number
+  onNotice?: number
+  /** Past days: the month's joiners and leavers up to the day. */
+  joinedInMonth?: number
+  leftInMonth?: number
+}
+
+/**
+ * Everyone on the roll on the day: the summary's headcount, else the headcount report's (the same rule), else the
+ * directory's count; null while none is known. Never the day's attendance roster, which leaves out the people on
+ * their weekly off and the viewer.
+ */
+export function rollTotal(st: RollStats | undefined, report: readonly { total?: number | string | null }[] | undefined, directory: number | undefined): number | null {
+  if (st?.headcount != null) return Number(st.headcount)
+  if (report) return report.reduce((n, r) => n + (Number(r.total) || 0), 0)
+  return directory ?? null
+}
+
+/**
+ * The Total employees note. Today: who is confirmed, on probation and serving notice ("1 active · 10 on
+ * probation"), so the figure adds up; a past day: that month's joiners and leavers up to it (`range`).
+ */
+export function rollNote(st: RollStats | undefined, isPast: boolean, range: string): string {
+  if (isPast && st?.joinedInMonth != null) return `${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${range}`
+  // A server without the split sends the confirmed count alone, which reads as if the rest had left.
+  if (st?.probation == null || st.activeEmployees == null) return 'Everyone on the roll'
+  const parts = [
+    st.activeEmployees ? `${st.activeEmployees} active` : '',
+    st.probation ? `${st.probation} on probation` : '',
+    st.onNotice ? `${st.onNotice} on notice` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : st.headcount ? 'Everyone on the roll' : 'No one on the roll yet'
+}
+
 /** "12 min ago" style relative time. */
 export function relTime(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return ''
