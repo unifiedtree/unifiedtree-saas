@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StaffStatusResponse } from '../../api/useAttendance'
-import { byBranch, hhmmIst, hm, inStatus, leaveLine, mainShift, methodLabel, rowStatus, statusOnDay, tileKeyOf, versus, workedMinutes } from './dailyModel'
+import { byBranch, hhmmIst, hm, inStatus, leaveLine, logPerson, mainShift, methodLabel, rowStatus, statusOnDay, tileKeyOf, versus, workedMinutes } from './dailyModel'
 
 const row = (o: Partial<StaffStatusResponse>): StaffStatusResponse => ({ employeeId: 'e', employeeCode: 'EMP1', fullName: 'A B', status: 'ABSENT', ...o })
 
@@ -64,5 +64,23 @@ describe('daily tracking view logic', () => {
     expect(versus(12, 10)).toEqual({ delta: '2', mood: 'bad', trend: 'up' })
     expect(versus(10, 10)?.delta).toBe('0')
     expect(versus(10, null)).toBeNull()
+  })
+
+  it('a weekly-off row stays a weekly off, never absent, and counts in no card', () => {
+    // The roster lists people on their weekly off (includeWeeklyOff) with the server's WEEKLY_OFF.
+    const off = rowStatus(row({ effectiveStatus: 'WEEKLY_OFF', status: 'NOT_MARKED' }))
+    expect(off).toBe('WEEKLY_OFF')
+    expect(statusOnDay(off, false)).toBe('WEEKLY_OFF')
+    for (const k of ['PRESENT', 'LATE', 'WFH', 'ON_LEAVE', 'ABSENT', 'NOT_MARKED']) expect(inStatus(off, k)).toBe(false)
+  })
+
+  it('names a face log row by the person, else the login', () => {
+    const id = 'cbee09fe-76ed-45cc-9465-17329903daaa'
+    expect(logPerson({ employeeId: id, employeeName: 'Google Reviewer', employeeCode: 'ADM001' }, 'reviewer@unifiedtree.com'))
+      .toEqual({ name: 'Google Reviewer', sub: 'ADM001' })
+    expect(logPerson({ employeeId: id, employeeName: 'Google Reviewer' }, 'reviewer@unifiedtree.com')).toEqual({ name: 'Google Reviewer', sub: 'reviewer@unifiedtree.com' })
+    // A server that sends no name: the email, as before.
+    expect(logPerson({ employeeId: id }, 'reviewer@unifiedtree.com')).toEqual({ name: 'reviewer@unifiedtree.com', sub: 'User cbee09fe' })
+    expect(logPerson({ employeeId: id, employeeName: '  ' })).toEqual({ name: 'Unknown user', sub: 'User cbee09fe' })
   })
 })

@@ -107,12 +107,12 @@ class TeamScheduleDayFactsTest {
         NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
         Employee e = new Employee();
         e.setId(UUID.randomUUID());
-        when(scope.resolve(any(), isNull())).thenReturn(List.of(e));
+        when(scope.resolve(any(), isNull(), isNull(), eq(false))).thenReturn(List.of(e));
         when(jdbc.queryForList(anyString(), anyMap())).thenReturn(new java.util.ArrayList<>(List.of(row())));
         UUID tenant = UUID.randomUUID();
         TenantContext.setTenantId(tenant);
         try {
-            List<Map<String, Object>> out = new TeamScheduleController(scope, jdbc).schedule(null, LocalDate.of(2026, 9, 28), LocalDate.of(2026, 10, 4));
+            List<Map<String, Object>> out = new TeamScheduleController(scope, jdbc).schedule(null, LocalDate.of(2026, 9, 28), LocalDate.of(2026, 10, 4), null);
             assertEquals(1, out.size());
             assertFalse(out.get(0).keySet().stream().anyMatch(k -> k.startsWith("_")), "no helper column leaks");
             verify(jdbc).queryForList(eq(TeamScheduleController.SQL), eq(Map.of("from", LocalDate.of(2026, 9, 28),
@@ -124,5 +124,22 @@ class TeamScheduleDayFactsTest {
         assertTrue(TeamScheduleController.SQL.contains("lr.status='APPROVED'"));
         assertTrue(TeamScheduleController.SQL.contains("h.company_id=e.company_id AND h.is_active"));
         assertTrue(TeamScheduleController.SQL.contains("LIMIT 1\n) lv ON true"));
+    }
+
+    @Test void includeSelfAsksTheScopeToKeepTheReader() {
+        TeamEmployeeScope scope = mock(TeamEmployeeScope.class);
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        Employee me = new Employee();
+        me.setId(UUID.randomUUID());
+        when(scope.resolve(any(), isNull(), isNull(), eq(true))).thenReturn(List.of(me));
+        when(jdbc.queryForList(anyString(), anyMap())).thenReturn(new java.util.ArrayList<>(List.of(row())));
+        TenantContext.setTenantId(UUID.randomUUID());
+        try {
+            List<Map<String, Object>> out = new TeamScheduleController(scope, jdbc).schedule(null, LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 5), true);
+            assertEquals(1, out.size());
+            verify(scope).resolve(any(), isNull(), isNull(), eq(true));
+        } finally {
+            TenantContext.clear();
+        }
     }
 }

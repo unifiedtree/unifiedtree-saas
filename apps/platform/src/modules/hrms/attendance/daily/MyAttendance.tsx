@@ -106,7 +106,8 @@ export function MyAttendance({ perms }: { perms: DailyPerms }) {
     date: picked, in: d?.checkInTime ? hhmmIst(d.checkInTime) : undefined, out: d?.checkOutTime ? hhmmIst(d.checkOutTime) : undefined,
   })
 
-  const legend = [{ tone: 'present', label: 'On time' }, { tone: 'late', label: 'Late or leave' }, { tone: 'home', label: 'Home' }, { tone: 'fix', label: 'To fix' }] as const
+  // Every colour the month uses: a day with no punch and no leave is red as "Absent" (not "To fix", which is a missed punch-out).
+  const legend = [{ tone: 'present', label: 'On time' }, { tone: 'late', label: 'Late or leave' }, { tone: 'home', label: 'Home' }, { tone: 'absent', label: 'Absent' }, { tone: 'fix', label: 'To fix' }] as const
   const payLine = pay.data?.nextPayDate ? `Payroll is processed on ${fmtLong(pay.data.nextPayDate)}. Fix any day before then.` : null
 
   return (

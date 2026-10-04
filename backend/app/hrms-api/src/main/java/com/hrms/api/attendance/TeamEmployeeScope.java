@@ -23,12 +23,26 @@ public class TeamEmployeeScope {
      * reports already include people who have left.) Null: today's team.
      */
     public List<Employee> resolve(Jwt jwt, UUID departmentId, java.util.function.Function<UUID, List<Employee>> formerStaff) {
+        return resolve(jwt, departmentId, formerStaff, false);
+    }
+
+    /**
+     * {@link #resolve(Jwt, UUID, java.util.function.Function)}, and with
+     * {@code includeSelf} a company-wide caller stays in their own list: a
+     * company register (the muster roll, the shift roster) lists everyone in
+     * the company, the person reading it too. A manager's team never includes
+     * the manager, flag or not. Every other caller (the approval guard among
+     * them) uses the overloads above, which always leave the caller out.
+     */
+    public List<Employee> resolve(Jwt jwt, UUID departmentId, java.util.function.Function<UUID, List<Employee>> formerStaff,
+                                  boolean includeSelf) {
         UUID currentEmployeeId = UUID.fromString(jwt.getClaimAsString("employee_id") != null ? jwt.getClaimAsString("employee_id") : jwt.getSubject());
         Employee current = employeeRepository.findById(currentEmployeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + currentEmployeeId));
 
         List<Employee> employees;
-        if (AttendanceController.isAdmin(jwt)) {
+        boolean companyWide = AttendanceController.isAdmin(jwt);
+        if (companyWide) {
             // Admin + HR: organisation-wide, every active employee.
             employees = withFormer(employeeRepository.findActiveByCompany(current.getCompanyId()), formerStaff, current.getCompanyId());
         } else {
@@ -38,9 +52,12 @@ public class TeamEmployeeScope {
         // Exclude the caller from the team list — admins and managers don't
         // punch on this app, so counting them produces phantom "Not Marked /
         // Absent" tiles. (HR does punch, but they're rarely their own report.)
-        employees = employees.stream()
-                .filter(employee -> !employee.getId().equals(currentEmployeeId))
-                .toList();
+        // A company register asks to keep them (includeSelf, company-wide only).
+        if (!(includeSelf && companyWide)) {
+            employees = employees.stream()
+                    .filter(employee -> !employee.getId().equals(currentEmployeeId))
+                    .toList();
+        }
 
         if (departmentId != null) {
             employees = employees.stream()

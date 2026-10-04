@@ -36,8 +36,10 @@ import java.util.UUID;
 
 /**
  * The day register (V143.53 redesign, BW-19): one day's attendance as a CSV,
- * one row per person on the day's roster, exactly the rows Daily Logs and the
- * Muster roll show for the caller (their team scope, and the department picked):
+ * one row per person on the roll that day, exactly the rows the Muster roll
+ * shows for the caller (their team scope, and the department picked): people
+ * on their weekly off are listed as such, and a company-wide register lists the
+ * person downloading it too, so the file is the same whoever downloads it.
  * Employee, Code, Department, Branch, Shift, In, Out, Hours, Status, Source.
  * Saved as {@code muster-roll-YYYY-MM-DD.csv} and recorded in the export log,
  * so the Reports Center's "Recent downloads" lists it.
@@ -72,14 +74,14 @@ public class AttendanceRegisterController {
         this.ownTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Operation(summary = "Download one day's attendance register as a CSV (the rows Daily Logs shows you)")
+    @Operation(summary = "Download one day's attendance register as a CSV (the rows the Muster roll shows you)")
     @GetMapping("/register/export.csv")
     @PreAuthorize("hasAuthority('attendance.team.read') and @perm.check('hrms.report.attendance')")
     public ResponseEntity<byte[]> export(@RequestParam(required = false) LocalDate date,
                                          @RequestParam(required = false) UUID departmentId,
                                          @AuthenticationPrincipal Jwt jwt) {
         LocalDate day = date != null ? date : LocalDate.now(IST);
-        TeamDashboardResponse team = attendance.teamDay(jwt, day, departmentId, false);
+        TeamDashboardResponse team = attendance.teamDay(jwt, day, departmentId, false, true, true);
         List<StaffStatusResponse> rows = team.staffStatuses() == null ? List.of() : team.staffStatuses();
         byte[] body = ("﻿" + csv(rows, day)).getBytes(StandardCharsets.UTF_8);
         String fileName = "muster-roll-" + day + ".csv";

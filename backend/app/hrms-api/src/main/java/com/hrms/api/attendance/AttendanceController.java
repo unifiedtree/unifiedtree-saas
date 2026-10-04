@@ -403,22 +403,46 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean includeLeavers,
+            @RequestParam(required = false) Boolean includeWeeklyOff,
+            @RequestParam(required = false) Boolean includeSelf,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(teamDay(jwt, date, departmentId, includeLeavers));
+        return ResponseEntity.ok(teamDay(jwt, date, departmentId, includeLeavers,
+                Boolean.TRUE.equals(includeWeeklyOff), Boolean.TRUE.equals(includeSelf)));
     }
 
     /**
      * The team's day: the dashboard's roster rows and tiles, in the caller's
-     * team scope. The day register export (AttendanceRegisterController, BW-19)
-     * writes exactly these rows.
+     * team scope (people on their weekly off and the caller left out, as the
+     * mobile app has always had it).
      */
     public TeamDashboardResponse teamDay(Jwt jwt, LocalDate date, UUID departmentId, Boolean includeLeavers) {
+        return teamDay(jwt, date, departmentId, includeLeavers, false, false);
+    }
+
+    /**
+     * {@link #teamDay(Jwt, LocalDate, UUID, Boolean)}, for the web's day views.
+     *
+     * <p>{@code includeWeeklyOff}: people whose weekly off the date is (and who
+     * did not punch) are listed too, as weekly-off rows. They are only listed:
+     * the tiles count exactly the people they counted before, so nobody on a
+     * day off is "not marked" or absent. Without it a Sunday's muster roll was
+     * empty and its "Weekly off" count could never be above 0.
+     *
+     * <p>{@code includeSelf}: a company-wide caller is on their own list (see
+     * {@link TeamEmployeeScope#resolve(Jwt, UUID, java.util.function.Function, boolean)}),
+     * so the muster roll is the same register whoever opens it. The day
+     * register export (AttendanceRegisterController, BW-19) asks for both.
+     */
+    public TeamDashboardResponse teamDay(Jwt jwt, LocalDate date, UUID departmentId, Boolean includeLeavers,
+                                         boolean includeWeeklyOff, boolean includeSelf) {
         LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         // includeLeavers (the admin dashboard's history view): the team as it was
         // on the date, so people who have left since still count on the days
         // they worked. Off by default: every other caller sees today's team.
         boolean history = Boolean.TRUE.equals(includeLeavers) && dashboardHistory != null;
-        List<Employee> rosterAll = history ? scopedEmployeesOn(jwt, departmentId, selectedDate, selectedDate) : scopedEmployees(jwt, departmentId);
+        List<Employee> rosterAll = history
+                ? scopedEmployeesOn(jwt, departmentId, selectedDate, selectedDate, includeSelf)
+                : scopedEmployees(jwt, departmentId, includeSelf);
         // Exclude anyone who joined after the date (a 1-Oct hire is not
         // "absent" on 24 Sep) or whose weekly off falls on the date (Sat/Sun
         // fallback if the employee has no explicit weekly_off_days) - unless
@@ -447,24 +471,35 @@ public class AttendanceController {
         // weekly off whose row carries no check-in) is dropped here rather than
         // counted in a tile that has no row to drill into.
         Set<UUID> rosterIds = Set.copyOf(employeeIds);
+        // includeWeeklyOff: the people the roster left out because the date is
+        // their weekly off (and they did not punch - anyone who did is already
+        // on it). They get a row each, after the tiles are counted.
+        List<Employee> offDuty = !includeWeeklyOff ? List.of() : rosterAll.stream()
+                .filter(emp -> !rosterIds.contains(emp.getId())
+                        && onWeeklyOff(selectedDate, joins.get(emp.getId()), lastDays.get(emp.getId()), weekOffs.get(emp.getId())))
+                .toList();
+        // Everyone with a row: the counted roster, then the people on their weekly off.
+        List<Employee> listed = offDuty.isEmpty() ? employees
+                : java.util.stream.Stream.concat(employees.stream(), offDuty.stream()).toList();
+        List<UUID> listedIds = listed.stream().map(Employee::getId).toList();
         List<AttendanceRecord> records = rosterRecords.stream()
                 .filter(record -> rosterIds.contains(record.getEmployeeId()))
                 .toList();
         Map<UUID, AttendanceRecord> byEmployee = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getEmployeeId, Function.identity(), (a, b) -> a));
-        Map<UUID, String> departmentNames = departmentNames(employees);
+        Map<UUID, String> departmentNames = departmentNames(listed);
         // One bulk lookup for the shift in force on the date; its end feeds both
         // the per-row earlyCheckout flag and the aggregate countSummary tile,
         // its name/start/grace feed the per-row "late by" columns.
         Map<UUID, AttendanceService.ShiftWindow> shiftLookup;
         try {
-            shiftLookup = attendanceService.getShiftWindowsForEmployees(employeeIds, selectedDate);
+            shiftLookup = attendanceService.getShiftWindowsForEmployees(listedIds, selectedDate);
         } catch (RuntimeException e) {
             // Shift details only enrich the roster (late-by, early checkout). A
             // failure there must not take down the whole team dashboard, which
             // the mobile manager home screen also loads.
             org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
-                    .warn("Team dashboard: shift lookup failed for {} on {}: {}", employeeIds.size(), selectedDate, e.getMessage());
+                    .warn("Team dashboard: shift lookup failed for {} on {}: {}", listedIds.size(), selectedDate, e.getMessage());
             shiftLookup = Map.of();
         }
         Map<UUID, AttendanceService.ShiftWindow> shiftByEmployee = shiftLookup;
@@ -475,40 +510,65 @@ public class AttendanceController {
         // and the tiles. It used to be fetched inside countSummary only, which
         // is why the "On Leave" / "Absent" tiles had no per-row counterpart:
         // clicking a tile filtered rows that never carried the fact the tile
-        // was counting. One lookup, one set, both consumers.
-        Set<UUID> onLeaveIds = employees.isEmpty()
+        // was counting. One lookup, one set, both consumers. The tiles count
+        // the roster's people only (onLeaveIds), never a weekly-off row.
+        Set<UUID> onLeaveListed = listed.isEmpty()
                 ? Set.of()
                 : Set.copyOf(leaveRequestRepository.findEmployeeIdsOnApprovedLeave(
-                        employeeIds, selectedDate));
+                        listedIds, selectedDate));
+        Set<UUID> onLeaveIds = offDuty.isEmpty() ? onLeaveListed
+                : onLeaveListed.stream().filter(rosterIds::contains).collect(Collectors.toUnmodifiableSet());
 
         // The day's effective status per person: the company attendance policy
         // (grace, half-day rules, late allowance) and any reviewer's change.
-        Map<UUID, com.hrms.attendance.policy.EffectiveDay> effective = effectiveOn(employeeIds, selectedDate);
+        Map<UUID, com.hrms.attendance.policy.EffectiveDay> effective = effectiveOn(listedIds, selectedDate);
 
         // Roster facts (V143.53 redesign, BW-13): the branch, how the check-in
         // was made, the approved leave covering the day and whether a leave
         // request is still waiting. One lookup each; each only enriches the rows,
         // so a failure leaves those fields empty and never the dashboard.
-        Map<UUID, String> branchNames = branchNames(employees);
-        Map<UUID, LeaveFacts> leaveFacts = leaveFactsOn(employeeIds, selectedDate);
+        Map<UUID, String> branchNames = branchNames(listed);
+        Map<UUID, LeaveFacts> leaveFacts = leaveFactsOn(listedIds, selectedDate);
 
-        List<StaffStatusResponse> staff = employees.stream()
-                .map(employee -> withRosterFacts(toStaffStatus(
+        Function<Employee, StaffStatusResponse> row = employee -> withRosterFacts(toStaffStatus(
                         employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee,
-                        onLeaveIds.contains(employee.getId()), shiftByEmployee.get(employee.getId()),
+                        onLeaveListed.contains(employee.getId()), shiftByEmployee.get(employee.getId()),
                         effective.get(employee.getId())),
-                        employee.getBranchId() != null ? branchNames.get(employee.getBranchId()) : null,
-                        byEmployee.get(employee.getId()),
-                        leaveFacts.get(employee.getId())))
+                employee.getBranchId() != null ? branchNames.get(employee.getBranchId()) : null,
+                byEmployee.get(employee.getId()),
+                leaveFacts.get(employee.getId()));
+        List<StaffStatusResponse> staff = employees.stream()
+                .map(row)
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
 
-        return new TeamDashboardResponse(
-                selectedDate,
-                effective.isEmpty()
-                        ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
-                        : countSummaryFromRows(staff, onLeaveIds),
-                staff);
+        AttendanceSummaryCounts counts = effective.isEmpty()
+                ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
+                : countSummaryFromRows(staff, onLeaveIds);
+        if (!offDuty.isEmpty()) {
+            staff = java.util.stream.Stream.concat(staff.stream(), offDuty.stream().map(row).map(AttendanceController::asWeeklyOff))
+                    .sorted(Comparator.comparing(StaffStatusResponse::fullName))
+                    .toList();
+        }
+        return new TeamDashboardResponse(selectedDate, counts, staff);
+    }
+
+    /**
+     * A row for someone on their weekly off. It keeps the policy's word for the
+     * day when there is one (weekly off; on leave or a holiday when one covers
+     * it); without the policy service the row says WEEKLY_OFF itself, so no
+     * screen reads the missing punch as "not marked" or absent.
+     */
+    static StaffStatusResponse asWeeklyOff(StaffStatusResponse s) {
+        if (s.effectiveStatus() != null) return s;
+        return new StaffStatusResponse(s.employeeId(), s.employeeCode(), s.fullName(), s.jobTitle(), s.departmentId(),
+                s.departmentName(), s.profilePhotoUrl(), s.status(), s.checkInAt(), s.checkOutAt(), s.locationName(),
+                s.latitude(), s.longitude(), s.earlyCheckout(), s.attendanceType(), s.onLeave(), s.shiftName(),
+                s.expectedCheckInAt(), s.graceMinutes(), s.lateByMinutes(),
+                com.hrms.attendance.policy.EffectiveDay.WEEKLY_OFF, "Weekly off.",
+                s.statusManual(), s.lossOfPay(), s.withinAllowance(), s.outsideGeofence(), s.punchRejected(),
+                s.earlyByMinutes(), s.workedMinutes(), s.branchName(), s.checkInMethod(), s.leaveTypeName(),
+                s.leaveFrom(), s.leaveTo(), s.pendingLeave());
     }
 
     /**
@@ -1289,14 +1349,23 @@ public class AttendanceController {
     }
 
     private List<Employee> scopedEmployees(Jwt jwt, UUID departmentId) {
-        return new TeamEmployeeScope(employeeRepository, departmentRepository).resolve(jwt, departmentId);
+        return scopedEmployees(jwt, departmentId, false);
+    }
+
+    /** The team; with {@code includeSelf}, a company-wide caller is on it too (see TeamEmployeeScope). */
+    private List<Employee> scopedEmployees(Jwt jwt, UUID departmentId, boolean includeSelf) {
+        return new TeamEmployeeScope(employeeRepository, departmentRepository).resolve(jwt, departmentId, null, includeSelf);
     }
 
     /** The team over {@code from}..{@code to}: today's team plus people who have left since but still worked then. */
     private List<Employee> scopedEmployeesOn(Jwt jwt, UUID departmentId, LocalDate from, LocalDate to) {
+        return scopedEmployeesOn(jwt, departmentId, from, to, false);
+    }
+
+    private List<Employee> scopedEmployeesOn(Jwt jwt, UUID departmentId, LocalDate from, LocalDate to, boolean includeSelf) {
         UUID tenant = com.unifiedtree.security.tenant.TenantContext.requireTenantId();
         return new TeamEmployeeScope(employeeRepository, departmentRepository)
-                .resolve(jwt, departmentId, companyId -> dashboardHistory.formerStaff(tenant, companyId, from, to));
+                .resolve(jwt, departmentId, companyId -> dashboardHistory.formerStaff(tenant, companyId, from, to), includeSelf);
     }
 
     /** Each leaver's last working day (people still employed are absent from the map). */

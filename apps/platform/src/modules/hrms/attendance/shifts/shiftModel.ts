@@ -16,6 +16,15 @@ export const overnight = (start: string, end: string) => mins(hhmm(end)) <= mins
 /** Length of a shift in minutes (a past-midnight shift wraps). */
 export const span = (start: string, end: string) => { const d = (mins(hhmm(end)) - mins(hhmm(start)) + 1440) % 1440; return d || 1440 }
 
+/**
+ * A shift's working time a day in minutes: its working hours (the daily target attendance measures,
+ * the "8h daily target" Master data shows), else the start-to-end span when none is set. A 09:00–18:00
+ * shift with a 1-hour break works 8h, not 9h.
+ */
+export function workMinutes(s: { startTime: string; endTime: string; workingHoursPerDay?: number | null }) {
+  return s.workingHoursPerDay && s.workingHoursPerDay > 0 ? Math.round(s.workingHoursPerDay * 60) : span(s.startTime, s.endTime)
+}
+
 /** Minutes → "1h 20m", "2h", "45m". */
 export function hm(n: number | null | undefined) {
   const v = Math.round(Math.abs(n || 0)), h = Math.floor(v / 60), m = v % 60

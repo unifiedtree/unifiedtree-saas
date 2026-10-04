@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   capLabel, changeRange, counted, dayBar, hm, isoDay, minimumLabel, overnight, overtimeTotals, span, statusOf, timeRange, toMinutes, weeklyOffLabel, workDaysLabel,
+  workMinutes,
 } from './shiftModel'
 import type { OvertimeEntry, OvertimeRequest } from '../../api/useOvertime'
 
@@ -14,6 +15,15 @@ describe('shift timings', () => {
     expect(span('09:00', '09:00')).toBe(1440)
     expect(dayBar('12:00', '18:00')).toEqual({ left: 50, width: 25 })
     expect(dayBar('21:00', '06:00')).toEqual({ left: 87.5, width: 12.5 })
+  })
+
+  it('says the working time a day, not the start-to-end span (Shift Rules says the same)', () => {
+    // Standard 9-6 with an hour's break: 8h of work, as Master data's "8h daily target" says.
+    expect(hm(workMinutes({ startTime: '09:00:00', endTime: '18:00:00', workingHoursPerDay: 8 }))).toBe('8h')
+    expect(workMinutes({ startTime: '22:00', endTime: '06:30', workingHoursPerDay: 7.5 })).toBe(450)
+    // No working hours set: the span, as before.
+    expect(workMinutes({ startTime: '09:00', endTime: '18:00', workingHoursPerDay: null })).toBe(540)
+    expect(workMinutes({ startTime: '09:00', endTime: '18:00' })).toBe(540)
   })
 
   it('names weekly offs and the working days they leave', () => {

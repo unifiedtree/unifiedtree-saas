@@ -124,6 +124,14 @@ describe('menu and search access (permission-only)', () => {
     expect(admin.has('att-daily:team')).toBe(true)
   })
 
+  it('Face Punch is offered to whoever the Daily tracking tab bar shows it to: the face log or the review permission', () => {
+    expect(ids(ctx(DEPT_MANAGER)).has('att-daily:face')).toBe(false)
+    expect(ids(ctx([...DEPT_MANAGER, 'attendance.status.review'])).has('att-daily:face')).toBe(true)
+    expect(ids(ctx([...HR_MANAGER, 'attendance.face.admin.read'])).has('att-daily:face')).toBe(true)
+    // Both views need team attendance first.
+    expect(ids(ctx([...EMPLOYEE, 'attendance.status.review', 'attendance.face.admin.read'])).has('att-daily:face')).toBe(false)
+  })
+
   it('an area opens the first page the person may open', () => {
     expect(firstOpenIn('attendance', visibleEntries(ctx(HR_MANAGER)))?.path).toBe('/hrms/att-analytics')
     expect(firstOpenIn('attendance', visibleEntries(ctx(EMPLOYEE)))?.path).toBe('/hrms/attendance')

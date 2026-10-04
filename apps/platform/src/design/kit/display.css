@@ -959,6 +959,8 @@ a.uk-row__main { cursor: pointer; }
 .uk-cal__legend--detail .uk-cal__sw--home { background: var(--u-g2, #5FB39C); }
 .uk-cal__legend--detail .uk-cal__sw--holiday { background: var(--u-gd, #C8912E); }
 .uk-cal__legend--detail :is(.uk-cal__sw--fix, .uk-cal__sw--absent) { background: var(--u-rd, #C4453A); }
+/* "To fix" keeps its day dot's ring in the legend, so it reads apart from "Absent". */
+.uk-cal__legend--detail .uk-cal__sw--fix { box-shadow: 0 0 0 3px var(--u-rds, #FBE3E0); }
 .uk-cal__legend--planner .uk-cal__sw--holiday { background: repeating-linear-gradient(135deg, var(--u-gds, #F6E7C8) 0 3px, var(--u-sf, #FBF3E2) 3px 6px); }
 .uk-cal__sw--marker { width: 6px; height: 6px; border-radius: 50%; background: var(--u-gd, #C8912E); }
 

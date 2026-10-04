@@ -603,14 +603,29 @@ public class FaceService {
     // Admin
     // ---------------------------------------------------------------------
 
+    /**
+     * The person behind a face login, for the admin lists: the employee record
+     * the login belongs to (name, code and id). Face rows are keyed by the
+     * login, so without it HR saw an email and the start of a login id.
+     */
+    static final String PERSON_COLUMNS =
+            "per.id AS hr_employee_id, per.employee_code, per.first_name, per.last_name";
+    static final String PERSON_JOIN = """
+            LEFT JOIN auth.user_credentials who ON who.id = fe.employee_id AND who.tenant_id = fe.tenant_id
+            LEFT JOIN hrms.employees per ON per.id = who.employee_id AND per.tenant_id = fe.tenant_id
+            """;
+
     public List<AdminEnrollmentSummary> adminList(UUID tenantId, String statusFilter) {
         String sql = """
             SELECT fe.employee_id, uc.email, fe.status, fe.samples_captured,
-                   fe.consecutive_failures, fe.enrolled_at, fe.locked_at, fe.locked_reason
+                   fe.consecutive_failures, fe.enrolled_at, fe.locked_at, fe.locked_reason,
+                   %s
               FROM attendance.face_enrollments fe
               LEFT JOIN auth.user_credentials uc ON uc.id = fe.employee_id
+            %s
              WHERE fe.tenant_id = ?
-            """ + (statusFilter == null || statusFilter.isBlank() ? "" : " AND fe.status = ?")
+            """.formatted(PERSON_COLUMNS, PERSON_JOIN)
+            + (statusFilter == null || statusFilter.isBlank() ? "" : " AND fe.status = ?")
             + " ORDER BY fe.updated_at DESC LIMIT 500";
         Object[] args = (statusFilter == null || statusFilter.isBlank())
                 ? new Object[]{tenantId} : new Object[]{tenantId, statusFilter};
@@ -624,9 +639,29 @@ public class FaceService {
                     rs.getInt("consecutive_failures"),
                     rs.getTimestamp("enrolled_at") == null ? null : rs.getTimestamp("enrolled_at").toInstant(),
                     rs.getTimestamp("locked_at") == null ? null : rs.getTimestamp("locked_at").toInstant(),
-                    rs.getString("locked_reason")));
+                    rs.getString("locked_reason"),
+                    personName(rs.getString("first_name"), rs.getString("last_name")),
+                    rs.getString("employee_code"),
+                    uuidOrNull(rs.getString("hr_employee_id"))));
         }, args);
         return rows;
+    }
+
+    /** "Asha Rao" from the record's names, skipping blanks and the "null" text old imports left; null when there is none. */
+    static String personName(String first, String last) {
+        StringBuilder sb = new StringBuilder();
+        for (String part : new String[]{first, last}) {
+            if (part == null) continue;
+            String t = part.trim();
+            if (t.isEmpty() || t.equalsIgnoreCase("null") || t.equalsIgnoreCase("undefined")) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(t);
+        }
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private static UUID uuidOrNull(String s) {
+        return s == null || s.isBlank() ? null : UUID.fromString(s);
     }
 
     public List<AdminVerificationEvent> adminEvents(UUID tenantId, UUID employeeId, int limit) {
@@ -636,7 +671,8 @@ public class FaceService {
         // person's check-in within 15 minutes after it.
         String sql = """
             SELECT fe.id, fe.employee_id, fe.purpose, fe.result, fe.reason, fe.score_bucket, fe.created_at,
-                   COALESCE(NULLIF(btrim(fe.device_fingerprint), ''), punch.device_id) AS device
+                   COALESCE(NULLIF(btrim(fe.device_fingerprint), ''), punch.device_id) AS device,
+                   %s
               FROM attendance.face_verification_events fe
               LEFT JOIN LATERAL (
                    SELECT NULLIF(btrim(r.device_id), '') AS device_id
@@ -650,8 +686,10 @@ public class FaceService {
                       AND NULLIF(btrim(fe.device_fingerprint), '') IS NULL
                     ORDER BY r.check_in_at
                     LIMIT 1) punch ON true
+            %s
              WHERE fe.tenant_id = ?
-            """ + (employeeId == null ? "" : " AND fe.employee_id = ?")
+            """.formatted(PERSON_COLUMNS, PERSON_JOIN)
+            + (employeeId == null ? "" : " AND fe.employee_id = ?")
             + " ORDER BY fe.created_at DESC LIMIT " + Math.max(1, Math.min(limit, 500));
         Object[] args = employeeId == null ? new Object[]{tenantId} : new Object[]{tenantId, employeeId};
         List<AdminVerificationEvent> rows = new ArrayList<>();
@@ -664,7 +702,10 @@ public class FaceService {
                     rs.getString("reason"),
                     rs.getString("score_bucket"),
                     rs.getTimestamp("created_at").toInstant(),
-                    rs.getString("device")));
+                    rs.getString("device"),
+                    personName(rs.getString("first_name"), rs.getString("last_name")),
+                    rs.getString("employee_code"),
+                    uuidOrNull(rs.getString("hr_employee_id"))));
         }, args);
         return rows;
     }

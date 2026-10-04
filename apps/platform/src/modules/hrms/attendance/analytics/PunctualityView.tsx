@@ -1,12 +1,14 @@
 // Attendance analytics · Punctuality (prototype PgTime a-analytics tab 1; BW-21): who is often late, and when, from
 // effective late days. Team-scoped on the server (a manager sees their team), so it works without the company report.
+// An empty table says "No late marks" only when people came in (checkIns, from the page's month data); a month with
+// no check-ins says so instead of "everyone came in on time".
 import { useNavigate } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { CellPerson, EmptyState, Section, StatusPill, Table, type TableColumn } from '@/design/kit/display'
 import { usePunctuality, type PunctualityRow } from '../../api/useAttendanceInsights'
-import { lateTrend, monthLabel, monthName, weekdayPlural } from './analyticsModel'
+import { lateTrend, monthLabel, monthName, noLateMarks, weekdayPlural } from './analyticsModel'
 
-export function PunctualityView({ m }: { m: { month: string; past: boolean; from: string; to: string } }) {
+export function PunctualityView({ m, checkIns = null }: { m: { month: string; past: boolean; from: string; to: string }; checkIns?: number | null }) {
   const navigate = useNavigate()
   const canOpenPeople = usePermission(P.HRMS_EMPLOYEE_READ)
   const q = usePunctuality(m.from, m.to)
@@ -27,12 +29,13 @@ export function PunctualityView({ m }: { m: { month: string; past: boolean; from
     return <EmptyState icon="clock" title="Punctuality isn’t available yet" hint="It shows here once the server is updated. Late marks are in the Overview meanwhile." />
   }
   const rows = q.data?.rows ?? []
+  const none = noLateMarks(checkIns, m.past)
   return (
     <Section title={m.past ? `Most late marks in ${monthLabel(m.from)}` : 'Most late marks this month'} body="flush"
       sub={q.data ? `${q.data.totals.lateDays} late ${q.data.totals.lateDays === 1 ? 'mark' : 'marks'} · ${q.data.totals.people} ${q.data.totals.people === 1 ? 'person' : 'people'} · ${q.data.totals.previousLateDays} in ${prevName}` : undefined}
       error={q.error} onRetry={() => q.refetch()}>
       <Table label="Most late marks" columns={columns} rows={rows} rowKey={(r) => r.employeeId} loading={q.isLoading} mobile="cards"
-        empty={<EmptyState variant="success" title="No late marks" hint="Everyone came in on time this period." />}
+        empty={<EmptyState variant={none.success ? 'success' : 'plain'} icon="clock" title={none.title} hint={none.hint} />}
         onRowClick={canOpenPeople ? (r) => navigate(`/hrms/employees/${r.employeeId}`) : undefined}
         rowLabel={canOpenPeople ? (r) => `Open ${r.employeeName || 'employee'}` : undefined} />
     </Section>

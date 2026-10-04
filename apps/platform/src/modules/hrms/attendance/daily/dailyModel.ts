@@ -4,6 +4,7 @@
 // the dashboard's own counts stay in attendanceBuckets.ts, unchanged.
 import type { StatusTone } from '@/design/kit/display'
 import type { StaffStatusResponse } from '../../api/useAttendance'
+import type { FaceVerificationEvent } from '../face/useFacePunchLogs'
 import { MON } from '@/design/dc/dates'
 
 /** "09:24" in IST (24-hour, as the design writes times), or an em dash. */
@@ -100,6 +101,17 @@ export function leaveLine(s: Pick<StaffStatusResponse, 'leaveTypeName' | 'leaveF
     ? (a.mon === b.mon ? `${a.day}–${b.day} ${a.mon}` : `${a.day} ${a.mon} – ${b.day} ${b.mon}`)
     : `${a.day} ${a.mon}`
   return `${type} · ${range}`
+}
+
+/**
+ * Who a Face Punch Logs row is: the person's name and code (the server names the person behind the login); else the
+ * login's email (servers before that); else the start of the login id.
+ */
+export function logPerson(e: Pick<FaceVerificationEvent, 'employeeId' | 'employeeName' | 'employeeCode'>, email?: string): { name: string; sub: string } {
+  const named = e.employeeName?.trim()
+  const login = `User ${e.employeeId.slice(0, 8)}`
+  if (named) return { name: named, sub: e.employeeCode || email || login }
+  return { name: email || 'Unknown user', sub: login }
 }
 
 /** Checked in per branch (the design's "By branch" card), biggest first; people without a branch are left out. */

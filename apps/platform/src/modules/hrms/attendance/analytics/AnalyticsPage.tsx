@@ -8,7 +8,7 @@ import { MonthField } from '@/shared/components/calendar'
 import { useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday } from '@/design/dc/dates'
 import { useNavigate } from 'react-router-dom'
-import { analyticsMonth, monthLabel, monthName } from './analyticsModel'
+import { analyticsMonth, checkInsIn, monthLabel, monthName } from './analyticsModel'
 import { useAnalyticsData } from './useAnalyticsData'
 import { OverviewView } from './OverviewView'
 import { PunctualityView } from './PunctualityView'
@@ -68,7 +68,7 @@ export function AnalyticsPage() {
         )} />
       <PillTabs label="Analytics views" semantics="tabs" className="apl-tabs" activeKey={tab} onSelect={setTab} items={TABS.map((t) => ({ key: t.key, label: t.label }))} />
       {tab === 'overview' && <OverviewView m={m} today={today} a={a} mobile={mobile} onCalendar={() => setTab('calendar')} />}
-      {tab === 'punctuality' && <PunctualityView m={m} />}
+      {tab === 'punctuality' && <PunctualityView m={m} checkIns={checkInsIn(m, a.byDept.data?.overall.attendedDays, a.data.daily)} />}
       {tab === 'calendar' && <CalendarView m={m} today={today} a={a} mobile={mobile} />}
     </PageFrame>
   )

@@ -100,6 +100,26 @@ public class ReportService {
                   )
             """;
 
+    /**
+     * Who is on the attendance roll on some day of a range: joined by its last
+     * day (no joining date: the day the record was created, the day the
+     * effective-status service starts tracking them from), and not gone before
+     * its first day (an exit ends the roll after the last working day, so
+     * someone who left mid-month still has their days in that month). Active,
+     * probation, notice period, on leave and suspended people all count, as the
+     * team dashboard and its trend count them; checking ACTIVE alone dropped
+     * everyone still on probation from the attendance summary, the muster
+     * download that falls back to it and the Reports Center's attendance tile.
+     * Takes two parameters: to, from. Starts with a space, like EMPLOYED_ON.
+     */
+    static final String ON_ROLL_DURING = " " + """
+            COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= ?
+                  AND NOT (
+                        e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED', 'RETIRED')
+                    AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') < ?
+                  )
+            """;
+
     // ── 1. Headcount Report ───────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -219,12 +239,12 @@ public class ReportService {
                    AND ar.attendance_date BETWEEN ? AND ?
                 WHERE e.tenant_id = ?
                   AND e.company_id = ?
-                  AND e.employment_status = 'ACTIVE'
+                  AND""" + ON_ROLL_DURING + """
                 GROUP BY e.id, e.employee_code, e.first_name, e.last_name, d.name
                 ORDER BY late_days DESC, e.last_name
                 """;
         UUID t = tenant();
-        List<Map<String, Object>> rows = jdbc.queryForList(sql, t, t, fromDate, toDate, t, companyId);
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, t, t, fromDate, toDate, t, companyId, toDate, fromDate);
         applyEffectiveSummary(rows, effective(
                 rows.stream().map(r -> uuid(r.get("employee_id"))).filter(java.util.Objects::nonNull).toList(), fromDate, toDate));
         return rows;
@@ -255,11 +275,11 @@ public class ReportService {
     /**
      * People who came in on each day of [from, to] (BW-87, the Reports
      * Center's attendance tile), counted exactly as the attendance summary
-     * counts present days: the same people (the company's ACTIVE employees),
-     * the effective status when the policy service is there (present, late or
-     * half day), else one per attendance record. So the days add up to the
-     * summary's total present days for the same range. Every day of the range
-     * is listed; a day nobody came in has 0.
+     * counts present days: the same people (the company's people on the roll
+     * during the range, ON_ROLL_DURING), the effective status when the policy
+     * service is there (present, late or half day), else one per attendance
+     * record. So the days add up to the summary's total present days for the
+     * same range. Every day of the range is listed; a day nobody came in has 0.
      */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> attendanceDaily(UUID companyId, LocalDate fromDate, LocalDate toDate) {
@@ -267,8 +287,8 @@ public class ReportService {
         Map<LocalDate, Long> perDay = new TreeMap<>();
         for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) perDay.put(d, 0L);
         List<UUID> ids = jdbc.queryForList(
-                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.company_id = ? AND e.employment_status = 'ACTIVE'",
-                UUID.class, t, companyId);
+                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.company_id = ? AND" + ON_ROLL_DURING,
+                UUID.class, t, companyId, toDate, fromDate);
         Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff = effective(ids, fromDate, toDate);
         if (!eff.isEmpty()) {
             countWorkedDays(perDay, ids, eff);
@@ -279,14 +299,14 @@ public class ReportService {
                       JOIN hrms.employees e ON e.id = ar.employee_id AND e.tenant_id = ?
                      WHERE ar.tenant_id = ?
                        AND e.company_id = ?
-                       AND e.employment_status = 'ACTIVE'
                        AND ar.attendance_date BETWEEN ? AND ?
+                       AND""" + ON_ROLL_DURING + """
                      GROUP BY ar.attendance_date
                     """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
                 LocalDate day = rs.getDate("day").toLocalDate();
                 long n = rs.getLong("n");
                 perDay.computeIfPresent(day, (k, v) -> v + n);
-            }, t, t, companyId, fromDate, toDate);
+            }, t, t, companyId, fromDate, toDate, toDate, fromDate);
         }
         List<Map<String, Object>> out = new ArrayList<>();
         perDay.forEach((day, n) -> {

@@ -48,10 +48,12 @@ export function ShiftsPage() {
   const companyId: string = companies[0]?.id ?? ''
   const policies = useShiftPolicies(companyId)
   const shifts = useMemo(() => [...(policies.data ?? [])].sort((a, b) => hhmm(a.startTime).localeCompare(hhmm(b.startTime))), [policies.data])
-  const teamToday = useTeamDashboard(today, undefined, canTeam)
+  // Everyone the roster lists, with their code and department: people on their weekly off too, and a company-wide
+  // viewer themself (includeSelf), so the Roster, "no shift yet" and People count the same people as employeeCount.
+  const teamToday = useTeamDashboard(today, undefined, canTeam, false, { includeWeeklyOff: true, includeSelf: true })
   const schedule = useQuery({
-    queryKey: ['team', 'schedule', today, today],
-    queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${today}&to=${today}`),
+    queryKey: ['team', 'schedule', today, today, 'self'],
+    queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${today}&to=${today}&includeSelf=true`),
     enabled: canTeam,
   })
   const me = useQuery({ queryKey: ['employees', 'me'], queryFn: () => apiJson<{ id: string }>('/v1/employees/me'), enabled: canSelf && !canTeam, staleTime: 300_000 })
@@ -117,7 +119,7 @@ export function ShiftsPage() {
       )}
       {tab === 'schedules' && (
         <SchedulesView companyId={companyId} shifts={shifts} loading={policies.isLoading || !companyId} error={policies.error} onRetry={() => policies.refetch()}
-          canEdit={canShiftAdmin} addKey={addKey} people={perShift} noShift={schedule.isSuccess ? noShift : 0} onSeePeople={seePeople} />
+          canEdit={canShiftAdmin} companyWide={canShiftAdmin} addKey={addKey} people={perShift} noShift={schedule.isSuccess ? noShift : 0} onSeePeople={seePeople} />
       )}
       {tab === 'roster' && (
         <RosterView rows={roster} shifts={shifts} loading={schedule.isLoading} error={schedule.error} onRetry={() => schedule.refetch()}

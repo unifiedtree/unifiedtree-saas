@@ -1,26 +1,31 @@
 // Shifts & overtime · Shift Schedules (prototype PgTime a-shifts tab 0): the company's shifts with timing, grace,
 // weekly offs and the people on each today (BW-32). Add, edit and delete need attendance.workforce.admin; a shift
 // people are still on can't be deleted (409 SHIFT_IN_USE), as before.
+// "People" is the company's count (employeeCount) for company-wide viewers and the team's (the roster) for a manager,
+// so it adds up with "no shift yet" and the Roster's filters. A shift's hours are its working time a day (the daily
+// target Shift Rules shows), not the start-to-end span.
 import { useEffect, useState } from 'react'
 import { Avatar, Button, CellActions, Section, SectionLink, Table, errorText, type TableColumn } from '@/design/kit/display'
 import { Dialog, FieldGrid, Input, PanelButton, SidePanel, useToast } from '@/design/kit/overlays'
 import { useCreateShiftPolicy, useDeleteShiftPolicy, useUpdateShiftPolicy, type ShiftPolicy } from '../../api/useShiftPolicies'
-import { hhmm, hm, overnight, span, timeRange, weeklyOffLabel } from './shiftModel'
+import { hhmm, hm, overnight, span, timeRange, weeklyOffLabel, workMinutes } from './shiftModel'
 
 interface Draft { id: string | null; name: string; start: string; end: string; grace: string; breakMin: string }
 
 const addMin = (t: string, n: number) => { const [h, m] = t.split(':').map(Number); const x = ((((h || 0) * 60 + (m || 0) + n) % 1440) + 1440) % 1440; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}` }
 
-export function SchedulesView({ companyId, shifts, loading, error, onRetry, canEdit, addKey, people, noShift, onSeePeople }: {
+export function SchedulesView({ companyId, shifts, loading, error, onRetry, canEdit, companyWide, addKey, people, noShift, onSeePeople }: {
   companyId: string
   shifts: ShiftPolicy[]
   loading: boolean
   error: unknown
   onRetry: () => void
   canEdit: boolean
+  /** Sees the whole company (attendance.workforce.admin); a manager sees their team. */
+  companyWide: boolean
   /** Changes when the header's "Add shift" is pressed. */
   addKey: number
-  /** People per shift from today's roster, for servers without employeeCount. */
+  /** People per shift from today's roster: the team's count, and the company's on servers without employeeCount. */
   people: Map<string, number>
   noShift: number
   onSeePeople: (shiftId: string) => void
@@ -34,7 +39,7 @@ export function SchedulesView({ companyId, shifts, loading, error, onRetry, canE
   const openNew = () => setDraft({ id: null, name: '', start: '09:00', end: '17:00', grace: '15', breakMin: '60' })
   useEffect(() => { if (addKey && canEdit) openNew() }, [addKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const peopleOn = (s: ShiftPolicy) => (typeof s.employeeCount === 'number' ? s.employeeCount : people.get(s.id) ?? 0)
+  const peopleOn = (s: ShiftPolicy) => (companyWide && typeof s.employeeCount === 'number' ? s.employeeCount : people.get(s.id) ?? 0)
   const breakOf = (s: ShiftPolicy) => (s.workingHoursPerDay ? Math.max(0, span(s.startTime, s.endTime) - Math.round(s.workingHoursPerDay * 60)) : 0)
   const edit = (s: ShiftPolicy) => setDraft({ id: s.id, name: s.name, start: hhmm(s.startTime), end: hhmm(s.endTime), grace: String(s.gracePeriodMinutes ?? 0), breakMin: String(breakOf(s)) })
 
@@ -77,7 +82,7 @@ export function SchedulesView({ companyId, shifts, loading, error, onRetry, canE
           <Avatar name={s.name} size={32} />
           <span style={{ display: 'grid' }}>
             <span style={{ fontWeight: 500 }}>{s.name}</span>
-            <span className="apl-muted" style={{ fontSize: 12.5 }}>{[s.code, overnight(s.startTime, s.endTime) ? 'Goes past midnight' : null].filter(Boolean).join(' · ') || `${hm(span(s.startTime, s.endTime))} a day`}</span>
+            <span className="apl-muted" style={{ fontSize: 12.5 }}>{[s.code, overnight(s.startTime, s.endTime) ? 'Goes past midnight' : null].filter(Boolean).join(' · ') || `${hm(workMinutes(s))} of work a day`}</span>
           </span>
         </span>
       ),
@@ -139,7 +144,7 @@ export function SchedulesView({ companyId, shifts, loading, error, onRetry, canE
             </FieldGrid>
             {draft.start && draft.end && draft.start !== draft.end && (
               <p className="apl-note">
-                {`${timeRange(draft.start, draft.end)}${ov ? ' (next day)' : ''} · ${hm(span(draft.start, draft.end))} a day. People who check in after ${addMin(draft.start, Number(draft.grace) || 0)} are marked late.`}
+                {`${timeRange(draft.start, draft.end)}${ov ? ' (next day)' : ''} · ${hm(Math.max(0, span(draft.start, draft.end) - Math.max(0, Number(draft.breakMin) || 0)))} of work a day. People who check in after ${addMin(draft.start, Number(draft.grace) || 0)} are marked late.`}
               </p>
             )}
           </div>

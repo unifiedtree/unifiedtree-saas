@@ -5,7 +5,9 @@
 // without it falls back to today's attendance summary export for the day.
 //
 // Today, anyone without a punch is "not marked yet" (absent only once the day is over), the same
-// rule Daily Logs and My team use.
+// rule Daily Logs and My team use. The register lists everyone on the roll that day: people on their
+// weekly off as "Weekly off" (never counted as absent), and a company-wide viewer's own row, so it is
+// the same register whoever opens it (includeWeeklyOff / includeSelf, as the downloaded file has it).
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission, P } from '@unifiedtree/sdk'
@@ -17,6 +19,7 @@ import { addDays, fmtLong, istToday } from '@/design/dc/dates'
 import { apiBlob, HttpError } from '@/core/api/client'
 import { saveServerFile } from '@/shared/export/fileExport'
 import { useCompanies, useDepartments } from '../api/useOrg'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useTeamDashboard, useAttendanceLogs, type StaffStatusResponse } from '../api/useAttendance'
 import { hhmmIst, hm, rowStatus, statusOnDay, workedMinutes } from './daily/dailyModel'
 import './daily/daily.css'
@@ -37,6 +40,8 @@ LABEL.HOLIDAY = { label: 'Holiday', tone: 'holiday' }
 LABEL.NOT_TRACKED = { label: 'Not tracked', tone: 'muted' }
 
 interface Row { id: string; name: string; code: string; dept: string; shift: string; inAt?: string; outAt?: string; worked: number | null; status: string; punches: number }
+/** The whole roll for the day: weekly offs listed, and the viewer's own row (company-wide viewers). */
+const REGISTER = { includeWeeklyOff: true, includeSelf: true } as const
 
 export function MusterRoll() {
   const navigate = useNavigate()
@@ -53,8 +58,9 @@ export function MusterRoll() {
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)
-  const dash = useTeamDashboard(date, deptId || undefined)
-  const all = useTeamDashboard(date)
+  const { data: me } = useCurrentUser()
+  const dash = useTeamDashboard(date, deptId || undefined, true, false, REGISTER)
+  const all = useTeamDashboard(date, undefined, true, false, REGISTER)
   const logs = useAttendanceLogs(date, deptId || undefined)
   const isToday = date === today
 
@@ -110,10 +116,11 @@ export function MusterRoll() {
     { key: 'punches', header: 'Punches', numeric: true, render: (r) => (r.punches ? r.punches : '—') },
     { key: 'status', header: 'Status', render: (r) => { const m = LABEL[r.status] || { label: r.status, tone: 'neutral' as StatusTone }; return <StatusPill tone={m.tone}>{m.label}</StatusPill> } },
     ...(canManual ? [{
-      key: 'act', header: <span className="uk-sr">Manual entry</span>, label: 'Manual entry', align: 'right' as const, render: (r: Row) => (
+      // Nobody records manual attendance for themselves (the server refuses it), so your own row has none.
+      key: 'act', header: <span className="uk-sr">Manual entry</span>, label: 'Manual entry', align: 'right' as const, render: (r: Row) => (r.id === me?.employeeId ? null : (
         <Button size={30} variant="ghost" aria-label={`Manual entry for ${r.name}`}
           onClick={() => navigate(`/hrms/attendance/manual-entry?employeeId=${encodeURIComponent(r.id)}&date=${encodeURIComponent(date)}`)}>Manual entry</Button>
-      ),
+      )),
     }] : []),
   ]
 

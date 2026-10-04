@@ -138,7 +138,12 @@ public final class FaceDtos {
             Instant punchedAt
     ) {}
 
-    /** GET /v1/attendance/face/admin/employees response item. */
+    /**
+     * GET /v1/attendance/face/admin/employees response item. {@code employeeId}
+     * is the LOGIN the face rows are keyed by; the person behind it is
+     * {@code hrEmployeeId}, {@code employeeName} and {@code employeeCode} (null
+     * when the login has no employee record).
+     */
     public record AdminEnrollmentSummary(
             UUID employeeId,
             String email,
@@ -147,10 +152,17 @@ public final class FaceDtos {
             int consecutiveFailures,
             Instant enrolledAt,
             Instant lockedAt,
-            String lockedReason
+            String lockedReason,
+            String employeeName,
+            String employeeCode,
+            UUID hrEmployeeId
     ) {}
 
-    /** GET /v1/attendance/face/admin/events item. */
+    /**
+     * GET /v1/attendance/face/admin/events item. {@code employeeId} is the
+     * login, as on {@link AdminEnrollmentSummary}; the person is
+     * {@code hrEmployeeId}, {@code employeeName} and {@code employeeCode}.
+     */
     public record AdminVerificationEvent(
             UUID id,
             UUID employeeId,
@@ -162,6 +174,9 @@ public final class FaceDtos {
             /** The phone or kiosk the check was made on, when known (V143.25): the
              *  deviceFingerprint the client sent, or the device of the punch the
              *  check cleared. Null for older events with neither. */
-            String device
+            String device,
+            String employeeName,
+            String employeeCode,
+            UUID hrEmployeeId
     ) {}
 }

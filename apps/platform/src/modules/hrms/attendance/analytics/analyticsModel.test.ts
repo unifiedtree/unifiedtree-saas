@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  analyticsMonth, arrivalNote, barTone, dayKind, dayRate, dur, lateTrend, leadingBlanks, monthEnd, pct, pickDay, rateBand, rateDelta, trendChart, weekdayPlural,
+  analyticsMonth, arrivalNote, barTone, checkInsIn, dayKind, dayRate, dur, lateTrend, leadingBlanks, monthEnd, noLateMarks, pct, pickDay, rateBand, rateDelta,
+  trendChart, weekdayPlural,
 } from './analyticsModel'
 import type { DayBuckets } from '../attendanceBuckets'
 
@@ -93,5 +94,22 @@ describe('the calendar', () => {
     expect(pickDay('2026-09-03', { month: '2026-09', ...ctx })).toBe('2026-09-03')
     expect(leadingBlanks('2026-09')).toBe(1)
     expect(dur(125)).toBe('2h 05m')
+  })
+})
+
+describe('Punctuality with no late marks', () => {
+  const m = { from: '2026-10-01', to: '2026-10-04' }
+  it('counts the month’s check-ins from the breakdown, else the trend, else unknown', () => {
+    expect(checkInsIn(m, 12, {})).toBe(12)
+    expect(checkInsIn(m, 0, { '2026-10-01': b({ present: 3 }) })).toBe(0)
+    expect(checkInsIn(m, undefined, { '2026-09-30': b({ present: 5 }), '2026-10-01': b({ present: 0, absent: 10 }), '2026-10-02': b({ present: 2 }) })).toBe(2)
+    expect(checkInsIn(m, null, {})).toBeNull()
+  })
+  it('is good news only when people came in', () => {
+    // 1 Oct: ten people absent, nobody came in all month: not "everyone came in on time".
+    expect(noLateMarks(0, false)).toMatchObject({ success: false, title: 'No check-ins yet' })
+    expect(noLateMarks(0, true).hint).toContain('that month')
+    expect(noLateMarks(14, false)).toEqual({ success: true, title: 'No late marks', hint: 'Everyone came in on time this period.' })
+    expect(noLateMarks(null, false).success).toBe(true)
   })
 })

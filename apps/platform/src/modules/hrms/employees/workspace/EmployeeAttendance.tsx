@@ -218,7 +218,7 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
             <div>
               <p className="text-xs text-text-secondary">Timing</p>
               <p className="text-sm text-text-primary">
-                {shift.data?.startTime ?? '—'} → {shift.data?.endTime ?? '—'}
+                {shift.data?.startTime?.slice(0, 5) ?? '—'} → {shift.data?.endTime?.slice(0, 5) ?? '—'}
               </p>
             </div>
             {shift.data?.gracePeriodMinutes != null && (

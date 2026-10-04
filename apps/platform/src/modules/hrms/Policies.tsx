@@ -61,7 +61,9 @@ const EMPTY_COPY: Record<PolicyStatus, string> = {
 //
 // Shift Rules and Leave Rules are the write-side config screens the client
 // asked for, so they are gated on the same authorities the backend enforces:
-//   • /v1/shifts POST/PUT/DELETE → attendance.regularization.approve
+//   • /v1/shifts POST/PUT/DELETE → attendance.workforce.admin (ShiftController;
+//     it was attendance.regularization.approve here, which every department
+//     manager holds, so managers got an editor whose every save was refused)
 //   • /v1/leave/types write      → leave.type.write
 // 'documents' stays ungated at the tab level (its body is guarded by
 // hrms.policy.read) so every employee keeps the read + acknowledge screen they
@@ -75,7 +77,7 @@ const EMPTY_COPY: Record<PolicyStatus, string> = {
 // removes it entirely for those users; the body-side guard stays as a
 // belt-and-braces defence.
 const ALL_TABS = [
-  { key: 'shifts',    label: 'Shift Rules', requires: P.ATTENDANCE_REGULARIZATION_APPROVE },
+  { key: 'shifts',    label: 'Shift Rules', requires: 'attendance.workforce.admin' },
   { key: 'leaves',    label: 'Leave Rules', requires: P.LEAVE_TYPE_WRITE },
   // Listing active policies is open to read OR acknowledge.self (PolicyController), so someone
   // who only acknowledges still gets the policies they're asked to agree to.

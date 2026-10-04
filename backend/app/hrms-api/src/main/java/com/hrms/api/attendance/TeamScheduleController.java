@@ -29,13 +29,18 @@ public class TeamScheduleController {
   *       that day, else their company's (HR configuration), else Saturday and Sunday.</li>
   *   <li>{@code holidayName}: the company's active holiday that day (names joined when there are several), else null.</li>
   * </ul>
+  *
+  * <p>{@code includeSelf}: a company-wide caller is on the list too (the shift roster and the master data's people per
+  * shift count the whole company, the reader included, as the shift list's employeeCount does). A manager's team never
+  * includes the manager. Off by default: My team's schedule stays the team.
   */
  @GetMapping
  @PreAuthorize("hasAuthority('attendance.team.read')")
  @Transactional(readOnly=true)
- public List<Map<String,Object>> schedule(@AuthenticationPrincipal Jwt jwt,@RequestParam LocalDate from,@RequestParam LocalDate to) {
+ public List<Map<String,Object>> schedule(@AuthenticationPrincipal Jwt jwt,@RequestParam LocalDate from,@RequestParam LocalDate to,
+                                          @RequestParam(required=false) Boolean includeSelf) {
    if(to.isBefore(from)||to.isAfter(from.plusDays(30))) throw new BusinessRuleException("Choose up to 31 days","SCHEDULE_RANGE_INVALID");
-   var employees=scope.resolve(jwt,null);
+   var employees=scope.resolve(jwt,null,null,Boolean.TRUE.equals(includeSelf));
    if(employees.isEmpty())return List.of();
    List<Map<String,Object>> rows=jdbc.queryForList(SQL,Map.of("from",from,"to",to,"tenant",TenantContext.requireTenantId(),"employees",employees.stream().map(e->e.getId()).toList()));
    rows.forEach(TeamScheduleController::dayFacts);

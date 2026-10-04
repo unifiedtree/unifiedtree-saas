@@ -2,9 +2,11 @@
 //   1. To check: punches the camera wasn't sure about (medium or low match), last 7 days
 //      (GET /review/face-events); "Yes, it's them" or "Not them" with attendance.status.override.
 //   2. Face punches calendar-wise (client decision, 1 Oct): one person's month, a day per box,
-//      and that day's punches when a day is opened (GET /review/face-events/employee/{id}).
+//      and that day's punches when a day is opened (GET /review/face-events/employee/{id}). The
+//      people to pick are the whole team, people on their weekly off included, on any day.
 //   3. Face Punch Logs: every face verification on record, newest first, with the employee filter
-//      (GET /face/admin/events, attendance.face.admin.read; keyed by login, shown by email).
+//      (GET /face/admin/events, attendance.face.admin.read; keyed by login, shown by the person's
+//      name and code, else the login's email on servers that don't send them).
 import { useMemo, useState } from 'react'
 import {
   Button, CellActions, CellPerson, MonthCalendar, PageHeader, Section, StatusPill, Table,
@@ -20,7 +22,7 @@ import {
 } from '../../api/useAttendanceReview'
 import { useFaceEnrollments, useFaceEvents, type FaceVerificationEvent } from '../face/useFacePunchLogs'
 import { StatusChangeDrawer, type StatusTarget } from '../StatusChangeDrawer'
-import { hhmmIst } from './dailyModel'
+import { hhmmIst, logPerson } from './dailyModel'
 import type { DailyPerms } from './DailyTracking'
 
 const BAND: Record<string, { label: string; tone: StatusTone }> = {
@@ -63,7 +65,8 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
   const today = istToday()
   const weekAgo = addDays(today, -6)
   const recent = useFaceReviewEvents(weekAgo, today, true)
-  const roster = useTeamDashboard(today, undefined, perms.team)
+  // The team on any day: people on their weekly off are listed too, so a Sunday's picker isn't empty.
+  const roster = useTeamDashboard(today, undefined, perms.team, false, { includeWeeklyOff: true })
   const decide = useDecideFacePunch()
   const [busy, setBusy] = useState<string | null>(null)
   const [target, setTarget] = useState<StatusTarget | null>(null)
@@ -102,7 +105,13 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
   ]
 
   // ── 2. one person's month ──
-  const people = useMemo(() => [...(roster.data?.staffStatuses ?? [])].sort((a, b) => a.fullName.localeCompare(b.fullName)), [roster.data])
+  // The roster, plus anyone in the last week's face punches it doesn't list (both are the caller's team).
+  const people = useMemo(() => {
+    const m = new Map<string, { employeeId: string; fullName: string; employeeCode: string }>()
+    for (const s of roster.data?.staffStatuses ?? []) m.set(s.employeeId, { employeeId: s.employeeId, fullName: s.fullName, employeeCode: s.employeeCode })
+    for (const f of recent.data ?? []) if (!m.has(f.employeeId)) m.set(f.employeeId, { employeeId: f.employeeId, fullName: f.employeeName, employeeCode: f.employeeCode })
+    return [...m.values()].sort((a, b) => a.fullName.localeCompare(b.fullName))
+  }, [roster.data, recent.data])
   const firstWithPunch = (recent.data ?? [])[0]?.employeeId
   const [who, setWho] = useState<string>('')
   const person = who || firstWithPunch || people[0]?.employeeId || ''
@@ -136,9 +145,12 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
   const emailById = useMemo(() => new Map((enrollments.data ?? []).map((e) => [e.employeeId, e.email ?? undefined])), [enrollments.data])
   const logRows = log.data ?? []
   const logShown = logRows.slice(logPage * LOG_PAGE, logPage * LOG_PAGE + LOG_PAGE)
-  const logOptions = (enrollments.data ?? []).map((e) => ({ value: e.employeeId, label: e.email || `User ${e.employeeId.slice(0, 8)}` })).sort((a, b) => a.label.localeCompare(b.label))
+  const logOptions = (enrollments.data ?? []).map((e) => ({
+    value: e.employeeId,
+    label: e.employeeName?.trim() ? `${e.employeeName.trim()}${e.employeeCode ? ` · ${e.employeeCode}` : ''}` : e.email || `User ${e.employeeId.slice(0, 8)}`,
+  })).sort((a, b) => a.label.localeCompare(b.label))
   const logCols: TableColumn<FaceVerificationEvent>[] = [
-    { key: 'who', header: 'Employee', primary: true, render: (e) => <CellPerson name={emailById.get(e.employeeId) || 'Unknown user'} sub={`User ${e.employeeId.slice(0, 8)}`} /> },
+    { key: 'who', header: 'Employee', primary: true, render: (e) => { const named = logPerson(e, emailById.get(e.employeeId)); return <CellPerson name={named.name} sub={named.sub} /> } },
     { key: 'what', header: 'Event', render: (e) => PURPOSE[e.purpose] || e.purpose },
     { key: 'when', header: 'Time', render: (e) => <span className="udt-num">{stamp(e.createdAt)}</span> },
     { key: 'result', header: 'Result', render: (e) => { const r = RESULT[e.result] || { label: e.result, tone: 'neutral' as StatusTone }; return <StatusPill tone={r.tone}>{r.label}</StatusPill> } },

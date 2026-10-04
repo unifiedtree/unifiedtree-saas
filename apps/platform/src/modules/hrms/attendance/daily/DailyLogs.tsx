@@ -1,7 +1,8 @@
 // Daily Logs = the design's "Today" (PgAttendance): the day's numbers as filter cards, everyone's
 // check-in with how and where it was made, what needs attention, and check-ins by branch.
-// Real data only: GET /v1/attendance/dashboard?date= (with the roster facts of BW-13), yesterday's
-// for the "vs yesterday" notes, the review list (BW-14) and the sent reminders (BW-10).
+// Real data only: GET /v1/attendance/dashboard?date= (with the roster facts of BW-13; people on their
+// weekly off are listed as such, so a Sunday isn't an empty roster, and no card counts them),
+// yesterday's for the "vs yesterday" notes, the review list (BW-14) and the sent reminders (BW-10).
 //
 // Actions, each with its endpoint's permission: Export the day register (hrms.report.attendance,
 // BW-19), Mark attendance for several people (attendance.workforce.admin, BW-17), Punch for a team
@@ -54,6 +55,8 @@ const CARD: Record<TileKey, { label: string; icon: string; tone: 'brand' | 'gold
   NOT_MARKED: { label: 'Not marked', icon: 'help', tone: 'gray' },
 }
 const PAGE = 50
+/** Days nobody is due in: no leave to mark on them. */
+const OFF_DAY = new Set(['WEEKLY_OFF', 'HOLIDAY'])
 const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : null)
 
 export function DailyLogs({ perms }: { perms: DailyPerms }) {
@@ -81,7 +84,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
   // ── data ──
   const { data: companies = [] } = useCompanies()
   const companyId: string = companies[0]?.id ?? ''
-  const team = useTeamDashboard(date, undefined, perms.team, !isToday)
+  const team = useTeamDashboard(date, undefined, perms.team, !isToday, { includeWeeklyOff: true })
   const before = useTeamDashboard(addDays(date, -1), undefined, perms.team, true)
   const policies = useShiftPolicies(companyId)
   const assisted = useAssistedPunches(date, date, undefined, perms.team)
@@ -103,7 +106,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
       const method = methodLabel(s.checkInMethod)
       const how = s.punchRejected ? 'Face punch rejected by HR'
         : s.checkInAt ? [method, s.locationName || s.branchName].filter(Boolean).join(' · ') + (s.outsideGeofence ? ' · outside the zone' : '') || 'Checked in'
-          : s.onLeave ? leaveLine(s) : isToday ? 'No punch yet' : 'No punch · no leave'
+          : s.onLeave ? leaveLine(s) : st === 'WEEKLY_OFF' ? 'Weekly off' : st === 'HOLIDAY' ? 'Company holiday' : isToday ? 'No punch yet' : 'No punch · no leave'
       return {
         id: s.employeeId, code: s.employeeCode, name: s.fullName, dept: s.departmentName || '—', branch: s.branchName || null,
         shiftName: s.shiftName || null, shiftStart: start, shiftEnd: end, grace: s.graceMinutes ?? sp?.gracePeriodMinutes ?? null,
@@ -273,7 +276,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
             ...(perms.override ? [{ key: 'status', label: 'Change status', icon: 'pencil', onSelect: () => openStatus(r) }] : []),
             ...(perms.approve ? [{ key: 'fix', label: 'Fix this day', icon: 'clock', onSelect: () => fixDay(r) }] : []),
             ...(perms.assist && isToday && !r.outAt && r.status !== 'ON_LEAVE' ? [{ key: 'punch', label: r.inAt ? 'Punch out with face' : 'Punch in with face', icon: 'scanFace', onSelect: () => setAssist({ employeeId: r.id }) }] : []),
-            ...(perms.leaveOthers && !r.inAt && r.status !== 'ON_LEAVE' ? [{ key: 'leave', label: 'Mark leave', icon: 'calendarDays', onSelect: () => setLeaveFor({ id: r.id, name: r.name }) }] : []),
+            ...(perms.leaveOthers && !r.inAt && r.status !== 'ON_LEAVE' && !OFF_DAY.has(r.status) ? [{ key: 'leave', label: 'Mark leave', icon: 'calendarDays', onSelect: () => setLeaveFor({ id: r.id, name: r.name }) }] : []),
             ...(isToday && r.status === 'NOT_MARKED' ? [{ key: 'remind', label: sentIds.has(r.id) ? 'Reminded today' : 'Remind to check in', icon: 'bell', disabled: sentIds.has(r.id), onSelect: () => sendReminders([r.id]) }] : []),
             { key: 'history', label: 'View history', icon: 'calendarDays', onSelect: () => navigate(`/hrms/employees/${r.id}?tab=attendance`) },
           ]} />

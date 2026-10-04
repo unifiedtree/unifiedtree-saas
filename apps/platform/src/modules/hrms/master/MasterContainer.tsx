@@ -179,7 +179,8 @@ export function MasterContainer() {
     queryFn: () => apiJson<Branch[]>(route.archived ? '/v1/hrms/branches?includeArchived=true' : '/v1/hrms/branches'), enabled: canCoRead && want('branches'), ...opt,
   })
   const empQ = useQuery({ queryKey: ['hrms', 'employees', 'master-all'], queryFn: loadDirectory, enabled: canEmpRead && (want('employees') || want('depts')), staleTime: 120_000 })
-  const schedQ = useQuery({ queryKey: ['master', 'schedule', TODAY_ISO], queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${TODAY_ISO}&to=${TODAY_ISO}`), enabled: canTeam && (want('employees') || want('shifts')), ...opt })
+  // includeSelf: the viewer's own shift too (company-wide viewers), so Shift Rules' People matches Shift Schedules.
+  const schedQ = useQuery({ queryKey: ['master', 'schedule', TODAY_ISO, 'self'], queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${TODAY_ISO}&to=${TODAY_ISO}&includeSelf=true`), enabled: canTeam && (want('employees') || want('shifts')), ...opt })
   const perCo = <T,>(key: string[], url: (cid: string) => string, on: boolean) => ({
     queries: coIds.map((cid) => ({ queryKey: [...key, cid], queryFn: () => apiJson<T[]>(url(cid)), enabled: on, ...opt })),
     combine: listOf as (rs: UseQueryResult<T[]>[]) => Coll<T>,

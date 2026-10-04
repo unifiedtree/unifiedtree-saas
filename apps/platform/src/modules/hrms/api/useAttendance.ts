@@ -368,17 +368,32 @@ export function useAttendanceTrend(from?: string, to?: string, departmentId?: st
   })
 }
 
+/** Who else a day's roster lists (the web's day views; the tiles never count them). */
+export interface TeamDayOptions {
+  /** People whose weekly off the day is, as WEEKLY_OFF rows (a Sunday's muster roll isn't empty). */
+  includeWeeklyOff?: boolean
+  /** A company-wide viewer's own row (the muster roll is the same register whoever opens it). */
+  includeSelf?: boolean
+}
+
 /**
  * `includeLeavers` (a past day): the team as it was then, so people who have
  * left since still show on the days they worked. Off: today's team (as before).
+ * `opts`: see TeamDayOptions; a server without them ignores them.
  */
-export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true, includeLeavers: boolean = false) {
+export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true, includeLeavers: boolean = false, opts: TeamDayOptions = {}) {
   const params = new URLSearchParams()
   if (date) params.set('date', date)
   if (departmentId) params.set('departmentId', departmentId)
   if (includeLeavers) params.set('includeLeavers', 'true')
+  if (opts.includeWeeklyOff) params.set('includeWeeklyOff', 'true')
+  if (opts.includeSelf) params.set('includeSelf', 'true')
+  const key: unknown[] = ['hrms', 'attendance', 'dashboard', date, departmentId]
+  if (includeLeavers) key.push('leavers')
+  if (opts.includeWeeklyOff) key.push('weeklyOff')
+  if (opts.includeSelf) key.push('self')
   return useQuery({
-    queryKey: includeLeavers ? ['hrms', 'attendance', 'dashboard', date, departmentId, 'leavers'] : ['hrms', 'attendance', 'dashboard', date, departmentId],
+    queryKey: key,
     queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?${params}`),
     staleTime: 5_000,
     refetchInterval: 60_000,

@@ -49,6 +49,27 @@ export function lateTrend(cur: number, prev: number): { label: 'Rising' | 'Stead
   return { label: 'Steady', tone: 'warning' }
 }
 
+/**
+ * How many check-ins a month had, for Punctuality's empty table: the breakdown's attended days, else the trend's
+ * "came in" over the month's days (servers without the breakdown), else null while neither has loaded.
+ */
+export function checkInsIn(m: { from: string; to: string }, attendedDays: number | null | undefined, daily: Record<string, DayBuckets>): number | null {
+  if (typeof attendedDays === 'number') return attendedDays
+  const days = Object.entries(daily).filter(([d]) => d >= m.from && d <= m.to)
+  return days.length ? days.reduce((n, [, b]) => n + (b.present || 0), 0) : null
+}
+
+/**
+ * Punctuality with no late marks: good news only when people came in. With no check-ins at all (a month nobody
+ * punched in, or a new company) "Everyone came in on time" would be false, so it says nobody checked in instead.
+ */
+export function noLateMarks(checkIns: number | null, past: boolean): { success: boolean; title: string; hint: string } {
+  if (checkIns === 0) {
+    return { success: false, title: 'No check-ins yet', hint: past ? 'Nobody checked in that month, so there’s no punctuality to show.' : 'Nobody has checked in this month yet, so there’s no punctuality to show.' }
+  }
+  return { success: true, title: 'No late marks', hint: 'Everyone came in on time this period.' }
+}
+
 /** A department or branch bar: green from 95%, gold below (the design's two tones). */
 export const barTone = (rate: number | null) => (rate != null && rate >= 95 ? 'brand' as const : 'warning' as const)
 

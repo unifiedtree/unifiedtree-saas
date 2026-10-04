@@ -53,6 +53,23 @@ class RegisterAndBulkMarkTest {
         assertEquals("Sita Devi,E-1,Engineering,Head office,General,,,,On leave,Casual leave", lines[3]);
     }
 
+    @Test void theDownloadIsTheWholeRollWeeklyOffsAndTheReaderIncluded() {
+        AttendanceController attendance = mock(AttendanceController.class);
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("t")
+                .header("alg", "none").subject(UUID.randomUUID().toString()).build();
+        when(attendance.teamDay(any(), any(), any(), any(), anyBoolean(), anyBoolean()))
+                .thenReturn(new com.hrms.attendance.dto.TeamDashboardResponse(DAY, null, List.of(
+                        row("Asha Rao", "WEEKLY_OFF", null, null, null, null, false, null, null))));
+        AttendanceRegisterController register = new AttendanceRegisterController(attendance,
+                mock(org.springframework.jdbc.core.JdbcTemplate.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
+
+        byte[] body = register.export(DAY, null, jwt).getBody();
+
+        verify(attendance).teamDay(jwt, DAY, null, false, true, true);
+        String csv = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(csv.contains("Asha Rao,E-1,Engineering,Head office,General,,,,Weekly off,"), csv);
+    }
+
     @Test void aNightShiftsCheckOutCarriesItsDate() {
         assertEquals("2026-09-29 06:10", AttendanceRegisterController.time(Instant.parse("2026-09-29T00:40:00Z"), DAY));
         assertEquals("21:00", AttendanceRegisterController.time(Instant.parse("2026-09-28T15:30:00Z"), DAY));
