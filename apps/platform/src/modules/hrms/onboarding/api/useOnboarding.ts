@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { asAvailable, unmatchedPathParam, useAvailableQuery } from '../../api/shared/available'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,8 @@ export interface OnboardingTemplate {
   tasks: OnboardingTask[]
   createdAt: string
   updatedAt: string
+  /** Onboardings started from this template (the list's "Used by"; BW-69). Missing on an older server and on GET /templates/{id}. */
+  usedBy?: number
 }
 
 export interface OnboardingTask {
@@ -219,6 +222,60 @@ export function useUpdateInstanceStatus() {
     // the employee-keyed lookup all show the status, and a stale pill after a
     // hold/resume reads as the action having failed.
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding'] }),
+  })
+}
+
+// ── New hires overview (redesign BW-69) ────────────────────────────────────────
+
+/** One onboarding with the new hire's name, department, joining date, checklist name and task counts. */
+export interface OnboardingOverviewRow {
+  instanceId: string
+  employeeId: string
+  employeeName: string | null
+  employeeCode: string | null
+  companyId: string | null
+  departmentId: string | null
+  departmentName: string | null
+  dateOfJoining: string | null
+  templateId: string
+  templateName: string | null
+  status: OnboardingInstanceStatus | string
+  startedAt: string
+  completedAt: string | null
+  tasksTotal: number
+  /** Done or skipped. */
+  tasksDone: number
+  /** Pending tasks past their due day (India time). */
+  tasksOverdue: number
+  nextDueOn: string | null
+}
+
+/** Counts over every onboarding in scope; the status filter doesn't change them. */
+export interface OnboardingOverviewCounts {
+  all: number
+  inProgress: number
+  onHold: number
+  completed: number
+  /** New hires joining this calendar month (India time). */
+  joiningThisMonth: number
+  /** Overdue tasks across onboardings in progress. */
+  tasksOverdue: number
+}
+
+export interface OnboardingOverview { counts: OnboardingOverviewCounts; rows: OnboardingOverviewRow[] }
+
+/**
+ * GET /v1/onboarding/instances/overview (hrms.onboarding.instance.read): everyone's onboardings
+ * for people who manage onboarding, otherwise the caller's own. Under the instances prefix, so
+ * every task tick, hold and new run refreshes it. A server without it answers 404, or 400 because
+ * "overview" then lands on /instances/{id}: both read as not available, and the page builds the
+ * same rows from the plain list.
+ */
+export function useOnboardingOverview(enabled = true) {
+  return useAvailableQuery<OnboardingOverview>({
+    queryKey: ['hrms', 'onboarding', 'instances', 'overview'],
+    queryFn: () => asAvailable(() => apiJson<OnboardingOverview>('/v1/onboarding/instances/overview'), unmatchedPathParam),
+    enabled,
   })
 }
 
