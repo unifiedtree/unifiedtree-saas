@@ -3,6 +3,8 @@
 // only, so the rules are unit-tested.
 import type { StatusTone } from '@/design/kit/display'
 import { dayMon, weekdayDay } from '../hiring/hiringModel'
+import type { WorkforceEmployee } from '../api/useWorkforce'
+import type { OnboardingInstance, OnboardingOverviewCounts, OnboardingOverviewRow, OnboardingTemplate } from './api/useOnboarding'
 
 export type InstanceStatusKey = 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD'
 export const INSTANCE_STATUS_LABEL: Record<InstanceStatusKey, string> = { IN_PROGRESS: 'In progress', COMPLETED: 'Completed', ON_HOLD: 'On hold' }
@@ -81,3 +83,44 @@ export function assetDates(a: { status: string; assignedAt?: string | null; retu
 
 /** In store = never handed out or back in the store (the design's filter). */
 export const inStore = (status: string) => status !== 'ASSIGNED'
+
+type Person = Pick<WorkforceEmployee, 'id' | 'firstName' | 'lastName' | 'employeeCode' | 'dateOfJoining'>
+
+/**
+ * The New hires rows and counts built in the browser, as the page did before the overview
+ * endpoint (BW-69): for a server that doesn't have it yet. Same rules as the server: done =
+ * completed or skipped; overdue = still pending after its due day; counts over every row.
+ * Names and joining days come from `people` (only with employee read), checklist names from
+ * `templates` (only with template read); without them the row says less, never something wrong.
+ */
+export function overviewFromInstances(
+  runs: readonly Pick<OnboardingInstance, 'id' | 'employeeId' | 'templateId' | 'status' | 'startedAt' | 'completedAt' | 'instanceTasks'>[],
+  people: readonly Person[], templates: readonly Pick<OnboardingTemplate, 'id' | 'name'>[], today: string,
+): { counts: OnboardingOverviewCounts; rows: OnboardingOverviewRow[] } {
+  const byId = new Map(people.map((p) => [p.id, p]))
+  const tplName = new Map(templates.map((t) => [t.id, t.name]))
+  const rows: OnboardingOverviewRow[] = runs.map((r) => {
+    const p = byId.get(r.employeeId)
+    const tasks = r.instanceTasks ?? []
+    const pending = tasks.filter((t) => t.status === 'PENDING')
+    const dues = pending.map((t) => t.dueDate?.slice(0, 10)).filter((d): d is string => !!d).sort()
+    return {
+      instanceId: r.id, employeeId: r.employeeId, employeeName: p ? [p.firstName, p.lastName].filter(Boolean).join(' ') || null : null,
+      employeeCode: p?.employeeCode ?? null, companyId: null, departmentId: null, departmentName: null, dateOfJoining: p?.dateOfJoining ?? null,
+      templateId: r.templateId ?? null, templateName: (r.templateId && tplName.get(r.templateId)) || null, status: r.status,
+      startedAt: r.startedAt ?? null, completedAt: r.completedAt ?? null, tasksTotal: tasks.length,
+      tasksDone: tasks.filter((t) => t.status === 'COMPLETED' || t.status === 'SKIPPED').length,
+      tasksOverdue: dues.filter((d) => d < today).length, nextDueOn: dues[0] ?? null,
+    }
+  })
+  const month = today.slice(0, 7)
+  const counts: OnboardingOverviewCounts = {
+    all: rows.length,
+    inProgress: rows.filter((r) => r.status === 'IN_PROGRESS').length,
+    onHold: rows.filter((r) => r.status === 'ON_HOLD').length,
+    completed: rows.filter((r) => r.status === 'COMPLETED').length,
+    joiningThisMonth: rows.filter((r) => r.dateOfJoining?.slice(0, 7) === month).length,
+    tasksOverdue: rows.filter((r) => r.status === 'IN_PROGRESS').reduce((n, r) => n + r.tasksOverdue, 0),
+  }
+  return { counts, rows }
+}

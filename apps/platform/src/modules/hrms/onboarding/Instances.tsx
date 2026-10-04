@@ -22,8 +22,9 @@ import { Menu, useToast, type MenuEntry } from '@/design/kit/overlays'
 import { useView } from '@/design/module/ModuleKit'
 import { AssetsTab } from './AssetsTab'
 import { Templates } from './Templates'
-import { useInstances, useOnboardingOverview, useUpdateInstanceStatus, type OnboardingInstanceStatus, type OnboardingOverviewRow } from './api/useOnboarding'
-import { INSTANCE_STATUS_LABEL, instanceState, joiningLabel, progressText, statusKeyOf, type InstanceStatusKey } from './onboardingModel'
+import { useInstances, useOnboardingOverview, useTemplates, useUpdateInstanceStatus, type OnboardingInstanceStatus, type OnboardingOverviewRow } from './api/useOnboarding'
+import { INSTANCE_STATUS_LABEL, instanceState, joiningLabel, overviewFromInstances, progressText, statusKeyOf, type InstanceStatusKey } from './onboardingModel'
+import { useEmployeesByIds } from '../api/useWorkforce'
 import { dayMon, istTodayIso } from '../hiring/hiringModel'
 import '../hiring/hiring.css'
 
@@ -103,8 +104,20 @@ function HiresView() {
   const [status, setStatus] = useState<InstanceStatusKey | ''>('')
   const [page, setPage] = useState(0)
   const today = istTodayIso()
-  const counts = overview.data?.counts
-  const all = useMemo(() => overview.data?.rows ?? [], [overview.data])
+  // A server without the overview (404): build the rows from the instance list, as before.
+  const fallback = overview.notAvailable
+  const runs = useInstances(undefined, fallback)
+  const ids = useMemo(() => (runs.data ?? []).map((r) => r.employeeId).filter((id): id is string => !!id), [runs.data])
+  const people = useEmployeesByIds(ids, { enabled: fallback && canReadEmployees && ids.length > 0 })
+  const templates = useTemplates(undefined, { enabled: fallback && canReadTemplates })
+  const local = useMemo(() => (fallback ? overviewFromInstances(runs.data ?? [], people.data ?? [], templates.data ?? [], today) : null),
+    [fallback, runs.data, people.data, templates.data, today])
+  const data = local ?? overview.data
+  const loading = overview.isLoading || (fallback && runs.isLoading)
+  const error = overview.error || (fallback ? runs.error : null)
+  const retry = () => { void overview.refetch(); if (fallback) void runs.refetch() }
+  const counts = data?.counts
+  const all = useMemo(() => data?.rows ?? [], [data])
   const filtered = useMemo(() => (status ? all.filter((r) => r.status === status) : all), [all, status])
   const rows = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
   // ON_HOLD is only reachable by hand; IN_PROGRESS → COMPLETED happens when the last task is done.
@@ -169,21 +182,20 @@ function HiresView() {
       value: k, label: INSTANCE_STATUS_LABEL[k], count: k === 'IN_PROGRESS' ? counts?.inProgress : k === 'ON_HOLD' ? counts?.onHold : counts?.completed,
     })),
   ]
-  const unavailable = overview.notAvailable
+  const retrying = overview.isFetching || runs.isFetching
   return (
     <>
-      <Section title="This month" body="tight" loading={overview.isLoading} skeleton="stats" error={overview.error} onRetry={() => overview.refetch()} retrying={overview.isFetching}
-        empty={unavailable ? { title: 'Not available yet', hint: 'These figures appear once the server is updated.' } : undefined}>
+      <Section title="This month" body="tight" loading={loading} skeleton="stats" error={error} onRetry={retry} retrying={retrying}>
         <MiniStatGrid>
           <MiniStat label="In progress" value={counts?.inProgress} note="Working through a checklist" tone="info" />
-          <MiniStat label="Joining this month" value={counts?.joiningThisMonth} note={month} tone="success" />
+          {/* Joining days need the employee records; without them (an older server, no employee read) it isn't counted. */}
+          {(!fallback || canReadEmployees) && <MiniStat label="Joining this month" value={counts?.joiningThisMonth} note={month} tone="success" />}
           <MiniStat label="Tasks overdue" value={counts?.tasksOverdue} note="Past their due day" tone="warning" />
         </MiniStatGrid>
       </Section>
-      <Section title="New hires" body="flush" loading={overview.isLoading} skeleton="table" error={overview.error} onRetry={() => overview.refetch()} retrying={overview.isFetching}
-        actions={!unavailable && all.length > 0 ? <SegmentedControl label="Filter by status" semantics="toggle" size="sm" options={filters} value={status || ALL} onChange={pick} /> : undefined}
-        empty={unavailable ? { title: 'Not available yet', hint: 'The new hires list appears once the server is updated.' }
-          : all.length === 0 ? { title: 'No one is being onboarded yet', hint: 'Use “Start onboarding” to add a new hire and give them a joining checklist.', icon: 'clipboard' } : undefined}
+      <Section title="New hires" body="flush" loading={loading} skeleton="table" error={error} onRetry={retry} retrying={retrying}
+        actions={all.length > 0 ? <SegmentedControl label="Filter by status" semantics="toggle" size="sm" options={filters} value={status || ALL} onChange={pick} /> : undefined}
+        empty={!loading && !error && all.length === 0 ? { title: 'No one is being onboarded yet', hint: 'Use “Start onboarding” to add a new hire and give them a joining checklist.', icon: 'clipboard' } : undefined}
         footer={filtered.length > PAGE_SIZE ? <Pager page={page} pageSize={PAGE_SIZE} total={filtered.length} onPageChange={setPage} noun="new hires" /> : undefined}>
         <Table label="New hires" columns={columns} rows={rows} rowKey={(r) => r.instanceId} mobile="cards" onRowClick={open}
           empty={<span className="hi-muted">No onboarding with this status. Pick “All” to see every new hire.</span>} />
