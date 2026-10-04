@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson, apiBlob } from '@/core/api/client'
+import { asAvailable, useAvailableQuery } from './shared/available'
 
 export type OfferStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
 export const OFFER_STATUSES: OfferStatus[] = ['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WITHDRAWN']
@@ -13,8 +14,13 @@ export interface HiringOfferPayload {
   joiningDate?: string
   notes?: string
   offerTerms?: string
+  /**
+   * The candidate's email for "Send offer email" (V143.59). Left out: kept as it
+   * is on an edit, none on a create. Empty: removed.
+   */
+  candidateEmail?: string
 }
-export interface HiringOffer extends HiringOfferPayload {
+export interface HiringOffer extends Omit<HiringOfferPayload, 'candidateEmail'> {
   id: string
   status: OfferStatus
   emailSubmittedAt?: string
@@ -22,6 +28,8 @@ export interface HiringOffer extends HiringOfferPayload {
   sentAt?: string
   respondedAt?: string
   createdAt: string
+  /** The email stored on the offer, else the linked candidate's; null when neither exists (or on older servers). */
+  candidateEmail?: string | null
 }
 export function useHiringOffers(page: number) {
   return useQuery({
@@ -287,12 +295,101 @@ export function useEmailHiringOffer() {
   const qc = useQueryClient()
   return useMutation({
     retry: false,
-    mutationFn: ({ id, recipient }: { id: string; recipient: string }) =>
+    // No recipient: the server uses the offer's candidate email (V143.59) and refuses when there is none.
+    mutationFn: ({ id, recipient }: { id: string; recipient?: string }) =>
       apiJson<HiringOffer>(`/v1/hiring/offers/${id}/email`, {
         method: 'POST',
-        body: JSON.stringify({ recipient }),
+        body: JSON.stringify(recipient ? { recipient } : {}),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
+  })
+}
+
+// ── The Hiring page's figures (redesign BW-65, BW-66, BW-68) ────────────────
+// Counted on the server, so they are right however many requisitions and
+// candidates there are. 404 / 503 FEATURE_NOT_READY (an older server, or the
+// funnel before V143.59) come back as `notAvailable`: the page shows "—" for
+// that block instead of an error. Keys sit under ['hrms','hiring'], so every
+// hiring change refreshes them.
+
+/** GET /v1/hiring/summary (hrms.hiring.read). */
+export interface HiringSummary {
+  companyId: string | null
+  requisitions: { open: number; onHold: number; closed: number; total: number }
+  /** Openings on open and on-hold requisitions. */
+  positionsToFill: number
+  candidatesThisQuarter: number
+  quarterStart: string
+  quarterEnd: string
+  /** Candidates on OPEN requisitions by their current stage, every stage listed. */
+  openRoleStages: { stage: CandidateStage; count: number }[]
+}
+
+/** GET /v1/hiring/funnel (hrms.hiring.read): this quarter by default. */
+export interface HiringFunnel {
+  from: string
+  to: string
+  companyId: string | null
+  /** When the stage history starts; null when there is none yet. */
+  trackedFrom: string | null
+  /** True when the whole period is inside the history. */
+  exact: boolean
+  trackedCandidates: number
+  untrackedCandidates: number
+  stages: { stage: CandidateStage; reached: number }[]
+  /** `rate` is 0..1, null when nobody reached `from`. */
+  conversions: { from: CandidateStage; to: CandidateStage; fromCount: number; toCount: number; rate: number | null }[]
+  timeToHire: { averageDays: number | null; hires: number }
+}
+
+/** GET /v1/hiring/interviews/mine/summary (hrms.hiring.interview.self or hrms.hiring.read). */
+export interface MyInterviewSummary {
+  quarterStart: string
+  quarterEnd: string
+  tookThisQuarter: number
+  scorecardsSubmittedThisQuarter: number
+  scorecardsDue: number
+  upcoming: number
+}
+
+export function useHiringSummary(enabled = true) {
+  return useAvailableQuery<HiringSummary>({
+    queryKey: ['hrms', 'hiring', 'summary'],
+    queryFn: () => asAvailable(() => apiJson<HiringSummary>('/v1/hiring/summary')),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useHiringFunnel(enabled = true) {
+  return useAvailableQuery<HiringFunnel>({
+    queryKey: ['hrms', 'hiring', 'funnel'],
+    queryFn: () => asAvailable(() => apiJson<HiringFunnel>('/v1/hiring/funnel')),
+    enabled,
+    staleTime: 60_000,
+  })
+}
+
+export function useMyInterviewSummary(enabled = true) {
+  return useAvailableQuery<MyInterviewSummary>({
+    queryKey: ['hrms', 'hiring', 'interviews', 'mine', 'summary'],
+    queryFn: () => asAvailable(() => apiJson<MyInterviewSummary>('/v1/hiring/interviews/mine/summary')),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+/**
+ * Every requisition in one call (up to 200, newest first), for the role
+ * pickers: the pipeline's role filter and Add a candidate. The Requisitions
+ * table pages through useRequisitions instead.
+ */
+export function useRequisitionOptions(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'requisitions', 'options'],
+    queryFn: () => apiJson<Page<JobRequisition>>('/v1/hiring/requisitions?page=0&size=200'),
+    enabled,
+    staleTime: 30_000,
   })
 }
 

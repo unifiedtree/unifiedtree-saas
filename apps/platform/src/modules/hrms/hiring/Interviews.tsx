@@ -1,35 +1,43 @@
-// Interviews and scorecards (V143.20), built from the module kit:
-//  - ScheduleInterviewDrawer: book or change an interview (IST date and time,
-//    duration, in person / video / phone, where or the link, interviewers,
-//    the criteria they rate). Needs hrms.hiring.interview.write.
-//  - ScorecardDrawer: an assigned interviewer rates each criterion 1-5, adds
-//    strengths and concerns, and recommends strong yes / yes / no / strong no.
+// Interviews and scorecards on the redesign kit (P-HIRE; prototype PgTalent h-pipe tab 2):
+//  - ScheduleInterviewPanel: book or change an interview (IST date and time, duration,
+//    in person / video / phone, where or the link, interviewers, the criteria they rate).
+//    From a candidate, or from the Interviews view with a candidate picker (Screening or
+//    Interview). Needs hrms.hiring.interview.write.
+//  - ScorecardPanel: an assigned interviewer rates each criterion 1-5, adds strengths and
+//    concerns, and recommends strong yes / yes / no / strong no.
 //  - CandidateDrawer: one candidate's facts, scorecard summary and interviews.
-//  - InterviewsTab (Hiring ?tab=interviews) and MyInterviews (/me/interviews).
-// Hiring roles (hrms.hiring.read) see every scorecard; an interviewer sees only
-// their own. Interviewers are notified of every change by the server.
+//  - InterviewsTab (Hiring ?tab=interviews): what's coming up and the interviews you are on,
+//    in one table; MyInterviews (/me/interviews): the interviews you were asked to take.
+// Hiring roles (hrms.hiring.read) see every scorecard; an interviewer sees only their own.
+// Interviewers are notified of every change by the server.
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { MoreHorizontal } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { HrButton, HrDrawer, HrStatusPill, type PillTone } from '@/shared/components/hr'
-import { DateField } from '@/shared/components/calendar'
-import { useToast } from '@/shared/hooks/useToast'
-import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
-import { ModulePage, Panel, Facts, Note, RowList, Row, State, StatRow, SubHeading, todayIso } from '@/design/module/ModuleKit'
-import { PerformanceEmployeePicker as EmployeePicker } from '../performance/PerformanceEmployeePicker'
 import {
-  useCandidateInterviews, useUpcomingInterviews, useMyInterviews, useScheduleInterview, useRescheduleInterview,
-  useCancelInterview, useSubmitScorecard, inr, istWhen,
+  Button, Callout, CellActions, CellPerson, EmptyState, KeyValueGrid, MiniStat, MiniStatGrid, PageFrame, PageHeader, Section, StatusPill, Table,
+  type TableColumn,
+} from '@/design/kit/display'
+import { DateInput, FieldGrid, Input, Menu, PanelButton, Select, SidePanel, Textarea, useToast, type MenuEntry } from '@/design/kit/overlays'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { PersonSearch, fullName } from '../letters/components/PersonSearch'
+import {
+  useCandidateBoard, useCandidateInterviews, useUpcomingInterviews, useMyInterviews, useMyInterviewSummary, useScheduleInterview,
+  useRescheduleInterview, useCancelInterview, useSubmitScorecard, inr, istWhen,
   DEFAULT_CRITERIA, MODE_LABEL, RECOMMENDATIONS, RECOMMENDATION_LABEL, SCHEDULABLE_STAGES,
   type CandidateCard, type Interview, type InterviewMode, type Recommendation, type ScorecardSummary,
 } from '../api/useHiring'
+import {
+  STAGE_LABEL, dayMon, interviewState, interviewWhen, interviewersLine, istDateOf, istTodayIso, mergeInterviews, type InterviewRow,
+} from './hiringModel'
+import './hiring.css'
 
-const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
-const fmtEnum = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase())
-const REC_TONE: Record<Recommendation, PillTone> = { STRONG_YES: 'green', YES: 'ok', NO: 'orange', STRONG_NO: 'red' }
+const REC_TONE: Record<Recommendation, 'success' | 'mint' | 'warning' | 'danger'> = { STRONG_YES: 'success', YES: 'mint', NO: 'warning', STRONG_NO: 'danger' }
 const RATING_LABEL = ['', '1 · Poor', '2 · Below the bar', '3 · Meets the bar', '4 · Strong', '5 · Exceptional']
+const DURATIONS = ['15', '30', '45', '60', '90', '120', '180']
 const errMsg = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
-const tomorrowIso = () => { const d = new Date(Date.now() + 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const tomorrowIst = () => istTodayIso(new Date(Date.now() + 86_400_000))
+const durationLabel = (d: string) => (Number(d) < 60 ? `${d} min` : `${Number(d) / 60} h`.replace('.5 h', ' h 30 min'))
 
 /** "3 scorecards · 3.8 / 5 · 2 strong yes, 1 no" — or null when there are none. */
 export function scorecardLine(s?: ScorecardSummary | null): string | null {
@@ -47,15 +55,24 @@ function summarise(interviews: Interview[]): ScorecardSummary {
 
 // ── Schedule / reschedule ────────────────────────────────────────────────────
 
-export function ScheduleInterviewDrawer({ candidateId, candidateName, interview, onClose }: {
-  candidateId: string; candidateName: string; interview?: Interview; onClose: () => void
+/**
+ * Book an interview for `candidate`, change `interview`, or (neither given) book one from the
+ * Interviews view: the panel then asks which candidate (those in Screening or Interview).
+ */
+export function ScheduleInterviewPanel({ candidate, interview, onClose }: {
+  candidate?: { id: string; name: string } | null; interview?: Interview; onClose: () => void
 }) {
-  const { toast } = useToast()
+  const toast = useToast()
   const schedule = useScheduleInterview()
   const reschedule = useRescheduleInterview()
   const busy = schedule.isPending || reschedule.isPending
+  const picking = !candidate && !interview
+  // The picker lists everyone who can be interviewed now; the server checks the stage again.
+  const pool = useCandidateBoard({}, picking)
+  const choices = useMemo(() => (pool.data ?? []).filter((c) => SCHEDULABLE_STAGES.includes(c.stage) && !c.convertedEmployeeId), [pool.data])
+  const [candidateId, setCandidateId] = useState(candidate?.id ?? interview?.candidateId ?? '')
   const [title, setTitle] = useState(interview?.title ?? '')
-  const [date, setDate] = useState(interview ? interview.scheduledAtIst.slice(0, 10) : tomorrowIso())
+  const [date, setDate] = useState(interview ? interview.scheduledAtIst.slice(0, 10) : tomorrowIst())
   const [time, setTime] = useState(interview ? interview.scheduledAtIst.slice(11, 16) : '10:00')
   const [duration, setDuration] = useState(String(interview?.durationMinutes ?? 45))
   const [mode, setMode] = useState<InterviewMode>(interview?.mode ?? 'VIDEO')
@@ -63,14 +80,22 @@ export function ScheduleInterviewDrawer({ candidateId, candidateName, interview,
   const [people, setPeople] = useState<{ id: string; name: string }[]>(interview?.interviewers.map((p) => ({ id: p.employeeId, name: p.name })) ?? [])
   const [criteria, setCriteria] = useState((interview?.criteria ?? DEFAULT_CRITERIA).join(', '))
   const [notes, setNotes] = useState(interview?.notes ?? '')
-  const durations = ['15', '30', '45', '60', '90', '120', '180'].includes(duration) ? ['15', '30', '45', '60', '90', '120', '180'] : [duration, '15', '30', '45', '60', '90', '120', '180']
+  const [errors, setErrors] = useState<{ candidate?: string; people?: string; where?: string }>({})
+  const durations = DURATIONS.includes(duration) ? DURATIONS : [duration, ...DURATIONS]
   const where = mode === 'VIDEO' ? { l: 'Video call link', ph: 'https://…', hint: 'Interviewers get this link in their notification.' }
     : mode === 'IN_PERSON' ? { l: 'Where', ph: 'e.g. 3rd floor meeting room, Hyderabad office', hint: '' }
       : { l: 'Phone number or note (optional)', ph: 'e.g. The candidate will call on +91…', hint: '' }
+  const name = candidate?.name ?? interview?.candidateName ?? choices.find((c) => c.id === candidateId)?.fullName ?? ''
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!people.length) { toast('Choose at least one interviewer', 'error'); return }
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault()
+    const next = {
+      candidate: candidateId ? undefined : 'Choose the candidate',
+      people: people.length ? undefined : 'Choose at least one interviewer',
+      where: mode !== 'PHONE' && !location.trim() ? (mode === 'VIDEO' ? 'Add the video call link' : 'Say where it happens') : undefined,
+    }
+    setErrors(next)
+    if (next.candidate || next.people || next.where) return
     const body = {
       title: title.trim() || undefined, scheduledAt: `${date}T${time}`, durationMinutes: Number(duration), mode,
       location: location.trim() || undefined, interviewerIds: people.map((p) => p.id),
@@ -79,141 +104,147 @@ export function ScheduleInterviewDrawer({ candidateId, candidateName, interview,
     try {
       if (interview) await reschedule.mutateAsync({ id: interview.id, ...body })
       else await schedule.mutateAsync({ candidateId, ...body })
-      toast(interview ? 'Interview updated. The interviewers were told.' : 'Interview scheduled. The interviewers were told.', 'success')
+      toast.success(interview ? 'Interview updated. The interviewers were told.' : 'Interview scheduled. The interviewers were told.')
       onClose()
-    } catch (err) { toast(errMsg(err), 'error') }
+    } catch (err) { toast.error(interview ? 'Couldn’t change the interview' : 'Couldn’t schedule the interview', { detail: errMsg(err) }) }
   }
 
   return (
-    <HrDrawer title={interview ? 'Change interview' : 'Schedule an interview'} onClose={onClose} width="max-w-xl"
-      footer={<><HrButton variant="ghost" onClick={onClose}>Cancel</HrButton><HrButton type="submit" form="interview-form" disabled={busy}>{busy ? 'Saving…' : interview ? 'Save changes' : 'Schedule'}</HrButton></>}>
-      <form id="interview-form" onSubmit={submit} className="space-y-4">
-        <p className="text-sm text-text-secondary">{`With ${candidateName}. Times are India time (IST).`}</p>
-        <div><label className={label} htmlFor="iv-title">Interview name</label><input id="iv-title" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Technical round" className="ut-input" /></div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div><label className={label} htmlFor="iv-date">Date</label><DateField id="iv-date" required min={interview ? undefined : todayIso()} value={date} onChange={(e) => setDate(e.target.value)} className="ut-input" format="short" /></div>
-          <div><label className={label} htmlFor="iv-time">Time (IST)</label><input id="iv-time" type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="ut-input" /></div>
-          <div><label className={label} htmlFor="iv-dur">Duration</label>
-            <select id="iv-dur" value={duration} onChange={(e) => setDuration(e.target.value)} className="ut-select">
-              {durations.map((d) => <option key={d} value={d}>{Number(d) < 60 ? `${d} min` : `${Number(d) / 60} h`.replace('.5 h', ' h 30 min')}</option>)}
-            </select>
-          </div>
-        </div>
-        {interview?.started && <p className="text-xs text-text-tertiary">This interview has already started. Keep its date and time to change only the interviewers (for example to add the person who took it, so they can file a scorecard). A new time must be in the future.</p>}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div><label className={label} htmlFor="iv-mode">How</label>
-            <select id="iv-mode" value={mode} onChange={(e) => setMode(e.target.value as InterviewMode)} className="ut-select">
-              {(Object.keys(MODE_LABEL) as InterviewMode[]).map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
-            </select>
-          </div>
-          <div className="sm:col-span-2"><label className={label} htmlFor="iv-where">{where.l}</label>
-            <input id="iv-where" value={location} maxLength={500} required={mode !== 'PHONE'} type={mode === 'VIDEO' ? 'url' : 'text'} onChange={(e) => setLocation(e.target.value)} placeholder={where.ph} className="ut-input" />
-            {where.hint && <p className="mt-1 text-xs text-text-tertiary">{where.hint}</p>}
-          </div>
-        </div>
-        <div>
-          <span className={label}>Interviewers</span>
+    <SidePanel open onClose={onClose} width={620} busy={busy} closeLabel="Close panel"
+      title={interview ? 'Change interview' : 'Schedule an interview'}
+      sub={name ? `With ${name}. Times are India time (IST).` : 'Times are India time (IST).'}
+      footer={<><PanelButton size="lg" onClick={onClose} disabled={busy}>Cancel</PanelButton>
+        <PanelButton size="lg" variant="primary" busy={busy} onClick={() => submit()}>{interview ? 'Save changes' : 'Schedule'}</PanelButton></>}>
+      <form id="interview-form" onSubmit={submit} noValidate className="hi-stack">
+        <FieldGrid columns={3}>
+          {picking && (
+            <Select id="iv-candidate" label="Candidate" required full value={candidateId} error={errors.candidate}
+              placeholder={pool.isLoading ? 'Loading candidates…' : choices.length ? 'Choose a candidate' : 'No one in Screening or Interview'}
+              hint="People in Screening or Interview can be interviewed."
+              options={choices.map((c) => ({ value: c.id, label: `${c.fullName} · ${c.requisitionTitle || STAGE_LABEL[c.stage]}` }))}
+              onChange={(e) => { setCandidateId(e.target.value); setErrors((x) => ({ ...x, candidate: undefined })) }} />
+          )}
+          <Input id="iv-title" label="Interview name" full value={title} maxLength={120} placeholder="e.g. Technical round" onChange={(e) => setTitle(e.target.value)} />
+          <DateInput id="iv-date" label="Date" required min={interview ? undefined : istTodayIso()} value={date} onChange={(e) => setDate(e.target.value)} format="short" />
+          <Input id="iv-time" label="Time (IST)" type="time" required value={time} onChange={(e) => setTime(e.target.value)} />
+          <Select id="iv-dur" label="Duration" value={duration} onChange={(e) => setDuration(e.target.value)} options={durations.map((d) => ({ value: d, label: durationLabel(d) }))} />
+        </FieldGrid>
+        {interview?.started && <Callout tone="neutral">This interview has already started. Keep its date and time to change only the interviewers (for example to add the person who took it, so they can file a scorecard). A new time must be in the future.</Callout>}
+        <FieldGrid columns={3}>
+          <Select id="iv-mode" label="How" value={mode} onChange={(e) => { setMode(e.target.value as InterviewMode); setErrors((x) => ({ ...x, where: undefined })) }}
+            options={(Object.keys(MODE_LABEL) as InterviewMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))} />
+          <Input id="iv-where" label={where.l} fieldClassName="hi-span2" value={location} maxLength={500} required={mode !== 'PHONE'} type={mode === 'VIDEO' ? 'url' : 'text'}
+            placeholder={where.ph} hint={where.hint || undefined} error={errors.where} onChange={(e) => { setLocation(e.target.value); setErrors((x) => ({ ...x, where: undefined })) }} />
+        </FieldGrid>
+        <div className="hi-field-block">
+          <p className="hi-label">Interviewers</p>
           {people.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2">
+            <div className="hi-chosen">
               {people.map((p) => (
-                <span key={p.id} className="inline-flex items-center gap-1">
-                  <HrStatusPill tone="info">{p.name}</HrStatusPill>
-                  <HrButton type="button" size="sm" variant="ghost" onClick={() => setPeople((x) => x.filter((y) => y.id !== p.id))} aria-label={`Remove ${p.name}`}>Remove</HrButton>
+                <span key={p.id} className="hi-chosen__item">
+                  {p.name}
+                  <button type="button" className="hi-chosen__x" onClick={() => setPeople((x) => x.filter((y) => y.id !== p.id))} aria-label={`Remove ${p.name}`}>×</button>
                 </span>
               ))}
             </div>
           )}
-          <EmployeePicker value="" onChange={(emp) => setPeople((x) => (x.some((y) => y.id === emp.id) || x.length >= 10 ? x : [...x, { id: emp.id, name: `${emp.firstName} ${emp.lastName || ''}`.trim() }]))} />
-          <p className="mt-1 text-xs text-text-tertiary">Up to 10. Each one is notified and fills in their own scorecard after the interview.</p>
+          <PersonSearch label="Add an interviewer" hint="Up to 10. Each one is notified and fills in their own scorecard after the interview."
+            onPick={(emp) => { setPeople((x) => (x.some((y) => y.id === emp.id) || x.length >= 10 ? x : [...x, { id: emp.id, name: fullName(emp) }])); setErrors((x) => ({ ...x, people: undefined })) }} />
+          {errors.people && <p className="hi-small" role="alert" style={{ color: 'var(--u-danger-text, #B4302A)' }}>{errors.people}</p>}
         </div>
-        <div><label className={label} htmlFor="iv-criteria">What interviewers rate (comma separated)</label>
-          <input id="iv-criteria" value={criteria} onChange={(e) => setCriteria(e.target.value)} className="ut-input" />
-          <p className="mt-1 text-xs text-text-tertiary">Each criterion is rated from 1 to 5 on the scorecard. Leave empty for the standard four.</p>
-        </div>
-        <div><label className={label} htmlFor="iv-notes">Notes for the interviewers</label><textarea id="iv-notes" value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Optional: what to focus on, the candidate's CV link…" className="ut-input resize-none" /></div>
+        <Input id="iv-criteria" label="What interviewers rate (comma separated)" value={criteria} onChange={(e) => setCriteria(e.target.value)}
+          hint="Each criterion is rated from 1 to 5 on the scorecard. Leave empty for the standard four." />
+        <Textarea id="iv-notes" label="Notes for the interviewers" value={notes} maxLength={2000} rows={3}
+          placeholder="Optional: what to focus on, the candidate's CV link…" onChange={(e) => setNotes(e.target.value)} />
       </form>
-    </HrDrawer>
+    </SidePanel>
   )
 }
 
 // ── Scorecard ────────────────────────────────────────────────────────────────
 
-export function ScorecardDrawer({ interview, onClose }: { interview: Interview; onClose: () => void }) {
-  const { toast } = useToast()
+/** `interview` is the interviewer's own copy: its scorecards are only theirs. */
+export function ScorecardPanel({ interview, onClose }: { interview: Interview; onClose: () => void }) {
+  const toast = useToast()
   const submit = useSubmitScorecard()
   const mine = interview.scorecards[0]
   const [ratings, setRatings] = useState<Record<string, string>>(() => Object.fromEntries(interview.criteria.map((c) => [c, String(mine?.ratings.find((r) => r.criterion === c)?.rating ?? '')])))
   const [strengths, setStrengths] = useState(mine?.strengths ?? '')
   const [concerns, setConcerns] = useState(mine?.concerns ?? '')
   const [rec, setRec] = useState<Recommendation | ''>(mine?.recommendation ?? '')
-  const save = async (e: FormEvent) => {
-    e.preventDefault()
+  const [problem, setProblem] = useState('')
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault()
     const missing = interview.criteria.filter((c) => !ratings[c])
-    if (missing.length) { toast(`Rate ${missing.join(', ')}`, 'error'); return }
-    if (!rec) { toast('Choose your recommendation', 'error'); return }
+    if (missing.length) { setProblem(`Rate ${missing.join(', ')}`); return }
+    if (!rec) { setProblem('Choose your recommendation'); return }
+    setProblem('')
     try {
       await submit.mutateAsync({ id: interview.id, ratings: interview.criteria.map((c) => ({ criterion: c, rating: Number(ratings[c]) })), strengths: strengths.trim() || undefined, concerns: concerns.trim() || undefined, recommendation: rec })
-      toast(mine ? 'Scorecard updated' : 'Scorecard submitted', 'success')
+      toast.success(mine ? 'Scorecard updated' : 'Scorecard submitted')
       onClose()
-    } catch (err) { toast(errMsg(err), 'error') }
+    } catch (err) { toast.error('Couldn’t save the scorecard', { detail: errMsg(err) }) }
   }
   return (
-    <HrDrawer title={mine ? 'Your scorecard' : 'Submit your scorecard'} onClose={onClose}
-      footer={<><HrButton variant="ghost" onClick={onClose}>Cancel</HrButton><HrButton type="submit" form="scorecard-form" disabled={submit.isPending || !interview.started}>{submit.isPending ? 'Saving…' : mine ? 'Save changes' : 'Submit scorecard'}</HrButton></>}>
-      <form id="scorecard-form" onSubmit={save} className="space-y-4">
-        <p className="text-sm text-text-secondary">{`${interview.candidateName} · ${interview.roleTitle} · ${interview.title} · ${istWhen(interview.scheduledAt)} IST`}</p>
-        {!interview.started && <Note tone="amber">You can fill in the scorecard once the interview has started.</Note>}
-        <Note>Only the hiring team (HR) sees your scorecard. The other interviewers don't see what you wrote.</Note>
-        {interview.criteria.map((c, i) => (
-          <div key={c}><label className={label} htmlFor={`sc-${i}`}>{c}</label>
-            <select id={`sc-${i}`} value={ratings[c]} onChange={(e) => setRatings((r) => ({ ...r, [c]: e.target.value }))} className="ut-select">
-              <option value="">Choose a rating</option>
-              {[5, 4, 3, 2, 1].map((n) => <option key={n} value={String(n)}>{RATING_LABEL[n]}</option>)}
-            </select>
-          </div>
-        ))}
-        <div><label className={label} htmlFor="sc-str">Strengths</label><textarea id="sc-str" value={strengths} maxLength={4000} onChange={(e) => setStrengths(e.target.value)} rows={3} placeholder="What stood out" className="ut-input resize-none" /></div>
-        <div><label className={label} htmlFor="sc-con">Concerns</label><textarea id="sc-con" value={concerns} maxLength={4000} onChange={(e) => setConcerns(e.target.value)} rows={3} placeholder="Gaps or risks" className="ut-input resize-none" /></div>
-        <div><label className={label} htmlFor="sc-rec">Your recommendation</label>
-          <select id="sc-rec" value={rec} onChange={(e) => setRec(e.target.value as Recommendation)} className="ut-select">
-            <option value="">Choose one</option>
-            {RECOMMENDATIONS.map((r) => <option key={r} value={r}>{RECOMMENDATION_LABEL[r]}</option>)}
-          </select>
-        </div>
+    <SidePanel open onClose={onClose} width={600} busy={submit.isPending} closeLabel="Close panel"
+      title={mine ? 'Your scorecard' : 'Submit your scorecard'}
+      sub={`${interview.candidateName} · ${interview.roleTitle} · ${interview.title} · ${istWhen(interview.scheduledAt)} IST`}
+      footer={<><PanelButton size="lg" onClick={onClose} disabled={submit.isPending}>Cancel</PanelButton>
+        <PanelButton size="lg" variant="primary" busy={submit.isPending} disabled={!interview.started} onClick={() => save()}>{mine ? 'Save changes' : 'Submit scorecard'}</PanelButton></>}>
+      <form id="scorecard-form" onSubmit={save} noValidate className="hi-stack">
+        {!interview.started && <Callout tone="warning">You can fill in the scorecard once the interview has started.</Callout>}
+        <Callout tone="neutral">Only the hiring team (HR) sees your scorecard. The other interviewers don’t see what you wrote.</Callout>
+        <FieldGrid columns={2}>
+          {interview.criteria.map((c, i) => (
+            <Select key={c} id={`sc-${i}`} label={c} value={ratings[c]} placeholder="Choose a rating" onChange={(e) => setRatings((r) => ({ ...r, [c]: e.target.value }))}
+              options={[5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: RATING_LABEL[n] }))} />
+          ))}
+          <Select id="sc-rec" label="Your recommendation" full value={rec} placeholder="Choose one" onChange={(e) => setRec(e.target.value as Recommendation)}
+            options={RECOMMENDATIONS.map((r) => ({ value: r, label: RECOMMENDATION_LABEL[r] }))} />
+          <Textarea id="sc-str" label="Strengths" full value={strengths} maxLength={4000} rows={3} placeholder="What stood out" onChange={(e) => setStrengths(e.target.value)} />
+          <Textarea id="sc-con" label="Concerns" full value={concerns} maxLength={4000} rows={3} placeholder="Gaps or risks" onChange={(e) => setConcerns(e.target.value)} />
+        </FieldGrid>
+        {problem && <p className="hi-small" role="alert" style={{ color: 'var(--u-danger-text, #B4302A)' }}>{problem}</p>}
       </form>
-    </HrDrawer>
+    </SidePanel>
   )
 }
 
 // ── One interview ────────────────────────────────────────────────────────────
 
-function InterviewBlock({ interview, showCandidate, actions }: { interview: Interview; showCandidate?: boolean; actions?: ReactNode }) {
+function InterviewCard({ interview, showCandidate, actions, mine }: { interview: Interview; showCandidate?: boolean; actions?: ReactNode; mine?: Interview | null }) {
+  const today = istTodayIso()
+  const state = interviewState(interview, today, mine)
   const cancelled = interview.status === 'CANCELLED'
-  const pending = interview.interviewers.filter((p) => !p.submitted).length
-  const [pill, tone]: [string, PillTone] = cancelled ? ['Cancelled', 'gray'] : !interview.started ? ['Scheduled', 'info'] : pending ? ['Awaiting scorecards', 'warn'] : ['Scorecards in', 'ok']
   return (
-    <Panel pad={16} title={showCandidate ? `${interview.candidateName} · ${interview.title}` : interview.title}
-      sub={`${istWhen(interview.scheduledAt)} IST · ${interview.durationMinutes} min · ${MODE_LABEL[interview.mode]}${showCandidate ? ` · ${interview.roleTitle}` : ''}`}
-      aside={<HrStatusPill tone={tone}>{pill}</HrStatusPill>}>
-      <Facts min={170} items={[
-        { k: interview.mode === 'VIDEO' ? 'Link' : 'Where', v: interview.location ? (interview.mode === 'VIDEO' ? <a href={interview.location} target="_blank" rel="noopener noreferrer" className="text-accent-fg hover:underline">Join call</a> : interview.location) : '—' },
-        { k: 'Interviewers', v: interview.interviewers.map((p) => `${p.name}${p.submitted ? ' ✓' : ''}`).join(', ') || '—' },
-        { k: 'Rated on', v: interview.criteria.join(', ') },
+    <article className="hi-iv" aria-label={`${interview.title} with ${interview.candidateName}`}>
+      <div className="hi-iv__head">
+        <div>
+          <h4 className="hi-iv__title">{showCandidate ? `${interview.candidateName} · ${interview.title}` : interview.title}</h4>
+          <p className="hi-iv__sub">{`${interviewWhen(interview, today)} · ${MODE_LABEL[interview.mode]}${showCandidate ? ` · ${interview.roleTitle}` : ''}`}</p>
+        </div>
+        <StatusPill tone={state.tone}>{state.label}</StatusPill>
+      </div>
+      <KeyValueGrid items={[
+        { key: 'where', label: interview.mode === 'VIDEO' ? 'Link' : 'Where', value: interview.location ? (interview.mode === 'VIDEO' ? <a href={interview.location} target="_blank" rel="noopener noreferrer" className="hi-link">Join call</a> : interview.location) : '—' },
+        { key: 'who', label: 'Interviewers', value: interviewersLine(interview) || '—' },
+        { key: 'rated', label: 'Rated on', value: interview.criteria.join(', ') },
       ]} />
-      {interview.notes && <Note>{interview.notes}</Note>}
-      {cancelled && <Note>{`Cancelled${interview.cancelReason ? `: ${interview.cancelReason}` : '.'}`}</Note>}
-      {interview.scorecards.length > 0 && (
-        <RowList>
-          {interview.scorecards.map((s) => (
-            <Row key={s.id} title={`${s.interviewerName || 'Interviewer'} · ${Number(s.overallRating).toFixed(1)} / 5`}
-              meta={s.ratings.map((r) => `${r.criterion} ${r.rating}`).join(' · ')}
-              note={[s.strengths ? `Strengths: ${s.strengths}` : '', s.concerns ? `Concerns: ${s.concerns}` : ''].filter(Boolean).join('  ·  ') || undefined}
-              trail={<HrStatusPill tone={REC_TONE[s.recommendation]}>{RECOMMENDATION_LABEL[s.recommendation]}</HrStatusPill>} />
-          ))}
-        </RowList>
-      )}
-      {actions ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{actions}</div> : null}
-    </Panel>
+      {interview.notes && <Callout tone="neutral">{interview.notes}</Callout>}
+      {cancelled && <Callout tone="neutral">{`Cancelled${interview.cancelReason ? `: ${interview.cancelReason}` : '.'}`}</Callout>}
+      {interview.scorecards.map((s) => (
+        <div key={s.id} className="hi-score">
+          <div className="hi-score__head">
+            <span>{`${s.interviewerName || 'Interviewer'} · ${Number(s.overallRating).toFixed(1)} / 5`}</span>
+            <StatusPill tone={REC_TONE[s.recommendation]}>{RECOMMENDATION_LABEL[s.recommendation]}</StatusPill>
+          </div>
+          <p className="hi-score__line">{s.ratings.map((r) => `${r.criterion} ${r.rating}`).join(' · ')}</p>
+          {s.strengths && <p className="hi-score__line">{`Strengths: ${s.strengths}`}</p>}
+          {s.concerns && <p className="hi-score__line">{`Concerns: ${s.concerns}`}</p>}
+        </div>
+      ))}
+      {actions ? <div className="hi-iv__acts">{actions}</div> : null}
+    </article>
   )
 }
 
@@ -222,123 +253,205 @@ function useInterviewActions() {
   const canWrite = usePermission('hrms.hiring.interview.write')
   const cancel = useCancelInterview()
   const confirm = useConfirmDialog()
-  const { toast } = useToast()
+  const toast = useToast()
   const [editing, setEditing] = useState<Interview | null>(null)
-  const actionsFor = (i: Interview) => (canWrite && i.status === 'SCHEDULED' && i.scorecards.length === 0 ? (
+  const editable = (i: Interview) => canWrite && i.status === 'SCHEDULED' && i.scorecards.length === 0
+  const doCancel = async (i: Interview) => {
+    const ok = await confirm({ title: `Cancel “${i.title}” with ${i.candidateName}?`, body: 'Every interviewer is told it is cancelled. This can’t be undone; schedule a new interview if it should happen later.', confirmLabel: 'Cancel interview', cancelLabel: 'Keep it', tone: 'danger' })
+    if (!ok) return
+    try { await cancel.mutateAsync({ id: i.id }); toast.success('Interview cancelled. The interviewers were told.') } catch (e) { toast.error('Couldn’t cancel the interview', { detail: errMsg(e) }) }
+  }
+  const buttonsFor = (i: Interview) => (editable(i) ? (
     <>
-      <HrButton size="sm" variant="ghost" onClick={() => setEditing(i)}>Reschedule</HrButton>
-      <HrButton size="sm" variant="ghost" disabled={cancel.isPending} onClick={async () => {
-        const ok = await confirm({ title: `Cancel “${i.title}” with ${i.candidateName}?`, body: 'Every interviewer is told it is cancelled. This can’t be undone; schedule a new interview if it should happen later.', confirmLabel: 'Cancel interview', cancelLabel: 'Keep it', tone: 'danger' })
-        if (!ok) return
-        try { await cancel.mutateAsync({ id: i.id }); toast('Interview cancelled. The interviewers were told.', 'success') } catch (e) { toast(errMsg(e), 'error') }
-      }}>Cancel interview</HrButton>
+      <Button size={30} variant="secondary" onClick={() => setEditing(i)}>Reschedule</Button>
+      <Button size={30} variant="secondary" disabled={cancel.isPending} onClick={() => doCancel(i)}>Cancel interview</Button>
     </>
   ) : null)
-  const drawer = editing ? <ScheduleInterviewDrawer candidateId={editing.candidateId} candidateName={editing.candidateName} interview={editing} onClose={() => setEditing(null)} /> : null
-  return { actionsFor, drawer, editing: !!editing }
+  const menuItemsFor = (i: Interview): MenuEntry[] => (editable(i) ? [
+    { key: 'resched', label: 'Reschedule', icon: 'calendarClock', onSelect: () => setEditing(i) },
+    { key: 'cancel', label: 'Cancel interview', icon: 'circleX', danger: true, disabled: cancel.isPending, onSelect: () => doCancel(i) },
+  ] : [])
+  const panel = editing ? <ScheduleInterviewPanel interview={editing} onClose={() => setEditing(null)} /> : null
+  return { buttonsFor, menuItemsFor, panel, editing: !!editing }
 }
 
-// ── Candidate drawer ─────────────────────────────────────────────────────────
+// ── Candidate panel ──────────────────────────────────────────────────────────
 
 export function CandidateDrawer({ card, onClose }: { card: CandidateCard; onClose: () => void }) {
   const canWrite = usePermission('hrms.hiring.interview.write')
   const q = useCandidateInterviews(card.id)
   const [scheduling, setScheduling] = useState(false)
-  const { actionsFor, drawer, editing } = useInterviewActions()
+  const { buttonsFor, panel, editing } = useInterviewActions()
   const interviews = useMemo(() => q.data ?? [], [q.data])
   const summary = q.data ? summarise(interviews) : card.scorecards
   const schedulable = SCHEDULABLE_STAGES.includes(card.stage)
-  if (scheduling) return <ScheduleInterviewDrawer candidateId={card.id} candidateName={card.fullName} onClose={() => setScheduling(false)} />
-  if (editing) return drawer
+  const today = istTodayIso()
+  // One panel at a time, as before: booking or changing an interview takes the candidate's place.
+  if (scheduling) return <ScheduleInterviewPanel candidate={{ id: card.id, name: card.fullName }} onClose={() => setScheduling(false)} />
+  if (editing) return panel
   return (
-    <HrDrawer title={card.fullName} onClose={onClose} width="max-w-2xl">
-      <div style={{ display: 'grid', gap: 16 }}>
-        <Facts items={[
-          { k: 'Stage', v: fmtEnum(card.stage) },
-          { k: 'Role', v: card.requisitionTitle || '—' },
-          { k: 'Source', v: card.source || '—' },
-          { k: 'Expects', v: card.expectedCtc != null ? inr(card.expectedCtc) : '—' },
-          { k: 'Email', v: card.email || '—' },
-          { k: 'Phone', v: card.phone || '—' },
+    <SidePanel open onClose={onClose} width={660} closeLabel="Close panel" title={card.fullName}
+      sub={[STAGE_LABEL[card.stage], card.requisitionTitle].filter(Boolean).join(' · ')}
+      footer={<PanelButton size="lg" onClick={onClose}>Close</PanelButton>}>
+      <div className="hi-stack">
+        <KeyValueGrid items={[
+          { key: 'stage', label: 'Stage', value: STAGE_LABEL[card.stage] },
+          { key: 'role', label: 'Role', value: card.requisitionTitle || '—' },
+          { key: 'source', label: 'Source', value: card.source || '—' },
+          { key: 'ctc', label: 'Expects', value: card.expectedCtc != null ? inr(card.expectedCtc) : '—' },
+          { key: 'email', label: 'Email', value: card.email || '—' },
+          { key: 'phone', label: 'Phone', value: card.phone || '—' },
+          { key: 'applied', label: 'Applied', value: card.createdAt ? dayMon(istDateOf(card.createdAt), today) : '—' },
         ]} />
-        <SubHeading>Scorecards</SubHeading>
-        {summary.count ? (
-          <Facts items={[
-            { k: 'Scorecards', v: String(summary.count) },
-            { k: 'Average', v: summary.averageRating != null ? `${Number(summary.averageRating).toFixed(1)} / 5` : '—' },
-            ...RECOMMENDATIONS.map((r) => ({ k: RECOMMENDATION_LABEL[r], v: String(summary.recommendations?.[r] ?? 0) })),
-          ]} />
-        ) : <Note>No scorecards yet. Interviewers fill them in after each interview.</Note>}
-        <SubHeading aside={canWrite && schedulable && !card.convertedEmployeeId ? <HrButton size="sm" onClick={() => setScheduling(true)}>Schedule interview</HrButton> : undefined}>Interviews</SubHeading>
-        {canWrite && !schedulable && <Note>Interviews can be scheduled while the candidate is in Screening or Interview.</Note>}
-        {q.isLoading ? <State kind="loading" height={120} />
-          : q.error ? <State kind="error" title="Couldn’t load the interviews" description={errMsg(q.error)} onRetry={() => q.refetch()} />
-            : interviews.length === 0 ? <State kind="empty" icon="calendar" title="No interviews yet" description={canWrite && schedulable ? 'Use “Schedule interview” to book the first one.' : 'None have been scheduled.'} />
-              : interviews.map((i) => <InterviewBlock key={i.id} interview={i} actions={actionsFor(i)} />)}
+        <Section title="Scorecards" level={3} variant="panel" cardClass={false}>
+          {summary.count ? (
+            <KeyValueGrid items={[
+              { key: 'n', label: 'Scorecards', value: String(summary.count) },
+              { key: 'avg', label: 'Average', value: summary.averageRating != null ? `${Number(summary.averageRating).toFixed(1)} / 5` : '—' },
+              ...RECOMMENDATIONS.map((r) => ({ key: r, label: RECOMMENDATION_LABEL[r], value: String(summary.recommendations?.[r] ?? 0) })),
+            ]} />
+          ) : <p className="hi-copy">No scorecards yet. Interviewers fill them in after each interview.</p>}
+        </Section>
+        <Section title="Interviews" level={3} variant="panel" cardClass={false}
+          actions={canWrite && schedulable && !card.convertedEmployeeId ? <Button size={32} variant="primary" icon="plus" onClick={() => setScheduling(true)}>Schedule interview</Button> : undefined}
+          loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
+          empty={interviews.length === 0 ? { title: 'No interviews yet', hint: canWrite && schedulable ? 'Use “Schedule interview” to book the first one.' : 'None have been scheduled.', icon: 'calendar' } : undefined}>
+          <div className="hi-stack">
+            {canWrite && !schedulable && <Callout tone="neutral">Interviews can be scheduled while the candidate is in Screening or Interview.</Callout>}
+            {interviews.map((i) => <InterviewCard key={i.id} interview={i} actions={buttonsFor(i)} />)}
+          </div>
+        </Section>
       </div>
-    </HrDrawer>
+    </SidePanel>
   )
 }
 
-// ── Lists ────────────────────────────────────────────────────────────────────
+// ── The interviews table ─────────────────────────────────────────────────────
 
-/** The interviews the signed-in person is on, with their scorecard. */
-function MyInterviewList({ emptyText }: { emptyText: string }) {
-  const q = useMyInterviews()
+/** Copy a video link; a toast says whether it worked. */
+function useCopyLink() {
+  const toast = useToast()
+  return async (link: string) => {
+    try { await navigator.clipboard.writeText(link); toast.success('Interview link copied') } catch { toast.error('Couldn’t copy the link', { detail: link }) }
+  }
+}
+
+function InterviewTable({ rows, loading, error, onRetry, retrying, empty, hr }: {
+  rows: InterviewRow[]; loading: boolean; error: unknown; onRetry: () => void; retrying: boolean; empty: { title: string; hint: string }; hr: boolean
+}) {
+  const navigate = useNavigate()
+  const copy = useCopyLink()
+  const { menuItemsFor, panel } = useInterviewActions()
   const [scoring, setScoring] = useState<Interview | null>(null)
-  const list = q.data ?? []
-  if (q.isLoading) return <State kind="loading" height={120} />
-  if (q.error) return <State kind="error" title="Couldn’t load your interviews" description={errMsg(q.error)} onRetry={() => q.refetch()} />
+  const [open, setOpen] = useState<InterviewRow | null>(null)
+  const today = istTodayIso()
+  const scoreButton = (r: InterviewRow) => (r.mine && r.interview.started && r.interview.status === 'SCHEDULED'
+    ? <Button size={30} variant={r.mine.scorecards.length ? 'secondary' : 'soft'} onClick={() => setScoring(r.mine)}>{r.mine.scorecards.length ? 'Edit scorecard' : 'Fill scorecard'}</Button>
+    : null)
+  const columns: TableColumn<InterviewRow>[] = [
+    {
+      key: 'candidate', header: 'Candidate', primary: true, width: '24%', render: (r) => (
+        <button type="button" className="hi-open" onClick={() => setOpen(r)} aria-label={`Open ${r.interview.title} with ${r.interview.candidateName}`}>
+          <CellPerson name={r.interview.candidateName} sub={r.interview.roleTitle} />
+        </button>
+      ),
+    },
+    { key: 'title', header: 'Interview', render: (r) => r.interview.title },
+    { key: 'when', header: 'When (IST)', render: (r) => <span className="hi-num">{interviewWhen(r.interview, today)}</span> },
+    { key: 'who', header: 'Interviewers', render: (r) => interviewersLine(r.interview) || '—' },
+    { key: 'status', header: 'Status', render: (r) => { const s = interviewState(r.interview, today, r.mine); return <StatusPill tone={s.tone}>{s.label}</StatusPill> } },
+    {
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (r) => {
+        const i = r.interview
+        const link = i.mode === 'VIDEO' && i.location && !i.started && i.status === 'SCHEDULED' ? i.location : null
+        const items: MenuEntry[] = [
+          { key: 'open', label: 'See details', icon: 'eye', onSelect: () => setOpen(r) },
+          ...menuItemsFor(i),
+          ...(hr ? [{ key: 'pipeline', label: 'Open pipeline', icon: 'workflow', onSelect: () => navigate(`/hrms/hiring?tab=pipeline&role=${i.requisitionId}`) }] : []),
+        ]
+        return (
+          <CellActions>
+            {scoreButton(r)}
+            {link && <Button size={30} variant="secondary" onClick={() => copy(link)}>Copy link</Button>}
+            <Menu label={`More for ${i.title} with ${i.candidateName}`} width={240} placement="bottom-end" items={items}
+              trigger={({ props }) => <Button {...props} size={30} variant="plain" icon={<MoreHorizontal size={16} />} aria-label={`More for ${i.title} with ${i.candidateName}`} />} />
+          </CellActions>
+        )
+      },
+    },
+  ]
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      {list.length === 0 ? <State kind="empty" icon="calendar" title="No interviews for you" description={emptyText} />
-        : list.map((i) => (
-          <InterviewBlock key={i.id} interview={i} showCandidate actions={
-            i.started ? <HrButton size="sm" variant={i.scorecards.length ? 'ghost' : undefined} onClick={() => setScoring(i)}>{i.scorecards.length ? 'Edit your scorecard' : 'Submit your scorecard'}</HrButton>
-              : <span style={{ fontSize: 12.5, color: '#64748b' }}>Your scorecard opens when the interview starts.</span>
-          } />
-        ))}
-      {scoring && <ScorecardDrawer interview={scoring} onClose={() => setScoring(null)} />}
-    </div>
+    <>
+      <Section title="Coming up" body="flush" loading={loading} skeleton="table" error={error} onRetry={onRetry} retrying={retrying}
+        empty={!loading && !error && rows.length === 0 ? { ...empty, icon: 'calendar' } : undefined}>
+        <Table label="Interviews coming up" columns={columns} rows={rows} rowKey={(r) => r.id} mobile="cards" onRowClick={(r) => setOpen(r)} />
+      </Section>
+      {open && (
+        <SidePanel open onClose={() => setOpen(null)} width={600} closeLabel="Close panel" title={open.interview.title}
+          sub={`${open.interview.candidateName} · ${open.interview.roleTitle}`} footer={<PanelButton size="lg" onClick={() => setOpen(null)}>Close</PanelButton>}>
+          <InterviewCard interview={open.interview} mine={open.mine} actions={scoreButton(open)} />
+        </SidePanel>
+      )}
+      {scoring && <ScorecardPanel interview={scoring} onClose={() => { setScoring(null); setOpen(null) }} />}
+      {panel}
+    </>
   )
 }
 
 /** Hiring ?tab=interviews: what's coming up, and the interviews you are on. */
-export function InterviewsTab() {
+export function InterviewsTab({ scheduling, onScheduleDone }: { scheduling: boolean; onScheduleDone: () => void }) {
   const upcoming = useUpcomingInterviews()
   const mine = useMyInterviews()
-  const { actionsFor, drawer } = useInterviewActions()
+  const mySummary = useMyInterviewSummary()
+  const today = istTodayIso()
   const list = upcoming.data ?? []
-  const today = todayIso()
+  const rows = useMemo(() => mergeInterviews(upcoming.data ?? [], mine.data ?? []), [upcoming.data, mine.data])
   const todayCount = list.filter((i) => i.scheduledAtIst.slice(0, 10) === today).length
-  const awaiting = (mine.data ?? []).filter((i) => i.started && i.scorecards.length === 0).length
+  const due = (mine.data ?? []).filter((i) => i.started && i.status === 'SCHEDULED' && i.scorecards.length === 0).length
+  const error = upcoming.error || mine.error
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      {upcoming.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
-        { icon: 'calendarClock', color: 'blue', label: 'Coming up', value: String(list.length), sub: 'Scheduled, not finished' },
-        { icon: 'calendar', color: 'green', label: 'Today', value: String(todayCount), sub: 'India time' },
-        { icon: 'clipboard', color: 'orange', label: 'Your scorecards due', value: String(awaiting), sub: 'Interviews you took' },
-      ]} />}
-      <SubHeading>Your interviews</SubHeading>
-      <MyInterviewList emptyText="When HR adds you as an interviewer, the interview shows up here." />
-      <SubHeading>Upcoming interviews</SubHeading>
-      {upcoming.isLoading ? <State kind="loading" height={160} />
-        : upcoming.error ? <State kind="error" title="Couldn’t load the interviews" description={errMsg(upcoming.error)} onRetry={() => upcoming.refetch()} />
-          : list.length === 0 ? <State kind="empty" icon="calendar" title="No interviews coming up" description="Open a candidate in Screening or Interview on the Pipeline to schedule one." />
-            : list.map((i) => <InterviewBlock key={i.id} interview={i} showCandidate actions={<>
-              {actionsFor(i)}
-              <Link to={`/hrms/hiring?tab=pipeline&role=${i.requisitionId}`} className="text-[13px] font-semibold text-accent-fg hover:underline" style={{ alignSelf: 'center' }}>Open pipeline →</Link>
-            </>} />)}
-      {drawer}
-    </div>
+    <>
+      <Section title="Interviews" body="tight" loading={upcoming.isLoading} skeleton="stats" error={upcoming.error} onRetry={() => upcoming.refetch()}>
+        <MiniStatGrid>
+          <MiniStat label="Coming up" value={list.length} note="Scheduled, not finished" tone="info" />
+          <MiniStat label="Today" value={todayCount} note="India time" tone="success" />
+          <MiniStat label="Your scorecards due" value={mine.isLoading ? null : due} note="Interviews you took" tone="warning" />
+          {mySummary.data && <MiniStat label="Interviews you took" value={mySummary.data.tookThisQuarter} note="This quarter" tone="neutral" />}
+        </MiniStatGrid>
+      </Section>
+      <InterviewTable rows={rows} loading={upcoming.isLoading || mine.isLoading} error={error} retrying={upcoming.isFetching || mine.isFetching}
+        onRetry={() => { void upcoming.refetch(); void mine.refetch() }} hr
+        empty={{ title: 'No interviews coming up', hint: 'Open a candidate in Screening or Interview on the Pipeline to schedule one.' }} />
+      {scheduling && <ScheduleInterviewPanel onClose={onScheduleDone} />}
+    </>
   )
 }
 
 /** /me/interviews: for every employee who is asked to interview. */
 export function MyInterviews() {
+  const mine = useMyInterviews()
+  const summary = useMyInterviewSummary()
+  const rows = useMemo(() => mergeInterviews([], mine.data ?? []), [mine.data])
+  const due = (mine.data ?? []).filter((i) => i.started && i.status === 'SCHEDULED' && i.scorecards.length === 0).length
+  const upcoming = (mine.data ?? []).filter((i) => !i.started && i.status === 'SCHEDULED').length
   return (
-    <ModulePage crumb="My workspace" title="Interviews" subtitle="Interviews you’ve been asked to take. Fill in your scorecard once each one has started.">
-      <MyInterviewList emptyText="When HR adds you as an interviewer, the interview shows up here and you get a notification." />
-    </ModulePage>
+    <PageFrame label="My interviews" width="narrow" className="hi-page">
+      <PageHeader eyebrow="My workspace" title="Interviews" sub="Interviews you’ve been asked to take. Fill in your scorecard once each one has started." />
+      {mine.isSuccess && rows.length === 0 ? (
+        <EmptyState icon="calendar" variant="dashed" title="No interviews for you" hint="When HR adds you as an interviewer, the interview shows up here and you get a notification." />
+      ) : (
+        <>
+          <Section title="Your interviews" body="tight" loading={mine.isLoading} skeleton="stats" error={mine.error} onRetry={() => mine.refetch()}>
+            <MiniStatGrid>
+              <MiniStat label="Coming up" value={upcoming} note="Scheduled, not started" tone="info" />
+              <MiniStat label="Your scorecards due" value={due} note="Interviews you took" tone="warning" />
+              {summary.data && <MiniStat label="Interviews you took" value={summary.data.tookThisQuarter} note="This quarter" tone="neutral" />}
+            </MiniStatGrid>
+          </Section>
+          <InterviewTable rows={rows} loading={mine.isLoading} error={mine.error} retrying={mine.isFetching} onRetry={() => mine.refetch()} hr={false}
+            empty={{ title: 'No interviews for you', hint: 'When HR adds you as an interviewer, the interview shows up here and you get a notification.' }} />
+        </>
+      )}
+    </PageFrame>
   )
 }

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { asAvailable, useAvailableQuery } from '../../api/shared/available'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,8 @@ export interface OnboardingTemplate {
   tasks: OnboardingTask[]
   createdAt: string
   updatedAt: string
+  /** Onboardings started from this template (the list only; BW-69). Absent on older servers. */
+  usedBy?: number
 }
 
 export interface OnboardingTask {
@@ -173,6 +176,54 @@ export function useInstances(status?: string, enabled = true) {
     queryKey: instancesKey(status),
     enabled,
     queryFn: () => apiJson<OnboardingInstance[]>(`/v1/onboarding/instances${params}`),
+  })
+}
+
+/** One row of the New hires overview (BW-69). Names come with the row, for any company. */
+export interface OnboardingOverviewRow {
+  instanceId: string
+  employeeId: string
+  employeeName: string | null
+  employeeCode: string | null
+  companyId: string | null
+  departmentId: string | null
+  departmentName: string | null
+  dateOfJoining: string | null
+  templateId: string | null
+  templateName: string | null
+  status: OnboardingInstanceStatus | string
+  startedAt: string | null
+  completedAt: string | null
+  tasksTotal: number
+  /** Done or skipped. */
+  tasksDone: number
+  /** Pending and past their due day (India time). */
+  tasksOverdue: number
+  nextDueOn: string | null
+}
+
+/** Counts over every onboarding in scope (a status filter doesn't change them). */
+export interface OnboardingOverviewCounts {
+  all: number
+  inProgress: number
+  onHold: number
+  completed: number
+  joiningThisMonth: number
+  /** Overdue tasks across onboardings in progress. */
+  tasksOverdue: number
+}
+
+/**
+ * GET /v1/onboarding/instances/overview (hrms.onboarding.instance.read): every onboarding
+ * for HR (instance.write), the caller's own otherwise. 404 on an older server comes back
+ * as `notAvailable`.
+ */
+export function useOnboardingOverview(enabled = true) {
+  return useAvailableQuery<{ counts: OnboardingOverviewCounts; rows: OnboardingOverviewRow[] }>({
+    // Under the instances prefix, so starting, holding and ticking off refresh it.
+    queryKey: ['hrms', 'onboarding', 'instances', 'overview'],
+    queryFn: () => asAvailable(() => apiJson<{ counts: OnboardingOverviewCounts; rows: OnboardingOverviewRow[] }>('/v1/onboarding/instances/overview')),
+    enabled,
   })
 }
 

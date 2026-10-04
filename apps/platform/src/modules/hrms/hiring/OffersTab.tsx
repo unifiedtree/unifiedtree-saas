@@ -1,424 +1,194 @@
+// Hiring › Offers (P-HIRE; prototype PgTalent h-pipe tab 3). Offers carry salary: reading
+// needs hrms.hiring.offer.read; creating, editing a draft, emailing and status changes need
+// hrms.hiring.offer.write or hrms.hiring.write (the API's rule).
+//   - Create offer (header button) / Edit draft: the offer panel. The candidate email
+//     (BW-67) is stored with the offer, so "Send offer email" starts from it.
+//   - Send offer email asks once for the address (the stored one is filled in): sending
+//     freezes the draft, and the mail service accepting it doesn't prove delivery.
+//   - Download PDF; the status changes (Mark as sent, accepted, declined, Withdraw) are in
+//     the row's menu; a final decision has none.
 import { useState, type FormEvent } from 'react'
+import { MoreHorizontal } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
-import { DateField } from '@/shared/components/calendar'
-import { HrPagination } from '@/shared/components/HrPagination'
-import { useToast } from '@/shared/hooks/useToast'
+import { Button, Callout, CellActions, CellStack, Section, StatusPill, Table, type TableColumn } from '@/design/kit/display'
+import { Pager } from '@/design/kit/data'
+import { DateInput, Dialog, FieldGrid, Input, Menu, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
 import {
-  useHiringOffers,
-  useCreateHiringOffer,
-  useUpdateHiringOfferStatus,
-  useEditHiringOffer,
-  useEmailHiringOffer,
-  downloadOfferPdf,
-  inr,
-  type HiringOffer,
-  type OfferStatus,
+  useHiringOffers, useCreateHiringOffer, useUpdateHiringOfferStatus, useEditHiringOffer, useEmailHiringOffer, downloadOfferPdf, inr,
+  type HiringOffer, type OfferStatus,
 } from '../api/useHiring'
+import { OFFER_ACTION, OFFER_LABEL, OFFER_NEXT, OFFER_TONE, istTodayIso, weekdayDay } from './hiringModel'
 
-const nextStatuses: Record<OfferStatus, OfferStatus[]> = {
-  DRAFT: ['SENT', 'WITHDRAWN'],
-  SENT: ['ACCEPTED', 'DECLINED', 'WITHDRAWN'],
-  ACCEPTED: [],
-  DECLINED: [],
-  WITHDRAWN: [],
-}
-export function OffersTab() {
-  const offerWrite = usePermission('hrms.hiring.offer.write')
-  const hiringWrite = usePermission('hrms.hiring.write')
-  const canWrite = offerWrite || hiringWrite
+const PAGE = 20
+const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
+const stampOf = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCreateDone: () => void }) {
+  const toast = useToast()
+  const canOfferWrite = usePermission('hrms.hiring.offer.write')
+  const canHiringWrite = usePermission('hrms.hiring.write')
+  const canWrite = canOfferWrite || canHiringWrite
   const [page, setPage] = useState(0)
-  const [creating, setCreating] = useState(false)
   const query = useHiringOffers(page)
+  const update = useUpdateHiringOfferStatus()
+  const [editing, setEditing] = useState<HiringOffer | null>(null)
+  const [emailing, setEmailing] = useState<HiringOffer | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const offers = query.data?.content ?? []
+  const total = query.data?.totalElements ?? 0
+  const today = istTodayIso()
+
+  const download = async (o: HiringOffer) => {
+    setDownloading(o.id)
+    try { await downloadOfferPdf(o.id) } catch (e) { toast.error('Couldn’t download the offer', { detail: errText(e) }) } finally { setDownloading(null) }
+  }
+  const changeStatus = async (o: HiringOffer, status: OfferStatus) => {
+    try {
+      await update.mutateAsync({ id: o.id, status })
+      toast.success(`Offer ${OFFER_LABEL[status].toLowerCase()}`, { detail: o.candidateName })
+    } catch (e) { toast.error('Couldn’t update the offer', { detail: errText(e) }) }
+  }
+
+  const columns: TableColumn<HiringOffer>[] = [
+    {
+      key: 'candidate', header: 'Candidate', primary: true, width: '24%', render: (o) => (
+        <CellStack primary={o.candidateName} secondary={o.candidateEmail || o.emailRecipient || (o.notes ? <span title={o.notes}>{o.notes}</span> : undefined)} />
+      ),
+    },
+    { key: 'role', header: 'Role', render: (o) => o.roleTitle },
+    { key: 'ctc', header: 'Offered CTC', render: (o) => <span className="hi-num">{inr(o.offeredCtc)}</span> },
+    { key: 'joining', header: 'Joining date', render: (o) => <span className="hi-num">{o.joiningDate ? weekdayDay(o.joiningDate, today) : '—'}</span> },
+    {
+      key: 'status', header: 'Status', render: (o) => (
+        <CellStack primary={<StatusPill tone={OFFER_TONE[o.status]}>{OFFER_LABEL[o.status]}</StatusPill>}
+          secondary={o.emailSubmittedAt ? `Submitted to ${o.emailRecipient ?? 'the candidate'} · ${stampOf(o.emailSubmittedAt)}` : undefined} />
+      ),
+    },
+    {
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (o) => {
+        const next = OFFER_NEXT[o.status]
+        return (
+          <CellActions>
+            <Button size={30} variant="secondary" loading={downloading === o.id} disabled={downloading !== null && downloading !== o.id} onClick={() => download(o)}>Download PDF</Button>
+            {canWrite && o.status === 'DRAFT' && <Button size={30} variant="secondary" onClick={() => setEditing(o)}>Edit draft</Button>}
+            {canWrite && !o.emailSubmittedAt && (o.status === 'DRAFT' || o.status === 'SENT') && <Button size={30} variant="soft" onClick={() => setEmailing(o)}>Send offer email</Button>}
+            {canWrite && next.length > 0 && (
+              <Menu label={`Change the offer for ${o.candidateName}`} width={230} placement="bottom-end"
+                items={next.map((s) => ({ key: s, label: OFFER_ACTION[s], danger: s === 'WITHDRAWN' || s === 'DECLINED', disabled: update.isPending, onSelect: () => changeStatus(o, s) }))}
+                trigger={({ props }) => <Button {...props} size={30} variant="plain" icon={<MoreHorizontal size={16} />} aria-label={`Change the offer for ${o.candidateName}`} />} />
+            )}
+          </CellActions>
+        )
+      },
+    },
+  ]
+
+  return (
+    <>
+      <Section title="Offers" body="flush" loading={query.isLoading} skeleton="table" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching}
+        empty={!query.isLoading && !query.error && total === 0 ? { title: 'No offers yet. Create a draft to begin tracking an offer.', icon: 'fileText' } : undefined}
+        footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="offers" /> : undefined}>
+        <Table label="Offers" columns={columns} rows={offers} rowKey={(o) => o.id} mobile="cards" minWidth={760} />
+      </Section>
+      {(creating || editing) && <OfferPanel offer={editing} onClose={() => { setEditing(null); onCreateDone() }} onSaved={() => setPage(0)} />}
+      {emailing && <EmailOfferDialog offer={emailing} onClose={() => setEmailing(null)} />}
+    </>
+  )
+}
+
+/** Create an offer draft, or edit one (`offer`). Offer terms go into the PDF; internal notes stay with HR. */
+function OfferPanel({ offer, onClose, onSaved }: { offer: HiringOffer | null; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast()
   const companies = useCompanies()
   const create = useCreateHiringOffer()
-  const update = useUpdateHiringOfferStatus()
   const edit = useEditHiringOffer()
-  const email = useEmailHiringOffer()
-  const [emailOffer, setEmailOffer] = useState<HiringOffer | null>(null)
-  const [recipient, setRecipient] = useState('')
-  const [editing, setEditing] = useState<HiringOffer | null>(null)
-  const [downloading, setDownloading] = useState<string | null>(null)
-  const emptyForm = {
-    companyId: '',
-    candidateName: '',
-    roleTitle: '',
-    offeredCtc: '',
-    joiningDate: '',
-    notes: '',
-    offerTerms: '',
-  }
-  const { toast } = useToast()
-  const [form, setForm] = useState(emptyForm)
-  async function save(event: FormEvent) {
-    event.preventDefault()
+  const busy = create.isPending || edit.isPending
+  const [form, setForm] = useState(() => ({
+    companyId: offer?.companyId ?? '',
+    candidateName: offer?.candidateName ?? '',
+    candidateEmail: offer?.candidateEmail ?? '',
+    roleTitle: offer?.roleTitle ?? '',
+    offeredCtc: offer ? String(offer.offeredCtc) : '',
+    joiningDate: offer?.joiningDate ?? '',
+    notes: offer?.notes ?? '',
+    offerTerms: offer?.offerTerms ?? '',
+  }))
+  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault()
+    if (!form.companyId) { toast.error('Choose the company making the offer'); return }
+    if (!form.candidateName.trim() || !form.roleTitle.trim()) { toast.error('Add the candidate’s name and the role'); return }
+    if (form.offeredCtc === '' || Number(form.offeredCtc) < 0) { toast.error('Add the annual offered CTC'); return }
+    const payload = {
+      companyId: form.companyId, candidateName: form.candidateName.trim(), roleTitle: form.roleTitle.trim(), offeredCtc: Number(form.offeredCtc),
+      joiningDate: form.joiningDate || undefined, notes: form.notes, offerTerms: form.offerTerms,
+      // Edit: an emptied field removes the stored email; create: none is sent when it's empty.
+      candidateEmail: offer ? form.candidateEmail.trim() : form.candidateEmail.trim() || undefined,
+    }
     try {
-      const payload = {
-        ...form,
-        candidateName: form.candidateName.trim(),
-        roleTitle: form.roleTitle.trim(),
-        offeredCtc: Number(form.offeredCtc),
-        joiningDate: form.joiningDate || undefined,
-      }
-      if (editing)
-        await edit.mutateAsync({
-          ...payload,
-          id: editing.id,
-          candidateId: editing.candidateId,
-          requisitionId: editing.requisitionId,
-        })
+      if (offer) await edit.mutateAsync({ ...payload, id: offer.id, candidateId: offer.candidateId, requisitionId: offer.requisitionId })
       else await create.mutateAsync(payload)
-      setCreating(false)
-      setPage(0)
-      setForm(emptyForm)
-      setEditing(null)
-      toast(editing ? 'Offer draft updated' : 'Offer draft created', 'success')
-    } catch (error) {
-      toast((error as Error).message, 'error')
-    }
-  }
-  function startEdit(offer: HiringOffer) {
-    setEditing(offer)
-    setForm({
-      companyId: offer.companyId,
-      candidateName: offer.candidateName,
-      roleTitle: offer.roleTitle,
-      offeredCtc: String(offer.offeredCtc),
-      joiningDate: offer.joiningDate || '',
-      notes: offer.notes || '',
-      offerTerms: offer.offerTerms || '',
-    })
-    setCreating(true)
-  }
-  async function download(id: string) {
-    setDownloading(id)
-    try {
-      await downloadOfferPdf(id)
-    } catch (error) {
-      toast((error as Error).message, 'error')
-    } finally {
-      setDownloading(null)
-    }
-  }
-  async function changeStatus(id: string, status: OfferStatus) {
-    try {
-      await update.mutateAsync({ id, status })
-      toast('Offer status updated', 'success')
-    } catch (error) {
-      toast((error as Error).message, 'error')
-    }
+      toast.success(offer ? 'Offer draft updated' : 'Offer draft created')
+      onSaved()
+      onClose()
+    } catch (err) { toast.error(offer ? 'Couldn’t update the offer' : 'Couldn’t create the offer', { detail: errText(err) }) }
   }
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-text-secondary">
-          Track offer drafts, issue status and candidate decisions.
-        </p>
-        {canWrite && (
-          <HrButton
-            onClick={() => {
-              setCreating(!creating)
-              setEditing(null)
-              setForm(emptyForm)
-            }}
-          >
-            {creating ? 'Cancel' : 'Create offer'}
-          </HrButton>
+    <SidePanel open onClose={onClose} width={620} busy={busy} closeLabel="Close panel"
+      title={offer ? 'Edit offer draft' : 'Create offer'} sub="Offer terms go into the PDF. Internal notes stay with HR."
+      footer={<><PanelButton size="lg" onClick={onClose} disabled={busy}>Cancel</PanelButton>
+        <PanelButton size="lg" variant="primary" busy={busy} disabled={!form.companyId} onClick={() => save()}>Save draft</PanelButton></>}>
+      <form id="offer-form" onSubmit={save} noValidate className="hi-stack">
+        <FieldGrid columns={2}>
+          <Select id="offer-company" label="Company" required full value={form.companyId} disabled={!!offer} placeholder="Select company"
+            options={(companies.data ?? []).map((c) => ({ value: c.id, label: c.name }))} onChange={(e) => set('companyId')(e.target.value)} />
+          <Input id="offer-name" label="Candidate name" required value={form.candidateName} maxLength={200} onChange={(e) => set('candidateName')(e.target.value)} />
+          <Input id="offer-email" label="Candidate email" type="email" value={form.candidateEmail} maxLength={254} placeholder="name@email.com"
+            hint="Used by Send offer email." onChange={(e) => set('candidateEmail')(e.target.value)} />
+          <Input id="offer-role" label="Role" required value={form.roleTitle} maxLength={200} onChange={(e) => set('roleTitle')(e.target.value)} />
+          <Input id="offer-ctc" label="Annual offered CTC (INR)" required type="number" min={0} step="0.01" value={form.offeredCtc} onChange={(e) => set('offeredCtc')(e.target.value)} />
+          <DateInput id="offer-joining" label="Joining date" full value={form.joiningDate} onChange={(e) => set('joiningDate')(e.target.value)} clearable />
+          <Textarea id="offer-terms" label="Offer terms (included in PDF)" aria-label="Offer terms" full rows={6} maxLength={20000} value={form.offerTerms}
+            hint="Enter the approved candidate-facing terms. Internal notes are never included in the document." onChange={(e) => set('offerTerms')(e.target.value)} />
+          <Textarea id="offer-notes" label="Internal notes" full rows={3} maxLength={10000} value={form.notes} placeholder="Not shown to the candidate" onChange={(e) => set('notes')(e.target.value)} />
+        </FieldGrid>
+        {companies.isError && (
+          <Callout tone="warning">Companies could not be loaded. <button type="button" className="hi-link" style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }} onClick={() => companies.refetch()}>Try again</button></Callout>
         )}
-      </div>
-      {emailOffer && (
-        <form
-          className="ut-card space-y-3 p-5"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            try {
-              await email.mutateAsync({ id: emailOffer.id, recipient: recipient.trim() })
-              setEmailOffer(null)
-              setRecipient('')
-              toast('Offer accepted by the mail service', 'success')
-            } catch (error) {
-              toast((error as Error).message, 'error')
-            }
-          }}
-        >
-          <h2 className="font-semibold">Email offer to {emailOffer.candidateName}</h2>
-          <p className="text-sm text-text-secondary">
-            The message includes the saved offer terms and PDF. Sending freezes the draft.
-            Mail-service acceptance does not confirm inbox delivery.
+      </form>
+    </SidePanel>
+  )
+}
+
+/** Email the offer (its terms and PDF) to the candidate. The stored candidate email is filled in. */
+function EmailOfferDialog({ offer, onClose }: { offer: HiringOffer; onClose: () => void }) {
+  const toast = useToast()
+  const email = useEmailHiringOffer()
+  const [recipient, setRecipient] = useState(offer.candidateEmail ?? '')
+  const send = async (e?: FormEvent) => {
+    e?.preventDefault()
+    if (!recipient.trim()) { toast.error('Add the candidate’s email'); return }
+    try {
+      await email.mutateAsync({ id: offer.id, recipient: recipient.trim() })
+      toast.success('Offer accepted by the mail service', { detail: `Sent to ${recipient.trim()}` })
+      onClose()
+    } catch { /* the dialog shows why below */ }
+  }
+  return (
+    <Dialog open onClose={onClose} busy={email.isPending} icon="mail" width={520} title={`Email the offer to ${offer.candidateName}`}
+      sub="The message includes the saved offer terms and PDF. Sending freezes the draft."
+      footer={<><PanelButton onClick={onClose} disabled={email.isPending}>Cancel</PanelButton>
+        <PanelButton variant="primary" busy={email.isPending} onClick={() => send()}>Send offer email</PanelButton></>}>
+      <form onSubmit={send} noValidate className="hi-stack">
+        <Input id="offer-recipient" label="Candidate email" type="email" required maxLength={254} value={recipient} autoFocus
+          hint="The mail service accepting the message doesn’t confirm it reached the inbox." onChange={(e) => setRecipient(e.target.value)} />
+        {email.isError && (
+          <p role="alert" className="hi-copy" style={{ color: 'var(--u-danger-text, #B4302A)' }}>
+            {`The email could not be confirmed: ${errText(email.error)} Check your mail provider before retrying to avoid a duplicate message.`}
           </p>
-          <label className="block text-sm">
-            Candidate email
-            <input
-              aria-label="Candidate email"
-              type="email"
-              required
-              maxLength={254}
-              className="ut-input mt-1"
-              value={recipient}
-              onChange={(e) => setRecipient(e.target.value)}
-            />
-          </label>
-          {email.isError && (
-            <p role="alert" className="text-sm text-red-700">
-              The email could not be confirmed. Check your mail provider before retrying to avoid a
-              duplicate message.
-            </p>
-          )}
-          <div className="flex gap-2">
-            <HrButton type="submit" disabled={email.isPending}>
-              {email.isPending ? 'Submitting...' : 'Send offer email'}
-            </HrButton>
-            <HrButton
-              variant="ghost"
-              disabled={email.isPending}
-              onClick={() => setEmailOffer(null)}
-            >
-              Cancel email
-            </HrButton>
-          </div>
-        </form>
-      )}
-      {creating && (
-        <form onSubmit={save} className="ut-card grid gap-4 p-5 sm:grid-cols-2">
-          <label className="text-sm">
-            Company
-            <select
-              aria-label="Company"
-              disabled={!!editing}
-              required
-              className="ut-select mt-1"
-              value={form.companyId}
-              onChange={(e) => setForm({ ...form, companyId: e.target.value })}
-            >
-              <option value="">Select company</option>
-              {companies.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm">
-            Candidate name
-            <input
-              required
-              maxLength={200}
-              className="ut-input mt-1"
-              value={form.candidateName}
-              onChange={(e) => setForm({ ...form, candidateName: e.target.value })}
-            />
-          </label>
-          <label className="text-sm">
-            Role
-            <input
-              required
-              maxLength={200}
-              className="ut-input mt-1"
-              value={form.roleTitle}
-              onChange={(e) => setForm({ ...form, roleTitle: e.target.value })}
-            />
-          </label>
-          <label className="text-sm">
-            Annual offered CTC (INR)
-            <input
-              required
-              type="number"
-              min="0"
-              step="0.01"
-              className="ut-input mt-1"
-              value={form.offeredCtc}
-              onChange={(e) => setForm({ ...form, offeredCtc: e.target.value })}
-            />
-          </label>
-          <label className="text-sm">
-            Joining date
-            <DateField
-              aria-label="Joining date"
-              className="ut-input mt-1"
-              value={form.joiningDate}
-              onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
-              clearable
-            />
-          </label>
-          <label className="text-sm">
-            Internal notes
-            <textarea
-              maxLength={10000}
-              className="ut-input mt-1"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
-          </label>
-          <label className="text-sm sm:col-span-2">
-            Offer terms (included in PDF)
-            <textarea
-              aria-label="Offer terms"
-              maxLength={20000}
-              rows={6}
-              className="ut-input mt-1"
-              value={form.offerTerms}
-              onChange={(e) => setForm({ ...form, offerTerms: e.target.value })}
-            />
-            <span className="mt-1 block text-xs text-text-secondary">
-              Enter the approved candidate-facing terms. Internal notes are never included in the
-              document.
-            </span>
-          </label>
-          {companies.isError && (
-            <p role="alert">
-              Companies could not be loaded.{' '}
-              <button type="button" onClick={() => companies.refetch()}>
-                Retry
-              </button>
-            </p>
-          )}
-          <div>
-            <HrButton
-              type="submit"
-              disabled={create.isPending || edit.isPending || !form.companyId}
-            >
-              {create.isPending || edit.isPending ? 'Saving...' : 'Save draft'}
-            </HrButton>
-          </div>
-        </form>
-      )}
-      {query.isError ? (
-        <div className="ut-card p-5" role="alert">
-          <p>{query.error.message}</p>
-          <HrButton onClick={() => query.refetch()}>Retry</HrButton>
-        </div>
-      ) : (
-        <TableCard>
-          <div className="overflow-x-auto">
-            <table className="hr-table">
-              <thead>
-                <tr>
-                  <th>Candidate</th>
-                  <th>Role</th>
-                  <th>Offered CTC</th>
-                  <th>Joining date</th>
-                  <th>Status</th>
-                  <th>Document</th>
-                  {canWrite && <th>Update status</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {query.isLoading ? (
-                  <tr>
-                    <td colSpan={canWrite ? 7 : 6}>Loading offers...</td>
-                  </tr>
-                ) : !query.data?.content.length ? (
-                  <tr>
-                    <td colSpan={canWrite ? 7 : 6} className="py-12 text-center">
-                      No offers yet. Create a draft to begin tracking an offer.
-                    </td>
-                  </tr>
-                ) : (
-                  query.data.content.map((offer) => (
-                    <tr key={offer.id}>
-                      <td>
-                        <span className="font-semibold">{offer.candidateName}</span>
-                        {offer.notes && (
-                          <p className="max-w-xs whitespace-normal text-xs text-text-secondary">
-                            {offer.notes}
-                          </p>
-                        )}
-                      </td>
-                      <td>{offer.roleTitle}</td>
-                      <td>{inr(offer.offeredCtc)}</td>
-                      <td>{offer.joiningDate ? new Date(`${offer.joiningDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'}</td>
-                      <td>
-                        <HrStatusPill
-                          tone={
-                            offer.status === 'ACCEPTED'
-                              ? 'green'
-                              : offer.status === 'DECLINED'
-                                ? 'red'
-                                : offer.status === 'SENT'
-                                  ? 'warn'
-                                  : 'gray'
-                          }
-                        >
-                          {String(offer.status).charAt(0) + String(offer.status).slice(1).toLowerCase()}
-                        </HrStatusPill>
-                      </td>
-                      <td>
-                        <HrButton
-                          variant="ghost"
-                          disabled={downloading !== null}
-                          onClick={() => download(offer.id)}
-                        >
-                          {downloading === offer.id ? 'Preparing...' : 'Download PDF'}
-                        </HrButton>
-                        {offer.emailSubmittedAt ? (
-                          <p className="mt-2 text-xs text-text-secondary">
-                            Submitted to {offer.emailRecipient}
-                            <br />
-                            {new Date(offer.emailSubmittedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                          </p>
-                        ) : (
-                          canWrite &&
-                          (offer.status === 'DRAFT' || offer.status === 'SENT') && (
-                            <HrButton
-                              variant="ghost"
-                              onClick={() => {
-                                setEmailOffer(offer)
-                                setRecipient('')
-                                email.reset()
-                              }}
-                            >
-                              Email offer
-                            </HrButton>
-                          )
-                        )}
-                      </td>
-                      {canWrite && (
-                        <td>
-                          {offer.status === 'DRAFT' && (
-                            <HrButton variant="ghost" onClick={() => startEdit(offer)}>
-                              Edit draft
-                            </HrButton>
-                          )}
-                          {nextStatuses[offer.status].length ? (
-                            <select
-                              aria-label={`Update offer for ${offer.candidateName}`}
-                              className="ut-select"
-                              value=""
-                              disabled={update.isPending}
-                              onChange={(e) =>
-                                changeStatus(offer.id, e.target.value as OfferStatus)
-                              }
-                            >
-                              <option value="">Choose action</option>
-                              {nextStatuses[offer.status].map((status) => (
-                                <option key={status} value={status}>
-                                  {status === 'SENT' ? 'Mark as sent' : status}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="text-text-secondary">Final decision</span>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </TableCard>
-      )}
-      {query.data && (
-        <HrPagination
-          page={page}
-          pageSize={20}
-          totalElements={query.data.totalElements}
-          totalPages={query.data.totalPages}
-          onPageChange={setPage}
-        />
-      )}
-    </div>
+        )}
+      </form>
+    </Dialog>
   )
 }

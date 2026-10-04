@@ -1,162 +1,249 @@
-// Assets view inside Onboarding & assets, on the module kit: register
-// equipment, hand it to someone, take it back, see its history.
-// Read: hrms.onboarding.asset.read or instance.write; changes: asset.write or
-// instance.write. Names link to the employee page only with hrms.employee.read.
-import { useMemo, useState, type FormEvent } from 'react'
+// Onboarding & assets › Assets (P-HIRE; prototype PgTalent h-onb tab Assets): register
+// equipment, give it to someone, take it back, see its history, and look after the problems
+// people report (BW-70).
+// Read: hrms.onboarding.asset.read or instance.write; changes: asset.write or instance.write.
+// Holder names come from the server only for callers with hrms.employee.read (BW-69); others
+// see "An employee". Problem reports: hrms.onboarding.asset.write.
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { HrButton, HrDrawer, HrStatusPill, HrSelect, TableCard, type PillTone } from '@/shared/components/hr'
-import { StatRow, State, SubHeading, useDesignToast, dmy } from '@/design/module/ModuleKit'
+import { Button, CellActions, CellStack, MiniStat, MiniStatGrid, Section, SegmentedControl, StatusPill, Table, type TableColumn } from '@/design/kit/display'
+import { Dialog, FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
 import { useEmployeesByIds } from '../api/useWorkforce'
-import { PerformanceEmployeePicker as EmployeePicker } from '../performance/PerformanceEmployeePicker'
-import { useAssets, useAssetActions, type Asset } from './api/useAssets'
+import { PersonSearch, fullName } from '../letters/components/PersonSearch'
+import { useAssets, useAssetActions, useAssetIssues, useResolveAssetIssue, type Asset, type AssetIssue } from './api/useAssets'
+import { problemLabel } from './myAssetsApi'
 import { AssetHistory } from './AssetHistory'
+import { assetDates, assetState, inStore } from './onboardingModel'
+import { dayMon, istDateOf, istTodayIso } from '../hiring/hiringModel'
+import '../hiring/hiring.css'
 
-const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
-const STATUS: Record<string, [string, PillTone]> = { AVAILABLE: ['In store', 'green'], ASSIGNED: ['With employee', 'info'], RETURNED: ['Returned', 'gray'] }
-const statusOf = (s: string): [string, PillTone] => STATUS[s] ?? [s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()), 'gray']
-const EMPTY = { companyId: '', assetTag: '', assetType: '', assetName: '', serialNo: '', conditionNotes: '' }
-const FIELDS = [
-  { key: 'assetTag', label: 'Asset tag', max: 80, required: true, ph: 'e.g. LAP-0042' },
-  { key: 'assetType', label: 'Category', max: 80, required: true, ph: 'e.g. Laptop' },
-  { key: 'assetName', label: 'Asset name', max: 200, required: true, ph: 'e.g. ThinkPad T14' },
-  { key: 'serialNo', label: 'Serial number', max: 120, required: false, ph: 'Optional' },
-] as const
+const ALL = 'all'
+const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
+type Filter = typeof ALL | 'ASSIGNED' | 'STORE'
 
-export function AssetsTab() {
+export function AssetsTab({ registering, onRegisterDone }: { registering: boolean; onRegisterDone: () => void }) {
+  const toast = useToast()
   const assetRead = usePermission('hrms.onboarding.asset.read')
   const assetWrite = usePermission('hrms.onboarding.asset.write')
   const instanceWrite = usePermission('hrms.onboarding.instance.write')
   const directoryRead = usePermission('hrms.employee.read')
   const canWrite = assetWrite || instanceWrite
   const query = useAssets(assetRead || instanceWrite)
-  const companies = useCompanies()
-  const employees = useEmployeesByIds(query.data?.flatMap((a) => (a.employeeId ? [a.employeeId] : [])), { enabled: directoryRead })
-  const { create, assign, receive } = useAssetActions()
-  const { show, node } = useDesignToast()
-  const [creating, setCreating] = useState(false)
-  const [selected, setSelected] = useState<Asset>()
-  const [history, setHistory] = useState<Asset>()
-  const [employee, setEmployee] = useState({ id: '', name: '' })
-  const [notes, setNotes] = useState('')
-  const [form, setForm] = useState({ ...EMPTY })
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('')
-
   const assets = useMemo(() => query.data ?? [], [query.data])
-  const count = (s: string) => assets.filter((a) => a.status === s).length
+  // Older servers don't send holder names: look them up as before (employee read only).
+  const missing = useMemo(() => assets.filter((a) => a.status === 'ASSIGNED' && a.employeeId && a.holderName === undefined).map((a) => a.employeeId as string), [assets])
+  const people = useEmployeesByIds(missing, { enabled: directoryRead && missing.length > 0 })
+  const issues = useAssetIssues(assetWrite)
+  const [filter, setFilter] = useState<Filter>(ALL)
+  const [search, setSearch] = useState('')
+  const [giving, setGiving] = useState<Asset | null>(null)
+  const [taking, setTaking] = useState<Asset | null>(null)
+  const [history, setHistory] = useState<Asset | null>(null)
+  const today = istTodayIso()
+
+  const counts = useMemo(() => ({ all: assets.length, with: assets.filter((a) => a.status === 'ASSIGNED').length, store: assets.filter((a) => inStore(a.status)).length }), [assets])
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return assets.filter((a) => (!filter || (filter === 'STORE' ? a.status !== 'ASSIGNED' : a.status === filter)) && (!q || [a.assetTag, a.assetName, a.assetType, a.serialNo].some((v) => v?.toLowerCase().includes(q))))
+    return assets.filter((a) => (filter === ALL || (filter === 'STORE' ? inStore(a.status) : a.status === filter))
+      && (!q || [a.assetTag, a.assetName, a.assetType, a.serialNo].some((v) => v?.toLowerCase().includes(q))))
   }, [assets, search, filter])
 
-  const openCreate = () => { setForm({ ...EMPTY, companyId: companies.data?.length === 1 ? companies.data[0].id : '' }); setCreating(true) }
-  async function save(e: FormEvent) {
-    e.preventDefault()
-    try { await create.mutateAsync(form); setCreating(false); show('Asset registered') } catch (err) { show('Couldn’t register the asset', true, (err as Error).message) }
+  const holder = (a: Asset): string | null => {
+    if (a.holderName) return a.holderName
+    const p = people.data?.find((e) => e.id === a.employeeId)
+    return p ? fullName(p) : null
   }
-  async function act() {
-    if (!selected) return
-    try {
-      if (selected.status === 'ASSIGNED') await receive.mutateAsync({ id: selected.id, notes })
-      else await assign.mutateAsync({ id: selected.id, employeeId: employee.id })
-      show(selected.status === 'ASSIGNED' ? 'Return recorded' : `Assigned to ${employee.name.trim()}`); setSelected(undefined)
-    } catch (err) { show('Couldn’t update the asset', true, (err as Error).message) }
-  }
-  const nameOf = (a: Asset) => { const p = employees.data?.find((e) => e.id === a.employeeId); return p ? `${p.firstName} ${p.lastName || ''}`.trim() : '' }
-  const pick = (s: string) => setFilter((cur) => (cur === s ? '' : s))
 
-  if (!assetRead && !instanceWrite) return <State kind="empty" icon="lock" title="No access to assets" description="Ask an admin if you hand out or track equipment." />
+  const columns: TableColumn<Asset>[] = [
+    { key: 'asset', header: 'Asset', primary: true, width: '24%', render: (a) => <CellStack primary={a.assetTag} secondary={[a.assetName, a.serialNo].filter(Boolean).join(' · ')} /> },
+    { key: 'category', header: 'Category', render: (a) => a.assetType || '—' },
+    {
+      key: 'with', header: 'With', render: (a) => {
+        if (a.status !== 'ASSIGNED' || !a.employeeId) return <span className="hi-muted">—</span>
+        const name = holder(a)
+        return directoryRead
+          ? <Link to={`/hrms/employees/${a.employeeId}`} className="hi-link">{name || 'View employee'}</Link>
+          : <span>{name || 'An employee'}</span>
+      },
+    },
+    {
+      key: 'dates', header: 'Dates', render: (a) => (
+        <CellStack primary={<span className="hi-num">{assetDates(a, today)}</span>}
+          secondary={[a.status !== 'ASSIGNED' && a.lastHolderName ? `by ${a.lastHolderName}` : null, a.conditionNotes].filter(Boolean).join(' · ') || undefined} />
+      ),
+    },
+    {
+      key: 'status', header: 'Status', render: (a) => {
+        const s = assetState(a.status)
+        return (
+          <span className="hi-pills">
+            <StatusPill tone={s.tone}>{s.label}</StatusPill>
+            {a.openIssue && <StatusPill tone="danger" size="xs" title={a.openIssue.note || undefined}>{problemLabel(a.openIssue.kind)}</StatusPill>}
+            {!a.openIssue && a.status === 'ASSIGNED' && a.confirmationPending && <StatusPill tone="warning" size="xs">Not confirmed yet</StatusPill>}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (a) => (
+        <CellActions>
+          {canWrite && (a.status === 'ASSIGNED'
+            ? <Button size={30} variant="secondary" onClick={() => setTaking(a)}>Take back</Button>
+            : <Button size={30} variant="soft" onClick={() => setGiving(a)}>Give to</Button>)}
+          <Button size={30} variant="secondary" onClick={() => setHistory(a)}>History</Button>
+        </CellActions>
+      ),
+    },
+  ]
+
+  if (!assetRead && !instanceWrite) return null
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      {query.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
-        { icon: 'briefcase', color: 'blue', label: 'All assets', value: String(assets.length), sub: 'Registered', onClick: () => pick('') },
-        { icon: 'userCheck', color: 'orange', label: 'With employees', value: String(count('ASSIGNED')), sub: 'Handed out', onClick: () => pick('ASSIGNED') },
-        { icon: 'checkCircle', color: 'green', label: 'In store', value: String(count('AVAILABLE') + count('RETURNED')), sub: 'Ready to hand out', onClick: () => pick('STORE') },
-      ]} />}
+    <>
+      <Section title="Equipment" body="tight" loading={query.isLoading} skeleton="stats" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching}>
+        <MiniStatGrid>
+          <MiniStat label="All assets" value={counts.all} note="Registered" tone="neutral" />
+          <MiniStat label="With employees" value={counts.with} note="Handed out" tone="success" />
+          <MiniStat label="In store" value={counts.store} note="Ready to hand out" tone="info" />
+        </MiniStatGrid>
+      </Section>
+      {issues.data && issues.data.length > 0 && <ProblemReports issues={issues.data} today={today} />}
+      <Section title="Assets" body="flush" loading={query.isLoading} skeleton="table" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching}
+        actions={assets.length > 0 ? (
+          <SegmentedControl<Filter> label="Filter by status" semantics="toggle" size="sm" value={filter} onChange={setFilter}
+            options={[{ value: ALL, label: 'All statuses' }, { value: 'ASSIGNED', label: 'With employee' }, { value: 'STORE', label: 'In store' }]} />
+        ) : undefined}
+        empty={!query.isLoading && !query.error && assets.length === 0 ? {
+          title: 'No assets registered', icon: 'briefcase',
+          hint: canWrite ? 'Register laptops, phones and ID cards here, then give them to new hires.' : 'Equipment HR registers appears here.',
+        } : undefined}>
+        <div className="hi-toolbar">
+          <Input type="search" aria-label="Search assets" size="md" fieldClassName="hi-filter__sel" value={search} placeholder="Search tag, name or serial"
+            onChange={(e) => setSearch(e.target.value)} />
+          <span className="hi-toolbar__count">{rows.length === assets.length ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}` : `${rows.length} of ${assets.length}`}</span>
+        </div>
+        <Table label="Assets" columns={columns} rows={rows} rowKey={(a) => a.id} mobile="cards"
+          empty={<span className="hi-muted">Nothing matches. Clear the search or the status filter.</span>} />
+      </Section>
+      {registering && <RegisterAssetPanel categories={[...new Set(assets.map((a) => a.assetType).filter(Boolean))].sort()} onClose={onRegisterDone} />}
+      {giving && <GiveAssetPanel asset={giving} onClose={() => setGiving(null)} onDone={(name) => { toast.success(`Handed to ${name}`, { detail: giving.assetTag }); setGiving(null) }} />}
+      {taking && <TakeBackPanel asset={taking} onClose={() => setTaking(null)} />}
+      {history && <AssetHistory assetId={history.id} tag={history.assetTag} onClose={() => setHistory(null)} />}
+    </>
+  )
+}
 
-      <SubHeading aside={canWrite ? <HrButton size="sm" onClick={openCreate}><Plus size={14} /> Register asset</HrButton> : undefined}>Equipment</SubHeading>
+/** Problems people reported with the equipment they hold (BW-70), for whoever manages assets. */
+function ProblemReports({ issues, today }: { issues: AssetIssue[]; today: string }) {
+  const [resolving, setResolving] = useState<AssetIssue | null>(null)
+  const columns: TableColumn<AssetIssue>[] = [
+    { key: 'asset', header: 'Asset', primary: true, width: '24%', render: (i) => <CellStack primary={i.assetTag} secondary={i.assetName} /> },
+    { key: 'who', header: 'Reported by', render: (i) => i.employeeName || 'An employee' },
+    { key: 'what', header: 'Problem', render: (i) => <CellStack primary={problemLabel(i.kind)} secondary={i.note || undefined} /> },
+    { key: 'when', header: 'Reported', render: (i) => <span className="hi-num">{dayMon(istDateOf(i.reportedAt), today)}</span> },
+    { key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (i) => <CellActions><Button size={30} variant="soft" onClick={() => setResolving(i)}>Mark resolved</Button></CellActions> },
+  ]
+  return (
+    <>
+      <Section title="Problems reported" count={issues.length} countTone="gold" countLabel={`${issues.length} open`} sub="People told you something is wrong with equipment they have." body="flush">
+        <Table label="Problems reported" columns={columns} rows={issues} rowKey={(i) => i.id} mobile="cards" />
+      </Section>
+      {resolving && <ResolveDialog issue={resolving} onClose={() => setResolving(null)} />}
+    </>
+  )
+}
 
-      {query.isError ? <State kind="error" title="Couldn’t load assets" description={query.error.message} onRetry={() => query.refetch()} />
-        : query.isLoading ? <State kind="loading" height={220} />
-          : assets.length === 0 ? <State kind="empty" icon="briefcase" title="No assets registered" description={canWrite ? 'Register laptops, phones and ID cards here, then assign them to new hires.' : 'Equipment HR registers appears here.'} />
-            : (
-              <TableCard search={{ value: search, onChange: setSearch, placeholder: 'Search tag, name or serial' }} actions={<>
-                <select aria-label="Filter by status" value={filter} onChange={(e) => setFilter(e.target.value)} className="ut-select ut-select-sm w-auto">
-                  <option value="">All statuses</option>
-                  <option value="ASSIGNED">With employee</option>
-                  <option value="STORE">In store (new or returned)</option>
-                </select>
-              </>}>
-                <div className="overflow-x-auto">
-                  <table className="hr-table">
-                    <thead><tr><th>Asset</th><th>Category</th><th>With</th><th className="hidden md:table-cell">Dates</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
-                    <tbody>
-                      {rows.length === 0 && <tr><td colSpan={6} className="!p-0"><State kind="empty" icon="briefcase" title="Nothing matches" description="Clear the search or status filter." /></td></tr>}
-                      {rows.map((a) => {
-                        const [st, tone] = statusOf(a.status)
-                        const who = nameOf(a)
-                        return (
-                          <tr key={a.id}>
-                            <td><strong className="text-[13.5px]">{a.assetTag}</strong><p className="text-[12.5px] text-text-secondary">{a.assetName}{a.serialNo ? ` · ${a.serialNo}` : ''}</p></td>
-                            <td className="text-text-secondary">{a.assetType}</td>
-                            <td>{a.status !== 'ASSIGNED' || !a.employeeId ? <span className="text-text-tertiary">—</span>
-                              : directoryRead ? <Link to={`/hrms/employees/${a.employeeId}`} className="font-semibold text-accent-fg hover:underline">{who || 'View employee'}</Link>
-                                : <span className="text-text-secondary">An employee</span>}</td>
-                            <td className="hidden md:table-cell text-[12.5px] text-text-secondary">{a.assignedAt ? `Given ${dmy(a.assignedAt)}` : '—'}{a.returnedAt && <><br />Back {dmy(a.returnedAt)}</>}</td>
-                            <td><HrStatusPill tone={tone}>{st}</HrStatusPill>{a.conditionNotes && <p className="mt-1 max-w-xs whitespace-normal text-xs text-text-secondary">{a.conditionNotes}</p>}</td>
-                            <td>
-                              <div className="flex flex-wrap items-center gap-1">
-                                {canWrite && <HrButton size="sm" variant="ghost" onClick={() => { setSelected(a); setEmployee({ id: '', name: '' }); setNotes('') }}>{a.status === 'ASSIGNED' ? 'Take back' : 'Assign'}</HrButton>}
-                                <HrButton size="sm" variant="ghost" onClick={() => setHistory(a)}>History</HrButton>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </TableCard>
-            )}
+function ResolveDialog({ issue, onClose }: { issue: AssetIssue; onClose: () => void }) {
+  const toast = useToast()
+  const resolve = useResolveAssetIssue()
+  const [note, setNote] = useState('')
+  const submit = async () => {
+    try { await resolve.mutateAsync({ id: issue.id, note }); toast.success('Problem resolved', { detail: issue.assetTag }); onClose() }
+    catch (e) { toast.error('Couldn’t resolve the problem', { detail: errText(e) }) }
+  }
+  return (
+    <Dialog open onClose={onClose} busy={resolve.isPending} icon="checkCircle" title={`Resolve the problem with ${issue.assetTag}?`}
+      sub={`${problemLabel(issue.kind)}${issue.employeeName ? ` by ${issue.employeeName}` : ''}.`}
+      footer={<><PanelButton onClick={onClose} disabled={resolve.isPending}>Cancel</PanelButton><PanelButton variant="primary" busy={resolve.isPending} onClick={submit}>Mark resolved</PanelButton></>}>
+      <Textarea id="issue-note" label="What was done" rows={3} maxLength={1000} value={note} placeholder="Optional, e.g. replaced the charger" onChange={(e) => setNote(e.target.value)} />
+    </Dialog>
+  )
+}
 
-      {creating && (
-        <HrDrawer title="Register an asset" onClose={() => setCreating(false)}
-          footer={<><HrButton variant="ghost" onClick={() => setCreating(false)}>Cancel</HrButton><HrButton type="submit" form="asset-create" disabled={create.isPending}>{create.isPending ? 'Saving…' : 'Register asset'}</HrButton></>}>
-          <form id="asset-create" onSubmit={save} className="space-y-4">
-            <div><span className={label}>Company</span>
-              <HrSelect value={form.companyId} onChange={(v) => setForm({ ...form, companyId: v })} placeholder="Choose a company" options={(companies.data ?? []).map((c) => ({ value: c.id, label: c.name }))} />
-              {companies.isError && <p role="alert" className="mt-1 text-xs text-[#b91c1c]">Couldn’t load companies. <button type="button" className="underline" onClick={() => companies.refetch()}>Try again</button></p>}
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {FIELDS.map((f) => (
-                <div key={f.key}><label className={label} htmlFor={`asset-${f.key}`}>{f.label}</label>
-                  <input id={`asset-${f.key}`} className="ut-input" required={f.required} maxLength={f.max} placeholder={f.ph} value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} /></div>
-              ))}
-            </div>
-            <div><label className={label} htmlFor="asset-cond">Condition notes</label><textarea id="asset-cond" className="ut-input resize-none" rows={2} maxLength={4000} placeholder="Optional, e.g. new in box" value={form.conditionNotes} onChange={(e) => setForm({ ...form, conditionNotes: e.target.value })} /></div>
-            {!form.companyId && <p className="text-xs text-text-secondary">Choose the company that owns this asset.</p>}
-          </form>
-        </HrDrawer>
-      )}
+/** Register an asset in a company's store. Category is free text; the list suggests the ones already used. */
+function RegisterAssetPanel({ categories, onClose }: { categories: string[]; onClose: () => void }) {
+  const toast = useToast()
+  const companies = useCompanies()
+  const { create } = useAssetActions()
+  const list = companies.data ?? []
+  const [form, setForm] = useState({ companyId: list.length === 1 ? list[0].id : '', assetTag: '', assetType: '', assetName: '', serialNo: '', conditionNotes: '' })
+  const companyId = form.companyId || (list.length === 1 ? list[0].id : '')
+  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
+  const submit = async () => {
+    if (!companyId) { toast.error('Choose the company that owns this asset'); return }
+    if (!form.assetTag.trim() || !form.assetType.trim() || !form.assetName.trim()) { toast.error('Add the asset tag, category and name'); return }
+    try {
+      await create.mutateAsync({ companyId, assetTag: form.assetTag.trim(), assetType: form.assetType.trim(), assetName: form.assetName.trim(), serialNo: form.serialNo.trim() || undefined, conditionNotes: form.conditionNotes.trim() || undefined })
+      toast.success('Asset registered', { detail: form.assetTag.trim() })
+      onClose()
+    } catch (e) { toast.error('Couldn’t register the asset', { detail: errText(e) }) }
+  }
+  return (
+    <SidePanel open onClose={onClose} width={560} busy={create.isPending} closeLabel="Close panel" title="Register an asset" sub="Choose the company that owns this asset."
+      footer={<><PanelButton size="lg" onClick={onClose} disabled={create.isPending}>Cancel</PanelButton><PanelButton size="lg" variant="primary" busy={create.isPending} onClick={submit}>Register asset</PanelButton></>}>
+      <form id="asset-create" onSubmit={(e) => { e.preventDefault(); void submit() }} noValidate>
+        <FieldGrid columns={2}>
+          <Select id="asset-company" label="Company" required full value={companyId} placeholder="Choose a company" onChange={(e) => set('companyId')(e.target.value)}
+            options={list.map((c) => ({ value: c.id, label: c.name }))} error={companies.isError ? 'Couldn’t load companies. Close the panel and try again.' : undefined} />
+          <Input id="asset-assetTag" label="Asset tag" required maxLength={80} placeholder="e.g. LAP-0042" value={form.assetTag} onChange={(e) => set('assetTag')(e.target.value)} />
+          <Input id="asset-assetType" label="Category" required maxLength={80} placeholder="e.g. Laptop" list="asset-category-options" value={form.assetType} onChange={(e) => set('assetType')(e.target.value)} />
+          <Input id="asset-assetName" label="Asset name" required maxLength={200} placeholder="e.g. ThinkPad T14" value={form.assetName} onChange={(e) => set('assetName')(e.target.value)} />
+          <Input id="asset-serialNo" label="Serial number" maxLength={120} placeholder="Optional" value={form.serialNo} onChange={(e) => set('serialNo')(e.target.value)} />
+          <Textarea id="asset-cond" label="Condition notes" full rows={2} maxLength={4000} placeholder="Optional, e.g. new in box" value={form.conditionNotes} onChange={(e) => set('conditionNotes')(e.target.value)} />
+        </FieldGrid>
+        <datalist id="asset-category-options">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+      </form>
+    </SidePanel>
+  )
+}
 
-      {selected && (
-        <HrDrawer title={selected.status === 'ASSIGNED' ? `Take back ${selected.assetTag}` : `Assign ${selected.assetTag}`} onClose={() => setSelected(undefined)}
-          footer={<><HrButton variant="ghost" onClick={() => setSelected(undefined)}>Cancel</HrButton>
-            <HrButton disabled={assign.isPending || receive.isPending || (selected.status !== 'ASSIGNED' && !employee.id)} onClick={act}>{selected.status === 'ASSIGNED' ? 'Record return' : 'Confirm assignment'}</HrButton></>}>
-          <div className="space-y-4">
-            <p className="text-[13px] text-text-secondary">{selected.assetName}{selected.serialNo ? ` · ${selected.serialNo}` : ''}</p>
-            {selected.status === 'ASSIGNED'
-              ? <div><label className={label} htmlFor="asset-return">Condition on return</label><textarea id="asset-return" className="ut-input resize-none" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional, e.g. screen scratched" /></div>
-              : <div><span className={label}>Give it to</span><EmployeePicker companyId={selected.companyId} value={employee.id} selectedLabel={employee.name} onChange={(e) => setEmployee({ id: e.id, name: `${e.firstName} ${e.lastName || ''}` })} /></div>}
-          </div>
-        </HrDrawer>
-      )}
+/** Hand an asset to someone in its company (dated today; the server refuses future dates). */
+function GiveAssetPanel({ asset, onClose, onDone }: { asset: Asset; onClose: () => void; onDone: (name: string) => void }) {
+  const toast = useToast()
+  const { assign } = useAssetActions()
+  const [employee, setEmployee] = useState({ id: '', name: '' })
+  const submit = async () => {
+    if (!employee.id) return
+    try { await assign.mutateAsync({ id: asset.id, employeeId: employee.id }); onDone(employee.name) } catch (e) { toast.error('Couldn’t hand over the asset', { detail: errText(e) }) }
+  }
+  return (
+    <SidePanel open onClose={onClose} width={520} busy={assign.isPending} closeLabel="Close panel" title={`Give ${asset.assetTag} to someone`}
+      sub={[asset.assetName, asset.serialNo].filter(Boolean).join(' · ')}
+      footer={<><PanelButton size="lg" onClick={onClose} disabled={assign.isPending}>Cancel</PanelButton>
+        <PanelButton size="lg" variant="primary" busy={assign.isPending} disabled={!employee.id} onClick={submit}>Confirm assignment</PanelButton></>}>
+      <div className="hi-stack">
+        {employee.id && <p className="hi-copy">{`Giving it to `}<strong>{employee.name}</strong></p>}
+        <PersonSearch companyId={asset.companyId} selectedId={employee.id} onPick={(e) => setEmployee({ id: e.id, name: fullName(e) })} />
+      </div>
+    </SidePanel>
+  )
+}
 
-      {history && <AssetHistory assetId={history.id} tag={history.assetTag} onClose={() => setHistory(undefined)} />}
-      {node}
-    </div>
+/** Record the asset coming back, with its condition. */
+function TakeBackPanel({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  const toast = useToast()
+  const { receive } = useAssetActions()
+  const [notes, setNotes] = useState('')
+  const submit = async () => {
+    try { await receive.mutateAsync({ id: asset.id, notes }); toast.success('Return recorded', { detail: asset.assetTag }); onClose() } catch (e) { toast.error('Couldn’t record the return', { detail: errText(e) }) }
+  }
+  return (
+    <SidePanel open onClose={onClose} width={520} busy={receive.isPending} closeLabel="Close panel" title={`Take back ${asset.assetTag}`}
+      sub={[asset.assetName, asset.serialNo].filter(Boolean).join(' · ')}
+      footer={<><PanelButton size="lg" onClick={onClose} disabled={receive.isPending}>Cancel</PanelButton>
+        <PanelButton size="lg" variant="primary" busy={receive.isPending} onClick={submit}>Record return</PanelButton></>}>
+      <Textarea id="asset-return" label="Condition on return" rows={3} maxLength={4000} value={notes} placeholder="Optional, e.g. screen scratched" onChange={(e) => setNotes(e.target.value)} />
+    </SidePanel>
   )
 }
