@@ -454,7 +454,7 @@ button.uk-stat { font: inherit; font-family: var(--u-font, 'Inter', system-ui, s
 .uk-stat--live .uk-stat__label { font-size: 14px; line-height: 20px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .uk-stat--live .uk-stat__value { font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: -.035em; white-space: nowrap; }
 .uk-stat--live .uk-stat__note { font-size: 13px; line-height: 18px; color: var(--u-ink2, #4A5A54); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.uk-stat--live .uk-stat__spark { position: relative; flex-shrink: 100; min-width: 44px; align-self: flex-end; margin-bottom: 6px; overflow: visible; color: var(--k, #0F6E56); }
+.uk-stat--live .uk-stat__spark { position: relative; flex-shrink: 1000; min-width: 44px; align-self: flex-end; margin-bottom: 6px; overflow: visible; color: var(--k, #0F6E56); }
 .uk-stat--live-stack .uk-stat__top { gap: 10px; }
 .uk-stat--live-stack .uk-stat__spark { flex-shrink: 1; min-width: 40px; overflow: visible; color: var(--k, #0F6E56); }
 .uk-stat--live-stack .uk-stat__label { font-size: 13.5px; line-height: 19px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
