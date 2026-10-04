@@ -12,7 +12,10 @@ export { PageHeader, PageFrame } from './PageHeader'
 export type { PageHeaderProps, PageFrameProps } from './PageHeader'
 
 export { PillTabs, PagePill } from './PillTabs'
-export type { PillTab, PillTabsProps, PillTabsSemantics, PagePillProps } from './PillTabs'
+export type { PillTab, PillTabsProps, PillTabsSemantics, PillTabsPlacement, PagePillProps } from './PillTabs'
+
+export { PageTabsHost, PageTabsInline, usePageTabsSlot } from './pageTabs'
+export type { PageTabsSlot } from './pageTabs'
 
 export { SearchPill } from './SearchPill'
 export type { SearchPillProps } from './SearchPill'
