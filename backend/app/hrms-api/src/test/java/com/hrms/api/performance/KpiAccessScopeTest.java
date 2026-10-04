@@ -70,10 +70,55 @@ class KpiAccessScopeTest {
         // A token that says OWNER but carries none of the permissions is SELF.
         assertEquals(KpiAccessScope.Kind.SELF,
                 KpiAccessScope.from(authentication("OWNER", employee, List.of())).kind());
-        // A manager given hrms.kpi.manage individually sees the whole company.
+        // A manager given hrms.kpi.manage individually sees the whole company's KPIs (not its reviews, below).
         assertEquals(KpiAccessScope.Kind.ADMIN,
                 KpiAccessScope.from(authentication("DEPT_MANAGER", employee,
                         List.of("attendance.team.read", "hrms.kpi.manage"))).kind());
+    }
+
+    /** What production's DEPT_MANAGER carried until V143.87: hrms.kpi.manage from V090. */
+    private static final List<String> DEPT_MANAGER_WITH_KPI_MANAGE = List.of(
+            "hrms.performance.read", "hrms.kpi.progress", "attendance.team.read", "hrms.kpi.manage");
+
+    @Test void kpiManageAloneNeverOpensEveryonesReviewsAndRatings() {
+        // KPIs and goals: hrms.kpi.manage is company-wide by design.
+        assertEquals(KpiAccessScope.Kind.ADMIN,
+                KpiAccessScope.from(authentication("DEPT_MANAGER", employee, DEPT_MANAGER_WITH_KPI_MANAGE)).kind());
+        // Reviews, ratings, cycle progress and the performance directory: their team only.
+        assertEquals(KpiAccessScope.Kind.TEAM,
+                KpiAccessScope.forReviews(authentication("DEPT_MANAGER", employee, DEPT_MANAGER_WITH_KPI_MANAGE)).kind());
+        assertEquals(KpiAccessScope.Kind.SELF,
+                KpiAccessScope.forReviews(authentication("CUSTOM_KPI_ADMIN", employee, List.of("hrms.performance.read", "hrms.kpi.manage"))).kind());
+        // Running review cycles (hrms.performance.write) still sees the company.
+        for (String role : List.of("OWNER", "ADMIN", "HR_MANAGER", "SUPER_ADMIN")) {
+            assertEquals(KpiAccessScope.Kind.ADMIN, KpiAccessScope.forReviews(authentication(role, null)).kind(), role);
+        }
+    }
+
+    @Test void departmentManagerHoldingKpiManageSeesOnlyTheirTeamInThePerformanceDirectory() {
+        UUID teammate = UUID.randomUUID();
+        com.hrms.employee.entity.Employee member = new com.hrms.employee.entity.Employee();
+        member.setId(teammate);
+        com.hrms.api.attendance.TeamEmployeeScope myTeam = mock(com.hrms.api.attendance.TeamEmployeeScope.class);
+        when(myTeam.resolve(any(Jwt.class), isNull())).thenReturn(List.of(member));
+        SecurityContextHolder.getContext().setAuthentication(
+                authentication("DEPT_MANAGER", employee, DEPT_MANAGER_WITH_KPI_MANAGE));
+        assertEquals(java.util.Set.of(teammate), new PerformanceTeamScope(myTeam).visibleEmployeeIds());
+        // And a performance page outside that team is refused.
+        assertFalse(PerformanceEmployeeService.inScope(UUID.randomUUID(), java.util.Set.of(teammate)));
+
+        SecurityContextHolder.getContext().setAuthentication(authentication("HR_MANAGER", employee));
+        assertNull(new PerformanceTeamScope(myTeam).visibleEmployeeIds());
+    }
+
+    @Test void v143_87TakesKpiManageFromTheBuiltInDeptManagerOnly() throws Exception {
+        String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "../hrms-app/src/main/resources/db/canonical/V143_87__dept_manager_without_company_kpi_manage.sql"));
+        String statement = sql.substring(sql.indexOf("DELETE FROM rbac.role_permissions"));
+        assertTrue(statement.contains("r.tenant_id IS NULL"), "built-in roles only");
+        assertTrue(statement.contains("r.code = 'DEPT_MANAGER'"));
+        assertTrue(statement.contains("rp.permission_code = 'hrms.kpi.manage'"));
+        assertFalse(sql.contains("INSERT INTO"), "removes a grant, adds none");
     }
 
     @Test void missingEmployeeClaimDoesNotFallBackToCredentialSubject() {
