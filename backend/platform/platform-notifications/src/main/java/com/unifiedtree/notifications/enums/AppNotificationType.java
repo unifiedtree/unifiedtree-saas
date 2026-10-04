@@ -124,5 +124,12 @@ public enum AppNotificationType {
     /** A manager confirmed or extended a team member's probation from Team today; sent to the employee and to HR. */
     PROBATION_TEAM_DECISION,
 
+    /**
+     * Someone punched in (punch-in alerts, V143.72): when, how and exactly where,
+     * with a map link. Sent after the punch commits to the person's reporting
+     * manager and to the people and roles the company chose in HR configuration.
+     */
+    PUNCH_IN_ALERT,
+
     GENERAL
 }

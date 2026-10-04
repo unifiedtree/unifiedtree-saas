@@ -231,6 +231,18 @@ public final class NotificationEventCatalog {
                 "Sent to an employee when their manager or HR reminds them that they haven't checked in yet that day. At most one reminder a day.",
                 "Please check in", "{{sentBy}} is reminding you to check in for {{date}}. If you're away that day, apply for leave.",
                 ph("sentBy", "Who sent the reminder, for example Priya Rao"), DATE));
+        // In the app and on the phone only (V143.72): it is about the moment, and it carries an exact location.
+        add(appOnly("attendance.punch_in_alert", AppNotificationType.PUNCH_IN_ALERT, "Attendance", "Someone punched in", "Manager and people the company chose",
+                "Sent when someone punches in (in the app, on the web, or by a manager for them) to their reporting manager and to the people and roles chosen under Punch-in alerts in HR configuration. Says when, how and exactly where, with a map link. Manual entries by HR are not punches and send nothing.",
+                "{{employeeName}} punched in at {{time}}", "{{place}}{{lateText}}. {{method}}.{{coordinatesText}}{{offlineText}}",
+                EMPLOYEE_NAME, ph("time", "The punch-in time in IST, for example 9:42 am"), DATE,
+                ph("place", "Where it was: \"At Head Office\", \"Outside office, about 1.2 km from Head Office\", or \"Location not shared\""),
+                ph("lateText", "\" · 12 min late\" when the punch-in was late, otherwise nothing"),
+                ph("method", "How they punched in, for example \"Face scan in the app\" or \"Punched in for them by Ravi Kumar with a face scan\""),
+                ph("coordinates", "The exact position, for example 17.385040, 78.486670 (±15 m); empty when no location was shared"),
+                ph("coordinatesText", "\" Location: 17.385040, 78.486670 (±15 m).\" or nothing when no location was shared"),
+                link("mapLink", "A Google Maps link to the exact position (empty when no location was shared)"),
+                ph("offlineText", "\" The phone was offline; this reached us at 6:10 pm.\" for a punch sent later, otherwise nothing")));
         add(inApp("attendance.timesheet_submitted", AppNotificationType.TIMESHEET_SUBMITTED, "Attendance", "Timesheet week submitted", "Approver",
                 "Sent to the approver when someone submits a week of their timesheet.",
                 "Timesheet to review", "{{employeeName}} submitted their timesheet for the week of {{weekStart}} ({{totalHours}}).",

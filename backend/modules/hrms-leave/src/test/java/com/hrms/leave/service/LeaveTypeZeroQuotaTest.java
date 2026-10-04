@@ -40,7 +40,7 @@ class LeaveTypeZeroQuotaTest {
         assertEquals(1, v.size());
         ConstraintViolation<LeaveTypeRequest> only = v.iterator().next();
         assertEquals("annualEntitlement", only.getPropertyPath().toString());
-        assertEquals("Annual entitlement can't be negative", only.getMessage());
+        assertEquals("Days a year can't be below 0", only.getMessage());
     }
 
     @Test void aZeroQuotaCreditsNothingAndPromisesNoNextCredit() {

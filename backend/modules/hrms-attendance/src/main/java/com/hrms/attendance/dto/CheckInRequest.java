@@ -1,5 +1,7 @@
 package com.hrms.attendance.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+
 import java.time.Instant;
 
 /**
@@ -23,6 +25,11 @@ import java.time.Instant;
  * <p>{@code offlineCaptured} is a legacy advisory flag that the server has
  * never acted on; {@code capturedAt} is the field that actually changes
  * behaviour. The flag is retained so existing clients keep deserializing.
+ *
+ * <p><b>accuracy</b> (optional, punch-in alerts V143.72): the device's accuracy
+ * for latitude/longitude in metres, as the phone or the browser reports it. It
+ * is only shown in the punch-in alert ("±15 m"); clients that don't send it
+ * work exactly as before.
  */
 public record CheckInRequest(
         double latitude,
@@ -34,5 +41,19 @@ public record CheckInRequest(
         String deviceId,
         String clientEventId,
         boolean offlineCaptured,
-        Instant capturedAt
-) {}
+        Instant capturedAt,
+        Double accuracy
+) {
+    /** The canonical constructor is the one the JSON body binds to. */
+    @JsonCreator
+    public CheckInRequest {
+    }
+
+    /** The shape before {@code accuracy} (V143.72), so existing callers keep compiling. */
+    public CheckInRequest(double latitude, double longitude, String faceImageBase64, String checkInMethod,
+                          String locationName, String zoneName, String deviceId, String clientEventId,
+                          boolean offlineCaptured, Instant capturedAt) {
+        this(latitude, longitude, faceImageBase64, checkInMethod, locationName, zoneName, deviceId, clientEventId,
+                offlineCaptured, capturedAt, null);
+    }
+}
