@@ -14,6 +14,7 @@ import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, B
 export interface Diff { added: Rec[]; changed: [Rec, Rec][]; removed: Rec[] }
 export interface SyncEnv {
   today: string
+  /** Where a new record goes when its add form chose no company (`co`): a one-company workspace, or Add employee → Create (the employee's company). */
   defaultCo: string
   /** The company a department belongs to (for designations and sub-teams). */
   coOfDept: (id: string) => string | undefined
@@ -49,6 +50,8 @@ const json = (method: string, body?: unknown) => ({ method, ...(body === undefin
 const q = (params: Record<string, string | undefined | null>) => Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&')
 const blank = (s: unknown) => (s == null || String(s).trim() === '' ? undefined : String(s).trim())
 const errMsg = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
+/** The company a new record is saved in: the one its add form's Company field chose (two or more companies), else the default. */
+const coOf = (r: Rec, env: SyncEnv) => r.co || env.defaultCo
 /** Run each save; if any fail, report how many and the first reason. */
 async function each<T>(items: T[], fn: (x: T) => Promise<unknown>, noun: string) {
   const errors: string[] = []
@@ -157,7 +160,7 @@ async function branches({ added, changed }: Diff, env: SyncEnv) {
 async function depts({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
     const c = await apiJson<{ id: string }>('/v1/hrms/departments', json('POST', {
-      companyId: (r.parent && env.coOfDept(r.parent)) || env.defaultCo, name: String(r.name).trim(), code: blank(r.code),
+      companyId: (r.parent && env.coOfDept(r.parent)) || coOf(r, env), name: String(r.name).trim(), code: blank(r.code),
       parentDepartmentId: r.parent || undefined, colorHex: TONE_HEX[r.t] || undefined, iconKey: r.icon || undefined,
       branchIds: r.branches?.length ? r.branches : undefined,
     }))
@@ -196,7 +199,7 @@ async function grades({ added, changed }: Diff, env: SyncEnv) {
   let level = env.nextGradeLevel
   // The band is only sent by someone who may see it; the server keeps it for anyone else.
   const band = (r: Rec) => (env.canBands ? { minCtcAnnual: r.min ?? null, maxCtcAnnual: r.max ?? null } : {})
-  for (const r of added) await apiJson('/v1/hrms/grades', json('POST', { companyId: env.defaultCo, code: String(r.id).trim(), name: String(r.name).trim(), level: level++, active: true, ...band(r) }))
+  for (const r of added) await apiJson('/v1/hrms/grades', json('POST', { companyId: coOf(r, env), code: String(r.id).trim(), name: String(r.name).trim(), level: level++, active: true, ...band(r) }))
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/grades/${r._key}`
     if (r.status !== o.status && r.status !== 'Active') { await apiJson(base, json('DELETE')); return }
@@ -216,7 +219,7 @@ async function agencies({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
     const b = agencyBody(r)
     const c = await apiJson<{ id: string }>('/v1/hrms/contractors', json('POST', {
-      ...b, companyId: env.defaultCo, registrationNumber: blank(b.registrationNumber), contactPersonName: blank(b.contactPersonName), contactEmail: blank(b.contactEmail),
+      ...b, companyId: coOf(r, env), registrationNumber: blank(b.registrationNumber), contactPersonName: blank(b.contactPersonName), contactEmail: blank(b.contactEmail),
       contactPhone: blank(b.contactPhone), serviceType: blank(b.serviceType), licenceNumber: blank(b.licenceNumber), licenceValidUntil: blank(b.licenceValidUntil),
     }))
     env.created?.(c?.id)
@@ -232,7 +235,7 @@ async function agencies({ added, changed }: Diff, env: SyncEnv) {
 
 async function classes({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    const c = await apiJson<{ id: string }>('/v1/hrms/employment-types', json('POST', { companyId: env.defaultCo, name: String(r.name).trim(), code: String(r.code || '').trim().toUpperCase(), payrollEligible: true, active: true }))
+    const c = await apiJson<{ id: string }>('/v1/hrms/employment-types', json('POST', { companyId: coOf(r, env), name: String(r.name).trim(), code: String(r.code || '').trim().toUpperCase(), payrollEligible: true, active: true }))
     env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
@@ -258,7 +261,7 @@ const shiftBody = (r: Rec) => ({
 })
 async function shifts({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    const c = await apiJson<{ id: string }>(`/v1/shifts?companyId=${env.defaultCo}`, json('POST', { ...shiftBody(r), gracePeriodMinutes: r.grace ?? 0 }))
+    const c = await apiJson<{ id: string }>(`/v1/shifts?companyId=${coOf(r, env)}`, json('POST', { ...shiftBody(r), gracePeriodMinutes: r.grace ?? 0 }))
     env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
@@ -278,7 +281,7 @@ async function leaves({ added, changed }: Diff, env: SyncEnv) {
     // V143.23: how the quota is credited, and encashment (0 clears the yearly limit).
     accrualFrequency: ACCRUAL_CODE[r.accrual] || 'YEARLY', isEncashable: !!r.encash, maxEncashDays: r.encash && r.encashMax ? Number(r.encashMax) : 0,
   })
-  for (const r of added) await apiJson(`/v1/leave/types?companyId=${env.defaultCo}`, json('POST', body(r)))
+  for (const r of added) await apiJson(`/v1/leave/types?companyId=${coOf(r, env)}`, json('POST', body(r)))
   await each(changed, async ([o, r]) => {
     if (r.status !== o.status && r.status !== 'Active') { await apiJson(`/v1/leave/types/${r._key}`, json('DELETE')); return }
     await apiJson(`/v1/leave/types/${r._key}`, json('PUT', body(r)))
