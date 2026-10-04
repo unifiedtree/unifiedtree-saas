@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import {
-  Button, Callout, CellActions, CellPerson, EmptyState, MiniStat, MiniStatGrid, PageFrame, PageHeader, PillTabs, Section, StatusPill, Table,
+  Button, Callout, CellActions, CellPerson, EmptyState, KeyValueGrid, MiniStat, MiniStatGrid, PageFrame, PageHeader, PillTabs, Section, StatusPill, Table,
   errorText, type TableColumn,
 } from '@/design/kit/display'
 import { Pager } from '@/design/kit/data'
@@ -25,7 +25,8 @@ import {
 import { useEmployeeStats } from '../api/shared/useEmployeeStats'
 import { useFnfStatus } from '../api/shared/useFnfStatus'
 import { daysLeft, dayMon, fnfState } from '../performance/growModel'
-import { exitName, matchesSearch, useExitList, type ExitRow, type ExitStatus } from './useExits'
+import { useDebounce } from '@/shared/hooks/useDebounce'
+import { exitName, useExitList, type ExitRow, type ExitStatus } from './useExits'
 import '../performance/grow.css'
 
 type Tab = 'notice' | 'exited' | 'terminated'
@@ -46,7 +47,6 @@ export function ExitCenter() {
   const canWrite = usePermission('hrms.employee.write')
   const canSettle = usePermission('hrms.fnf.read')
   const canProcess = usePermission('hrms.fnf.process')
-  const toast = useToast()
   const navigate = useNavigate()
   const today = istToday()
   const [params, setParams] = useSearchParams()
@@ -57,22 +57,21 @@ export function ExitCenter() {
   const [starting, setStarting] = useState(false)
   const [editing, setEditing] = useState<ExitRow | null>(null)
   const [exiting, setExiting] = useState<ExitRow | null>(null)
-  const searching = search.trim().length > 0
+  const [confirming, setConfirming] = useState<ExitRow | null>(null)
+  // Typing must not fire a request per keystroke; the server does the matching either way.
+  const query = useDebounce(search.trim(), 300)
+  const searching = query.length > 0
   const stats = useEmployeeStats(undefined, { enabled: canRead })
   const counts = useEmployeeCounts(undefined, { enabled: canRead && stats.notAvailable })
-  // HR (employee.write): the exit list with reasons; a search filters the latest 200 on the page.
-  const exits = useExitList(current.status, searching ? 0 : page, searching ? 200 : PAGE, { enabled: canWrite })
+  // HR (employee.write): the exit list with reasons; the search and the paging are the server's.
+  const exits = useExitList(current.status, page, PAGE, query, { enabled: canWrite })
   // Read-only: the directory, as before (no reason).
-  const dir = useEmployeeDirectory({ status: current.status, search: search.trim() || undefined, page, pageSize: PAGE }, { enabled: canRead && !canWrite })
+  const dir = useEmployeeDirectory({ status: current.status, search: query || undefined, page, pageSize: PAGE }, { enabled: canRead && !canWrite })
   const exitEmployee = useExitEmployee()
-  const rows: ExitRow[] = useMemo(() => {
-    if (canWrite) {
-      const all = exits.data?.content ?? []
-      return searching ? all.filter((r) => matchesSearch(r, search)).slice(page * PAGE, (page + 1) * PAGE) : all
-    }
-    return (dir.data?.content ?? []).map(toRow)
-  }, [canWrite, exits.data, dir.data, searching, search, page])
-  const total = canWrite ? (searching ? (exits.data?.content ?? []).filter((r) => matchesSearch(r, search)).length : exits.data?.totalElements ?? 0) : dir.data?.totalElements ?? 0
+  const rows: ExitRow[] = useMemo(() => (
+    canWrite ? exits.data?.content ?? [] : (dir.data?.content ?? []).map(toRow)
+  ), [canWrite, exits.data, dir.data])
+  const total = (canWrite ? exits.data?.totalElements : dir.data?.totalElements) ?? 0
   const list = canWrite ? exits : dir
   const fnf = useFnfStatus(tab === 'notice' ? [] : rows.map((r) => r.employeeId), { enabled: canSettle })
   const fnfOf = useMemo(() => new Map((fnf.data ?? []).map((f) => [f.employeeId, f])), [fnf.data])
@@ -83,14 +82,11 @@ export function ExitCenter() {
     setParams(sp, { replace: true })
     setPage(0)
   }
-  const markExited = async (r: ExitRow) => {
+  const markExited = (r: ExitRow) => {
     if (!r.lastWorkingDay) { setEditing(r); return }
-    // One click when the exit type is already recorded (it drives the attrition split); otherwise ask for it.
     if (!r.exitType) { setExiting(r); return }
-    try {
-      await exitEmployee.mutateAsync({ id: r.employeeId, lastWorkingDay: r.lastWorkingDay, exitType: r.exitType })
-      toast.success(`${r.firstName} is marked exited. Full & final can start.`)
-    } catch (e) { toast.error('Couldn’t mark them exited', { detail: errorText(e, 'Try again in a moment.') }) }
+    // Exit type already recorded: confirm first — it's hard to undo (they lose access and move lists).
+    setConfirming(r)
   }
 
   const person: TableColumn<ExitRow> = {
@@ -170,7 +166,12 @@ export function ExitCenter() {
         {(s || c) && (
           <MiniStatGrid>
             <MiniStat label="On notice" value={s ? s.counts.notice : c?.notice ?? 0} note="Serving their notice period" tone="warning" />
-            <MiniStat label="Exited" value={s ? s.exitedThisYear : c?.exited ?? 0} note={s ? 'Left the company this year' : 'Left the company'} tone="neutral" />
+            {/* exitedThisYear counts EXITED *and* TERMINATED with a last working day this year, so say
+                so. The split can't be exact: the only terminated figure on the response is all-time
+                (counts.terminated), not this year's — so it's labelled as the all-time total, not subtracted. */}
+            <MiniStat label="Exited" value={s ? s.exitedThisYear : c?.exited ?? 0} tone="neutral"
+              note={s ? `Left this year, including terminations · ${s.counts.terminated} terminated in all (the rest resigned or left for other reasons)`
+                : `Left the company, including terminations · ${c?.terminated ?? 0} terminated in all`} />
             <MiniStat label="Terminated" value={s ? s.counts.terminated : c?.terminated ?? 0} note="Employment ended by the company" tone="danger" />
           </MiniStatGrid>
         )}
@@ -179,9 +180,6 @@ export function ExitCenter() {
         actions={<div style={{ width: 'min(100%, 300px)' }}><Input label={`Search ${current.label.toLowerCase()}`} type="search" value={search} placeholder="Name, code or department"
           onChange={(e) => { setSearch(e.target.value); setPage(0) }} /></div>}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="people" /> : undefined}>
-        {canWrite && searching && (exits.data?.totalElements ?? 0) > 200 && (
-          <div style={{ padding: '0 16px 12px' }}><Callout tone="neutral">The search covers the 200 most recent leavers in this list.</Callout></div>
-        )}
         <Table label={current.label} columns={columns} rows={rows} rowKey={(r) => r.employeeId} loading={list.isLoading} mobile="cards"
           empty={<EmptyState variant="plain" icon="userMinus" title={empty}
             hint={tab === 'notice' ? 'Start a notice period from here or from an employee’s Exit tab.' : 'Employees appear here once HR marks them as exited or terminated.'}
@@ -190,6 +188,7 @@ export function ExitCenter() {
       {starting && <StartNoticePanel onClose={() => setStarting(false)} onDone={() => { setStarting(false); setTab('notice') }} />}
       {editing && <SeparationPanel row={editing} onClose={() => setEditing(null)} />}
       {exiting && <MarkExitedPanel row={exiting} onClose={() => setExiting(null)} />}
+      {confirming && <ConfirmExitDialog row={confirming} onClose={() => setConfirming(null)} />}
     </PageFrame>
   )
 }
@@ -323,6 +322,53 @@ function SeparationPanel({ row, onClose }: { row: ExitRow; onClose: () => void }
           <PanelButton variant="danger" busy={cancel.isPending} onClick={withdraw}>Withdraw notice</PanelButton>
         </>} />
     </SidePanel>
+  )
+}
+
+/**
+ * Mark exited when the exit type is already recorded: confirm by typing the person's name or code.
+ * Marking exited is hard to undo (they lose access and move to the Exited list), and the rows sit
+ * next to each other — so the typed value is matched against THIS row only, never the whole list.
+ */
+function ConfirmExitDialog({ row, onClose }: { row: ExitRow; onClose: () => void }) {
+  const exit = useExitEmployee()
+  const toast = useToast()
+  const [typed, setTyped] = useState('')
+  const [error, setError] = useState('')
+  const same = (a: string, b: string | null | undefined) => !!b && a === b.trim().toLowerCase()
+  const entered = typed.trim().toLowerCase()
+  const matches = entered.length > 0 && (same(entered, exitName(row)) || same(entered, row.employeeCode))
+  const confirm = async () => {
+    if (!matches) return
+    setError('')
+    try {
+      await exit.mutateAsync({ id: row.employeeId, lastWorkingDay: row.lastWorkingDay!, exitType: row.exitType! })
+      toast.success(`${row.firstName} is marked exited. Full & final can start.`); onClose()
+    } catch (e) { setError(errorText(e, 'Unable to mark the employee as exited.')) }
+  }
+  return (
+    <Dialog open onClose={() => { if (!exit.isPending) onClose() }} busy={exit.isPending} tone="danger" role="alertdialog" width={520}
+      title={`Mark ${exitName(row)} as exited?`}
+      sub="They lose access immediately and move to the Exited list; payroll and settlement records are unaffected."
+      footer={<>
+        <PanelButton variant="secondary" disabled={exit.isPending} onClick={onClose}>Cancel</PanelButton>
+        <PanelButton variant="danger" busy={exit.isPending} onClick={confirm}
+          blockedReason={matches ? null : 'Type their name or employee code to confirm'}>Mark exited</PanelButton>
+      </>}>
+      <div className="grw-form">
+        <CellPerson name={exitName(row)} sub={row.departmentName || row.employeeCode} />
+        <KeyValueGrid items={[
+          { label: 'Employee code', value: row.employeeCode },
+          { label: 'Department', value: row.departmentName || row.employeeCode },
+          { label: 'Exit type', value: exitTypeLabel(row.exitType) },
+          { label: 'Last working day', value: dayMon(row.lastWorkingDay) },
+        ]} />
+        <Input id="confirm-exit-name" label="Type the name or employee code to confirm" autoFocus value={typed}
+          onChange={(e) => setTyped(e.target.value)} placeholder={row.employeeCode}
+          hint={`Enter “${exitName(row)}” or “${row.employeeCode}” exactly, to be sure this is the right person.`} />
+        {error && <Callout tone="danger" icon="alert"><span role="alert">{error}</span></Callout>}
+      </div>
+    </Dialog>
   )
 }
 

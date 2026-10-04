@@ -498,7 +498,10 @@ public class WorkforceController {
     /**
      * Redesign BW-91: people on notice or gone, with the exit type, the reason,
      * the department and the last working day. {@code status} = NOTICE_PERIOD,
-     * EXITED or TERMINATED (blank = all three). The reason is why this needs
+     * EXITED or TERMINATED (blank = all three). {@code search} is a
+     * case-insensitive "contains" over the name, the employee code and the
+     * department (blank = no search), so a page need not hold every row for
+     * the list to be searchable. The reason is why this needs
      * hrms.employee.write, like the rest of the exit flow.
      */
     @GetMapping("/employees/exits")
@@ -506,9 +509,10 @@ public class WorkforceController {
     public PageResponse<EmployeeRecordQueries.ExitRow> employeeExits(
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int pageSize) {
-        return recordQueries.exits(companyId, status, page, pageSize);
+        return recordQueries.exits(companyId, status, search, page, pageSize);
     }
 
     /**
