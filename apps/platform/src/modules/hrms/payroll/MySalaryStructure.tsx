@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { AmountMask, AmountToggle } from '@/design/kit/AmountMask'
-import { Button, EmptyState, PageHeader, Section, Skeleton, StatusPill, errorText } from '@/design/kit/display'
+import { Button, EmptyState, PageFrame, PageHeader, Section, Skeleton, StatusPill, errorText } from '@/design/kit/display'
 import { useMySalaryStructure, type StructureLine } from '../api/usePayroll'
 import { useMyStructureHistory, inr } from '../api/usePayrollRuns'
 import { fmtShort } from '@/design/dc/dates'
@@ -43,23 +43,25 @@ function StackedBar({ segments }: { segments: { pct: number; fill: string; label
 function Flow({ ctc, gross, employerContrib, deductions, net, hide }: {
   ctc: number; gross: number; employerContrib: number; deductions: number; net: number; hide: boolean
 }) {
-  const items: { k: string; v: number; fill: string }[] = [
+  // `minus` belongs to the row, not its position: zero rows are dropped, so an
+  // index check would put the minus on Gross pay when employer costs are 0.
+  const items: { k: string; v: number; fill: string; minus?: boolean }[] = [
     { k: 'Cost to company', v: ctc, fill: 'var(--u-br,#0F6E56)' },
-    { k: 'Employer PF, gratuity and health cover', v: employerContrib, fill: 'var(--u-gy,#C9D2CE)' },
+    { k: 'Employer PF, gratuity and health cover', v: employerContrib, fill: 'var(--u-gy,#C9D2CE)', minus: true },
     { k: 'Gross pay', v: gross, fill: 'var(--u-g3,#A9D6C6)' },
-    { k: 'Tax, PF and professional tax', v: deductions, fill: 'var(--u-gd,#C8912E)' },
+    { k: 'Tax, PF and professional tax', v: deductions, fill: 'var(--u-gd,#C8912E)', minus: true },
     { k: 'Take-home', v: net, fill: 'var(--u-br,#0F6E56)' },
   ].filter((x) => x.v > 0)
   const max = ctc || 1
   return (
     <Section title="From CTC to take-home" rise={false} spot={false}>
       <div style={{ display: 'grid', gap: 12 }}>
-        {items.map((f, i) => (
+        {items.map((f) => (
           <div key={f.k} style={{ display: 'grid', gap: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13.5 }}>
               <span style={{ color: 'var(--u-ink2,#4A5A54)' }}>{f.k}</span>
               <span style={{ fontWeight: 500 }}>
-                {i === 1 || i === 3 ? '− ' : ''}
+                {f.minus ? '− ' : ''}
                 <AmountMask value={inr(f.v)} hidden={hide} />
               </span>
             </div>
@@ -72,6 +74,14 @@ function Flow({ ctc, gross, employerContrib, deductions, net, hide }: {
       </div>
     </Section>
   )
+}
+
+// "PF · enrolled" beside ₹0 deductions read as a mistake: when the company has
+// PF switched off in Payroll settings, nobody's PF is deducted, so say that.
+function PfPill({ applicable, status, pfOn }: { applicable: boolean; status?: string | null; pfOn?: boolean | null }) {
+  if (!applicable) return <StatusPill tone="neutral">PF not applicable</StatusPill>
+  if (pfOn === false) return <StatusPill tone="neutral">PF · not deducted (off in payroll settings)</StatusPill>
+  return <StatusPill tone="success">{`PF · ${String(status || 'applies').toLowerCase().replace(/_/g, ' ')}`}</StatusPill>
 }
 
 function History({ hide }: { hide: boolean }) {
@@ -110,7 +120,13 @@ function History({ hide }: { hide: boolean }) {
   )
 }
 
+// The routes render this page directly (not through PayrollContainer), so it
+// brings its own PageFrame: the self-service width and the page gutter.
 export function MySalaryStructure() {
+  return <PageFrame label="My salary" width="narrow"><MySalaryBody /></PageFrame>
+}
+
+function MySalaryBody() {
   const navigate = useNavigate()
   const canPayslips = usePermission(P.PAYROLL_PAYSLIP_READ_SELF)
   const q = useMySalaryStructure()
@@ -210,7 +226,7 @@ export function MySalaryStructure() {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <StatusPill tone="info">{`Tax regime · ${d.taxRegime === 'NEW' ? 'New' : 'Old'}`}</StatusPill>
-            <StatusPill tone={d.pfApplicable ? 'success' : 'neutral'}>{d.pfApplicable ? `PF · ${String(d.pfStatus || 'applies').toLowerCase().replace(/_/g, ' ')}` : 'PF not applicable'}</StatusPill>
+            <PfPill applicable={d.pfApplicable} status={d.pfStatus} pfOn={d.pfOn} />
             <StatusPill tone="muted">Effective {fmtShort(d.effectiveFrom)}</StatusPill>
           </div>
         </section>

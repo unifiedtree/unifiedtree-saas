@@ -1,5 +1,6 @@
 import { InspectorSessions } from './compliance/InspectorSessions'
 import { FilingCalendar } from './compliance/FilingCalendar'
+import { filingPill } from './compliance/filingPill'
 import React, { useId, useMemo, useState } from 'react'
 import { Plus, Check, FileCheck2, RotateCw } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
@@ -16,19 +17,15 @@ import {
   useStatutoryFilings, useCreateFiling, useFileFiling,
   usePoshComplaints, useCreatePoshComplaint, useUpdatePoshStatus,
   inr, FILING_TYPES, POSH_STATUSES, POSH_SEVERITIES, COMPLIANCE_PAGE_SIZE,
-  type ComplianceStatus, type FilingType, type FilingStatus, type PoshStatus, type StatutoryFiling,
+  type ComplianceStatus, type FilingType, type PoshStatus, type StatutoryFiling,
 } from './api/useCompliance'
 
 const ITEM_TONE: Record<ComplianceStatus, PillTone> = { PENDING: 'warn', DONE: 'ok', OVERDUE: 'red' }
-const FILING_TONE: Record<FilingStatus, PillTone> = { DUE: 'warn', FILED: 'ok', LATE: 'red' }
 const POSH_TONE: Record<PoshStatus, PillTone> = {
   RECEIVED: 'info', UNDER_INQUIRY: 'warn', RESOLVED: 'ok', DISMISSED: 'gray',
 }
-// Human wording for the enum values. LATE is only ever set by
-// ComplianceService.fileFiling when the return was recorded after its due date,
-// so it reads "Filed late" rather than suggesting the return is still open.
+// Human wording for the enum values (filings: compliance/filingPill).
 const ITEM_LABEL: Record<ComplianceStatus, string> = { PENDING: 'Pending', DONE: 'Done', OVERDUE: 'Overdue' }
-const FILING_LABEL: Record<FilingStatus, string> = { DUE: 'Due', FILED: 'Filed', LATE: 'Filed late' }
 const POSH_LABEL: Record<PoshStatus, string> = {
   RECEIVED: 'Received', UNDER_INQUIRY: 'Under inquiry', RESOLVED: 'Resolved', DISMISSED: 'Dismissed',
 }
@@ -357,6 +354,11 @@ function AddObligationDrawer({ companyId, onClose }: { companyId: string; onClos
 
 // ── Statutory filings ────────────────────────────────────────────────────────
 
+function FilingStatusPill({ filing }: { filing: StatutoryFiling }) {
+  const p = filingPill(filing.status, filing.dueDate, today())
+  return <HrStatusPill tone={p.tone}>{p.label}</HrStatusPill>
+}
+
 function FilingsTab({ companyId, canWrite, adding, onAddClose }: {
   companyId: string; canWrite: boolean; adding: boolean; onAddClose: () => void
 }) {
@@ -416,7 +418,7 @@ function FilingsTab({ companyId, canWrite, adding, onAddClose }: {
                 <td className="text-text-secondary">{fmtDate(f.dueDate)}</td>
                 <td className="text-text-secondary">{fmtDate(f.filedDate)}</td>
                 <td className="text-text-secondary">{f.referenceNo || '—'}</td>
-                <td><HrStatusPill tone={FILING_TONE[f.status]}>{FILING_LABEL[f.status] ?? f.status}</HrStatusPill></td>
+                <td><FilingStatusPill filing={f} /></td>
                 {canWrite && (
                   <td>
                     <div className="flex items-center justify-end">

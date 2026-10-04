@@ -85,14 +85,14 @@ public class MyPayService {
                 "SELECT company_id FROM hrms.employees WHERE tenant_id = ? AND id = ?",
                 rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, employeeId);
         Set<String> periodsWithRun = new HashSet<>();
+        LocalDate runDate = null;
         if (companyId != null) {
             // The next run that isn't paid yet and whose pay date is still ahead.
-            LocalDate runDate = jdbc.query("""
+            runDate = jdbc.query("""
                 SELECT min(pay_date) FROM payroll.runs
                  WHERE tenant_id = ? AND company_id = ? AND status IN ('DRAFT','PROCESSING','LOCKED')
                    AND pay_date >= ?
                 """, rs -> rs.next() ? rs.getObject(1, LocalDate.class) : null, tenantId, companyId, today);
-            if (runDate != null) return new PayScheduleDto(runDate.toString(), processingDay);
             jdbc.query("""
                 SELECT period_year, period_month FROM payroll.runs
                  WHERE tenant_id = ? AND company_id = ? AND status <> 'CANCELLED'
@@ -101,10 +101,14 @@ public class MyPayService {
                         YearMonth.of(rs.getInt("period_year"), rs.getInt("period_month")).toString()),
                 tenantId, companyId, today.withDayOfMonth(1).minusMonths(2));
         }
-        if (settings == null) return new PayScheduleDto(null, null);
-        LocalDate next = PayrollInsights.nextProcessingDate(today, (Integer) settings.get("start"), processingDay,
-                periodsWithRun);
-        return new PayScheduleDto(next == null ? null : next.toString(), processingDay);
+        // A month with no run yet still gets paid on the processing day: a later
+        // month's draft created early must not hide this month's payday, so the
+        // answer is the nearer of the two.
+        LocalDate next = settings == null ? null : PayrollInsights.nextProcessingDate(today,
+                (Integer) settings.get("start"), processingDay, periodsWithRun);
+        LocalDate nearest = runDate == null ? next : next == null || runDate.isBefore(next) ? runDate : next;
+        if (nearest == null) return new PayScheduleDto(null, processingDay);
+        return new PayScheduleDto(nearest.toString(), processingDay);
     }
 
     @Transactional

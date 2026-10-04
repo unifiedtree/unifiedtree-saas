@@ -112,7 +112,11 @@ export function PayrollContainer() {
   const canPliRead = usePermission('hrms.pli.read'), canPliTarget = usePermission('hrms.pli.target.read'), canPliWrite = usePermission('hrms.pli.write'), canPliTargetWrite = usePermission('hrms.pli.target.write'), canPliSelf = usePermission('hrms.pli.read.self')
   const canAdvRead = usePermission('hrms.advance.read'), canAdvApprove = usePermission('hrms.advance.approve'), canAdvRequest = usePermission('hrms.advance.request.self'), canAdvOthers = usePermission('hrms.advance.request.others')
   const canCompliance = usePermission('hrms.compliance.read'), canEmpRead = usePermission(P.HRMS_EMPLOYEE_READ)
-  const pliAdmin = canPliRead || canPliTarget, advAdmin = canAdvRead
+  // My pay › Advances (?tab=my) and "Request a salary advance" (?tab=request) are the person's own
+  // advances: someone who also holds hrms.advance.read (a department manager) gets the self-service
+  // page there too, not the payroll admin's Advances & Loans.
+  const advSelf = section === 'advances' && canAdvRequest && ['my', 'request'].includes(params.get('tab') || '')
+  const pliAdmin = canPliRead || canPliTarget, advAdmin = canAdvRead && !advSelf
   const me = useMemo(() => { try { return jwtDecode<{ employee_id?: string; name?: string; given_name?: string }>(getAccessToken() || '') } catch { return {} as any } }, [])
 
   // ── shared data ──
@@ -161,7 +165,7 @@ export function PayrollContainer() {
     enabled: canRuns && !!run && run.status !== 'DRAFT',
     staleTime: 300_000,
   })
-  const activeAdvQ = useQuery({ queryKey: ['hrms', 'advance', 'company', 0, 'DISBURSED', 100], queryFn: () => apiJson<Page<AdvanceRequest>>('/v1/advance/requests?page=0&size=100&status=DISBURSED'), enabled: canAdvRead && (!!run || section === 'advances'), staleTime: 60_000 })
+  const activeAdvQ = useQuery({ queryKey: ['hrms', 'advance', 'company', 0, 'DISBURSED', 100], queryFn: () => apiJson<Page<AdvanceRequest>>('/v1/advance/requests?page=0&size=100&status=DISBURSED'), enabled: canAdvRead && (!!run || (section === 'advances' && advAdmin)), staleTime: 60_000 })
   const processRun = useProcessRun(runId), lockRun = useLockRun(runId), reopenRun = useReopenRun(runId)
   const buildBatch = useMutation({ mutationFn: (b: { runId: string; bankProfileId: string }) => apiJson<BatchDetail>('/v1/payroll/disbursement/batches', { method: 'POST', body: JSON.stringify(b) }), onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'disbursement-batches'] }) })
   const markPaid = useMutation({
@@ -548,9 +552,10 @@ export function PayrollContainer() {
         </HrDrawer>
       )}
       {recoveryFor && <AdvanceDetail id={recoveryFor} onClose={() => setRecoveryFor(null)} />}
-      {/* Ask payroll: the payroll team's answer queue sits on the dashboard, under the KPIs (BW-59). */}
+      {/* Ask payroll: the payroll team's answer queue sits on the dashboard, under the KPIs (BW-59).
+          DesignFrame already gives the width and gutter, so this only keeps the cards' 16px gap. */}
       {section === 'dashboard' && canRuns && (
-        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 clamp(16px,2.4vw,36px) 56px', marginTop: -24 }}>
+        <div style={{ marginTop: 16 }}>
           <AskPayrollQueue />
         </div>
       )}

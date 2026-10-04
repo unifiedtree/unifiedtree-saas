@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { AmountMask, AmountToggle } from '@/design/kit/AmountMask'
-import { Button, PageHeader, Skeleton, EmptyState, errorText } from '@/design/kit/display'
+import { Button, PageFrame, PageHeader, Skeleton, EmptyState, errorText } from '@/design/kit/display'
 import { useToast } from '@/design/kit/overlays'
 import {
   downloadMyPayslipPdf, inr, useMyPayslip, useMyPayslips, type MyPayslip,
@@ -166,7 +166,13 @@ function SlipArticle({ slip, hide, loading, error, onRetry, onDownload, download
   )
 }
 
+// The routes render this page directly (not through PayrollContainer), so it
+// brings its own PageFrame: the self-service width and the page gutter.
 export function EmployeePayslips() {
+  return <PageFrame label="My payslips" width="narrow"><MyPayslipsBody /></PageFrame>
+}
+
+function MyPayslipsBody() {
   const navigate = useNavigate()
   const canSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF)
   const list = useMyPayslips()

@@ -75,6 +75,7 @@ class MyPayServiceTest {
         settings(1, 28);
         company(COMPANY);
         nextRunPayDate(LocalDate.of(2026, 9, 25).plusDays(3));
+        runsInMonths(2026, 9);
         assertEquals(new MyPayService.PayScheduleDto("2026-09-28", 28), service.schedule(TENANT, READER));
         // Only the caller's own company's runs, still ahead and not paid.
         verify(jdbc).query(contains("status IN ('DRAFT','PROCESSING','LOCKED')"), any(ResultSetExtractor.class),
@@ -92,6 +93,27 @@ class MyPayServiceTest {
 
         runsInMonths(2026, 9); // September's run is paid already (or its date has passed)
         assertEquals(new MyPayService.PayScheduleDto("2026-10-28", 28), service.schedule(TENANT, READER));
+    }
+
+    @Test
+    void aLaterMonthsDraftDoesNotHideThisMonthsPayday() {
+        // Audit 4 Oct: a November draft made early showed "Next payday 28 Nov"
+        // although October had no run yet and is paid on the 28th.
+        service.setClock(Clock.fixed(LocalDate.of(2026, 10, 4).atTime(12, 0).atZone(IST).toInstant(), IST));
+        settings(1, 28);
+        company(COMPANY);
+        nextRunPayDate(LocalDate.of(2026, 11, 28));
+        runsInMonths(2026, 9, 2026, 11);
+        assertEquals(new MyPayService.PayScheduleDto("2026-10-28", 28), service.schedule(TENANT, READER));
+    }
+
+    @Test
+    void aRunPaidEarlierThanTheProcessingDayStillWins() {
+        settings(1, 28);
+        company(COMPANY);
+        nextRunPayDate(LocalDate.of(2026, 10, 5));
+        runsInMonths(2026, 9, 2026, 10); // September paid; October's run pays on the 5th
+        assertEquals(new MyPayService.PayScheduleDto("2026-10-05", 28), service.schedule(TENANT, READER));
     }
 
     @Test

@@ -103,7 +103,13 @@ public class PayrollService {
          * payroll run applies. The UI says so rather than presenting a guess as
          * a configured structure.
          */
-        boolean derivedFromCtc) {}
+        boolean derivedFromCtc,
+        /**
+         * Whether PF is switched on in this tenant's Payroll settings, as the
+         * preview read them: false means no PF is deducted for anyone, however
+         * the structure is enrolled; null when the preview couldn't run.
+         */
+        Boolean pfOn) {}
 
     public record PtSlabDto(UUID id, String stateCode, String stateName,
                             BigDecimal minSalary, BigDecimal maxSalary, BigDecimal monthlyTax) {}
@@ -585,6 +591,7 @@ public class PayrollService {
         List<StructureLineDto> employerContrib = List.of();
         BigDecimal gross = BigDecimal.ZERO, totalDed = BigDecimal.ZERO;
         BigDecimal net = BigDecimal.ZERO, employerTotal = BigDecimal.ZERO;
+        Boolean pfOn = null;
 
         if (!engineEarnings.isEmpty()) {
             // Gross needs no settings and no engine, so establish it first. If
@@ -618,6 +625,7 @@ public class PayrollService {
                 // defaults row first (idempotent), same as the settings screen.
                 UUID tid = TenantContext.getTenantId();
                 SettingsDto s = ctx.settings(tid);
+                pfOn = Boolean.TRUE.equals(s.pfEnabled());
                 boolean ptEnabled = Boolean.TRUE.equals(s.ptEnabled());
                 String ptState = (String) r.get("pt_state") != null
                         ? (String) r.get("pt_state") : s.ptStateCode();
@@ -646,6 +654,7 @@ public class PayrollService {
                 employerTotal   = res.totalEmployerContrib();
             } catch (Exception ex) {
                 log.warn("structure preview computation failed for structure {}: {}", id, ex.getMessage());
+                pfOn = null;
             }
         }
 
@@ -655,7 +664,7 @@ public class PayrollService {
             String.valueOf(r.get("effective_from")), isCur == null ? Boolean.FALSE : (Boolean) isCur,
             (String) r.get("revision_note"), lines,
             earnings, deductions, employerContrib,
-            gross, totalDed, net, employerTotal, derivedFromCtc);
+            gross, totalDed, net, employerTotal, derivedFromCtc, pfOn);
     }
 
     /** The component catalogue as payroll reads it (tenant already bound). */

@@ -87,6 +87,8 @@ export interface EmployeeSalaryStructure {
   employerContribMonthly?: number
   /** True when the breakup was derived from CTC (no components configured). */
   derivedFromCtc?: boolean
+  /** PF switched on in Payroll settings: false = nobody's PF is deducted; null/absent = unknown. */
+  pfOn?: boolean | null
 }
 
 export interface PtSlab {
