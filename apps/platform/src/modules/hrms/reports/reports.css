@@ -135,7 +135,10 @@
 .rp-mini-split__track { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 3px; }
 .rp-mini-split__a { height: 100%; background: var(--u-br, #0F6E56); border-radius: 5px; min-width: 0; }
 .rp-mini-split__b { flex: 1; height: 100%; background: var(--u-g3, #A9D6C6); border-radius: 5px; }
-.rp-mini-split__labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--u-ink3, #6A7A73); }
+.rp-mini-split__b--sized { flex: 0 0 auto; }
+.rp-mini-split__c { flex: 1; height: 100%; background: var(--u-gy, #C9D2CE); border-radius: 5px; }
+.rp-mini-split__labels { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; font-size: 12px; color: var(--u-ink3, #6A7A73); }
+.rp-mini-split__labels--three { justify-content: flex-start; gap: 2px 12px; }
 .rp-mini-empty { height: 100%; display: flex; align-items: center; font-size: 12px; color: var(--u-ink3, #6A7A73); }
 
 /* scheduled reports */

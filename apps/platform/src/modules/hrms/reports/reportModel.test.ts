@@ -31,7 +31,12 @@ describe('tile mini charts come from the summary, each only when its series is t
     expect(miniFor('late', S({ lateMarks: { from: 'a', to: 'b', days: [{ date: 'a', count: 2 }, { date: 'b', count: 0 }] } }))).toEqual({ kind: 'line', values: [2, 0] })
   })
   it('diversity: men and women shares, or a plain line when no gender is on file', () => {
-    expect(miniFor('diversity', S({ diversity: { women: 3, men: 6, other: 1, total: 10 } }))).toEqual({ kind: 'split', a: 60, aLabel: '60% men', bLabel: '30% women' })
+    expect(miniFor('diversity', S({ diversity: { women: 4, men: 6, other: 0, total: 10 } }))).toEqual({ kind: 'split', a: 60, aLabel: '60% men', bLabel: '40% women' })
+    expect(miniFor('diversity', S({ diversity: { women: 3, men: 6, other: 1, total: 10 } })))
+      .toEqual({ kind: 'split', a: 60, aLabel: '60% men', b: 30, bLabel: '30% women', cLabel: '10% other or unknown' })
+    // Audit, 5 Oct (demo-hrms: 2 women, 2 men, 7 with no gender): the women's share is 18%, not the whole rest of the bar.
+    expect(miniFor('diversity', S({ diversity: { women: 2, men: 2, other: 7, total: 11 } })))
+      .toEqual({ kind: 'split', a: 18, aLabel: '18% men', b: 18, bLabel: '18% women', cLabel: '64% other or unknown' })
     expect(miniFor('diversity', S({ diversity: { women: 0, men: 0, other: 19, total: 19 } }))).toEqual({ kind: 'none', text: 'No gender recorded yet' })
   })
   it('attendance: the last day is lit; leave: used against available', () => {

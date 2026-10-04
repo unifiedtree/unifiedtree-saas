@@ -100,6 +100,17 @@ public class ReportService {
                   )
             """;
 
+    /**
+     * Who the attendance summary, the attendance tile and the leave balance
+     * report count: everyone still working here, the same people Leave › All
+     * balances lists (not soft-deleted, not separated). These reports used to
+     * count ACTIVE only, so people on probation (every new joiner, for six
+     * months by default) or serving notice were silently left out, and the
+     * leave balance report disagreed with All balances.
+     */
+    static final String STILL_EMPLOYED =
+            "e.is_active = TRUE AND e.employment_status NOT IN ('EXITED', 'TERMINATED', 'RESIGNED', 'RETIRED')";
+
     // ── 1. Headcount Report ───────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -219,10 +230,10 @@ public class ReportService {
                    AND ar.attendance_date BETWEEN ? AND ?
                 WHERE e.tenant_id = ?
                   AND e.company_id = ?
-                  AND e.employment_status = 'ACTIVE'
+                  AND %s
                 GROUP BY e.id, e.employee_code, e.first_name, e.last_name, d.name
                 ORDER BY late_days DESC, e.last_name
-                """;
+                """.formatted(STILL_EMPLOYED);
         UUID t = tenant();
         List<Map<String, Object>> rows = jdbc.queryForList(sql, t, t, fromDate, toDate, t, companyId);
         applyEffectiveSummary(rows, effective(
@@ -255,7 +266,7 @@ public class ReportService {
     /**
      * People who came in on each day of [from, to] (BW-87, the Reports
      * Center's attendance tile), counted exactly as the attendance summary
-     * counts present days: the same people (the company's ACTIVE employees),
+     * counts present days: the same people (everyone still employed, {@link #STILL_EMPLOYED}),
      * the effective status when the policy service is there (present, late or
      * half day), else one per attendance record. So the days add up to the
      * summary's total present days for the same range. Every day of the range
@@ -267,7 +278,7 @@ public class ReportService {
         Map<LocalDate, Long> perDay = new TreeMap<>();
         for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) perDay.put(d, 0L);
         List<UUID> ids = jdbc.queryForList(
-                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.company_id = ? AND e.employment_status = 'ACTIVE'",
+                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.company_id = ? AND " + STILL_EMPLOYED,
                 UUID.class, t, companyId);
         Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff = effective(ids, fromDate, toDate);
         if (!eff.isEmpty()) {
@@ -279,10 +290,10 @@ public class ReportService {
                       JOIN hrms.employees e ON e.id = ar.employee_id AND e.tenant_id = ?
                      WHERE ar.tenant_id = ?
                        AND e.company_id = ?
-                       AND e.employment_status = 'ACTIVE'
+                       AND %s
                        AND ar.attendance_date BETWEEN ? AND ?
                      GROUP BY ar.attendance_date
-                    """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                    """.formatted(STILL_EMPLOYED), (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
                 LocalDate day = rs.getDate("day").toLocalDate();
                 long n = rs.getLong("n");
                 perDay.computeIfPresent(day, (k, v) -> v + n);
@@ -333,9 +344,9 @@ public class ReportService {
                 WHERE lb.tenant_id = ?
                   AND e.company_id = ?
                   AND lb.year = ?
-                  AND e.employment_status = 'ACTIVE'
+                  AND %s
                 ORDER BY e.last_name, lt.name
-                """;
+                """.formatted(STILL_EMPLOYED);
         UUID t = tenant();
         return jdbc.queryForList(sql, t, t, t, t, companyId, year);
     }

@@ -55,10 +55,16 @@ function MiniChart({ m, label }: { m: Mini | null; label: string }) {
   if (m.kind === 'none') return <span className="rp-tile__chart"><span className="rp-mini-empty">{m.text}</span></span>
   if (m.kind === 'split') {
     return (
-      <span className="rp-tile__chart" role="img" aria-label={`${label}: ${m.aLabel}, ${m.bLabel}`}>
+      <span className="rp-tile__chart" role="img" aria-label={`${label}: ${[m.aLabel, m.bLabel, m.cLabel].filter(Boolean).join(', ')}`}>
         <span className="rp-mini-split">
-          <span className="rp-mini-split__track"><span className="rp-mini-split__a" style={{ width: `${Math.max(0, Math.min(100, m.a))}%` }} /><span className="rp-mini-split__b" /></span>
-          <span className="rp-mini-split__labels"><span>{m.aLabel}</span><span>{m.bLabel}</span></span>
+          <span className="rp-mini-split__track">
+            <span className="rp-mini-split__a" style={{ width: `${Math.max(0, Math.min(100, m.a))}%` }} />
+            {m.b == null ? <span className="rp-mini-split__b" /> : <>
+              <span className="rp-mini-split__b rp-mini-split__b--sized" style={{ width: `${Math.max(0, Math.min(100, m.b))}%` }} />
+              <span className="rp-mini-split__c" />
+            </>}
+          </span>
+          <span className={`rp-mini-split__labels${m.cLabel ? ' rp-mini-split__labels--three' : ''}`}><span>{m.aLabel}</span><span>{m.bLabel}</span>{m.cLabel && <span>{m.cLabel}</span>}</span>
         </span>
       </span>
     )
