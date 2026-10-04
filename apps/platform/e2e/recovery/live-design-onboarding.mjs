@@ -1,3 +1,4 @@
+/* global console, process, fetch */
 // Live check of the redesigned Onboarding & assets pages against the local API.
 //  - API: removing a template task that a started onboarding uses now works
 //    (was a foreign-key 500) and the run keeps its copy; a task id from another
@@ -26,7 +27,7 @@ async function apiSession(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
@@ -82,11 +83,13 @@ try {
   const o = await session('owner@unifiedtree.demo')
   await o.page.goto(base + '/hrms/onboarding/instances'); await settle(o.page)
   for (const v of ['New hires', 'Assets', 'Checklist templates']) check(`owner: "${v}" view`, (await views(o.page).getByRole('button', { name: new RegExp(`^${v}`) }).count()) === 1)
-  for (const t of ['All onboarding', 'In progress', 'Completed', 'On hold']) check(`owner: "${t}" tile`, (await o.page.getByText(t, { exact: true }).count()) > 0)
+  // Redesign (P-WF-PEOPLE): the design's "This month" figures, and the status tiles became the table's status filter.
+  for (const t of ['In progress', 'Joining this month', 'Tasks overdue']) check(`owner: "${t}" figure`, (await o.page.getByText(t, { exact: true }).count()) > 0)
+  for (const t of ['All', 'In progress', 'On hold', 'Completed']) check(`owner: "${t}" status filter`, (await o.page.locator('[aria-label="Onboarding status"]').getByRole('button', { name: new RegExp(`^${t}`) }).count()) === 1)
   check('owner: "Start onboarding" button', (await o.page.getByRole('button', { name: 'Start onboarding' }).count()) === 1)
   const readerName = sql(`select first_name||' '||coalesce(last_name,'') from hrms.employees where id='${reader.employeeId}'`).trim()
   const row = o.page.getByRole('row').filter({ hasText: readerName }).first()
-  check('owner: the new hire’s row shows their name and checklist progress', (await row.count()) === 1 && /0\/3/.test(await row.innerText()), readerName)
+  check('owner: the new hire’s row shows their name and checklist progress', (await row.count()) === 1 && /0 of 3 tasks/.test(await row.innerText()), readerName)
   await o.page.goto(base + `/hrms/onboarding/instances/${runId}`); await settle(o.page)
   check('owner: checklist page is titled with the hire’s name', (await o.page.getByRole('heading', { name: `${readerName}’s onboarding` }).count()) === 1)
   check('owner: checklist shows the removed task as the run’s own copy', (await o.page.getByText('QA: task to be removed').count()) === 1)
@@ -97,7 +100,7 @@ try {
   check('owner: template page shows its tasks in order', (await o.page.getByText('Tasks, in order').count()) === 1 && (await o.page.getByText('QA: sign the handbook').count()) === 1)
   check('owner: owner role reads "HR manager"', (await o.page.getByText('HR manager', { exact: true }).count()) > 0)
   await o.page.goto(base + '/hrms/onboarding/instances?view=assets'); await settle(o.page)
-  check('owner: assets view with tiles', (await o.page.getByText('With employees', { exact: true }).count()) === 1 && (await o.page.getByRole('button', { name: /Register asset/ }).count()) === 1)
+  check('owner: assets view with tiles', (await o.page.getByText('With employees', { exact: true }).count()) === 1 && (await o.page.getByRole('button', { name: /Register (an )?asset/ }).count()) === 1)
   await o.page.goto(base + '/hrms/onboarding/instances/new'); await settle(o.page)
   check('owner: the new-hire wizard opens in the kit frame', (await o.page.getByText('Step 1 of', { exact: false }).count()) === 1)
   check('owner: no refused API calls or page errors', !o.failed.length && !o.errors.length, o.failed[0] || o.errors[0] || '')
@@ -123,7 +126,7 @@ try {
   const m = await session('mgr@unifiedtree.demo')
   await m.page.goto(base + '/hrms/onboarding/instances?view=assets'); await settle(m.page)
   check('manager: assets view opens', (await m.page.getByText('With employees', { exact: true }).count()) === 1)
-  check('manager: read-only (no "Register asset")', (await m.page.getByRole('button', { name: /Register asset/ }).count()) === 0)
+  check('manager: read-only (no "Register asset")', (await m.page.getByRole('button', { name: /Register (an )?asset/ }).count()) === 0)
   check('manager: no templates view', (await views(m.page).getByRole('button', { name: /^Checklist templates/ }).count()) === 0)
   check('manager: no refused API calls or page errors', !m.failed.length && !m.errors.length, m.failed[0] || m.errors[0] || '')
   await m.ctx.close()

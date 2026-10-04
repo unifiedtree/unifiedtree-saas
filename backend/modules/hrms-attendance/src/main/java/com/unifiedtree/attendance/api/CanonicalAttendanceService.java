@@ -51,6 +51,10 @@ public class CanonicalAttendanceService {
 
     private final JdbcTemplate jdbc;
 
+    /** Punch-in alerts (V143.72): told about each punch-in, sent after it commits. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher events;
+
     public CanonicalAttendanceService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
@@ -150,8 +154,27 @@ public class CanonicalAttendanceService {
 
         logEvent(recordId, employee, "CHECK_IN", now, status,
                 request.latitude(), request.longitude(), location, firstNonBlank(request.zoneName(), employee.branchName()), null);
+        publishPunchIn(recordId, employee, today, now, method, request, status, lateBy);
         return findRecord(employee.employeeId(), today)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Attendance insert failed"));
+    }
+
+    /**
+     * Punch-in alerts (V143.72), as AttendanceService does for its check-ins: the
+     * alert goes out after this transaction commits, on its own thread, and a
+     * failure to hand it over never fails the punch.
+     */
+    private void publishPunchIn(UUID recordId, EmployeeContext employee, LocalDate day, Instant at, String method,
+                                CheckInRequest request, String status, Integer lateBy) {
+        if (events == null) return;
+        try {
+            events.publishEvent(new com.hrms.attendance.dto.PunchInRecordedEvent(tenantId(), recordId, employee.employeeId(),
+                    employee.companyId(), day, at, method, request.latitude(), request.longitude(), null,
+                    "LATE".equals(status), lateBy, false, false, at));
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(CanonicalAttendanceService.class)
+                    .warn("Punch-in alert not queued for record {}: {}", recordId, e.getMessage());
+        }
     }
 
     @Transactional

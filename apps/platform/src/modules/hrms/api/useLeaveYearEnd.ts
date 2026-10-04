@@ -52,7 +52,7 @@ export interface CarryForwardPreview { fromYear: number; toYear: number; lines: 
 export interface CarryForwardResult { fromYear: number; toYear: number; processed: number; skippedAlreadyDone: number; totalCarried: number; totalLapsed: number }
 export interface LedgerEntry {
   id: string; employeeId: string; employeeName?: string | null; employeeCode?: string | null; leaveTypeId: string; leaveTypeName?: string | null
-  year: number; kind: 'ACCRUAL' | 'CARRY_FORWARD' | 'LAPSE' | 'ENCASHMENT'; period: string; days: number; note?: string | null; createdAt: string; createdBy?: string | null
+  year: number; kind: 'ACCRUAL' | 'CARRY_FORWARD' | 'LAPSE' | 'ENCASHMENT' | 'ADJUSTMENT'; period: string; days: number; note?: string | null; createdAt: string; createdBy?: string | null
 }
 
 const KEY = ['hrms', 'leave', 'encash'] as const

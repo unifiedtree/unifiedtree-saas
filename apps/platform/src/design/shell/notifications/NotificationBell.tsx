@@ -71,6 +71,14 @@ export function NotificationBell({ open, onToggle, onClose, onNavigate }: Notifi
               </span>
               {!n.isRead && <span className="ut-bellpop__dot" role="img" aria-label="Unread" />}
             </button>
+            {/* A punch-in alert's exact place, in a new tab (beside the row: a link can't sit inside its button). */}
+            {n.mapUrl && (
+              <a className="ut-bellpop__map" href={n.mapUrl} target="_blank" rel="noopener noreferrer"
+                aria-label={`View on Google Maps: ${n.title} (opens in a new tab)`}
+                onClick={() => { if (!n.isRead) void markAsRead(n.id) }}>
+                {dashIcon('mapPin', 13)}View on Google Maps
+              </a>
+            )}
           </li>
         ))}
       </ul>

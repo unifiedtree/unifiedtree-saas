@@ -340,9 +340,10 @@ try {
     const loaded = page.waitForResponse((r) => r.url().includes(`/v1/onboarding/instances/${INSTANCE}/hire-details`) && r.request().method() === 'GET', { timeout: 60000 })
     await page.goto(base + `/hrms/onboarding/instances/${INSTANCE}`)
     const original = await (await loaded).json().catch(() => ({}))
-    const head = page.locator('h3', { hasText: /^Hire details$/ })
+    // Redesign (P-WF-PEOPLE): Hire details is a kit section (its own heading, Edit in the section header).
+    const head = page.locator('section h2, section h3').filter({ hasText: /^Hire details$/ }).first()
     await head.waitFor({ timeout: 15000 })
-    const panel = head.locator('xpath=../..')
+    const panel = page.locator('section').filter({ has: page.locator('h2, h3').filter({ hasText: /^Hire details$/ }) }).last()
     const accepted = () => page.locator('dt', { hasText: /^Offer accepted$/ }).locator('xpath=following-sibling::dd[1]')
     const before = await textOf(accepted())
     await panel.getByRole('button', { name: 'Edit', exact: true }).click()

@@ -53,9 +53,27 @@ describe('ModuleKit', () => {
     expect(s).toContain('role="group" aria-label="Leave views"')
     expect((s.match(/aria-pressed="true"/g) || []).length).toBe(1)
     expect((s.match(/aria-pressed="false"/g) || []).length).toBe(2)
-    expect(s).toMatch(/aria-pressed="true"[^>]*class="uk-fpill is-on"><span><span class="sc-interp">Decided<\/span><\/span><\/button>/)
-    expect(s).toContain('uk-fpill__n dcsub-n is-urgent')
-    expect(s).toContain('>5</span>')
+    // The kit PillTabs (4 Oct): the chosen view is the pill with is-on; counts are kit CountBadges, gold when urgent.
+    expect(s).toContain('class="uk-ptabs"')
+    expect(s).toMatch(/class="uk-ptab is-on"[^>]*aria-pressed="true"[^>]*>Decided<\/button>/)
+    expect(s).toMatch(/<span>Approvals<\/span><span class="uk-count uk-count--gold uk-count--sm">3<\/span>/)
+    expect(s).toMatch(/<span>Encash<\/span><span class="uk-count uk-count--neutral uk-count--sm">5<\/span>/)
+    expect(s).not.toContain('dcsub')
+  })
+  it('Views: icon and tooltip go on the pill; hero={false} keeps the bar inline (placement is a no-op)', () => {
+    const s = html(<Views label="Policy views" active="a" onChange={noop} placement="header" hero={false} items={[{ key: 'a', label: 'Shifts', icon: 'clock', tip: 'Working hours' }]} />)
+    expect(s).toContain('role="group" aria-label="Policy views"')
+    expect(s).toMatch(/class="uk-ptab is-on has-icon"[^>]*data-tip="Working hours"/)
+    expect(s).toContain('<span class="uk-ptab__icon" aria-hidden="true"><svg')
+  })
+  it('ModulePage: hosts the header tab slot, and draws the hero card with `tabs` inside it', () => {
+    const plain = html(<ModulePage crumb="Leave" title="Leave"><p>body</p></ModulePage>)
+    expect(plain).toContain('<header class="uk-ph">')
+    expect(plain).toContain('<div class="uk-ph__tabs"></div>')
+    const hero = html(<ModulePage crumb="Leave" title="Leave" tabs={<Views label="Leave views" active="a" onChange={noop} items={[{ key: 'a', label: 'My leave' }]} />}><p>body</p></ModulePage>)
+    expect(hero).toContain('<header class="uk-ph uk-ph--hero">')
+    expect(hero).toMatch(/<div class="uk-ph__tabs"><div role="group" aria-label="Leave views" class="uk-ptabs">/)
+    expect(rawHexInStyles(hero)).toEqual([])
   })
 
   it('StatRow: a group of stat cards; each tile stays a button (.ut-card), tones follow the design', () => {

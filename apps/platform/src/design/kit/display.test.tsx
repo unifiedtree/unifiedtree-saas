@@ -46,6 +46,25 @@ describe('PageHeader / PageFrame', () => {
     expect(s).toContain('--uk-gap:40px')
     expect(s).toContain('padding-top:22px')
   })
+  // The hero card (the Master "Organization Setup" look): on when tabs are given or forced; the header
+  // stays plain otherwise, and a greeting never becomes a card.
+  it('hero: `tabs` draw inside the card under the title row; `hero` forces the card on or off', () => {
+    const bar = <PillTabs items={[{ key: 'a', label: 'Branches' }]} activeKey="a" onSelect={noop} label="Setup views" semantics="toggle" />
+    const s = html(<PageHeader eyebrow="Master" title="Branches" sub="Offices" actions={<button>Add</button>} tabs={bar} />)
+    expect(s).toContain('<header class="uk-ph uk-ph--hero">')
+    expect(s).toMatch(/<div class="uk-ph__actions"><button>Add<\/button><\/div><div class="uk-ph__tabs"><div role="group" aria-label="Setup views" class="uk-ptabs">/)
+    expect(html(<PageHeader title="Branches" hero />)).toContain('<header class="uk-ph uk-ph--hero">')
+    expect(html(<PageHeader title="Branches" hero={false} tabs={bar} />)).toContain('<header class="uk-ph">')
+    expect(html(<PageHeader size="greeting" title="Hello" hero />)).not.toContain('uk-ph--hero')
+  })
+  it('hero: inside a frame the header offers its tab slot to the page’s bars; outside one it does not', () => {
+    const inFrame = html(<PageFrame><PageHeader title="Leave" /></PageFrame>)
+    expect(inFrame).toContain('<header class="uk-ph"><div class="uk-ph__main"><h1 class="uk-ph__title">Leave</h1></div><div class="uk-ph__tabs"></div></header>')
+    const alone = html(<PageHeader title="Leave" />)
+    expect(alone).not.toContain('uk-ph__tabs')
+    const greet = html(<PageFrame><PageHeader size="greeting" title="Hi" /></PageFrame>)
+    expect(greet).not.toContain('uk-ph__tabs')
+  })
 })
 
 describe('PillTabs', () => {
@@ -74,6 +93,12 @@ describe('PillTabs', () => {
     const s = html(<PillTabs items={items} activeKey="a" onSelect={noop} label="x" />)
     expect(s).toMatch(/class="uk-ptab is-on has-icon"/)
     expect(s).toMatch(/class="uk-ptab ufx-spot"/)
+  })
+  it('tip goes on the pill as the shell tooltip; server markup never joins a header (no layout effects)', () => {
+    const s = html(<PageFrame><PageHeader title="Shifts" /><PillTabs items={[{ key: 'a', label: 'Roster', tip: 'Who works when' }]} activeKey="a" onSelect={noop} label="Shift views" /></PageFrame>)
+    expect(s).toMatch(/class="uk-ptab is-on"[^>]*data-tip="Who works when"/)
+    expect(s).toContain('<div class="uk-ph__tabs"></div></header><div role="tablist" aria-label="Shift views" class="uk-ptabs">')
+    expect(html(<PillTabs items={items} activeKey="a" onSelect={noop} label="x" placement="inline" />)).toContain('class="uk-ptabs"')
   })
   it('PagePill shows icon and page name', () => {
     const s = html(<PagePill icon="home" label="Home" />)

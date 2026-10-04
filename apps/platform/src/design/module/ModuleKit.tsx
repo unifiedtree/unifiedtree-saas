@@ -8,7 +8,6 @@
 import { createElement as h, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { HrStatusPill } from '@/shared/components/hr'
 import { DesignFrame } from '@/design/dc/DesignFrame'
-import { SubTabs } from '@/design/dc/SubTabs'
 import { StatTile } from '@/design/dc/StatTile'
 import { SectionState } from '@/design/dc/SectionState'
 import { ApprovalCard } from '@/design/dc/ApprovalCard'
@@ -16,6 +15,9 @@ import { ApprovalShell } from '@/design/dc/ApprovalCard.view'
 import { dashIcon } from '@/design/dc/icons'
 import { ToastSlot, TOAST_MS } from '@/design/kit/Toast'
 import { PageHeader } from '@/design/kit/PageHeader'
+import { PageTabsHost } from '@/design/kit/pageTabs'
+import { PillTabs, type PillTab } from '@/design/kit/PillTabs'
+import { CountBadge } from '@/design/kit/StatusPill'
 import { SectionHeading } from '@/design/kit/Section'
 import { ErrorState } from '@/design/kit/EmptyState'
 import './ModuleKit.css'
@@ -25,31 +27,46 @@ export const HEAD_FONT = "var(--u-font,'Inter',system-ui,sans-serif)"
 /** The design's card surface (UtSection): white, 18px corners, hairline, card shadow. */
 export const CARD: CSSProperties = { background: 'var(--u-sf,#fff)', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 18, boxShadow: 'var(--u-shc,0 1px 2px rgba(14,27,22,.05))', minWidth: 0 }
 
-/** Page frame: the kit page header (context line, 28/34 title, summary, actions), then content on the design's 20px rhythm. */
-export function ModulePage({ crumb, title, subtitle, actions, children, gap = 20 }: { crumb: string; title: string; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; gap?: number }) {
+/**
+ * Page frame: the kit page header (context line, 28/34 title, summary, actions), then content on the design's 20px rhythm.
+ * It hosts the header's tab slot (kit pageTabs): the page's Views — the first PillTabs anywhere in the page —
+ * move into the header, which draws the Master "Organization Setup" hero card with the segmented tabs inside.
+ * `tabs` passes a bar explicitly instead (for one that must stay in a row with filters, or isn't the first).
+ */
+export function ModulePage({ crumb, title, subtitle, actions, tabs, children, gap = 20 }: { crumb: string; title: string; subtitle?: ReactNode; actions?: ReactNode; tabs?: ReactNode; children: ReactNode; gap?: number }) {
   return (
     <DesignFrame>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap, minWidth: 0, fontFamily: FONT, color: 'var(--u-ink,#0E1B16)' }}>
-        <PageHeader eyebrow={crumb} title={title} sub={subtitle} actions={actions} />
-        {children}
-      </div>
+      <PageTabsHost>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap, minWidth: 0, fontFamily: FONT, color: 'var(--u-ink,#0E1B16)' }}>
+          <PageHeader eyebrow={crumb} title={title} sub={subtitle} actions={actions} tabs={tabs} />
+          {children}
+        </div>
+      </PageTabsHost>
     </DesignFrame>
   )
 }
 
 export interface ViewTab { key: string; label: string; count?: number | string | null; urgent?: boolean; icon?: string; tip?: string }
 /**
- * The page's own views, as the kit's lighter in-page pills, inside the page under the top bar. The
- * active one is kept in ?view= (or the given param) so links and Back work. The top bar shows the
+ * The page's own views: the kit PillTabs with view semantics (role="group", aria-pressed), a count after
+ * the label (gold when it's urgent, grey otherwise; 0 shows none), an icon and a tooltip. Inside a
+ * ModulePage the bar joins the page header as the hero card's segmented control (the first PillTabs in
+ * the page does; `hero={false}` keeps a bar where it stands, e.g. a chooser inside a form). The active
+ * one is kept in ?view= (or the given param) by useView so links and Back work. The top bar shows the
  * module's pages (SHELL CONTRACT UPDATE, DECISIONS 21), so `placement` no longer moves the bar: both
- * values render it here (the prop stays for the callers that pass it).
+ * values render it in the page (the prop stays for the callers that pass it).
  */
-export function Views({ items, active, onChange, label = 'Views', placement = 'inline' }: { items: ViewTab[]; active: string; onChange: (k: string) => void; label?: string; placement?: 'header' | 'inline' }) {
-  return h(SubTabs as any, {
-    label,
-    placement,
-    items: items.map((t) => ({ key: t.key, label: t.label, count: t.count === 0 ? undefined : t.count ?? undefined, urgent: t.urgent, icon: t.icon ? dashIcon(t.icon, 15) : null, tip: t.tip, active: t.key === active, onClick: () => onChange(t.key) })),
+export function Views({ items, active, onChange, label = 'Views', hero = true }: { items: ViewTab[]; active: string; onChange: (k: string) => void; label?: string; placement?: 'header' | 'inline'; hero?: boolean }) {
+  const tabs: PillTab[] = items.map((t) => {
+    const count = t.count === 0 || t.count == null || t.count === '' ? null : t.count
+    return {
+      key: t.key,
+      icon: t.icon,
+      tip: t.tip,
+      label: count == null ? t.label : <><span>{t.label}</span><CountBadge tone={t.urgent ? 'gold' : 'neutral'} size="sm">{count}</CountBadge></>,
+    }
   })
+  return <PillTabs items={tabs} activeKey={active} onSelect={onChange} label={label} semantics="toggle" placement={hero ? 'auto' : 'inline'} />
 }
 
 /** Keeps the chosen view in the URL; unknown or hidden views fall back to the first allowed one. */

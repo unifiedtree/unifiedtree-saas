@@ -6,6 +6,7 @@ import { queryClient } from '@/providers/QueryProvider'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import {
   WelcomeSplash,
+  WelcomeOnScreen,
   peekWelcomeIntent,
   initialWelcomeIntent,
   consumeWelcomeIntent,
@@ -145,8 +146,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // workspace's own icon, never the vendor's (workspaceBranding.ts).
   useBrandingHead()
 
+  // The app below can tell when the welcome has gone (the check-in prompt waits for it).
   return (
-    <>
+    <WelcomeOnScreen.Provider value={greeting}>
       {children}
       {greeting && (
         <WelcomeSplash
@@ -156,6 +158,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           onDone={() => setGreeting(false)}
         />
       )}
-    </>
+    </WelcomeOnScreen.Provider>
   )
 }
