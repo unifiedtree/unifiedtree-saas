@@ -36,7 +36,7 @@ function EditTemplatePanel({ template, open, onClose }: { template: OnboardingTe
     } catch (e) { setError(errorText(e, 'Couldn’t save the template.')) }
   }
   return (
-    <SidePanel open={open} onClose={close} busy={update.isPending} width={480} title="Edit template"
+    <SidePanel open={open} onClose={close} busy={update.isPending} width={480} closeLabel="Close panel" title="Edit template"
       footer={<>
         <PanelButton variant="secondary" size="lg" disabled={update.isPending} onClick={close}>Cancel</PanelButton>
         <PanelButton variant="primary" size="lg" busy={update.isPending} blockedReason={!name.trim() ? 'Give the template a name' : null} onClick={submit}>Save changes</PanelButton>
@@ -76,7 +76,7 @@ function AddTaskPanel({ templateId, nextSeq, open, onClose }: { templateId: stri
     } catch (e) { setError(errorText(e, 'Couldn’t add the task.')) }
   }
   return (
-    <SidePanel open={open} onClose={close} busy={create.isPending} width={520} title="Add a task"
+    <SidePanel open={open} onClose={close} busy={create.isPending} width={520} closeLabel="Close panel" title="Add a task"
       sub="It shows on the checklist of every new hire who starts on this template from now on."
       footer={<>
         <PanelButton variant="secondary" size="lg" disabled={create.isPending} onClick={close}>Cancel</PanelButton>

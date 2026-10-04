@@ -12,11 +12,11 @@ export function AssetHistory({ assetId, tag, onClose }: { assetId: string; tag: 
   const query = useQuery({ queryKey: ['hrms', 'onboarding', 'assets', 'history', assetId], queryFn: () => apiJson<Allocation[]>(`/v1/onboarding/assets/${assetId}/history`) })
   const rows = query.data ?? []
   return (
-    <SidePanel open onClose={onClose} width={480} title={`History · ${tag}`} sub="Each hand-over and return, newest last."
+    <SidePanel open onClose={onClose} width={480} closeLabel="Close panel" title={`History · ${tag}`} sub="Each hand-over and return, newest last."
       footer={<PanelButton variant="secondary" size="lg" onClick={onClose}>Close</PanelButton>}>
       <section aria-label="Asset allocation history">
         {query.isLoading ? <SkeletonList rows={3} label="Loading the history" />
-          : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} retrying={query.isRefetching} />
+          : query.isError ? <ErrorState title="Couldn’t load the history" error={query.error} onRetry={() => query.refetch()} retrying={query.isRefetching} />
             : !rows.length ? <EmptyState icon="clock" title="Never handed out" hint="Each hand-over and return shows up here." />
               : (
                 <Timeline variant="rail" label={`Who has had ${tag}`} items={rows.map((a) => ({

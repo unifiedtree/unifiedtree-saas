@@ -76,7 +76,7 @@ function HireDetailsEditor({ instanceId, details, open, onClose }: { instanceId:
     } catch (e) { setError(errorText(e, 'Couldn’t save the hire details.')) }
   }
   return (
-    <SidePanel open={open} onClose={close} busy={save.isPending} width={520} title="Hire details"
+    <SidePanel open={open} onClose={close} busy={save.isPending} width={520} closeLabel="Close panel" title="Hire details"
       sub="Offer date, who hired them, where they came from, and the buddy they can ask."
       footer={<>
         <PanelButton variant="secondary" size="lg" disabled={save.isPending} onClick={close}>Cancel</PanelButton>

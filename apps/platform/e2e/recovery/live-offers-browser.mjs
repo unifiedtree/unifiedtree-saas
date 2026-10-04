@@ -1,3 +1,4 @@
+/* global process, console */
 import { chromium, expect } from '@playwright/test'
 const base = process.env.RECOVERY_UI_URL || 'http://demo.localhost:3002'
 const browser = await chromium.launch({ headless: true })
@@ -14,33 +15,42 @@ try {
   await page.locator('[aria-label="Hiring views"]').getByRole('button', { name: /^Offers/ }).click()
   await expect(page.getByRole('button', { name: 'Create offer', exact: true })).toBeVisible({ timeout: 30000 })
   await page.getByRole('button', { name: 'Create offer', exact: true }).click()
+  // The offer form sits in a side panel (P-HIRE); its Save draft button is in the panel's footer.
   const form = page.locator('form')
+  const panel = page.getByRole('dialog')
   await form.getByLabel('Company', { exact: true }).selectOption({ index: 1 })
   const name = `Browser offer ${Date.now()}`
   await form.getByLabel('Candidate name').fill(name)
   await form.getByLabel('Role', { exact: true }).fill('Browser verification role')
   await form.getByLabel('Annual offered CTC (INR)').fill('450000')
-  await form.getByRole('button', { name: 'Save draft' }).click()
+  await panel.getByRole('button', { name: 'Save draft' }).click()
   const row = page.getByRole('row').filter({ hasText: name })
   await expect(row).toBeVisible()
   await row.getByRole('button', { name: 'Edit draft' }).click()
   await form.getByLabel('Role', { exact: true }).fill('Updated verification role')
   await form.getByLabel('Offer terms', { exact: true }).fill('Approved local verification terms.')
-  await form.getByRole('button', { name: 'Save draft' }).click()
+  await panel.getByRole('button', { name: 'Save draft' }).click()
   await expect(row.getByText('Updated verification role')).toBeVisible()
   const downloadPromise = page.waitForEvent('download')
-  await row.getByRole('button', { name: 'Download PDF' }).click()
+  // A draft's PDF is in the row's menu (P-HIRE: the design shows Edit draft and Send offer email on drafts).
+  await row.getByRole('button', { name: `More for ${name}` }).click()
+  await page.getByRole('menuitem', { name: 'Download PDF' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/^offer-.*\.pdf$/)
   expect(await download.failure()).toBeNull()
-  await row.getByRole('button', { name: 'Email offer', exact: true }).click()
-  await page.getByLabel('Candidate email', { exact: true }).fill(`browser-${Date.now()}@example.test`)
-  await page.getByRole('button', { name: 'Send offer email', exact: true }).click()
+  // "Send offer email" asks for the address in a dialog (this offer has none stored).
+  await row.getByRole('button', { name: 'Send offer email', exact: true }).click()
+  const emailDialog = page.getByRole('dialog')
+  await emailDialog.getByLabel('Candidate email', { exact: true }).fill(`browser-${Date.now()}@example.test`)
+  await emailDialog.getByRole('button', { name: 'Send offer email', exact: true }).click()
   await expect(row.getByText('Submitted to', { exact: false })).toBeVisible({ timeout: 30000 })
   await expect(row.getByText('Sent', { exact: true })).toBeVisible()
   await expect(row.getByRole('button', { name: 'Edit draft' })).toHaveCount(0)
-  await row.getByRole('combobox').selectOption('WITHDRAWN')
-  await expect(row.getByText('Final decision')).toBeVisible()
+  // Status changes are in the row's menu; a final decision leaves no menu to change it with.
+  await row.getByRole('button', { name: `More for ${name}` }).click()
+  await page.getByRole('menuitem', { name: 'Withdraw offer' }).click()
+  await expect(row.getByText('Withdrawn', { exact: true })).toBeVisible()
+  await expect(row.getByRole('button', { name: `More for ${name}` })).toHaveCount(0)
   await page.reload()
   await page.locator('[aria-label="Hiring views"]').getByRole('button', { name: /^Offers/ }).click()
   await expect(page.getByRole('row').filter({ hasText: name }).getByText('Withdrawn', { exact: true })).toBeVisible()

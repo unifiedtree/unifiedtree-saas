@@ -32,11 +32,11 @@ export function CreateTemplatePanel({ open, onClose }: { open: boolean; onClose:
     setError('')
     try {
       await create.mutateAsync({ companyId, name: name.trim(), description: description.trim() || undefined, active: true })
-      toast.success('Template created'); onClose()
+      toast.success('Template created', { detail: 'Open it to add its tasks.' }); onClose()
     } catch (e) { setError(errorText(e, 'Couldn’t create the template.')) }
   }
   return (
-    <SidePanel open={open} onClose={close} busy={create.isPending} width={480} title="New checklist template"
+    <SidePanel open={open} onClose={close} busy={create.isPending} width={480} closeLabel="Close panel" title="New checklist template"
       sub="Add the tasks after creating it. Every new hire on this template works through them."
       footer={<>
         <PanelButton variant="secondary" size="lg" disabled={create.isPending} onClick={close}>Cancel</PanelButton>
@@ -47,7 +47,7 @@ export function CreateTemplatePanel({ open, onClose }: { open: boolean; onClose:
           <Select label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)} options={list.map((c) => ({ value: c.id, label: c.name }))} />
         )}
         <Input id="tpl-name" label="Template name" required value={name} maxLength={200} onChange={(e) => setName(e.target.value)} placeholder="e.g. Engineering onboarding" />
-        <Textarea id="tpl-desc" label="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+        <Textarea id="tpl-desc" label="Description" rows={3} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
         {companies.isError && <Callout tone="danger" icon="alert"><span role="alert">Couldn’t load companies. <button type="button" className="onb-link" onClick={() => companies.refetch()}>Try again</button></span></Callout>}
         {error && <Callout tone="danger" icon="alert"><span role="alert">{error}</span></Callout>}
       </form>

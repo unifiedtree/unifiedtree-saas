@@ -35,6 +35,9 @@ export function RegisterAssetPanel({ open, onClose }: { open: boolean; onClose: 
   const toast = useToast()
   const [form, setForm] = useState<AssetInput>({ ...EMPTY })
   const [error, setError] = useState('')
+  // Categories already in use, offered as suggestions so the list stays tidy (Laptop, not laptop / Laptops).
+  const existing = useAssets(open)
+  const categories = useMemo(() => [...new Set((existing.data ?? []).map((a) => a.assetType).filter(Boolean))].sort(), [existing.data])
   useEffect(() => {
     if (!open) return
     setForm({ ...EMPTY, companyId: companies.data?.length === 1 ? companies.data[0].id : '' }); setError('')
@@ -49,7 +52,7 @@ export function RegisterAssetPanel({ open, onClose }: { open: boolean; onClose: 
     catch (e) { setError(errorText(e, 'Couldn’t register the asset.')) }
   }
   return (
-    <SidePanel open={open} onClose={close} busy={create.isPending} width={520} title="Register an asset" sub="Choose the company that owns this asset."
+    <SidePanel open={open} onClose={close} busy={create.isPending} width={520} closeLabel="Close panel" title="Register an asset" sub="Choose the company that owns this asset."
       footer={<>
         <PanelButton variant="secondary" size="lg" disabled={create.isPending} onClick={close}>Cancel</PanelButton>
         <PanelButton variant="primary" size="lg" busy={create.isPending} blockedReason={missing} onClick={save}>Register asset</PanelButton>
@@ -60,10 +63,11 @@ export function RegisterAssetPanel({ open, onClose }: { open: boolean; onClose: 
         {companies.isError && <Callout tone="danger" icon="alert"><span role="alert">Couldn’t load companies. <button type="button" className="onb-link" onClick={() => companies.refetch()}>Try again</button></span></Callout>}
         <div className="onb-wiz-grid">
           {FIELDS.map((f) => (
-            <Input key={f.key} id={`asset-${f.key}`} label={f.label} required={f.required} maxLength={f.max} placeholder={f.ph}
+            <Input key={f.key} id={`asset-${f.key}`} label={f.label} required={f.required} maxLength={f.max} placeholder={f.ph} list={f.key === 'assetType' ? 'asset-category-options' : undefined}
               value={form[f.key] ?? ''} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
           ))}
         </div>
+        <datalist id="asset-category-options">{categories.map((c) => <option key={c} value={c} />)}</datalist>
         <Textarea id="asset-cond" label="Condition notes" rows={2} maxLength={4000} placeholder="Optional, e.g. new in box" value={form.conditionNotes ?? ''}
           onChange={(e) => setForm({ ...form, conditionNotes: e.target.value })} />
         {error && <Callout tone="danger" icon="alert"><span role="alert">{error}</span></Callout>}
@@ -204,7 +208,7 @@ function AssetMovePanel({ asset, onClose }: { asset: Asset; onClose: () => void 
     } catch (e) { setError(errorText(e, 'Couldn’t update the asset.')) }
   }
   return (
-    <SidePanel open onClose={close} busy={busy} width={520} title={taking ? `Take back ${asset.assetTag}` : `Give ${asset.assetTag} to someone`}
+    <SidePanel open onClose={close} busy={busy} width={520} closeLabel="Close panel" title={taking ? `Take back ${asset.assetTag}` : `Give ${asset.assetTag} to someone`}
       sub={`${asset.assetName}${asset.serialNo ? ` · ${asset.serialNo}` : ''}`}
       footer={<>
         <PanelButton variant="secondary" size="lg" disabled={busy} onClick={close}>Cancel</PanelButton>

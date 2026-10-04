@@ -1,3 +1,4 @@
+/* global process, console, fetch */
 // Candidate → employee conversion (plan item 11 / AT-3) against the local
 // recovery runtime. Creates a requisition + candidate through the real API,
 // walks the candidate to HIRED, records an accepted offer, then converts in the
@@ -69,10 +70,11 @@ try {
   const errs = []; page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]))
   await page.goto(base + '/login'); await page.locator('input[type=email]').fill('owner@unifiedtree.demo'); await page.locator('input[type=password]').fill(password); await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 }); await page.waitForTimeout(1500); errs.length = 0
-  // The pipeline is a board by stage; ?role= opens this requisition's board.
+  // The pipeline lists candidates in a table (P-HIRE; the board is a toggle); ?role= filters it to
+  // this requisition. A Hired candidate's row action is "Create employee", which asks first.
   await page.goto(base + `/hrms/hiring?tab=pipeline&role=${req.json.id}`)
-  const row = page.locator('article').filter({ hasText: `Kavya QA${tag}` })
-  await row.getByRole('button', { name: 'Convert to employee' }).click({ timeout: 20_000 })
+  const row = page.getByRole('row').filter({ hasText: `Kavya QA${tag}` })
+  await row.getByRole('button', { name: 'Create employee' }).click({ timeout: 20_000 })
   await page.getByRole('dialog').getByRole('button', { name: 'Create employee' }).click()
   await page.waitForURL(/\/hrms\/employees\/[0-9a-f-]{36}/, { timeout: 30_000 })
   const employeeId = page.url().match(/employees\/([0-9a-f-]{36})/)[1]
@@ -91,7 +93,7 @@ try {
   check('second conversion is rejected (idempotent)', again.status === 409, `${again.status} ${again.json?.errorCode ?? ''}`)
 
   await page.goto(base + `/hrms/hiring?tab=pipeline&role=${req.json.id}`)
-  await page.locator('article').filter({ hasText: `Kavya QA${tag}` }).getByRole('link', { name: /View employee/ }).waitFor({ timeout: 20_000 })
+  await page.getByRole('row').filter({ hasText: `Kavya QA${tag}` }).getByRole('link', { name: /View employee/ }).waitFor({ timeout: 20_000 })
   check('pipeline shows "View employee" after reload', true)
   mkdirSync('test-results/recovery', { recursive: true })
   await page.screenshot({ path: 'test-results/recovery/candidate-conversion-live.png', fullPage: true })

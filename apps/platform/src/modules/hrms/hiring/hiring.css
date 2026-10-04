@@ -1,0 +1,106 @@
+/* Hiring, onboarding and assets (P-HIRE). Tokens only (var(--u-*, light fallback)); no raw colours. */
+
+.hi-page { min-width: 0; }
+.hi-stack { display: grid; gap: 16px; min-width: 0; }
+.hi-muted { color: var(--u-ink3, #6A7A73); }
+.hi-small { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--u-ink3, #6A7A73); }
+.hi-copy { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--u-ink2, #4A5A54); }
+.hi-pills { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hi-num { font-variant-numeric: tabular-nums; }
+/* A pill with a wrapping note under it, inside a table cell. */
+.hi-cellwrap { display: grid; justify-items: start; gap: 4px; min-width: 0; white-space: normal; }
+.hi-link { color: var(--u-brt, #0F6E56); font-weight: 500; text-decoration: none; }
+.hi-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.hi-link:focus-visible { outline: none; border-radius: 4px; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+
+/* A person or item name that opens its panel: looks like the cell, behaves like a button. */
+.hi-open { display: block; width: 100%; padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit;
+  text-align: left; cursor: pointer; border-radius: 8px; min-width: 0; }
+.hi-open:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.hi-open:hover .uk-cell-person__name, .hi-open:hover .uk-cell-stack__a { color: var(--u-brt, #0F6E56); }
+
+/* The quiet row under a section header: role filter, Table / Board, the count. */
+.hi-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 0 20px 14px; }
+.hi-toolbar__count { font-size: 12.5px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
+.hi-toolbar__grow { flex: 1 1 auto; }
+.hi-toolbar .uko-field { min-width: 0; }
+.hi-toolbar .uko-input { height: 34px; border-radius: 10px; font-size: 13px; }
+.hi-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--u-ink2, #4A5A54); }
+.hi-filter__sel { min-width: 200px; max-width: 320px; }
+
+/* ── the pipeline board (Board view): a column per stage, cards you drag ── */
+.hi-board { overflow-x: auto; padding: 0 20px 20px; }
+.hi-board__cols { display: grid; gap: 12px; }
+.hi-col { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 8px; min-height: 180px; min-width: 0;
+  padding: 10px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 14px; background: var(--u-sf2, #F7F9F8); transition: border-color .2s, background .2s; }
+.hi-col.is-drop { border-color: var(--u-brl, #BFDFD1); }
+.hi-col.is-over { border-color: var(--u-br, #0F6E56); background: var(--u-brs, #E8F3EE); }
+.hi-col__head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px; }
+.hi-col__title { margin: 0; flex: 1; font-size: 14px; font-weight: 600; color: var(--u-ink, #0E1B16); }
+.hi-col__empty { margin: 0; padding: 14px 6px; border: 1px dashed var(--u-ln, #E3E9E6); border-radius: 10px; text-align: center;
+  font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.hi-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; overflow: hidden; padding: 10px 12px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff); box-shadow: var(--u-shc, 0 1px 2px rgba(14,27,22,.05)); }
+.hi-card[draggable="true"] { cursor: grab; }
+.hi-card.is-dragging { opacity: .6; }
+.hi-card__meta { display: grid; gap: 2px; font-size: 12px; line-height: 1.4; color: var(--u-ink3, #6A7A73); }
+.hi-card__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ── one interview (candidate panel, interview details) ── */
+.hi-iv { display: grid; gap: 12px; padding: 14px 16px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 14px; background: var(--u-sf, #fff); min-width: 0; }
+.hi-iv__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.hi-iv__title { margin: 0; font-size: 14.5px; font-weight: 600; color: var(--u-ink, #0E1B16); }
+.hi-iv__sub { margin: 2px 0 0; font-size: 12.5px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
+.hi-iv__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.hi-score { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--u-sf2, #F7F9F8); }
+.hi-score__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 500; color: var(--u-ink, #0E1B16); }
+.hi-score__line { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--u-ink2, #4A5A54); }
+
+/* Interviewers picked so far, each with its remove button. */
+.hi-chosen { display: flex; flex-wrap: wrap; gap: 6px; }
+.hi-chosen__item { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 4px 0 12px; border-radius: 999px;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); font-size: 13px; font-weight: 500; }
+.hi-chosen__x { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 999px;
+  background: none; color: inherit; font: inherit; cursor: pointer; }
+.hi-chosen__x:hover { background: var(--u-brs2, #D2EADF); }
+.hi-chosen__x:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--u-br, #0F6E56); }
+.hi-field-block { display: grid; gap: 8px; min-width: 0; }
+/* A field two columns wide in a three-column field grid (one column on phones, like the grid). */
+.hi-span2 { grid-column: span 2; }
+@media (max-width: 480px) { .hi-span2 { grid-column: auto; } }
+.hi-label { margin: 0; font-size: 13px; font-weight: 500; color: var(--u-ink, #0E1B16); }
+
+/* ── onboarding: progress in a table cell, the checklist ── */
+.hi-progress { display: grid; gap: 6px; min-width: 120px; max-width: 200px; }
+.hi-progress__text { font-size: 13px; color: var(--u-ink, #0E1B16); font-variant-numeric: tabular-nums; }
+.hi-tasks { display: grid; min-width: 0; }
+.hi-task { display: flex; gap: 14px; align-items: flex-start; padding: 14px 20px; border-top: 1px solid var(--u-ln2, #EDF1EF); }
+.hi-task:first-child { border-top: 0; }
+.hi-task.is-closed { opacity: .78; }
+.hi-task__dot { flex: 0 0 auto; margin-top: 1px; width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+.hi-task__dot[data-tone="done"] { background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.hi-task__dot[data-tone="skipped"] { background: var(--u-hv, #F0F4F2); color: var(--u-ink3, #6A7A73); }
+.hi-task__dot[data-tone="overdue"] { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.hi-task__dot[data-tone="todo"] { background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); }
+.hi-task__body { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.hi-task__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hi-task__title { font-size: 14px; font-weight: 500; color: var(--u-ink, #0E1B16); }
+.hi-task.is-closed .hi-task__title { text-decoration: line-through; color: var(--u-ink3, #6A7A73); }
+.hi-task__meta { font-size: 12.5px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
+.hi-task__note { font-size: 12.5px; font-style: italic; color: var(--u-ink2, #4A5A54); }
+.hi-task__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Asset history in its panel. */
+.hi-history { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.hi-history__item { padding-left: 14px; border-left: 2px solid var(--u-br, #0F6E56); font-size: 13.5px; color: var(--u-ink, #0E1B16); }
+.hi-history__item strong { font-weight: 500; }
+.hi-history__sub { margin: 2px 0 0; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+
+@media (max-width: 640px) {
+  /* Phone cards: a row's buttons wrap instead of running off the card. */
+  .hi-page .uk-table--cards .uk-cell-actions { flex-wrap: wrap; row-gap: 6px; }
+  .hi-toolbar { padding: 0 16px 12px; }
+  .hi-board { padding: 0 16px 16px; }
+  .hi-filter__sel { min-width: 0; max-width: none; flex: 1 1 auto; }
+  .hi-task { padding: 12px 16px; }
+}

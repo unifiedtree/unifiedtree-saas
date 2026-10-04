@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import { asAvailable, useAvailableQuery } from '../../api/shared/available'
+import type { AssetIssueBrief, AssetProblemKind } from '../myAssetsApi'
 
-/** A problem the holder reported that HR hasn't resolved yet (BW-70). */
-export interface AssetIssueBrief { id: string; kind: string; note?: string | null; reportedAt: string }
+/** A problem the holder reported that HR hasn't resolved yet (BW-70); the same shape My assets reads. */
+export type { AssetIssueBrief }
 
 export interface Asset {
   id: string; companyId: string; employeeId?: string; assetTag: string; assetType: string;
@@ -19,14 +20,15 @@ export interface Asset {
   confirmationSource?: string | null
   /** Handed over and not confirmed yet. Null while the confirmations table is missing. */
   confirmationPending?: boolean | null
+  /** A problem the holder reported that hasn't been resolved. */
   openIssue?: AssetIssueBrief | null
 }
 export type AssetInput = Pick<Asset, 'companyId' | 'assetTag' | 'assetType' | 'assetName' | 'serialNo' | 'conditionNotes'>
 
 /** A reported problem as HR's list shows it. employeeName only for callers who can read employee records. */
 export interface AssetIssue {
-  id: string; assetId: string; assetTag: string; assetName: string; assetType: string; companyId: string
-  employeeId: string | null; employeeName: string | null; kind: string; note: string | null; status: 'OPEN' | 'RESOLVED' | string
+  id: string; assetId: string; assetTag: string; assetName: string; assetType: string | null; companyId: string | null
+  employeeId: string | null; employeeName: string | null; kind: AssetProblemKind | string; note: string | null; status: 'OPEN' | 'RESOLVED' | string
   reportedAt: string; resolvedAt: string | null; resolvedByName: string | null; resolutionNote: string | null
 }
 
@@ -56,12 +58,12 @@ export function useAssetIssues(status: 'OPEN' | 'RESOLVED' | 'ALL', enabled: boo
   })
 }
 
-/** HR marks a report resolved, with an optional note; the asset list's open problem clears with it. */
+/** HR marks a report resolved, with an optional note (blank sends none); the asset list's open problem clears with it. */
 export function useResolveAssetIssue() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note?: string }) =>
-      apiJson<AssetIssue>(`/v1/onboarding/assets/issues/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note: note || null }) }),
+      apiJson<AssetIssue>(`/v1/onboarding/assets/issues/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   })
 }

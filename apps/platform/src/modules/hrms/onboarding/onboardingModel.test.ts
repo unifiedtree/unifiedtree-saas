@@ -13,6 +13,7 @@ describe('run status', () => {
     expect(runStatusLabel('ON_HOLD')).toBe('On hold')
     expect(runStatusLabel('COMPLETED')).toBe('Completed')
     expect(runStatusLabel('SOME_NEW_STATE')).toBe('Some new state')
+    expect(runPill('CANCELLED', null, TODAY)).toEqual({ label: 'Cancelled', tone: 'neutral' })
     expect(runStatusLabel('')).toBe('—')
     expect(runStatusTone('SOME_NEW_STATE')).toBe('neutral')
     expect(runStatusTone('ON_HOLD')).toBe('danger')
@@ -20,6 +21,7 @@ describe('run status', () => {
 
   it('says when a hire who has not joined yet starts', () => {
     expect(runPill('IN_PROGRESS', '2026-10-05', TODAY)).toEqual({ label: 'Starts tomorrow', tone: 'warning' })
+    expect(runPill('IN_PROGRESS', '2026-10-07', TODAY).label).toBe('Starts Wednesday')
     expect(runPill('IN_PROGRESS', '2026-10-09', TODAY)).toEqual({ label: 'Starts Friday', tone: 'warning' })
     expect(runPill('IN_PROGRESS', '2026-10-12', TODAY)).toEqual({ label: 'Starts 12 Oct', tone: 'warning' })
     // Joined today or earlier, no joining date, or not in progress: the status itself.
@@ -131,6 +133,19 @@ describe('the New hires list without the overview endpoint', () => {
     expect(rows[1]).toMatchObject({ employeeName: null, departmentName: null, tasksOverdue: 1 })
     // Overdue tasks only count on runs in progress; joining this month comes from the hire's date.
     expect(counts).toEqual({ all: 3, inProgress: 1, onHold: 1, completed: 1, joiningThisMonth: 1, tasksOverdue: 1 })
+  })
+
+  it('leaves out a checklist name it does not know, and counts done and skipped on every run', () => {
+    const { rows } = rowsFromInstances([
+      run('a', 'IN_PROGRESS', 'e1', [{ status: 'COMPLETED', dueDate: '2026-10-01' }, { status: 'SKIPPED', dueDate: null }, { status: 'PENDING', dueDate: '2026-10-02' }, { status: 'PENDING', dueDate: '2026-10-09' }]),
+      run('c', 'COMPLETED', 'e3', []),
+    ], {
+      person: (id) => (id === 'e3' ? { name: 'Karan', dateOfJoining: '2026-08-01' } : undefined),
+      department: () => undefined,
+      template: () => undefined,
+    }, TODAY)
+    expect(rows[0]).toMatchObject({ templateName: null, tasksTotal: 4, tasksDone: 2, tasksOverdue: 1, nextDueOn: '2026-10-02' })
+    expect(rows[1]).toMatchObject({ employeeName: 'Karan', tasksTotal: 0, nextDueOn: null })
   })
 
   it('counts an empty list as zeros', () => {
