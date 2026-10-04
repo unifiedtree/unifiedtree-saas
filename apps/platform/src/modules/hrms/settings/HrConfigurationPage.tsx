@@ -209,7 +209,7 @@ export function HrConfigurationPage() {
     { key: 'week', label: 'Work week', state: 'on', errors: secErr('week') },
     { key: 'late', label: 'Late arrival', state: 'on', errors: secErr('late') },
     { key: 'attendance', label: 'Attendance rules', state: 'on', errors: secErr('attendance') },
-    ...(canAlertsRead ? [{ key: 'alerts', label: 'Punch-in alerts', state: alertsQ.data ? 'on' : alertsQ.notAvailable ? 'soon' : 'none' } satisfies SettingsNavItem] : []),
+    ...(canAlertsRead && co ? [{ key: 'alerts', label: 'Punch-in alerts', state: alertsQ.data ? 'on' : alertsQ.notAvailable ? 'soon' : 'none' } satisfies SettingsNavItem] : []),
     { key: 'fiscal', label: 'Fiscal year', state: 'on' },
   ]
   const ro = !hrEdit, pro = !probEdit, pol = !polEdit
@@ -336,7 +336,7 @@ export function HrConfigurationPage() {
           {(f.fullDayHours || f.halfDayHours) && <SettingsNote tone="amber">Warning: days under the minimum hours count as half days or absences, which payroll can deduct. People who forget to check out aren’t judged on hours; they show as “No check-out” for review.</SettingsNote>}
         </SettingsSection>
 
-        {canAlertsRead && (
+        {canAlertsRead && !!co && (
           <PunchAlertsSection
             value={alertsQ.notAvailable ? undefined : f.alerts}
             error={alertsQ.isError && !alertsQ.data}

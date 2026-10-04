@@ -37,7 +37,7 @@ describe('HR configuration › Punch-in alerts', () => {
     expect(out).toContain('Add a role…')
     expect(out).toContain('role="radiogroup"')
     expect(out).toContain('Every punch-in')
-    expect(out).toContain('Only late or outside the office')
+    expect(out).toContain('Late or outside only')
   })
 
   it('marks someone who has left (the alert skips them)', () => {

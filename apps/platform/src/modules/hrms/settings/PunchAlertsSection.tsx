@@ -20,9 +20,10 @@ export interface PunchAlertsForm {
 export const MAX_ALERT_PEOPLE = 50
 export const MAX_ALERT_ROLES = 20
 
-const WHEN: { value: PunchAlertOn; label: string }[] = [
-  { value: 'ALL', label: 'Every punch-in' },
-  { value: 'LATE_OR_OUTSIDE', label: 'Only late or outside the office' },
+// Short labels: the two options sit side by side, even on a phone.
+const WHEN: { value: PunchAlertOn; label: string; long: string }[] = [
+  { value: 'ALL', label: 'Every punch-in', long: 'Every punch-in' },
+  { value: 'LATE_OR_OUTSIDE', label: 'Late or outside only', long: 'Only late punch-ins and punch-ins outside the office' },
 ]
 
 export interface PunchAlertsSectionProps {
@@ -118,11 +119,12 @@ export function PunchAlertsSection({ value, onChange, readOnly, options, options
       </div>
 
       {readOnly
-        ? <SettingsValue label="Which punch-ins" value={WHEN.find((w) => w.value === a.on)?.label ?? 'Every punch-in'} />
+        ? <SettingsValue label="Which punch-ins" value={WHEN.find((w) => w.value === a.on)?.long ?? 'Every punch-in'} />
         : (
           <div className="uks-field">
             <span className="uks-label">Which punch-ins</span>
-            <SegmentedControl<PunchAlertOn> label="Which punch-ins" semantics="radio" size="lg" options={WHEN} value={a.on} onChange={(on) => set({ on })} />
+            <SegmentedControl<PunchAlertOn> label="Which punch-ins" semantics="radio" size="lg" options={WHEN.map(({ value, label }) => ({ value, label }))} value={a.on} onChange={(on) => set({ on })} />
+            <p className="uks-hint">{a.on === 'ALL' ? 'An alert for every punch-in.' : 'Only late punch-ins, and ones outside every office zone or without a location. A work-from-home day, or someone allowed to punch in from anywhere, doesn’t count as outside.'}</p>
           </div>
         )}
 
