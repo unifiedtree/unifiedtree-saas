@@ -1,3 +1,4 @@
+/* global process, console */
 // Browser check of the Assets view (Onboarding & assets → Assets) and the
 // compliance filing calendar: register an asset, assign it, take it back,
 // check its history after a reload, then page the calendar. The QA asset is

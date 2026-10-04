@@ -1,3 +1,4 @@
+/* global process, console */
 import { chromium, expect } from '@playwright/test'
 const base = process.env.RECOVERY_UI_URL || 'http://demo.localhost:3002'
 const browser = await chromium.launch({ headless: true })

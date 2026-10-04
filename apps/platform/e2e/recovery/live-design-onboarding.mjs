@@ -1,3 +1,4 @@
+/* global process, console, fetch */
 // Live check of the redesigned Onboarding & assets pages against the local API.
 //  - API: removing a template task that a started onboarding uses now works
 //    (was a foreign-key 500) and the run keeps its copy; a task id from another
@@ -26,7 +27,7 @@ async function apiSession(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }

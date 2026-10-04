@@ -1,3 +1,4 @@
+/* global process, console, fetch */
 // Candidate → employee conversion (plan item 11 / AT-3) against the local
 // recovery runtime. Creates a requisition + candidate through the real API,
 // walks the candidate to HIRED, records an accepted offer, then converts in the
