@@ -1,265 +1,233 @@
-// Onboarding & Assets (/hrms/onboarding/instances) on the module kit.
-//
-// Who sees what (the API decides the scope, the page follows it):
-//   - HR (hrms.onboarding.instance.write): every new hire's run, can start,
-//     hold, resume and reopen runs.
-//   - Everyone else with instance.read (employees, managers, finance): the API
-//     returns only their OWN runs, so the view is "Your onboarding" rather than
-//     a table of colleagues' names they can't read.
-//   - Assets: asset.read or instance.write. Templates: template.read.
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, MoreVertical, Plus } from 'lucide-react'
-import { usePermission } from '@unifiedtree/sdk'
-import { HrStatusPill, HrButton, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
-import { ModulePage, Views, useView, StatRow, State, RowList, Row, useDesignToast, dmy } from '@/design/module/ModuleKit'
-import { AssetsTab } from './AssetsTab'
-import { Templates } from './Templates'
-import { useInstances, useUpdateInstanceStatus } from './api/useOnboarding'
-import type { OnboardingInstance, OnboardingInstanceStatus } from './api/useOnboarding'
+// Onboarding & assets (/hrms/onboarding/instances) on the redesign kit (prototype PgTalent h-onb).
+// Three views kept in ?view= (hires · assets · templates, the registry's keys; today's order):
+//   - New hires (HR, hrms.onboarding.instance.write): this month's figures and every run with the
+//     hire's name, department, joining date, checklist and progress (BW-69 overview, one call), with
+//     a status filter, Open record and hold / resume / reopen. Everyone else with instance.read gets
+//     "Your onboarding": the API returns only their own runs.
+//   - Assets: asset.read or instance.write. Checklist templates: template.read.
+// The page's main action follows the view (Start onboarding · Register an asset · New template).
+import React, { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { MoreVertical } from 'lucide-react'
+import { P, usePermission } from '@unifiedtree/sdk'
+import {
+  Button, CellActions, CellPerson, EmptyState, ListRow, ListRows, MiniStat, MiniStatGrid, PageFrame, PageHeader, PillTabs,
+  SegmentedControl, Section, StatusPill, Table, errorText, type TableColumn,
+} from '@/design/kit/display'
+import { Pager } from '@/design/kit/data'
+import { Menu, useToast } from '@/design/kit/overlays'
+import { MONTHS, istToday } from '@/design/dc/dates'
+import { AssetsTab, RegisterAssetPanel } from './AssetsTab'
+import { CreateTemplatePanel, Templates } from './Templates'
+import {
+  useInstances, useOnboardingOverview, useTemplates, useUpdateInstanceStatus,
+  type OnboardingInstanceStatus, type OnboardingOverview, type OnboardingOverviewRow,
+} from './api/useOnboarding'
 import { useEmployeesByIds } from '../api/useWorkforce'
-import type { WorkforceEmployee } from '../api/useWorkforce'
 import { useCompanies, useDepartments } from '../api/useOrg'
+import {
+  RUN_STATUS, RUN_STATUS_KEYS, fullDate, joiningText, progressOf, rowsFromInstances, runPill, runStatusKey, runStatusLabel, runStatusTone,
+  tasksText, type RunStatusKey,
+} from './onboardingModel'
+import './onboarding.css'
 
 const PAGE_SIZE = 10
-
-// The status column is a free string server-side; anything unrecognised
-// falls through to a grey pill with the raw value rather than a wrong label.
-type StatusKey = 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD'
-export const STATUS_LABEL: Record<StatusKey, string> = { IN_PROGRESS: 'In progress', COMPLETED: 'Completed', ON_HOLD: 'On hold' }
-export const STATUS_TONE: Record<StatusKey, PillTone> = { IN_PROGRESS: 'warn', COMPLETED: 'ok', ON_HOLD: 'red' }
-export function statusKeyOf(status: string): StatusKey | null {
-  return status === 'IN_PROGRESS' || status === 'COMPLETED' || status === 'ON_HOLD' ? status : null
-}
-export const statusLabel = (s: string) => { const k = statusKeyOf(s); return k ? STATUS_LABEL[k] : s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) }
-export const statusTone = (s: string): PillTone => { const k = statusKeyOf(s); return k ? STATUS_TONE[k] : 'gray' }
-
-/** Done = completed or skipped; the run closes itself when the last task is done. */
-function progressOf(run: OnboardingInstance) {
-  const tasks = run.instanceTasks ?? []
-  const done = tasks.filter((t) => t.status === 'COMPLETED' || t.status === 'SKIPPED').length
-  return { done, total: tasks.length }
-}
-
-function RowMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('pointerdown', onPointerDown); document.removeEventListener('keydown', onKey) }
-  }, [open])
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" aria-label="Row actions" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-[var(--bg-subtle)] hover:text-text-primary">
-        <MoreVertical size={16} />
-      </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-[calc(100%+4px)] z-50 w-52 overflow-hidden rounded-xl border border-border-default bg-[var(--bg-surface)] py-1 shadow-[0_16px_48px_-16px_rgba(15,110,86,0.25)]">
-          {items.map((item) => (
-            <button key={item.label} type="button" role="menuitem" onClick={() => { setOpen(false); item.onClick() }}
-              className="block w-full px-3.5 py-2 text-left text-[13px] font-medium text-text-primary transition-colors hover:bg-[var(--bg-subtle)]">
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Progress({ done, total }: { done: number; total: number }) {
-  if (!total) return <span style={{ fontSize: 12.5, color: '#94a3b8' }}>No tasks</span>
-  const pct = Math.round((done / total) * 100)
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
-      <span aria-hidden="true" style={{ flex: 1, height: 6, borderRadius: 999, background: '#eef2f6', overflow: 'hidden', minWidth: 60 }}>
-        <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: '#059669', borderRadius: 999 }} />
-      </span>
-      <span style={{ fontSize: 12.5, color: '#475569', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{`${done}/${total}`}</span>
-    </span>
-  )
-}
-
 type Tab = 'hires' | 'assets' | 'templates'
+
+// Kept for callers of the old helpers (labels and tones now come from onboardingModel).
+export const statusLabel = runStatusLabel
+export const statusTone = runStatusTone
 
 export const Instances: React.FC = () => {
   const navigate = useNavigate()
   const canReadInstances = usePermission('hrms.onboarding.instance.read')
   const isHr = usePermission('hrms.onboarding.instance.write')
   const canReadAssets = usePermission('hrms.onboarding.asset.read') || isHr
+  const canWriteAssets = usePermission('hrms.onboarding.asset.write') || isHr
   const canReadTemplates = usePermission('hrms.onboarding.template.read')
-  const views = [
-    ...(canReadInstances ? [{ key: 'hires', label: isHr ? 'New hires' : 'Your onboarding', icon: 'clipboard' }] : []),
-    ...(canReadAssets ? [{ key: 'assets', label: 'Assets', icon: 'briefcase' }] : []),
-    ...(canReadTemplates ? [{ key: 'templates', label: 'Checklist templates', icon: 'list' }] : []),
+  const canWriteTemplates = usePermission(P.HRMS_ONBOARDING_TEMPLATE_WRITE)
+  const views: { key: Tab; label: string }[] = [
+    ...(canReadInstances ? [{ key: 'hires' as const, label: isHr ? 'New hires' : 'Your onboarding' }] : []),
+    ...(canReadAssets ? [{ key: 'assets' as const, label: 'Assets' }] : []),
+    ...(canReadTemplates ? [{ key: 'templates' as const, label: 'Checklist templates' }] : []),
   ]
-  const [tab, setTab] = useView(views.map((v) => v.key)) as [Tab, (k: string) => void]
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('view')
+  const tab: Tab | '' = views.find((v) => v.key === asked)?.key ?? views[0]?.key ?? ''
+  const setTab = (next: string) => {
+    const sp = new URLSearchParams(params)
+    sp.set('view', next)
+    setParams(sp, { replace: true })
+  }
+  const [panel, setPanel] = useState<'template' | 'asset' | null>(null)
+
+  const sub = tab === 'templates' ? 'Reusable task lists for new hires.'
+    : tab === 'assets' ? 'Company equipment: who has it, and what’s in store.'
+      : isHr ? 'Everyone joining, and how far they are through their checklist.'
+        : 'Your joining checklist, and how far you are through it.'
+  const action = tab === 'hires' && isHr
+    ? <Button variant="primary" size={40} icon="plus" onClick={() => navigate('/hrms/onboarding/instances/new')}>Start onboarding</Button>
+    : tab === 'templates' && canWriteTemplates
+      ? <Button variant="primary" size={40} icon="plus" onClick={() => setPanel('template')}>New template</Button>
+      : tab === 'assets' && canWriteAssets
+        ? <Button variant="primary" size={40} icon="plus" onClick={() => setPanel('asset')}>Register an asset</Button>
+        : undefined
+
   return (
-    <ModulePage crumb="Recruitment" title="Onboarding & assets"
-      subtitle={isHr ? 'Bring new hires on board, follow their checklists and track the equipment you hand out.' : canReadAssets ? 'Your joining checklist, and the equipment handed out in the company.' : 'Your joining checklist.'}
-      actions={isHr ? <HrButton onClick={() => navigate('/hrms/onboarding/instances/new')}><Plus size={15} /> Start onboarding</HrButton> : undefined}>
-      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-        {views.length > 1 && <Views items={views} active={tab} onChange={setTab} label="Onboarding views" />}
-        {views.length === 0 && <State kind="empty" icon="lock" title="No onboarding access" description="Ask an admin if you should see onboarding or assets." />}
-        {tab === 'hires' && canReadInstances && (isHr ? <HiresView /> : <MyOnboarding />)}
-        {tab === 'assets' && canReadAssets && <AssetsTab />}
-        {tab === 'templates' && canReadTemplates && <Templates embedded />}
-      </div>
-    </ModulePage>
+    <PageFrame label="Onboarding & assets">
+      <PageHeader eyebrow="Hiring & onboarding" title="Onboarding & assets" sub={views.length ? sub : undefined} actions={action} />
+      {views.length > 1 && <PillTabs label="Onboarding views" semantics="toggle" activeKey={tab} onSelect={setTab} items={views} />}
+      {views.length === 0 && <EmptyState icon="lock" title="No onboarding access" hint="Ask an admin if you should see onboarding or assets." />}
+      {tab === 'hires' && (isHr ? <HiresView /> : <MyOnboarding />)}
+      {tab === 'assets' && <AssetsTab />}
+      {tab === 'templates' && <Templates embedded />}
+      <CreateTemplatePanel open={panel === 'template'} onClose={() => setPanel(null)} />
+      <RegisterAssetPanel open={panel === 'asset'} onClose={() => setPanel(null)} />
+    </PageFrame>
   )
 }
 
-/** Non-HR: the API returns only the viewer's own runs. */
+/** Not HR: the API returns only the viewer's own runs. */
 function MyOnboarding() {
   const navigate = useNavigate()
-  const { data: runs = [], isLoading, error, refetch } = useInstances(undefined, true)
-  if (isLoading) return <State kind="loading" />
-  if (error) return <State kind="error" title="Couldn’t load your onboarding" description={(error as Error).message} onRetry={() => refetch()} />
-  if (!runs.length) return <State kind="empty" icon="clipboard" title="No onboarding checklist" description="When HR starts your onboarding, your joining tasks appear here." />
+  const { data: runs = [], isLoading, error, refetch, isRefetching } = useInstances(undefined, true)
   return (
-    <RowList>
-      {runs.map((run) => {
-        const p = progressOf(run)
-        return (
-          <Row key={run.id} onClick={() => navigate(`/hrms/onboarding/instances/${run.id}`)}
-            title={`Onboarding started ${dmy(run.startedAt)}`}
-            meta={run.completedAt ? `Completed ${dmy(run.completedAt)}` : `${p.total - p.done} ${p.total - p.done === 1 ? 'task' : 'tasks'} left`}
-            trail={<><Progress {...p} /><HrStatusPill tone={statusTone(run.status)}>{statusLabel(run.status)}</HrStatusPill></>} />
-        )
-      })}
-    </RowList>
+    <Section title="Your onboarding" body="list" loading={isLoading} error={error} onRetry={() => refetch()} retrying={isRefetching}
+      empty={!runs.length ? { title: 'No onboarding checklist', hint: 'When HR starts your onboarding, your joining tasks appear here.', icon: 'clipboard', variant: 'plain' } : undefined}>
+      <ListRows label="Your onboarding checklists">
+        {runs.map((run) => {
+          const p = progressOf(run.instanceTasks ?? [])
+          const left = p.total - p.done
+          return (
+            <ListRow key={run.id} chevron onClick={() => navigate(`/hrms/onboarding/instances/${run.id}`)}
+              title={`Onboarding started ${fullDate(run.startedAt)}`}
+              sub={run.completedAt ? `Completed ${fullDate(run.completedAt)}` : `${left} ${left === 1 ? 'task' : 'tasks'} left`}
+              end={<span className="onb-row"><span className="onb-muted onb-num">{tasksText(p.done, p.total)}</span><StatusPill tone={runStatusTone(run.status)}>{runStatusLabel(run.status)}</StatusPill></span>} />
+          )
+        })}
+      </ListRows>
+    </Section>
   )
 }
 
+/** HR: the overview in one call; a server without it gets the same rows built from the plain list. */
 function HiresView() {
-  const navigate = useNavigate()
-  const { show, node } = useDesignToast()
-  const [status, setStatus] = useState<'' | StatusKey>('')
-  const [page, setPage] = useState(0)
-  // by-ids needs hrms.employee.read; without it names stay a quiet dash.
+  const overview = useOnboardingOverview()
+  if (overview.notAvailable) return <LegacyHires />
+  return <HiresBody data={overview.data} loading={overview.isLoading} error={overview.error} retrying={overview.isRefetching} onRetry={() => overview.refetch()} />
+}
+
+/** Today's way of building the list: the runs, then names (directory read only), departments and template names. */
+function LegacyHires() {
+  const today = istToday()
   const canReadEmployees = usePermission('hrms.employee.read')
   const canReadTemplates = usePermission('hrms.onboarding.template.read')
-  // Tiles count every run, so the list is fetched unfiltered and narrowed here.
-  const { data: instances = [], isLoading, error, refetch } = useInstances(undefined, true)
-  const ids = useMemo(() => instances.map((r) => r.employeeId).filter((id): id is string => !!id), [instances])
-  const { data: people } = useEmployeesByIds(ids, { enabled: canReadEmployees })
-  const byId = useMemo(() => { const m = new Map<string, WorkforceEmployee>(); (people ?? []).forEach((e) => m.set(e.id, e)); return m }, [people])
+  const runs = useInstances(undefined, true)
+  const ids = useMemo(() => (runs.data ?? []).map((r) => r.employeeId).filter((id): id is string => !!id), [runs.data])
+  const people = useEmployeesByIds(ids, { enabled: canReadEmployees })
   const { data: companies = [] } = useCompanies()
   const { data: departments = [] } = useDepartments(companies[0]?.id ?? '')
-  const deptName = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments])
+  const templates = useTemplates(undefined, { enabled: canReadTemplates })
+  const data: OnboardingOverview | undefined = useMemo(() => {
+    if (!runs.data) return undefined
+    const byId = new Map((people.data ?? []).map((e) => [e.id, e]))
+    const dept = new Map(departments.map((d) => [d.id, d.name]))
+    const tpl = new Map((templates.data ?? []).map((t) => [t.id, t.name]))
+    return rowsFromInstances(runs.data, {
+      person: (id) => {
+        const e = byId.get(id)
+        return e && { name: [e.firstName, e.lastName].filter(Boolean).join(' '), code: e.employeeCode, companyId: e.companyId, departmentId: e.departmentId, dateOfJoining: e.dateOfJoining }
+      },
+      department: (id) => dept.get(id),
+      template: (id) => tpl.get(id),
+    }, today)
+  }, [runs.data, people.data, departments, templates.data, today])
+  return <HiresBody data={data} loading={runs.isLoading} error={runs.error} retrying={runs.isRefetching} onRetry={() => runs.refetch()} />
+}
 
-  const counts = useMemo(() => {
-    const c = { total: instances.length, IN_PROGRESS: 0, COMPLETED: 0, ON_HOLD: 0 }
-    instances.forEach((r) => { const k = statusKeyOf(r.status); if (k) c[k] += 1 })
-    return c
-  }, [instances])
-  const filtered = useMemo(() => (status ? instances.filter((r) => r.status === status) : instances), [instances, status])
-  const total = filtered.length
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const safePage = Math.min(page, totalPages - 1)
-  useEffect(() => { setPage(0) }, [status])
-  const rows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
-
-  // ON_HOLD is only reachable by hand; IN_PROGRESS -> COMPLETED happens when the last task is done.
+function HiresBody({ data, loading, error, retrying, onRetry }: { data?: OnboardingOverview; loading: boolean; error: unknown; retrying?: boolean; onRetry: () => void }) {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const today = istToday()
+  const canReadEmployees = usePermission('hrms.employee.read')
+  const canReadTemplates = usePermission('hrms.onboarding.template.read')
+  const [status, setStatus] = useState<'all' | RunStatusKey>('all')
+  const [page, setPage] = useState(0)
   const updateStatus = useUpdateInstanceStatus()
-  const setRowStatus = async (instanceId: string, next: OnboardingInstanceStatus, done: string) => {
-    try { await updateStatus.mutateAsync({ instanceId, status: next }); show(done) } catch (e) { show('Couldn’t update the onboarding', true, (e as Error)?.message) }
+  const rows = useMemo(() => data?.rows ?? [], [data])
+  const counts = data?.counts
+  const filtered = useMemo(() => (status === 'all' ? rows : rows.filter((r) => r.status === status)), [rows, status])
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pages - 1)
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
+  const open = (r: OnboardingOverviewRow) => navigate(`/hrms/onboarding/instances/${r.instanceId}`)
+  // ON_HOLD is only reachable by hand; IN_PROGRESS → COMPLETED happens when the last task is done.
+  const setRunStatus = async (r: OnboardingOverviewRow, next: OnboardingInstanceStatus, done: string) => {
+    try { await updateStatus.mutateAsync({ instanceId: r.instanceId, status: next }); toast.success(done) }
+    catch (e) { toast.error('Couldn’t update the onboarding', { detail: errorText(e, 'Try again in a moment.') }) }
   }
-  const nameOf = (r: OnboardingInstance) => {
-    const e = byId.get(r.employeeId)
-    return [e?.firstName, e?.lastName].filter(Boolean).join(' ').trim() || 'Employee'
-  }
-  const pick = (k: '' | StatusKey) => setStatus((cur) => (cur === k ? '' : k))
+  const pick = (next: 'all' | RunStatusKey) => { setStatus(next); setPage(0) }
 
+  const columns: TableColumn<OnboardingOverviewRow>[] = [
+    {
+      key: 'hire', header: 'New hire', primary: true, render: (r) => r.employeeName
+        ? <CellPerson name={r.employeeName} sub={r.departmentName || r.employeeCode || undefined} />
+        : <span className="onb-muted" title="Your role can’t read employee names">—</span>,
+    },
+    // The run has no joining date of its own: the hire's date of joining, else when it started.
+    { key: 'joining', header: 'Joining', render: (r) => <span className="onb-num">{joiningText(r.dateOfJoining ?? r.startedAt, today)}</span> },
+    { key: 'template', header: 'Template', render: (r) => <span className="onb-clip" title={r.templateName || undefined}>{r.templateName || '—'}</span> },
+    { key: 'progress', header: 'Progress', render: (r) => <span className="onb-num">{tasksText(r.tasksDone, r.tasksTotal)}</span> },
+    { key: 'status', header: 'Status', render: (r) => { const p = runPill(r.status, r.dateOfJoining, today); return <StatusPill tone={p.tone}>{p.label}</StatusPill> } },
+    {
+      key: 'act', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (r) => {
+        const key = runStatusKey(r.status)
+        const name = r.employeeName || 'this new hire'
+        return (
+          <CellActions>
+            <Button variant="secondary" size={30} onClick={() => open(r)}>Open record</Button>
+            <Menu label={`More for ${name}`} width={240} placement="bottom-end"
+              trigger={({ props }) => <button type="button" {...props} className="onb-more" aria-label={`More for ${name}`}><MoreVertical size={16} aria-hidden="true" /></button>}
+              items={[
+                { key: 'open', label: 'Open checklist', icon: 'clipboard', onSelect: () => open(r) },
+                ...(key === 'IN_PROGRESS' ? [{ key: 'hold', label: 'Put on hold', icon: 'clock', onSelect: () => { void setRunStatus(r, 'ON_HOLD', 'Onboarding put on hold') } }] : []),
+                ...(key === 'ON_HOLD' ? [{ key: 'resume', label: 'Resume onboarding', icon: 'arrowRight', onSelect: () => { void setRunStatus(r, 'IN_PROGRESS', 'Onboarding resumed') } }] : []),
+                ...(key === 'COMPLETED' ? [{ key: 'reopen', label: 'Reopen onboarding', icon: 'arrowRight', onSelect: () => { void setRunStatus(r, 'IN_PROGRESS', 'Onboarding reopened') } }] : []),
+                ...(canReadEmployees ? [{ key: 'profile', label: 'Open employee profile', icon: 'users', onSelect: () => navigate(`/hrms/employees/${r.employeeId}`) }] : []),
+                ...(canReadTemplates && r.templateId ? [{ key: 'template', label: 'Open template', icon: 'list', onSelect: () => navigate(`/hrms/onboarding/templates/${r.templateId}`) }] : []),
+              ]} />
+          </CellActions>
+        )
+      },
+    },
+  ]
+
+  const month = MONTHS[Number(today.slice(5, 7)) - 1]
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
-        { icon: 'clipboard', color: 'blue', label: 'All onboarding', value: String(counts.total), sub: 'Every run so far', onClick: () => pick('') },
-        { icon: 'userCheck', color: 'orange', label: 'In progress', value: String(counts.IN_PROGRESS), sub: 'Tasks still open', onClick: () => pick('IN_PROGRESS') },
-        { icon: 'checkCircle', color: 'green', label: 'Completed', value: String(counts.COMPLETED), sub: 'Every task done', onClick: () => pick('COMPLETED') },
-        { icon: 'clock', color: 'red', label: 'On hold', value: String(counts.ON_HOLD), sub: 'Paused by HR', onClick: () => pick('ON_HOLD') },
-      ]} />}
-
-      {isLoading ? <State kind="loading" height={260} />
-        : error ? <State kind="error" title="Couldn’t load onboarding" description={(error as Error).message} onRetry={() => refetch()} />
-          : instances.length === 0 ? <State kind="empty" icon="clipboard" title="No one is being onboarded yet" description="Use “Start onboarding” to add a new hire and give them a joining checklist." />
-            : (
-              <TableCard
-                actions={
-                  <>
-                    <select aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value as '' | StatusKey)} className="ut-select ut-select-sm w-auto">
-                      <option value="">All statuses</option>
-                      {(Object.keys(STATUS_LABEL) as StatusKey[]).map((k) => <option key={k} value={k}>{STATUS_LABEL[k]}</option>)}
-                    </select>
-                    {status && <HrButton size="sm" variant="ghost" onClick={() => setStatus('')}>Clear filter</HrButton>}
-                  </>
-                }
-                footer={total > 0 ? (
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-text-secondary">Showing <span className="font-semibold text-text-primary">{safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, total)}</span> of <span className="font-semibold text-text-primary">{total}</span></p>
-                    <div className="flex items-center gap-2">
-                      <button aria-label="Previous page" onClick={() => setPage(safePage - 1)} disabled={safePage === 0} className="rounded-lg border border-border-default p-1.5 text-text-secondary hover:text-text-primary disabled:opacity-40"><ChevronLeft size={15} /></button>
-                      <span className="px-1 text-xs font-semibold text-text-primary">{safePage + 1} / {totalPages}</span>
-                      <button aria-label="Next page" onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages - 1} className="rounded-lg border border-border-default p-1.5 text-text-secondary hover:text-text-primary disabled:opacity-40"><ChevronRight size={15} /></button>
-                    </div>
-                  </div>
-                ) : undefined}
-              >
-                <table className="hr-table">
-                  <thead>
-                    <tr>
-                      <th>New hire</th>
-                      <th className="hidden lg:table-cell">Department</th>
-                      <th className="hidden sm:table-cell">Joining date</th>
-                      <th className="hidden md:table-cell">Checklist</th>
-                      <th>Status</th>
-                      <th className="w-32"><span className="sr-only">Actions</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 && (
-                      <tr><td colSpan={6} className="!p-0"><State kind="empty" icon="clipboard" title="No onboarding with this status" description="Clear the filter to see every run." /></td></tr>
-                    )}
-                    {rows.map((r, i) => {
-                      const emp = byId.get(r.employeeId)
-                      const dept = emp?.departmentId ? deptName.get(emp.departmentId) : undefined
-                      // The run has no joining date of its own: the hire's date of joining, else when it started.
-                      const joining = emp?.dateOfJoining ?? r.startedAt
-                      const key = statusKeyOf(r.status)
-                      const open = () => navigate(`/hrms/onboarding/instances/${r.id}`)
-                      return (
-                        <tr key={r.id} onClick={open} className="cursor-pointer">
-                          <td>{canReadEmployees ? <HrAvatar name={nameOf(r)} sub={emp?.email} seed={safePage * PAGE_SIZE + i} /> : <span className="text-text-tertiary" title="Your role can’t read employee names">—</span>}</td>
-                          <td className="hidden lg:table-cell text-text-secondary">{dept || '—'}</td>
-                          <td className="hidden sm:table-cell text-text-secondary">{dmy(joining)}</td>
-                          <td className="hidden md:table-cell"><Progress {...progressOf(r)} /></td>
-                          <td><HrStatusPill tone={statusTone(r.status)}>{statusLabel(r.status)}</HrStatusPill></td>
-                          <td onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center gap-1">
-                              <HrButton variant="ghost" size="sm" onClick={open}>Open</HrButton>
-                              <RowMenu items={[
-                                { label: 'Open checklist', onClick: open },
-                                ...(key === 'IN_PROGRESS' ? [{ label: 'Put on hold', onClick: () => setRowStatus(r.id, 'ON_HOLD', 'Onboarding put on hold') }] : []),
-                                ...(key === 'ON_HOLD' ? [{ label: 'Resume onboarding', onClick: () => setRowStatus(r.id, 'IN_PROGRESS', 'Onboarding resumed') }] : []),
-                                ...(key === 'COMPLETED' ? [{ label: 'Reopen onboarding', onClick: () => setRowStatus(r.id, 'IN_PROGRESS', 'Onboarding reopened') }] : []),
-                                ...(canReadEmployees && emp ? [{ label: 'Open employee profile', onClick: () => navigate(`/hrms/employees/${emp.id}`) }] : []),
-                                ...(canReadTemplates ? [{ label: 'Open template', onClick: () => navigate(`/hrms/onboarding/templates/${r.templateId}`) }] : []),
-                              ]} />
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </TableCard>
-            )}
-      {node}
-    </div>
+    <>
+      {!error && (
+        <Section title="This month" loading={loading} skeleton="stats" skeletonRows={3}>
+          {counts && (
+            <MiniStatGrid>
+              <MiniStat label="In progress" value={counts.inProgress} note="Working through a checklist" tone="info" />
+              <MiniStat label="Joining this month" value={counts.joiningThisMonth} note={month} tone="success" />
+              <MiniStat label="Tasks overdue" value={counts.tasksOverdue} note="Past their due day" tone="warning" />
+            </MiniStatGrid>
+          )}
+        </Section>
+      )}
+      <Section title="New hires" body="flush" loading={loading} skeleton="table" error={error} onRetry={onRetry} retrying={retrying}
+        empty={!loading && !error && rows.length === 0 ? { title: 'No onboarding runs yet.', hint: 'Use “Start onboarding” when someone accepts an offer, to give them a joining checklist.', icon: 'clipboard', variant: 'plain' } : undefined}
+        actions={rows.length > 0 && counts ? (
+          <SegmentedControl label="Onboarding status" semantics="toggle" size="sm" value={status} onChange={pick}
+            options={[{ value: 'all' as const, label: 'All', count: counts.all }, ...RUN_STATUS_KEYS.map((k) => ({
+              value: k, label: RUN_STATUS[k].label, count: k === 'IN_PROGRESS' ? counts.inProgress : k === 'ON_HOLD' ? counts.onHold : counts.completed,
+            }))]} />
+        ) : undefined}
+        footer={filtered.length > PAGE_SIZE ? <Pager page={safePage} pageSize={PAGE_SIZE} total={filtered.length} onPageChange={setPage} noun="new hires" /> : undefined}>
+        <Table label="New hires" columns={columns} rows={pageRows} rowKey={(r) => r.instanceId} onRowClick={open} mobile="cards"
+          empty={<EmptyState variant="plain" icon="clipboard" title="No onboarding with this status" hint="Choose All to see every run." />} />
+      </Section>
+    </>
   )
 }
