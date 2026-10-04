@@ -219,7 +219,9 @@ public class AttendanceController {
                 // Both are null/false for pre-capturedAt app builds, which keeps
                 // the server-clock behaviour byte-for-byte.
                 !web && request.offlineCaptured(),
-                web ? null : request.capturedAt());
+                web ? null : request.capturedAt(),
+                // Only for the punch-in alert ("±15 m"); null from clients that don't send it.
+                request.accuracy());
         // Accepted from outside the zone (the company doesn't require it): mark
         // the day so it shows in the attendance review list.
         if (!geoValidation.withinFence() && !wfhDay && !anywhere && reviewService != null && dto != null && dto.id() != null) {

@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { PAGE_REGISTRY } from '@/shared/navigation/pageRegistry'
-import { NOTIFICATION_TYPES, groupFor, iconForGroup, isWebShapedRoute, livePath, timeAgo, webRouteFor, withinDays } from './notificationRoutes'
+import { NOTIFICATION_TYPES, groupFor, iconForGroup, isWebShapedRoute, livePath, mapUrlFor, timeAgo, webRouteFor, withinDays } from './notificationRoutes'
+import { toDisplay } from './notificationStore'
 
 // Every route pattern App.tsx registers ("/hrms/employees/:id" → a regex).
 const appSource = readFileSync(fileURLToPath(new URL('../../App.tsx', import.meta.url)), 'utf8')
@@ -27,6 +28,7 @@ const CATALOG: Record<string, string> = {
   POLICY_PUBLISHED: 'Policies', POLICY_REMINDER: 'Policies', INTERVIEW_SCHEDULED: 'Hiring', INTERVIEW_RESCHEDULED: 'Hiring', INTERVIEW_CANCELLED: 'Hiring',
   SKILL_ASSESSMENT_SUBMITTED: 'Learning', SKILL_ASSESSMENT_APPROVED: 'Learning', SKILL_ASSESSMENT_REJECTED: 'Learning',
   PERFORMANCE_REVIEW_REMINDER: 'Performance', TEAM_MESSAGE: 'Team', WELCOME: 'People', RETIREMENT_DUE: 'People', PROBATION_TEAM_DECISION: 'People',
+  PUNCH_IN_ALERT: 'Attendance',
   LETTER_SIGNATURE_REQUESTED: 'Letters', SUBSCRIPTION_HALTED: 'Billing', BILLING_OVER_CAP: 'Billing', TRIAL_ENDING_SOON: 'Billing', TRIAL_EXPIRED: 'Billing',
   GENERAL: 'Other',
 }
@@ -77,6 +79,29 @@ describe('notification routes', () => {
     const timesheetLive = PAGE_REGISTRY.some((e) => e.path === '/hrms/attendance?tab=timesheet')
     expect(webRouteFor('TIMESHEET_DECIDED', null)).toBe(timesheetLive ? '/hrms/attendance?tab=timesheet' : '/hrms/attendance')
     expect(livePath('/no/such/page', '/hrms/attendance')).toBe('/hrms/attendance')
+  })
+  it('opens a punch-in alert on Daily Logs, with a map link built from its own coordinates', () => {
+    const data = { route: '/notifications', latitude: 17.38504, longitude: 78.48667, mapUrl: 'https://www.google.com/maps?q=17.385040,78.486670' }
+    expect(webRouteFor('PUNCH_IN_ALERT', data)).toBe(livePath('/hrms/attendance?tab=team', '/hrms/attendance'))
+    expect(mapUrlFor('PUNCH_IN_ALERT', data)).toBe('https://www.google.com/maps?q=17.385040,78.486670')
+    expect(mapUrlFor('PUNCH_IN_ALERT', { latitude: -33.8688, longitude: 151.2093 })).toBe('https://www.google.com/maps?q=-33.868800,151.209300')
+    // Only a Google Maps link the server sent, never anything else, and nothing without a place.
+    expect(mapUrlFor('PUNCH_IN_ALERT', { mapUrl: 'https://www.google.com/maps?q=12.9,77.6' })).toBe('https://www.google.com/maps?q=12.9,77.6')
+    expect(mapUrlFor('PUNCH_IN_ALERT', { mapUrl: 'https://evil.example/maps?q=1,2' })).toBeNull()
+    expect(mapUrlFor('PUNCH_IN_ALERT', { mapUrl: 'javascript:alert(1)' })).toBeNull()
+    expect(mapUrlFor('PUNCH_IN_ALERT', { latitude: 0, longitude: 0 })).toBeNull()
+    expect(mapUrlFor('PUNCH_IN_ALERT', { latitude: '17.4', longitude: '78.4' })).toBeNull()
+    expect(mapUrlFor('PUNCH_IN_ALERT', null)).toBeNull()
+    expect(mapUrlFor('LEAVE_SUBMITTED', data)).toBeNull()
+  })
+  it('a punch-in alert in the bell carries its map link; other rows none', () => {
+    const row = toDisplay({
+      id: 'n1', type: 'PUNCH_IN_ALERT', title: 'Priya Rao punched in at 9:42 am', body: 'At Head Office. Face scan in the app.',
+      data: { route: '/notifications', latitude: 17.38504, longitude: 78.48667 }, readAt: null, createdAt: '2026-10-05T04:12:05Z', group: 'Attendance',
+    })
+    expect(row).toMatchObject({ kind: 'PUNCH_IN_ALERT', group: 'Attendance', icon: 'clock', mapUrl: 'https://www.google.com/maps?q=17.385040,78.486670' })
+    expect(row.link).toBe(livePath('/hrms/attendance?tab=team', '/hrms/attendance'))
+    expect(toDisplay({ id: 'n2', type: 'LEAVE_SUBMITTED', title: 'New leave request', body: '', data: { route: '/requests-tab' }, readAt: null, createdAt: '2026-10-05T04:12:05Z' }).mapUrl).toBeNull()
   })
   it('keeps the cancelled fan-out per recipient', () => {
     expect(webRouteFor('LEAVE_CANCELLED', { audience: 'approver' })).toBe('/hrms/leave?tab=approvals')
