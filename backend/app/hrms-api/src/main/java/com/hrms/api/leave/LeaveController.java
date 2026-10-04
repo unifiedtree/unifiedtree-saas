@@ -114,14 +114,17 @@ public class LeaveController {
         //       still routes leave somewhere a human will see it
         // If even L4 fails, fail loudly at apply time so HR fixes the org structure
         // rather than the request silently rotting.
-        UUID approverId = employee.getManagerId();
+        // Never the applicant themself (audit 5 Oct 2026): a department head's
+        // own leave goes on to HR, and the fallback is someone else when there is
+        // anyone else. Nobody may decide their own request.
+        UUID approverId = notThem(employee.getManagerId(), employee);
         if (approverId == null && employee.getDepartmentId() != null) {
-            approverId = departmentRepository.findById(employee.getDepartmentId())
+            approverId = notThem(departmentRepository.findById(employee.getDepartmentId())
                     .map(com.hrms.employee.workforce.entity.Department::getDepartmentHeadEmployeeId)
-                    .orElse(null);
+                    .orElse(null), employee);
         }
         if (approverId == null) {
-            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId(), employee.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "No approver available — assign this employee a reporting manager, set a "
                                     + "department head, or add an HR manager before applying for leave",
@@ -137,7 +140,7 @@ public class LeaveController {
         // still routes somewhere a human will see it.
         Employee resolvedApprover = employeeRepository.findById(approverId).orElse(null);
         if (!isValidApprover(resolvedApprover, employee)) {
-            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId(), employee.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "Resolved approver is not a valid active employee in this tenant; "
                                     + "assign a reporting manager or department head before applying.",
@@ -639,6 +642,11 @@ public class LeaveController {
             default:
                 return true;
         }
+    }
+
+    /** {@code approverId}, or null when it is the applicant themself. */
+    private static UUID notThem(UUID approverId, Employee applicant) {
+        return approverId != null && approverId.equals(applicant.getId()) ? null : approverId;
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

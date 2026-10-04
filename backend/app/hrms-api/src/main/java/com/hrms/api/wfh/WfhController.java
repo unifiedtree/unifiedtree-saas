@@ -91,14 +91,15 @@ public class WfhController {
         // two request types route the same way. See audit P0-1: never persist
         // a null approver, otherwise a fresh tenant's WFH request is invisible
         // to every approval queue.
-        UUID approverId = employee.getManagerId();
+        // Never the applicant themself (audit 5 Oct 2026), as LeaveController.
+        UUID approverId = notThem(employee.getManagerId(), employee);
         if (approverId == null && employee.getDepartmentId() != null) {
-            approverId = departmentRepository.findById(employee.getDepartmentId())
+            approverId = notThem(departmentRepository.findById(employee.getDepartmentId())
                     .map(Department::getDepartmentHeadEmployeeId)
-                    .orElse(null);
+                    .orElse(null), employee);
         }
         if (approverId == null) {
-            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId(), employee.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "No approver available — assign this employee a reporting manager, set a "
                                     + "department head, or add an HR manager before applying for WFH",
@@ -107,7 +108,7 @@ public class WfhController {
         // Validate the resolved approver is a real, active, same-tenant employee.
         Employee resolvedApprover = employeeRepository.findById(approverId).orElse(null);
         if (!isValidApprover(resolvedApprover, employee)) {
-            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId(), employee.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "Resolved approver is not a valid active employee in this tenant; "
                                     + "assign a reporting manager or department head before applying.",
@@ -353,6 +354,11 @@ public class WfhController {
             default:
                 return true;
         }
+    }
+
+    /** {@code approverId}, or null when it is the applicant themself. */
+    private static UUID notThem(UUID approverId, Employee applicant) {
+        return approverId != null && approverId.equals(applicant.getId()) ? null : approverId;
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

@@ -28,6 +28,7 @@ import {
   CARD, HEAD_FONT, days, range, dmy, todayIso, stamp, type Tile, type Approval, FONT,
 } from '@/design/module/ModuleKit'
 import { Button } from '@/design/kit/display'
+import { decidedCount, decidedTotal, requestWho } from './leave/leaveLabels'
 import {
   useMyLeaves, useMyBalances, useLeaveTypes, usePendingApprovals, useApprovalsHistory,
   useApplyLeave, useLeaveDecision, useCancelLeave, usePendingL2Approvals, useLeaveL2Decision,
@@ -101,7 +102,7 @@ function MyLeave({ toast }: { toast: (m: string, err?: boolean, d?: string) => v
                   <Row key={r.id}
                     lead={<span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--u-sf2,#F7F9F8)', border: '1px solid var(--u-ln2,#EDF1EF)', color: 'var(--u-brt,#0F6E56)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('calendarDays', 17)}</span>}
                     title={`${r.leaveTypeName || 'Leave'} · ${range(r.startDate, r.endDate)}`}
-                    meta={`${days(Number(r.totalDays))} · asked ${stamp(r.createdAt)}${r.approverName ? ` · for ${r.approverName}` : ''}${r.approverComment ? ` · “${r.approverComment}”` : ''}`}
+                    meta={`${days(Number(r.totalDays))} · asked ${stamp(r.createdAt)}${requestWho(r) ? ` · ${requestWho(r)}` : ''}${r.approverComment ? ` · “${r.approverComment}”` : ''}`}
                     note={r.reason ? `“${r.reason}”` : undefined}
                     trail={<>{pill(r.status)}{(r.status === 'PENDING' || r.status === 'PENDING_L2' || r.status === 'APPROVED') && <HrButton size="sm" variant="ghost" onClick={() => setAsking(r)}>Cancel</HrButton>}</>}
                   />
@@ -325,11 +326,18 @@ interface ApproverRow {
 type Segment = 'pending' | 'approved' | 'rejected' | 'all'
 const SEG_LABEL: Record<Segment, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', all: 'All' }
 
-function Approvals({ toast }: { toast: (m: string, err?: boolean, d?: string) => void }) {
+/**
+ * The approver's queue (Approvals) or what they already decided (Decided,
+ * `decided`): the same list, but Decided opens on every decision and has no
+ * Pending filter (audit 5 Oct 2026: it opened on the pending queue, so the two
+ * tabs looked identical).
+ */
+function Approvals({ toast, decided = false }: { toast: (m: string, err?: boolean, d?: string) => void; decided?: boolean }) {
   const canLeave = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canWfh = usePermission(P.WFH_APPROVE)
   const canL2 = usePermission(P.HRMS_LEAVE_APPROVE_L2)
-  const [seg, setSeg] = useState<Segment>('pending')
+  const segments: Segment[] = decided ? ['approved', 'rejected', 'all'] : ['pending', 'approved', 'rejected', 'all']
+  const [seg, setSeg] = useState<Segment>(decided ? 'all' : 'pending')
   const [page, setPage] = useState(0)
 
   // Pending queues (polled). PENDING_L2 only for HR holders.
@@ -445,13 +453,15 @@ function Approvals({ toast }: { toast: (m: string, err?: boolean, d?: string) =>
     } catch (e) { toast('Couldn’t take back the decision', true, errMsg(e)) }
   }
 
-  const loading = l1.isLoading || wq.isLoading || (canL2 && l2.isLoading)
+  const loading = seg === 'pending' ? (l1.isLoading || wq.isLoading || (canL2 && l2.isLoading)) : history.isLoading
   const visiblePending = seg === 'pending' ? pending : []
   const decidedShown = (seg === 'pending' ? [] : histRows)
+  // Missing statuses count 0 (an older server only sends the ones that occur;
+  // the sum was NaN). Decided's "All" is every decision; the queue's adds what waits.
   const segCount = (s: Segment) =>
     s === 'pending' ? waiting
-      : s === 'all' ? waiting + (counts ? counts.APPROVED + counts.REJECTED + counts.CANCELLED : 0)
-        : counts ? counts[s.toUpperCase() as DecidedStatus] : 0
+      : s === 'all' ? (decided ? 0 : waiting) + decidedTotal(counts)
+        : decidedCount(counts, s.toUpperCase() as DecidedStatus)
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -478,7 +488,7 @@ function Approvals({ toast }: { toast: (m: string, err?: boolean, d?: string) =>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <div role="tablist" aria-label="Request filter" style={{ display: 'inline-flex', padding: 3, borderRadius: 10, background: 'var(--u-hv,#F0F4F2)' }}>
-          {(['pending', 'approved', 'rejected', 'all'] as Segment[]).map((s) => {
+          {segments.map((s) => {
             const active = seg === s
             return (
               <button key={s} role="tab" aria-selected={active}
@@ -504,7 +514,8 @@ function Approvals({ toast }: { toast: (m: string, err?: boolean, d?: string) =>
       <SubHeading>{seg === 'pending' ? 'Waiting for your OK' : 'Already decided'}</SubHeading>
 
       {loading ? <State kind="loading" />
-        : (l1.error && wq.error) ? <State kind="error" title="Couldn’t load requests" description="Leave and work-from-home requests didn’t load." onRetry={() => { l1.refetch(); wq.refetch() }} />
+        : (seg !== 'pending' && history.error) ? <State kind="error" title="Couldn’t load decisions" description={errMsg(history.error)} onRetry={() => history.refetch()} />
+        : (seg === 'pending' && l1.error && wq.error) ? <State kind="error" title="Couldn’t load requests" description="Leave and work-from-home requests didn’t load." onRetry={() => { l1.refetch(); wq.refetch() }} />
           : (seg === 'pending' && visiblePending.length === 0) ? <State kind="empty" icon="checkCircle" title="All caught up" description="No requests are waiting for you." />
             : (seg !== 'pending' && decidedShown.length === 0) ? <State kind="empty" icon="fileText" title="No decisions yet" description="Leave you decide shows up here." />
               : (
@@ -653,7 +664,7 @@ export function Leave() {
         {view === 'apply' && <Apply onDone={() => setView('my')} toast={show} />}
         {view === 'balances' && <Balances />}
         {view === 'approvals' && <Approvals toast={show} />}
-        {view === 'history' && <Approvals toast={show} />}
+        {view === 'history' && <Approvals toast={show} decided />}
         {view === 'all-balances' && canAllBalances && <AllBalances />}
         {view === 'encash' && canEncashApprove && <EncashmentAdmin toast={show} />}
         {view === 'encash' && canEncashSelf && canEncashApprove && <SubHeading>Your own encashment</SubHeading>}

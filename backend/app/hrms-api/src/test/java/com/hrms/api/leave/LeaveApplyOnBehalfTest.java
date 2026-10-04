@@ -130,7 +130,7 @@ class LeaveApplyOnBehalfTest {
         when(leaveService.applyLeave(any(), any(), any(), any())).thenReturn(new LeaveRequestResponse(UUID.randomUUID(),
                 employeeId, null, null, null, typeId, "Casual leave", start, end, 2, null, ApprovalStatus.PENDING, null, null, null));
         reader(null, null, EmploymentStatus.NOTICE_PERIOD);
-        when(approvers.resolveTerminalApprover(tenant)).thenReturn(Optional.of(hrApprover));
+        when(approvers.resolveTerminalApprover(eq(tenant), eq(employeeId))).thenReturn(Optional.of(hrApprover));
         when(employees.findById(hrApprover)).thenReturn(Optional.of(person(hrApprover, "HR", "Manager", company, null, null, EmploymentStatus.ACTIVE)));
         controller.applyFor(employeeId, body, jwtFor(hr));
         verify(leaveService).applyLeave(eq(employeeId), eq(company), any(), eq(hrApprover));
