@@ -361,6 +361,14 @@ public class WfhService {
         return PageResponse.from(page, this::toResponse);
     }
 
+    /** {@link #getAllPending(Pageable)} as {@code approverEmployeeId}'s queue: without their own requests. Null leaves nothing out. */
+    @Transactional(readOnly = true)
+    public PageResponse<WfhRequestResponse> getAllPending(UUID approverEmployeeId, Pageable pageable) {
+        if (approverEmployeeId == null) return getAllPending(pageable);
+        Page<WfhRequest> page = repository.findAllPendingExcept(approverEmployeeId, pageable);
+        return PageResponse.from(page, this::toResponse);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<WfhRequestResponse> getPendingApprovalsForManager(UUID managerId, Pageable pageable) {
         Page<WfhRequest> page = repository.findPendingForManager(managerId, pageable);

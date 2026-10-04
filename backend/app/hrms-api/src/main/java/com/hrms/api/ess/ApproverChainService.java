@@ -25,10 +25,11 @@ import java.util.UUID;
  * chain {@code LeaveController.apply} and {@code WfhController.apply} run, step
  * for step, with the same refusals:
  * <ol>
- *   <li>the reporting manager;</li>
+ *   <li>the reporting manager (never the applicant themself, at any step: audit 5 Oct 2026);</li>
  *   <li>else the department head;</li>
  *   <li>else the terminal fallback ({@link ApproverFallbackResolver}: the longest-serving
- *       active HR manager, else super admin), refused with {@code NO_APPROVER_AVAILABLE}
+ *       active HR manager, else super admin, other than the applicant when there is anyone else),
+ *       refused with {@code NO_APPROVER_AVAILABLE}
  *       when there is none;</li>
  *   <li>a person picked above who is not an active employee of the same workspace is
  *       replaced by the terminal fallback ({@code APPROVER_INVALID} when that fails too);</li>
@@ -109,16 +110,17 @@ public class ApproverChainService {
         if (kind != Kind.LEAVE && kind != Kind.WFH) {
             throw new IllegalArgumentException("requestApprover is for leave and work from home, not " + kind);
         }
-        UUID approverId = applicant.getManagerId();
+        // Never the applicant themself (audit 5 Oct 2026), as the controllers.
+        UUID approverId = notThem(applicant.getManagerId(), applicant);
         Source source = approverId != null ? Source.MANAGER : null;
         if (approverId == null && applicant.getDepartmentId() != null) {
-            approverId = departments.findById(applicant.getDepartmentId())
+            approverId = notThem(departments.findById(applicant.getDepartmentId())
                     .map(Department::getDepartmentHeadEmployeeId)
-                    .orElse(null);
+                    .orElse(null), applicant);
             if (approverId != null) source = Source.DEPARTMENT_HEAD;
         }
         if (approverId == null) {
-            approverId = fallback.resolveTerminalApprover(applicant.getTenantId())
+            approverId = fallback.resolveTerminalApprover(applicant.getTenantId(), applicant.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "No approver available — assign this employee a reporting manager, set a "
                                     + "department head, or add an HR manager before applying for "
@@ -128,7 +130,7 @@ public class ApproverChainService {
         }
         Employee resolved = employees.findById(approverId).orElse(null);
         if (!isValidApprover(resolved, applicant)) {
-            approverId = fallback.resolveTerminalApprover(applicant.getTenantId())
+            approverId = fallback.resolveTerminalApprover(applicant.getTenantId(), applicant.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "Resolved approver is not a valid active employee in this tenant; "
                                     + "assign a reporting manager or department head before applying.",
@@ -196,6 +198,11 @@ public class ApproverChainService {
                 )
                 """, Boolean.class, tenantId, HR_MANAGER, employeeId);
         return Boolean.TRUE.equals(hr) ? Source.HR : Source.ADMIN;
+    }
+
+    /** {@code approverId}, or null when it is the applicant themself. */
+    private static UUID notThem(UUID approverId, Employee applicant) {
+        return approverId != null && approverId.equals(applicant.getId()) ? null : approverId;
     }
 
     /** Same predicate as the two controllers' isValidApprover: same workspace, not in a terminal or inactive state. */

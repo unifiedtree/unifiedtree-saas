@@ -126,6 +126,26 @@ class LeaveInsightsTest {
         });
     }
 
+    @Test void hrsWaitingCountLeavesOutTheirOwnRequestsLikeTheirQueue() {
+        statsData();
+        service.approvalStats(me, true, 7, LocalDate.of(2026, 9, 25));
+        // Both waiting counts (PENDING and PENDING_L2): the workspace without the caller's own requests,
+        // which they may not decide and /approvals/pending no longer lists for them.
+        int waitingQueries = 0;
+        for (int i = 0; i < sqls.size(); i++) {
+            if (!sqls.get(i).contains("FILTER (WHERE lr.created_at")) continue;
+            waitingQueries++;
+            assertTrue(sqls.get(i).contains("lr.employee_id <> ?"), sqls.get(i));
+            assertEquals(me, argsOf.get(i).get(2));
+        }
+        assertEquals(2, waitingQueries);
+        // Without an employee id nothing is left out (as before).
+        sqls.clear();
+        argsOf.clear();
+        service.approvalStats(null, true, 7, LocalDate.of(2026, 9, 25));
+        assertFalse(sqlContaining("FILTER (WHERE lr.created_at").contains("lr.employee_id <> ?"));
+    }
+
     @Test void aManagerSeesTheirPendingListsScopeAndNeverTheHrQueue() {
         statsData();
         LeaveInsightsService.ApprovalStats s = service.approvalStats(me, false, 7, LocalDate.of(2026, 9, 23));

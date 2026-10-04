@@ -114,14 +114,17 @@ public class LeaveController {
         //       still routes leave somewhere a human will see it
         // If even L4 fails, fail loudly at apply time so HR fixes the org structure
         // rather than the request silently rotting.
-        UUID approverId = employee.getManagerId();
+        // Never the applicant themself (audit 5 Oct 2026): a department head's
+        // own leave goes on to HR, and the fallback is someone else when there is
+        // anyone else. Nobody may decide their own request.
+        UUID approverId = notThem(employee.getManagerId(), employee);
         if (approverId == null && employee.getDepartmentId() != null) {
-            approverId = departmentRepository.findById(employee.getDepartmentId())
+            approverId = notThem(departmentRepository.findById(employee.getDepartmentId())
                     .map(com.hrms.employee.workforce.entity.Department::getDepartmentHeadEmployeeId)
-                    .orElse(null);
+                    .orElse(null), employee);
         }
         if (approverId == null) {
-            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId(), employee.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "No approver available — assign this employee a reporting manager, set a "
                                     + "department head, or add an HR manager before applying for leave",
@@ -137,7 +140,7 @@ public class LeaveController {
         // still routes somewhere a human will see it.
         Employee resolvedApprover = employeeRepository.findById(approverId).orElse(null);
         if (!isValidApprover(resolvedApprover, employee)) {
-            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId(), employee.getId())
                     .orElseThrow(() -> new BusinessRuleException(
                             "Resolved approver is not a valid active employee in this tenant; "
                                     + "assign a reporting manager or department head before applying.",
@@ -292,7 +295,7 @@ public class LeaveController {
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
         long pendingApprovals = (adminOrHr
-                ? leaveService.getAllPending(Pageable.ofSize(1))
+                ? leaveService.getAllPending(employeeId, Pageable.ofSize(1))
                 : leaveService.getPendingApprovalsForManager(employeeId, Pageable.ofSize(1)))
                 .totalElements();
         return ResponseEntity.ok(new LeaveOverviewResponse(balances, withDetails(recent.content(), false), pendingApprovals));
@@ -367,10 +370,11 @@ public class LeaveController {
         // routed to HR, and the admin needs to see it too. Detected by the
         // L2 approve authority (COMPANY_ADMIN + HR_MANAGER have it, plain
         // DEPT_MANAGER does not, so managers keep their personal-scope view).
+        // Never their own requests, which they may not decide (audit 5 Oct 2026).
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
         PageResponse<LeaveRequestResponse> page = adminOrHr
-                ? leaveService.getAllPending(pageable)
+                ? leaveService.getAllPending(callerOrNull(jwt), pageable)
                 : leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
         return ResponseEntity.ok(enrichPage(page, true));
     }
@@ -445,8 +449,10 @@ public class LeaveController {
     @GetMapping("/approvals/pending-l2")
     @PreAuthorize("@perm.check('hrms.leave.approve.l2')")
     public ResponseEntity<PageResponse<LeaveRequestResponse>> pendingL2Approvals(
+            @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(leaveService.getPendingL2Approvals(pageable), true));
+        // Not the caller's own requests, which they may not decide (audit 5 Oct 2026).
+        return ResponseEntity.ok(enrichPage(leaveService.getPendingL2Approvals(callerOrNull(jwt), pageable), true));
     }
 
     @Operation(summary = "L2 HR final approval or rejection")
@@ -638,9 +644,26 @@ public class LeaveController {
         }
     }
 
+    /** {@code approverId}, or null when it is the applicant themself. */
+    private static UUID notThem(UUID approverId, Employee applicant) {
+        return approverId != null && approverId.equals(applicant.getId()) ? null : approverId;
+    }
+
     private UUID extractEmployeeId(Jwt jwt) {
         String empId = jwt.getClaimAsString("employee_id");
         return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());
+    }
+
+    /**
+     * The caller, for leaving their own requests out of an HR / admin queue;
+     * null (nothing left out, the queue as before) when the token doesn't say.
+     */
+    private UUID callerOrNull(Jwt jwt) {
+        try {
+            return jwt == null ? null : extractEmployeeId(jwt);
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
     }
 
 }

@@ -21,8 +21,11 @@ import { useEmployeeLeaveBalances, useEmployeeLeaveRequests, type LeaveApprovalS
 import { SectionState, SubSection } from './shared'
 import { ApplyLeaveForPanel } from './OnBehalfPanels'
 
+// PENDING is with whoever the request was routed to, not always a manager (no
+// manager: the department head, else HR; audit 5 Oct 2026), so the pill says
+// "Waiting for approval" and the line under it names the approver.
 const STATUS: Record<LeaveApprovalStatus, [string, PillTone]> = {
-  PENDING: ['Waiting for manager', 'warn'], PENDING_L2: ['Waiting for HR', 'warn'],
+  PENDING: ['Waiting for approval', 'warn'], PENDING_L2: ['Waiting for HR', 'warn'],
   APPROVED: ['Approved', 'ok'], REJECTED: ['Rejected', 'red'], CANCELLED: ['Cancelled', 'gray'],
 }
 const PAGE_SIZE = 10
@@ -93,6 +96,7 @@ export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: 
                       <td className="text-text-secondary">{n(r.totalDays)}</td>
                       <td>
                         <HrStatusPill tone={st[1]}>{st[0]}</HrStatusPill>
+                        {r.status === 'PENDING' && r.approverName && r.approverName !== name && <span className="mt-1 block text-xs text-text-secondary">With {r.approverName}</span>}
                         {r.status === 'REJECTED' && r.approverComment && <span className="mt-1 block text-xs" style={{ color: 'var(--u-rdt,#B42318)' }}>{r.approverComment}</span>}
                       </td>
                       <td className="hidden md:table-cell"><span className="block max-w-xs truncate text-text-secondary" title={r.reason || undefined}>{r.reason || '—'}</span></td>

@@ -66,6 +66,8 @@ class ApproverChainFixtureTest {
     private final Map<UUID, UUID> delegations = new HashMap<>();
     private final Set<UUID> hrHolders = new HashSet<>();
     private UUID terminal;
+    /** The terminal fallback when {@code terminal} is the applicant themself (the next HR manager or admin); null when there is nobody else. */
+    private UUID nextTerminal;
     private UUID firstHr;
     private UUID firstAdmin;
 
@@ -86,6 +88,8 @@ class ApproverChainFixtureTest {
         when(employees.findById(any())).thenAnswer(i -> Optional.ofNullable(people.get((UUID) i.getArgument(0))));
         when(departments.findById(any())).thenAnswer(i -> Optional.ofNullable(depts.get((UUID) i.getArgument(0))));
         when(fallback.resolveTerminalApprover(any())).thenAnswer(i -> Optional.ofNullable(terminal));
+        when(fallback.resolveTerminalApprover(any(), any())).thenAnswer(i ->
+                Optional.ofNullable(terminal != null && terminal.equals(i.getArgument(1)) && nextTerminal != null ? nextTerminal : terminal));
         when(fallback.redirectIfDelegated(any(), any())).thenAnswer(i -> {
             UUID id = i.getArgument(0);
             return id == null ? null : delegations.getOrDefault(id, id);
@@ -332,8 +336,32 @@ class ApproverChainFixtureTest {
         firstAdmin = admin.getId();
         assertAllAgree(me);
         assertEquals(admin.getId(), chain.notificationApprover(me).approverId());
-        // Leave and WFH do route an HR manager's own request to themself when they are the fallback (today's rule).
-        assertEquals(me.getId(), chain.requestApprover(me, Kind.LEAVE).approverId());
+        // Leave and WFH go to someone else too (audit 5 Oct 2026: nobody may decide their own).
+        nextTerminal = admin.getId();
+        assertAllAgree(me);
+        assertEquals(admin.getId(), chain.requestApprover(me, Kind.LEAVE).approverId());
+        assertEquals(admin.getId(), leavePick(me));
+        assertEquals(admin.getId(), wfhPick(me));
+    }
+
+    @Test void aDepartmentHeadsOwnRequestGoesOnToHrNotToThemself() {
+        Employee me = person("Meera", EmploymentStatus.ACTIVE);
+        me.setDepartmentId(department(me).getId());
+        Employee hr = person("Anita", EmploymentStatus.ACTIVE);
+        terminal = hr.getId(); firstHr = hr.getId(); hrHolders.add(hr.getId());
+        assertAllAgree(me);
+        assertEquals(hr.getId(), leavePick(me));
+        assertEquals(hr.getId(), wfhPick(me));
+        assertEquals(Source.HR, chain.requestApprover(me, Kind.LEAVE).source());
+    }
+
+    @Test void theOnlyAdminStillGetsTheirOwnRequestAsBefore() {
+        // Nobody else in the workspace: the request still goes somewhere (to them), never refused.
+        Employee me = person("Owner", EmploymentStatus.ACTIVE);
+        terminal = me.getId(); firstAdmin = me.getId();
+        assertAllAgree(me);
+        assertEquals(me.getId(), leavePick(me));
+        assertEquals(me.getId(), chain.requestApprover(me, Kind.WFH).approverId());
     }
 
     @Test void theWholeMatrixAgrees() {
@@ -342,7 +370,7 @@ class ApproverChainFixtureTest {
         for (int manager = 0; manager < 3; manager++) for (int head = 0; head < 3; head++)
             for (int fb = 0; fb < 3; fb++) for (int deleg = 0; deleg < 2; deleg++) {
                 people.clear(); depts.clear(); delegations.clear(); hrHolders.clear();
-                terminal = null; firstHr = null; firstAdmin = null;
+                terminal = null; nextTerminal = null; firstHr = null; firstAdmin = null;
                 Employee me = person("Kavya", EmploymentStatus.ACTIVE);
                 if (manager > 0) me.setManagerId(person("Boss", manager == 1 ? EmploymentStatus.ACTIVE : EmploymentStatus.EXITED).getId());
                 if (head > 0) me.setDepartmentId(department(head == 1 ? person("Head", EmploymentStatus.ACTIVE) : me).getId());

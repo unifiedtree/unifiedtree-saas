@@ -3,7 +3,8 @@
 // level (tenant for HR, team for approvers, self otherwise). Replaces the
 // 10-page history walker. The grid, prev/today/next controls, cell data
 // attributes and heading copy are preserved so live-leave-calendar's
-// behavioural assertions still match.
+// behavioural assertions still match. Company holidays are marked like the
+// other calendars (My attendance, Team schedule) mark them (audit 5 Oct 2026).
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Lock } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -17,7 +18,7 @@ import { EmptyState } from '@/shared/components/EmptyState'
 import { HrAvatar, HrButton, HrStatusPill } from '@/shared/components/hr'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useCompanies } from '../api/useOrg'
-import { useWeekendDays, jsWeekendDays } from '../api/useSettings'
+import { useWeekendDays, jsWeekendDays, useHolidays, type HolidayResponse } from '../api/useSettings'
 import { useLeaveCalendarFeed, type LeaveCalendarEntry } from '../api/useLeave'
 
 const WEEKDAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
@@ -39,6 +40,18 @@ const spanLabel = (e: AwayEntry) =>
     ? format(e.start, 'd MMM yyyy')
     : `${format(e.start, 'd MMM')} – ${format(e.end, 'd MMM yyyy')}`
 
+/** The company's active holidays by date ('yyyy-MM-dd' → name); several on a day are joined. */
+export function holidayNames(list: HolidayResponse[] | undefined): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const h of list ?? []) {
+    if (h.active === false || !h.holidayDate) continue
+    const k = h.holidayDate.slice(0, 10)
+    const prev = map.get(k)
+    map.set(k, prev ? `${prev} · ${h.holidayName}` : h.holidayName)
+  }
+  return map
+}
+
 export function LeaveCalendar() {
   const canSeeTeam = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canSeeOwn = usePermission(P.LEAVE_BALANCE_READ)
@@ -59,6 +72,8 @@ export function LeaveCalendar() {
   const companyId = companies[0]?.id ?? me?.companyId ?? undefined
   const { data: weekendCfg } = useWeekendDays(companyId)
   const weekendDays = useMemo<Set<number>>(() => jsWeekendDays(weekendCfg?.weekendDays), [weekendCfg])
+  const { data: holidayList } = useHolidays(companyId ?? '', month.getFullYear())
+  const holidays = useMemo(() => holidayNames(holidayList), [holidayList])
 
   const myName = me?.displayName || [me?.firstName, me?.lastName].filter(Boolean).join(' ') || 'You'
 
@@ -182,6 +197,7 @@ export function LeaveCalendar() {
                   const inMonth = isSameMonth(day, month)
                   const away = inMonth ? byDay.get(dayKey(day)) ?? [] : []
                   const weekend = weekendDays.has(day.getDay())
+                  const holiday = inMonth ? holidays.get(dayKey(day)) : undefined
                   const today = isToday(day)
                   return (
                     <div
@@ -190,7 +206,7 @@ export function LeaveCalendar() {
                       className={clsx(
                         'flex min-h-[96px] flex-col rounded-lg border p-2',
                         inMonth ? 'border-[var(--border-default)]' : 'border-transparent opacity-40',
-                        weekend && 'bg-[var(--bg-subtle)]',
+                        (weekend || holiday) && 'bg-[var(--bg-subtle)]',
                         today && 'ring-2 ring-[var(--accent-fg,#0f6e56)]',
                       )}
                     >
@@ -198,6 +214,11 @@ export function LeaveCalendar() {
                         {today ? <span className="text-[10px] font-semibold uppercase text-[var(--accent-fg,#0f6e56)]">Today</span> : <span />}
                         <span className="text-sm font-semibold tabular-nums text-[var(--text-primary)]">{format(day, 'd')}</span>
                       </div>
+                      {holiday && (
+                        <div className="mt-1 truncate text-[11px] font-medium text-[var(--accent-fg,#0f6e56)]" title={`Holiday · ${holiday}`} data-holiday="">
+                          {holiday}
+                        </div>
+                      )}
                       {inMonth && (
                         <div className="mt-auto space-y-1 text-left">
                           {away.slice(0, MAX_CHIPS_PER_DAY).map((e) => (
@@ -215,7 +236,7 @@ export function LeaveCalendar() {
                               +{away.length - MAX_CHIPS_PER_DAY} more (see list below)
                             </div>
                           )}
-                          {away.length === 0 && weekend && (
+                          {away.length === 0 && weekend && !holiday && (
                             <div className="text-center text-[11px] text-[var(--text-tertiary)]">Weekend</div>
                           )}
                         </div>

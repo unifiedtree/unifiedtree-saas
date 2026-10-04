@@ -579,6 +579,18 @@ public class LeaveService {
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
+    /**
+     * {@link #getAllPending(Pageable)} as {@code approverEmployeeId}'s queue:
+     * without their own requests, which they may not decide
+     * ({@link #assertNotSelfApproval}). Null leaves nothing out.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getAllPending(UUID approverEmployeeId, Pageable pageable) {
+        if (approverEmployeeId == null) return getAllPending(pageable);
+        Page<LeaveRequest> page = leaveRequestRepository.findAllPendingExcept(approverEmployeeId, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<LeaveRequestResponse> getPendingApprovalsForManager(UUID managerId, Pageable pageable) {
         // Broadened match: also returns leaves whose applicant's current
@@ -598,6 +610,15 @@ public class LeaveService {
         log.debug("Fetching pending L2 (HR) approvals");
         Page<LeaveRequest> page = leaveRequestRepository
                 .findByStatus(ApprovalStatus.PENDING_L2, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /** {@link #getPendingL2Approvals(Pageable)} without {@code approverEmployeeId}'s own requests; null leaves nothing out. */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getPendingL2Approvals(UUID approverEmployeeId, Pageable pageable) {
+        if (approverEmployeeId == null) return getPendingL2Approvals(pageable);
+        Page<LeaveRequest> page = leaveRequestRepository
+                .findByStatusAndEmployeeIdNot(ApprovalStatus.PENDING_L2, approverEmployeeId, pageable);
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
@@ -635,6 +656,10 @@ public class LeaveService {
     /**
      * How many decided requests there are per status, over the same rows as the
      * history list: the tenant's ({@code managerId} null) or a manager's.
+     * APPROVED, REJECTED and CANCELLED are always there, 0 when none (the
+     * GROUP BY only returns statuses that occur, and the Decided filter showed
+     * "Rejected" with no number and "All NaN" for anyone who had never
+     * rejected anything). Other statuses (PENDING_L2) appear when they occur.
      */
     @Transactional(readOnly = true)
     public java.util.Map<String, Long> decidedCounts(UUID managerId) {
@@ -642,6 +667,9 @@ public class LeaveService {
                 ? leaveRequestRepository.countAllDecidedByStatus()
                 : leaveRequestRepository.countDecidedForManagerByStatus(managerId);
         java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        counts.put(ApprovalStatus.APPROVED.name(), 0L);
+        counts.put(ApprovalStatus.REJECTED.name(), 0L);
+        counts.put(ApprovalStatus.CANCELLED.name(), 0L);
         for (Object[] row : rows) {
             if (row == null || row.length < 2 || row[0] == null) continue;
             counts.put(row[0].toString(), row[1] == null ? 0L : ((Number) row[1]).longValue());

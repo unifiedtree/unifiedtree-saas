@@ -41,7 +41,8 @@ import java.util.UUID;
  * the list it summarises:
  * <ul>
  *   <li>Level-2 approvers (HR / admin, {@code hrms.leave.approve.l2}) see the
- *       whole tenant, like {@code /approvals/pending} and {@code /history}.</li>
+ *       whole tenant, like {@code /approvals/pending} and {@code /history}. The
+ *       waiting count leaves out their own requests, as the pending lists do.</li>
  *   <li>Other approvers see the "broadened match" those lists use: requests
  *       routed to them, from their direct reports, or from a department they
  *       head. The waiting count leaves out their own requests, as the pending
@@ -179,6 +180,11 @@ public class LeaveInsightsService {
         if (!levelTwo) {
             sql.append(" AND lr.employee_id <> ? AND ").append(MANAGER_MATCH);
             args.addAll(List.of(me, me, me, me));
+        } else if (me != null) {
+            // The whole workspace but their own requests, as /approvals/pending and
+            // /approvals/pending-l2 list it (audit 5 Oct 2026: nobody decides their own).
+            sql.append(" AND lr.employee_id <> ?");
+            args.add(me);
         }
         return jdbc.query(sql.toString(), rs -> rs.next() ? new long[]{rs.getLong("n"), rs.getLong("recent")} : new long[]{0, 0},
                 args.toArray());

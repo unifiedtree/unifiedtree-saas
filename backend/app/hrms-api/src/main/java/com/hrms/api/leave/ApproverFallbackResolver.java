@@ -39,6 +39,22 @@ public class ApproverFallbackResolver {
     }
 
     /**
+     * {@link #resolveTerminalApprover(UUID)} for {@code applicantId}'s own request:
+     * someone other than the applicant when the workspace has one (audit 5 Oct 2026:
+     * an owner's leave went to the owner, who may not decide it). The first HR
+     * manager who isn't them, else the first admin who isn't them; when they are
+     * the only HR manager and admin, the request still goes to them, as before.
+     */
+    public Optional<UUID> resolveTerminalApprover(UUID tenantId, UUID applicantId) {
+        if (applicantId == null) return resolveTerminalApprover(tenantId);
+        UUID hr = firstEmployeeWithRole(tenantId, HR_MANAGER, applicantId);
+        if (hr != null) return Optional.of(hr);
+        UUID admin = firstEmployeeWithRole(tenantId, SUPER_ADMIN, applicantId);
+        if (admin != null) return Optional.of(admin);
+        return resolveTerminalApprover(tenantId);
+    }
+
+    /**
      * Redirect through any active delegation. A submit for approver X on the
      * given date returns X's active delegate if one exists — the "I'm on
      * leave, my approvals go to Alice" flow. Chains are followed but capped at
@@ -84,5 +100,20 @@ public class ApproverFallbackResolver {
              ORDER BY uc.created_at
              LIMIT 1
             """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId);
+    }
+
+    private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId, UUID notEmployeeId) {
+        return jdbc.query("""
+            SELECT uc.employee_id
+              FROM rbac.user_roles ur
+              JOIN auth.user_credentials uc ON uc.id = ur.user_id
+             WHERE ur.tenant_id = ?
+               AND ur.role_id = ?
+               AND uc.employee_id IS NOT NULL
+               AND uc.employee_id <> ?
+               AND uc.is_active = TRUE
+             ORDER BY uc.created_at
+             LIMIT 1
+            """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId, notEmployeeId);
     }
 }
