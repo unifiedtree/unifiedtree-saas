@@ -148,6 +148,35 @@ class NotificationEventCatalogTest {
         }
     }
 
+    /**
+     * Punch-in alerts (V143.72): their own entry under Attendance, in the app and
+     * on the phone only (never email: it carries an exact location), following
+     * each person's choices, templatable, and readable with every value filled.
+     */
+    @Test
+    void punchInAlertsAreAnAttendanceEventInTheAppAndOnThePhone() {
+        assertTrue(NotificationEventCatalog.covers(AppNotificationType.PUNCH_IN_ALERT));
+        EventDef d = NotificationEventCatalog.forType(AppNotificationType.PUNCH_IN_ALERT);
+        assertEquals("attendance.punch_in_alert", d.key());
+        assertEquals("Attendance", d.group());
+        assertSame(d, NotificationEventCatalog.byKey("PUNCH_IN_ALERT").orElseThrow());
+        assertEquals(EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH), d.channels());
+        assertFalse(d.essential(), "people can switch it off for themselves");
+        assertTrue(d.templatable(DeliveryChannel.PUSH));
+        assertTrue(d.placeholder("mapLink").link());
+        Map<String, String> values = new HashMap<>();
+        for (NotificationEventCatalog.Placeholder p : d.placeholders()) values.put(p.name(), "x");
+        for (String text : new String[]{d.defaultTitle(), d.defaultBody()}) {
+            String rendered = TemplateRenderer.render(text, values);
+            assertFalse(rendered.contains("{{") || rendered.contains("}}"), rendered);
+        }
+        assertEquals("Priya Rao punched in at 9:42 am", TemplateRenderer.render(d.defaultTitle(),
+                Map.of("employeeName", "Priya Rao", "time", "9:42 am")));
+        assertEquals("At Head Office. Face scan in the app. Location: 17.385040, 78.486670 (±15 m).",
+                TemplateRenderer.render(d.defaultBody(), Map.of("place", "At Head Office", "method", "Face scan in the app",
+                        "coordinatesText", " Location: 17.385040, 78.486670 (±15 m).")));
+    }
+
     /** A reminder a person sends by hand and a team message never go by email (DECISIONS 15). */
     @Test
     void checkInRemindersAndTeamMessagesAreAppAndPhoneOnly() {
