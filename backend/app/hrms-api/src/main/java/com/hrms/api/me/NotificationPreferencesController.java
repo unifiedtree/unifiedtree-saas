@@ -10,6 +10,8 @@ import com.unifiedtree.security.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -34,6 +36,7 @@ import java.util.UUID;
  * <p>Always-sent notifications (password reset, invitation, billing, letters HR
  * sends) are listed with {@code essential: true} and can't be switched off.
  * Offers to candidates go to people outside the workspace and aren't listed.
+ * Billing events go only to owners and super admins, so only they see them.
  */
 @RestController
 @RequestMapping("/v1/me/notification-preferences")
@@ -59,15 +62,15 @@ public class NotificationPreferencesController {
     @Operation(summary = "My notification choices, with every event I can receive")
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    public PreferencesView get() {
+    public PreferencesView get(@AuthenticationPrincipal Jwt jwt) {
         UUID[] ids = session();
-        return view(load(ids[0], ids[1]));
+        return view(load(ids[0], ids[1]), workspaceAdmin(jwt));
     }
 
     @Operation(summary = "Change my notification choices")
     @PutMapping
     @PreAuthorize("isAuthenticated()")
-    public PreferencesView update(@RequestBody UpdateRequest req) {
+    public PreferencesView update(@AuthenticationPrincipal Jwt jwt, @RequestBody UpdateRequest req) {
         UUID[] ids = session();
         if (req == null) throw bad("Nothing to change.");
         Map<String, Object> merged;
@@ -81,7 +84,7 @@ public class NotificationPreferencesController {
         } catch (IllegalStateException e) {
             throw new HrmsException("Your account wasn't found, so nothing was saved.", HttpStatus.NOT_FOUND, "ACCOUNT_NOT_FOUND");
         }
-        return view(merged);
+        return view(merged, workspaceAdmin(jwt));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -94,9 +97,11 @@ public class NotificationPreferencesController {
         }
     }
 
-    static PreferencesView view(Map<String, Object> prefs) {
+    /** @param workspaceAdmin owner or super admin: the only people billing events reach */
+    static PreferencesView view(Map<String, Object> prefs, boolean workspaceAdmin) {
         List<EventChoice> events = NotificationEventCatalog.all().stream()
                 .filter(d -> !d.external())
+                .filter(d -> workspaceAdmin || !NotificationEventCatalog.workspaceAdminsOnly(d))
                 .map(d -> new EventChoice(d.key(), d.group(), d.label(), d.audience(), d.description(),
                         List.copyOf(d.channels()), d.essential(),
                         choice(d, prefs, DeliveryChannel.IN_APP),
@@ -111,6 +116,12 @@ public class NotificationPreferencesController {
 
     private static Boolean choice(EventDef d, Map<String, Object> prefs, DeliveryChannel c) {
         return d.has(c) ? NotificationPreferences.eventChoice(d, prefs, c) : null;
+    }
+
+    /** The token's roles, as TenantAdminLookup picks who billing events reach (OWNER, SUPER_ADMIN). */
+    static boolean workspaceAdmin(Jwt jwt) {
+        List<String> roles = jwt == null ? null : jwt.getClaimAsStringList("roles");
+        return roles != null && (roles.contains("OWNER") || roles.contains("SUPER_ADMIN"));
     }
 
     private static UUID[] session() {

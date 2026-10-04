@@ -572,6 +572,15 @@ public final class NotificationEventCatalog {
         return d != null ? d : BY_KEY.get("general");
     }
 
+    /**
+     * True for the billing events: they go only to the workspace's owners and
+     * super admins (TenantAdminLookup: the OWNER and SUPER_ADMIN roles), so
+     * nobody else is offered them among their own notification choices.
+     */
+    public static boolean workspaceAdminsOnly(EventDef d) {
+        return d != null && "Billing".equals(d.group());
+    }
+
     /** True when {@code type} has its own entry (not just the "general" fallback). */
     public static boolean covers(AppNotificationType type) {
         return BY_TYPE.containsKey(type);

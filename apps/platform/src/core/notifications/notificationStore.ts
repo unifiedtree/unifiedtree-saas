@@ -68,6 +68,14 @@ export function toDisplay(dto: ServerNotificationDto): WebNotification {
   }
 }
 
+/** The bell's two pages (last 7 days, still unread) as one list: each notification once, newest first. */
+export function mergeNewestFirst(...pages: ServerNotificationDto[][]): ServerNotificationDto[] {
+  const byId = new Map<string, ServerNotificationDto>()
+  for (const page of pages) for (const n of page) if (n?.id && !byId.has(n.id)) byId.set(n.id, n)
+  const time = (n: ServerNotificationDto) => { const t = new Date(n.createdAt).getTime(); return Number.isNaN(t) ? 0 : t }
+  return [...byId.values()].sort((a, b) => time(b) - time(a))
+}
+
 interface NotificationState {
   notifications: WebNotification[]
   loading: boolean
@@ -109,10 +117,15 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
     try {
       // size=50 keeps the bell useful without paying full-history cost on every open. `since` asks only for
       // the bell's last 7 days (BW-05); a server without it ignores the parameter and the bell filters itself.
+      // Anything still unread is listed too, however old: the badge counts every unread notification, so
+      // one older than 7 days must be in the list to be read (otherwise "3 new" over "all caught up").
       const since = new Date(Date.now() - LAST_DAYS * 86_400_000).toISOString()
-      const page = await apiJson<PageResponse<ServerNotificationDto>>(`/v1/notifications?page=0&size=50&since=${encodeURIComponent(since)}`)
+      const [recent, unread] = await Promise.all([
+        apiJson<PageResponse<ServerNotificationDto>>(`/v1/notifications?page=0&size=50&since=${encodeURIComponent(since)}`),
+        apiJson<PageResponse<ServerNotificationDto>>('/v1/notifications?page=0&size=50&unreadOnly=true'),
+      ])
       set({
-        notifications: (page.content ?? []).map(toDisplay),
+        notifications: mergeNewestFirst(recent.content ?? [], unread.content ?? []).map(toDisplay),
         loading: false,
         loaded: true,
         error: null,
