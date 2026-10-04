@@ -33,7 +33,8 @@ import java.util.*;
 public class WorkspaceAccessService {
 
     // perm.module -> tenant_modules.module_key. Modules NOT here are core/always-on.
-    private static final Map<String, String> PERM_MODULE_TO_GATED_KEY = Map.of(
+    // Package-private: NewPermissions uses the same rule for "is this module on".
+    static final Map<String, String> PERM_MODULE_TO_GATED_KEY = Map.of(
         "hrms", "hrms",
         "attendance", "attendance",
         "leave", "leave",

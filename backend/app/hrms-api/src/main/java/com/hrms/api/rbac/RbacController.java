@@ -1,6 +1,7 @@
 package com.hrms.api.rbac;
 
 import com.hrms.api.access.RoleAdminService;
+import com.hrms.api.access.RoleReviewService;
 import com.unifiedtree.rbac.entity.Role;
 import com.unifiedtree.rbac.service.RbacService;
 import org.springframework.http.HttpStatus;
@@ -24,10 +25,12 @@ public class RbacController {
 
     private final RbacService rbac;
     private final RoleAdminService roles;
+    private final RoleReviewService review;
 
-    public RbacController(RbacService rbac, RoleAdminService roles) {
+    public RbacController(RbacService rbac, RoleAdminService roles, RoleReviewService review) {
         this.rbac = rbac;
         this.roles = roles;
+        this.review = review;
     }
 
     public record CreateRoleRequest(String code, String displayName, String description, UUID cloneFromRoleId) {}
@@ -68,6 +71,31 @@ public class RbacController {
     @PreAuthorize("hasAuthority('rbac.role.write')")
     public void deleteRole(@PathVariable UUID roleId, @AuthenticationPrincipal Jwt jwt) {
         roles.delete(roleId, actor(jwt));
+    }
+
+    /**
+     * Business-made roles with permissions added since they were last reviewed
+     * (V143.69), with how many; built-in roles never appear. Empty until the
+     * migration is applied. Same access as the roles list.
+     */
+    @GetMapping("/roles/new-permissions")
+    @PreAuthorize("hasAuthority('rbac.role.write') or hasAuthority('platform.admin')")
+    public List<RoleReviewService.RoleCount> newPermissionCounts() {
+        return review.counts();
+    }
+
+    /** The permissions that are new for one role (name, description, risk), for its Review. */
+    @GetMapping("/roles/{roleId}/new-permissions")
+    @PreAuthorize("hasAuthority('rbac.role.write')")
+    public List<RoleReviewService.NewPermission> newPermissions(@PathVariable UUID roleId) {
+        return review.forRole(roleId);
+    }
+
+    /** "Mark as reviewed": hides the role's notice until another permission is added. Changes no access. */
+    @PostMapping("/roles/{roleId}/permissions-reviewed")
+    @PreAuthorize("hasAuthority('rbac.role.write')")
+    public Map<String, Object> markPermissionsReviewed(@PathVariable UUID roleId) {
+        return Map.of("roleId", roleId, "reviewedAt", review.markReviewed(roleId));
     }
 
     /** The catalogue, with each permission's description, risk level and warning. */
