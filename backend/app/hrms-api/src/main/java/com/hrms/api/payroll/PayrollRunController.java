@@ -30,6 +30,10 @@ public class PayrollRunController {
 
     private final PayrollRunService service;
 
+    /** The audit log (Settings -> Audit logs). Optional, so tests can build the controller bare. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.audit.AuditService auditService;
+
     public PayrollRunController(PayrollRunService service) {
         this.service = service;
     }
@@ -56,7 +60,9 @@ public class PayrollRunController {
     @PreAuthorize("hasAuthority('payroll.runs.manage')")
     public PayrollRunService.RunDto create(@Valid @RequestBody PayrollRunService.CreateRunRequest req,
                                            @AuthenticationPrincipal Jwt jwt) {
-        return service.createDraftRun(TenantContext.getTenantId(), req, actorId(jwt));
+        PayrollRunService.RunDto run = service.createDraftRun(TenantContext.getTenantId(), req, actorId(jwt));
+        audit("CREATE", run, "Created", null);
+        return run;
     }
 
     @GetMapping("/runs/{id}/eligible-employees")
@@ -98,13 +104,17 @@ public class PayrollRunController {
     @PostMapping("/runs/{id}/process")
     @PreAuthorize("hasAuthority('payroll.runs.manage')")
     public PayrollRunService.RunDto process(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return service.processRun(TenantContext.getTenantId(), id, actorId(jwt));
+        PayrollRunService.RunDto run = service.processRun(TenantContext.getTenantId(), id, actorId(jwt));
+        audit("PAYROLL_PROCESSED", run, "Processed", null);
+        return run;
     }
 
     @PostMapping("/runs/{id}/lock")
     @PreAuthorize("hasAuthority('payroll.runs.lock')")
     public PayrollRunService.RunDto lock(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return service.lockRun(TenantContext.getTenantId(), id, actorId(jwt));
+        PayrollRunService.RunDto run = service.lockRun(TenantContext.getTenantId(), id, actorId(jwt));
+        audit("PAYROLL_LOCKED", run, "Locked", null);
+        return run;
     }
 
     /**
@@ -117,7 +127,27 @@ public class PayrollRunController {
     public PayrollRunService.RunDto reopen(@PathVariable UUID id,
                                           @jakarta.validation.Valid @RequestBody ReopenRequest req,
                                           @AuthenticationPrincipal Jwt jwt) {
-        return service.reopenRun(TenantContext.getTenantId(), id, req.reason(), actorId(jwt));
+        PayrollRunService.RunDto run = service.reopenRun(TenantContext.getTenantId(), id, req.reason(), actorId(jwt));
+        audit("PAYROLL_REOPENED", run, "Reopened", "Reason: " + req.reason().trim());
+        return run;
+    }
+
+    /**
+     * One audit row for a run that changed: "Created the Nov 2026 payroll run
+     * for Acme Pvt Ltd". Best effort: the change is already saved, and the
+     * audit service swallows its own write errors.
+     */
+    private void audit(String action, PayrollRunService.RunDto run, String verb, String note) {
+        if (auditService == null || run == null) return;
+        try {
+            String period = java.time.Month.of(run.periodMonth())
+                    .getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) + " " + run.periodYear();
+            String company = run.companyName() == null || run.companyName().isBlank() ? "" : " for " + run.companyName();
+            auditService.record("payroll", action, "PAYROLL_RUN", run.id(),
+                    verb + " the " + period + " payroll run" + company + (note == null ? "" : ". " + note));
+        } catch (RuntimeException e) {
+            // Never fails the request.
+        }
     }
 
     public record ReopenRequest(

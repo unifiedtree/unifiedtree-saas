@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
+import { roleLabel, rolesLine } from '@/shared/navigation/roleLabels'
 import { useCurrentUser, useUpdateCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { SettingsPage, SettingsSection, SettingsGrid, SettingsInput, SettingsValue, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { fieldErrors, useUpdateWorkspaceProfile, useWorkspaceProfile, type WorkspaceProfile, type WorkspaceProfileInput } from './workspaceSettingsApi'
@@ -15,6 +16,10 @@ type AccountDraft = { displayName: string; phone: string }
 
 const ORG_KEYS: (keyof OrgDraft)[] = ['displayName', 'contactEmail', 'contactPhone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'gstin', 'pan']
 const B36 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+const NO_ROLES: string[] = []
+/** "STARTER" → "Starter", "PRO_PLUS" → "Pro plus": the plan as words, not its code. */
+const planLabel = (code: string) => code.replace(/_/g, ' ').trim().toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 
 const orgFrom = (p: WorkspaceProfile): OrgDraft => Object.fromEntries(ORG_KEYS.map((k) => [k, (p[k] as string | null) ?? ''])) as OrgDraft
 const norm = (s: string) => s.trim().replace(/\s+/g, ' ')
@@ -52,6 +57,7 @@ function orgErrors(d: OrgDraft): Partial<Record<keyof OrgDraft, string>> {
 
 export const WorkspaceProfileSettings: React.FC<{ crumb: string; title: string; subtitle: string }> = ({ crumb, title, subtitle }) => {
   const authUser = useAuthStore((s) => s.user)
+  const sdkRoles = useSdkStore((s) => s.user?.roles) ?? NO_ROLES
   const me = useCurrentUser()
   const updateMe = useUpdateCurrentUser()
   const profile = useWorkspaceProfile()
@@ -134,7 +140,7 @@ export const WorkspaceProfileSettings: React.FC<{ crumb: string; title: string; 
           <SettingsInput label="Display name" value={acc?.displayName ?? ''} onChange={(v) => setAcc((d) => d && ({ ...d, displayName: v }))} error={accErr.displayName} maxLength={150} placeholder="How your name appears" />
           <SettingsInput label="Phone" value={acc?.phone ?? ''} onChange={(v) => setAcc((d) => d && ({ ...d, phone: v }))} error={accErr.phone} maxLength={20} placeholder="+91 98xxxxxxxx" hint="Used for account recovery and text-message sign-in in the app." />
           <SettingsValue label="Sign-in email" value={me.data?.email || authUser?.email || '—'} />
-          <SettingsValue label="Role" value={authUser?.role || '—'} />
+          <SettingsValue label={sdkRoles.length > 1 ? 'Roles' : 'Role'} value={rolesLine(sdkRoles) ?? (authUser?.role ? roleLabel(authUser.role) : '—')} />
         </SettingsGrid>
         <SettingsNote>Your first and last name come from your employee record, which HR keeps. Your photo, documents and notification choices are on <Link to="/profile" style={{ color: '#047857', fontWeight: 600 }}>your profile</Link>.</SettingsNote>
       </SettingsSection>
@@ -145,7 +151,7 @@ export const WorkspaceProfileSettings: React.FC<{ crumb: string; title: string; 
           <SettingsInput label="Contact email" value={org?.contactEmail ?? ''} onChange={setO('contactEmail')} readOnly={!canEdit} error={canEdit ? errOf('contactEmail') : undefined} maxLength={255} placeholder="accounts@company.com" />
           <SettingsInput label="Contact phone" value={org?.contactPhone ?? ''} onChange={setO('contactPhone')} readOnly={!canEdit} error={canEdit ? errOf('contactPhone') : undefined} maxLength={20} placeholder="+91 20 1234 5678" />
           <SettingsValue label="Web address" value={p?.subdomain || '—'} />
-          <SettingsValue label="Plan" value={p?.planType || '—'} />
+          <SettingsValue label="Plan" value={p?.planType ? planLabel(p.planType) : '—'} />
         </SettingsGrid>
         <SettingsGrid min={220}>
           <SettingsInput label="Address line 1" value={org?.addressLine1 ?? ''} onChange={setO('addressLine1')} readOnly={!canEdit} error={canEdit ? errOf('addressLine1') : undefined} maxLength={255} />

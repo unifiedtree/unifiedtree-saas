@@ -62,6 +62,12 @@ export function activityActor(event: AuditEventDto): string {
 }
 
 /**
+ * The feed shows what people changed, so sign-ins (one per session, often
+ * dozens a day) are left out on the server; they stay in Settings › Audit logs.
+ */
+export const ACTIVITY_FEED_EXCLUDE = 'exclude=LOGIN'
+
+/**
  * Recent workspace activity for the dashboard feed.
  *
  * Requires the `audit.read` authority — the caller must gate rendering on that
@@ -71,7 +77,7 @@ export function activityActor(event: AuditEventDto): string {
 export function useActivityFeed(size: number = 8, enabled: boolean = true) {
   return useQuery({
     queryKey: ['hrms', 'activity', 'feed', size],
-    queryFn: () => apiJson<AuditPageResponse>(`/v1/audit/events?page=0&size=${size}`),
+    queryFn: () => apiJson<AuditPageResponse>(`/v1/audit/events?page=0&size=${size}&${ACTIVITY_FEED_EXCLUDE}`),
     staleTime: 30_000,
     refetchInterval: 120_000,
     enabled,

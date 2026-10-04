@@ -350,10 +350,11 @@ export const Plan: React.FC = () => {
     }
   }
 
+  // Only for someone who may manage the plan: anyone else sees the
+  // "Only workspace admins" card, and the call would only answer 403.
   useEffect(() => {
-    fetchCurrent()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (isAdmin) fetchCurrent()
+  }, [isAdmin])
 
   // Pre-select the plan passed via ?add=<planKey> (from the tile grid's
   // "Add to plan" affordance on a locked tile). Skips if that plan is

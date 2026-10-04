@@ -30,7 +30,7 @@ import { useCompanies } from '../api/useOrg'
 import { useTeamDashboard, useAttendanceTrend, type TeamDashboardResponse, type DailyAttendanceCounts } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useHeadcountReport, fetchHeadcountWorkbook } from '../api/useReports'
-import { useActivityFeed, activityActor, type AuditPageResponse } from '../api/useActivity'
+import { useActivityFeed, activityActor, ACTIVITY_FEED_EXCLUDE, type AuditPageResponse } from '../api/useActivity'
 import { useSeatsUsage } from '../api/useSeats'
 import { useHolidays } from '../api/useSettings'
 import { useUpcomingProbations, type UpcomingProbation } from '../api/useProbation'
@@ -53,7 +53,9 @@ interface Alert { type: string; count: number; label: string; path: string }
 interface Notice { id: string; title: string; body: string; expiresOn?: string; createdAt: string }
 interface Project { id: string; name: string; status: string; total: number; completed: number }
 
-const STAGE_LABEL: Record<string, string> = { APPLIED: 'Applied', SCREENING: 'Screening', INTERVIEW: 'Interview', OFFER: 'Offer', HIRED: 'Hired', REJECTED: 'Rejected' }
+const STAGE_LABEL: Record<string, string> = { APPLIED: 'Applied', SCREENING: 'Screening', INTERVIEW: 'Interview', OFFER: 'Offer', HIRED: 'Hired', REJECTED: 'Rejected', WITHDRAWN: 'Withdrawn' }
+/** A stage code the map doesn't know yet still reads as words ("ON_HOLD" → "On hold"), never as the raw code. */
+const stageLabel = (code: string) => STAGE_LABEL[code] || code.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 const humanise = (t: string) => t.replace(/[._-]+/g, ' ').trim().toLowerCase()
 /** "CREATE" → "created", so the feed reads "Asha created report schedule …". */
 const VERB: Record<string, string> = { create: 'created', update: 'updated', delete: 'deleted', approve: 'approved', reject: 'rejected', export: 'exported', submit: 'submitted', cancel: 'cancelled', login: 'signed in', logout: 'signed out' }
@@ -158,7 +160,7 @@ export function AdminDashboardContainer() {
   const runs = useRuns({ companyId }, { enabled: hasPayroll && !!companyId })
   const activityToday = useActivityFeed(5, canAudit && !isPast)
   // A past day: the five latest events up to the end of it.
-  const activityPast = useQuery({ queryKey: ['hrms', 'activity', 'feed', 5, 'to', sel], queryFn: () => apiJson<AuditPageResponse>(`/v1/audit/events?page=0&size=5&to=${encodeURIComponent(endOfIstDay(sel))}`), enabled: canAudit && isPast, staleTime: 60_000 })
+  const activityPast = useQuery({ queryKey: ['hrms', 'activity', 'feed', 5, 'to', sel], queryFn: () => apiJson<AuditPageResponse>(`/v1/audit/events?page=0&size=5&${ACTIVITY_FEED_EXCLUDE}&to=${encodeURIComponent(endOfIstDay(sel))}`), enabled: canAudit && isPast, staleTime: 60_000 })
   const activity = isPast ? activityPast : activityToday
   const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, noticePage, date], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=${noticePage}&size=${NOTICES_PER_PAGE}${dq}`), enabled: !!companyId })
   // A different day starts the notices from their first page.
@@ -322,7 +324,7 @@ export function AdminDashboardContainer() {
       onboardingLoading: onboarding.isLoading, onboardingError: onboarding.error,
       // ── hiring & projects ──
       showHiring: canReadHiring, showProjects: canReadProjects,
-      hiring: { openJobs: hiring.data?.openJobs ?? 0, stages: (hiring.data?.stages ?? []).map((x) => ({ ...x, label: STAGE_LABEL[x.stage] || x.stage })) },
+      hiring: { openJobs: hiring.data?.openJobs ?? 0, stages: (hiring.data?.stages ?? []).map((x) => ({ ...x, label: stageLabel(x.stage) })) },
       hiringLoading: hiring.isLoading, hiringError: hiring.error,
       projects: projects.data ?? [], projectsLoading: projects.isLoading, projectsError: projects.error,
       // ── payroll & activity ──

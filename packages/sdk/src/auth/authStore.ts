@@ -16,8 +16,9 @@ const EMPTY_SCOPES: ScopeContext = { branches: [], departments: [], directReport
  * api.unifiedtree.com), and `_skipAuth` because there is no Bearer token to
  * attach yet.
  *
- * <p>A 4xx here is the ordinary "not signed in" case, not an error worth
- * surfacing — the caller simply shows the login page.
+ * <p>No cookie is the ordinary "not signed in" case: the server answers 204
+ * with no body (no access token), and a dead cookie answers 4xx. Neither is an
+ * error worth surfacing — the caller simply shows the login page.
  *
  * @returns true when a session was restored
  */

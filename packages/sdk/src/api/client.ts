@@ -50,7 +50,8 @@ async function doRefresh(instance: AxiosInstance): Promise<string | null> {
       {},
       { withCredentials: true, _skipAuth: true } as AxiosRequestConfig & { _skipAuth?: boolean },
     );
-    const newToken = res.data.accessToken;
+    // 204 (no body) means "no session to restore": nothing was there to refresh.
+    const newToken = res.data?.accessToken ?? null;
     setAccessToken(newToken);
     return newToken;
   } catch {

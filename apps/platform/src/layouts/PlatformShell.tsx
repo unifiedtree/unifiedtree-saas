@@ -30,6 +30,7 @@ import {
   type NavPage, type VisibleModule,
 } from '@/design/shell/navModel'
 import { mayPunchFromWeb } from '@/modules/hrms/attendance/webpunch/punchPromptRules'
+import { primaryRole, roleLabel } from '@/shared/navigation/roleLabels'
 
 // The check-in prompt after sign-in (DECISIONS 21, the NextWave reference; rules in punchPromptRules.ts).
 // Its code loads only for people who may check in from the web; if it can't load, nothing shows.
@@ -44,15 +45,6 @@ const PunchPrompt = React.lazy<React.ComponentType<{ ready: boolean }>>(() => im
 // permissions alone (design/shell/navModel.ts over shared/navigation/pageRegistry.ts); which item is
 // lit by railLit. On a phone the drawer is the rail with the open module's pages under its item.
 
-// A role's display name for the More card when the person's employee record has no job title.
-// Presentation only: nothing is decided by it.
-const ROLE_PRIORITY = ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN', 'ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'MANAGER', 'EMPLOYEE'] as const
-const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin', COMPANY_ADMIN: 'Company Admin',
-  OWNER: 'Company Owner', ADMIN: 'Company Admin', MANAGER: 'Manager',
-  HR_MANAGER: 'HR Manager', FINANCE_LEAD: 'Finance Lead',
-  DEPT_MANAGER: 'Dept Manager', EMPLOYEE: 'Employee',
-}
 
 /** Pages that read "?q=" (the search opens them filtered): the top bar shows the filter and can clear it. */
 function readsQuery(pathname: string, params: URLSearchParams, canAuthorPolicies: boolean): boolean {
@@ -105,8 +97,9 @@ export function PlatformShell() {
   const logout = useSdkStore(s => s.logout)
   const user = useSdkStore(s => s.user)
   const userRoles: string[] = user?.roles ?? []
-  const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
-  const roleLabel = primaryRole ? (ROLE_LABELS[primaryRole] ?? primaryRole) : null
+  // A role's display name for the More card when the person's employee record has no job title.
+  const topRole = primaryRole(userRoles)
+  const roleTitle = topRole ? roleLabel(topRole) : null
   const { workspaceName } = useWorkspaceBranding()
   const welcomeOnScreen = useWelcomeOnScreen()
   const pathname = location.pathname
@@ -253,7 +246,7 @@ export function PlatformShell() {
     ],
   }
   const moreContent = {
-    roleLabel,
+    roleLabel: roleTitle,
     profileHref: '/profile',
     onProfile: () => goTo('/profile'),
     onSignOut: signOut,

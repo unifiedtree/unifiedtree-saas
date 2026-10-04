@@ -9,6 +9,7 @@ import com.unifiedtree.auth.entity.UserCredentials;
 import com.unifiedtree.auth.mfa.MfaChallengeTokens;
 import com.unifiedtree.auth.mfa.MfaService;
 import com.unifiedtree.auth.session.SessionDevice;
+import com.unifiedtree.auth.session.SignedInEvent;
 import com.unifiedtree.auth.repository.RbacRefreshTokenRepository;
 import com.unifiedtree.auth.repository.UserCredentialsRepository;
 import com.unifiedtree.rbac.entity.UserRole;
@@ -87,6 +88,14 @@ public class AuthService {
         this.employeeBaseline = employeeBaseline;
         this.mfa = mfa;
         this.mfaChallenges = mfaChallenges;
+    }
+
+    /** Tells listeners (the audit log) about each new sign-in. Optional, so tests can build the service bare. */
+    private org.springframework.context.ApplicationEventPublisher events;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setEvents(org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
     }
 
     /**
@@ -442,13 +451,25 @@ public class AuthService {
         rt.setUserId(creds.getId());
         rt.setTokenHash(refreshHash);
         rt.setIssuedAt(now);
-        rt.setExpiresAt(now.plus(jwt.refreshTokenTtl()));
+        rt.setExpiresAt(now.plus(sessionTtl(jwt.refreshTokenTtl(), client.userAgent())));
         rt.setSessionId(sessionId);
         rt.setSessionStartedAt(carry != null && carry.startedAt() != null ? carry.startedAt() : now);
         rt.setLastUsedAt(now);
         rt.setUserAgent(client.userAgent());
         rt.setIpAddress(client.ipAddress());
         refreshRepo.save(rt);
+
+        // A new session is a sign-in (a refresh carries the old one and is not).
+        // Never let the notice fail the sign-in itself.
+        if (carry == null && events != null) {
+            try {
+                events.publishEvent(new SignedInEvent(tenantId, creds.getId(), creds.getEmail(), sessionId,
+                        client.userAgent(), client.ipAddress()));
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger(AuthService.class)
+                        .warn("sign-in notice not published for user {}: {}", creds.getId(), e.toString());
+            }
+        }
 
         String firstName = "";
         String lastName = "";
@@ -464,6 +485,19 @@ public class AuthService {
             access.token(), refreshPlain, access.expiresAt(),
             creds.getId(), creds.getEmployeeId(), tenantId, creds.getEmail(),
             firstName, lastName, roleCodes, permissions);
+    }
+
+    /**
+     * How long this session lasts without use: the configured refresh-token
+     * life, but never longer than a browser's refresh cookie for a browser
+     * (see {@link SessionDevice#BROWSER_SESSION_TTL}). The mobile app keeps the
+     * full life.
+     */
+    static java.time.Duration sessionTtl(java.time.Duration configured, String userAgent) {
+        if ("web".equals(SessionDevice.kind(userAgent)) && SessionDevice.BROWSER_SESSION_TTL.compareTo(configured) < 0) {
+            return SessionDevice.BROWSER_SESSION_TTL;
+        }
+        return configured;
     }
 
     /** Issue a session for a user that just activated via invitation/password reset. */
