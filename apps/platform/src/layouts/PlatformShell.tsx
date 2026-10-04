@@ -8,6 +8,7 @@ import { PAGE_REGISTRY } from '@/shared/navigation/pageRegistry'
 import { useAccessContext } from '@/shared/navigation/useAccess'
 import { openSearch } from '@/design/shell/search/searchStore'
 import { usePageTitle, useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
+import { useWelcomeOnScreen } from '@/core/auth/WelcomeSplash'
 import { apiJson } from '@/core/api/client'
 import type { ModulePlan } from '@/core/api/modulePlans'
 import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
@@ -28,6 +29,12 @@ import {
   preferencesTarget, railGroups, readLastPages, readPinned, routeOf, saveLastPage, savePinned, settingsActive, settingsPages,
   type NavPage, type VisibleModule,
 } from '@/design/shell/navModel'
+import { mayPunchFromWeb } from '@/modules/hrms/attendance/webpunch/punchPromptRules'
+
+// The check-in prompt after sign-in (DECISIONS 21, the NextWave reference; rules in punchPromptRules.ts).
+// Its code loads only for people who may check in from the web; if it can't load, nothing shows.
+const PunchPrompt = React.lazy<React.ComponentType<{ ready: boolean }>>(() => import('@/modules/hrms/attendance/webpunch/PunchPrompt')
+  .then((m) => ({ default: m.PunchPrompt }), () => ({ default: () => null })))
 
 // The app shell (design: HrmsPlatform.dc.html). A 72px rail of named groups that widens on hover or
 // focus (or stays open when pinned), a white top bar with the open module's pages as tabs (ModuleTabs;
@@ -101,6 +108,7 @@ export function PlatformShell() {
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
   const roleLabel = primaryRole ? (ROLE_LABELS[primaryRole] ?? primaryRole) : null
   const { workspaceName } = useWorkspaceBranding()
+  const welcomeOnScreen = useWelcomeOnScreen()
   const pathname = location.pathname
 
   useEffect(() => { setNotifOpen(false); setMobileOpen(false); setMoreOpen(false) }, [pathname])
@@ -345,6 +353,9 @@ export function PlatformShell() {
         )}
         <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} contacts={helpContacts} />
         <DesignTooltip />
+        {mayPunchFromWeb(accessCtx) && (
+          <React.Suspense fallback={null}><PunchPrompt ready={!welcomeOnScreen} /></React.Suspense>
+        )}
       </div>
     </>
   )

@@ -115,6 +115,48 @@
 .uk-ph--greet .uk-ph__sub { line-height: 21px; }
 .uk-ph__wave { display: inline-block; transform-origin: 70% 75%; }
 
+/* ── Hero header: a page with sub-section tabs (the Master "Organization Setup" look) ──
+   The same header, drawn as the Master's hero card (design/master/master.css .hero): a white
+   rounded card with a soft green glow top-right, an uppercase green eyebrow, the title at 30/800,
+   the summary at 15px, actions on the right, and under them — inside the card — the page's tabs as
+   a segmented control (.uk-ptabs--seg below). PageHeader adds uk-ph--hero once a PillTabs joins it
+   (pageTabs.tsx) or when it is given `tabs` / `hero`. Measurements are the Master's; colours are the
+   kit's tokens, so the card is right in dark too (the glow stays, as on the Master pages). */
+.uk-ph.uk-ph--hero {
+  position: relative;
+  overflow: hidden;
+  gap: 20px;
+  padding: 26px 30px;
+  border: 1px solid var(--u-ln, #E3E9E6);
+  border-radius: 20px;
+  background: var(--u-sf, #fff);
+  box-shadow: var(--u-shc, 0 1px 2px rgba(14, 27, 22, .05));
+}
+.uk-ph--hero::before {
+  content: "";
+  position: absolute;
+  top: -140px;
+  right: -60px;
+  width: 560px;
+  height: 340px;
+  background: radial-gradient(closest-side, var(--uk-hero-glow, rgba(16, 185, 129, .11)), transparent);
+  pointer-events: none;
+}
+.uk-ph--hero > * { position: relative; }
+.uk-ph--hero .uk-ph__main { flex: 1 1 420px; gap: 0; }
+.uk-ph--hero .uk-ph__eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--u-brt, #0F6E56); }
+.uk-ph--hero .uk-ph__eyebrow + .uk-ph__title { margin-top: 8px; }
+.uk-ph--hero .uk-ph__title { font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -.03em; }
+.uk-ph--hero .uk-ph__sub { margin-top: 7px; font-size: 15px; max-width: 700px; }
+.uk-ph--hero .uk-ph__actions { gap: 10px; }
+/* The tab slot: a full-width line under the title row, 22px below it (20px row gap + 2px); nothing when empty. */
+.uk-ph__tabs { flex: 1 0 100%; min-width: 0; margin-top: 2px; }
+.uk-ph__tabs:empty { display: none; }
+@media (max-width: 1100px) {
+  .uk-ph.uk-ph--hero { padding: 22px; }
+  .uk-ph--hero .uk-ph__title { font-size: 25px; }
+}
+
 /* ── Pill tabs (a page's own views and tabs, inside the page) ───────────────
    The second level of navigation (DECISIONS 21): the top bar shows the module's pages as outlined pills
    with a solid green one (design/shell ModuleTabs); a page's own views sit under it, in the page, and are
@@ -170,6 +212,49 @@
 .uk-ptab__icon { display: inline-flex; flex-shrink: 0; }
 .uk-ptab__icon svg { width: 17px; height: 17px; stroke-width: 1.9; }
 .uk-ptab:not(.is-on) .uk-ptab__icon svg { transform: rotate(calc(var(--fx, 0) * -10deg)) scale(calc(1 + var(--fx, 0) * .12)); transition: transform .5s cubic-bezier(.34,1.56,.64,1); }
+
+/* ── Segmented pill tabs: the bar inside the hero header (the Master's .seg, master.css) ──
+   A grey track with 4px padding and 12px corners; 34px segments at 13px/600, 3px apart; the chosen
+   one a white pill with dark text and the card shadow. The track hugs its segments and they wrap
+   onto more rows when the page is narrow (the Master wraps too), so there is no sideways scroll
+   and no fade. PillTabs adds the class when it joins a header; a bar given to PageHeader as `tabs`
+   gets the same look from the slot. */
+.uk-ptabs.uk-ptabs--seg,
+.uk-ph__tabs > .uk-ptabs {
+  flex: 0 1 auto;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--u-hv, #F0F4F2);
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab {
+  height: 34px;
+  gap: 7px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  justify-content: center;
+  color: var(--u-ink2, #4A5A54);
+  font-size: 13px;
+  font-weight: 600;
+}
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab.has-icon { padding: 0 14px 0 12px; }
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab:hover { background: transparent; color: var(--u-ink, #0E1B16); transform: none; }
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab.is-on,
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab.is-on:hover {
+  background: var(--u-sf, #fff);
+  color: var(--u-ink, #0E1B16);
+  box-shadow: var(--shadow-sm, 0 1px 3px 0 rgba(15, 23, 42, .06), 0 1px 2px -1px rgba(15, 23, 42, .04));
+}
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab.is-on > span[aria-hidden="true"]:not(.uk-ptab__icon) { background: var(--u-hv, #F0F4F2); color: var(--u-ink2, #4A5A54); }
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab__icon svg { width: 16px; height: 16px; }
+:is(.uk-ptabs--seg, .uk-ph__tabs > .uk-ptabs) .uk-ptab:focus-visible { box-shadow: inset 0 0 0 1.5px var(--u-brt, #0F6E56), var(--u-focus, 0 0 0 3px var(--u-brs, #E8F3EE)); }
 
 .uk-ppill {
   flex: 0 1 auto;

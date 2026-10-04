@@ -77,7 +77,7 @@ class WebCheckInTest {
                 EMP, COMPANY, UUID.randomUUID(), null, 17.4, 78.4, 100, "Head office"));
         when(attendance.effectivePunchInstant(any(), anyBoolean())).thenReturn(Instant.now());
         when(attendance.checkInJson(any(), any(), any(), any(), anyDouble(), anyDouble(), any(), any(), any(), any(), any(),
-                any(), any(), anyBoolean(), anyBoolean(), any()))
+                any(), any(), anyBoolean(), anyBoolean(), any(), any()))
                 .thenReturn(new AttendanceDto(UUID.randomUUID(), "2026-09-28", "2026-09-28T03:40:00Z", null, "OFFICE", "ON_TIME",
                         "WEB", null, null, null, "Head office", null, null, 0, null, false));
     }
@@ -125,7 +125,7 @@ class WebCheckInTest {
 
     private void verifyNoPunch() {
         verify(attendance, never()).checkInJson(any(), any(), any(), any(), anyDouble(), anyDouble(), any(), any(), any(), any(),
-                any(), any(), any(), anyBoolean(), anyBoolean(), any());
+                any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     private void verifyNoCheckOut() {
@@ -207,7 +207,7 @@ class WebCheckInTest {
         assertEquals(12.9, sent.getValue().latitude());
         // then the punch: the WEB method, the WFH day, no face on the record path, never the client's capture time
         verify(attendance).checkInJson(eq(EMP), eq(COMPANY), any(), any(), eq(12.9), eq(77.6), isNull(), eq("WEB"), any(), any(), any(),
-                any(), any(), eq(true), eq(false), isNull());
+                any(), any(), eq(true), eq(false), isNull(), isNull());
         verify(attendance).effectivePunchInstant(isNull(), eq(false));
         verify(review, never()).flagOutsideGeofence(any(), any(), any());
     }
@@ -283,7 +283,7 @@ class WebCheckInTest {
         CheckInRequest phone = new CheckInRequest(12.9, 77.6, FACE, "FACE_RECOGNITION", null, null, null, null, false, null);
         controller.checkIn(phone, token());
         verify(attendance).checkInJson(eq(EMP), any(), any(), any(), anyDouble(), anyDouble(), eq(FACE), eq("FACE_RECOGNITION"),
-                any(), any(), any(), any(), any(), eq(false), eq(false), isNull());
+                any(), any(), any(), any(), any(), eq(false), eq(false), isNull(), isNull());
         verify(review, never()).flagOutsideGeofence(any(), any(), any());
     }
 

@@ -60,7 +60,7 @@ public class AssistedPunchRecorder {
         AttendanceDto dto = attendanceService.checkInJson(
                 t.employeeId(), t.companyId(), t.branchId(), t.departmentId(),
                 by.latitude(), by.longitude(), faceImageBase64, "FACE_RECOGNITION", tenantId,
-                t.locationName(), null, by.deviceId(), null, wfhDay, false, null);
+                t.locationName(), null, by.deviceId(), null, wfhDay, false, null, by.accuracyMeters());
         insert(tenantId, dto, t.employeeId(), "CHECK_IN", dto.checkInTime(), by);
         return dto;
     }

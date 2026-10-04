@@ -1,0 +1,63 @@
+/* Onboarding & assets on the redesign kit: layout only. Every colour is a design token with its
+   light fallback, so the pages read right in light and dark without the dark bridge. */
+.onb-stack { display: grid; gap: 20px; min-width: 0; }
+.onb-form { display: grid; gap: 16px; }
+.onb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.onb-row--between { justify-content: space-between; }
+.onb-muted { color: var(--u-ink3, #6A7A73); font-size: 12.5px; line-height: 18px; }
+.onb-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.onb-clip { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onb-strong { color: var(--u-ink, #0E1B16); font-weight: 500; }
+.onb-cell2 { display: grid; gap: 2px; min-width: 0; }
+.onb-link { padding: 0; border: 0; background: none; font: inherit; color: var(--u-brt, #0F6E56); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.onb-muted-row > * { color: var(--u-ink3, #6A7A73); }
+.onb-person { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 12px; background: var(--u-sf2, #F7F9F8); }
+.onb-more { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px;
+  background: transparent; color: var(--u-ink3, #6A7A73); cursor: pointer; transition: background .2s, color .2s; }
+.onb-more:hover, .onb-more[aria-expanded='true'] { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
+.onb-more:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+
+/* A run's checklist: one row per task (kept as <article> for the live checks). */
+.onb-tasks { display: grid; }
+.onb-task { display: flex; gap: 14px; align-items: flex-start; padding: 14px 20px; border-top: 1px solid var(--u-ln2, #EDF1EF); }
+.onb-task:first-child { border-top: 0; }
+.onb-task__dot { flex: 0 0 auto; margin-top: 1px; width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+.onb-task__dot--done { background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.onb-task__dot--skipped { background: var(--u-hv, #F0F4F2); color: var(--u-ink3, #6A7A73); }
+.onb-task__dot--overdue { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.onb-task__dot--todo { background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); }
+.onb-task__body { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.onb-task__title { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--u-ink, #0E1B16); overflow-wrap: anywhere; }
+.onb-task.is-closed .onb-task__title { text-decoration: line-through; color: var(--u-ink3, #6A7A73); }
+.onb-task__note { font-size: 12.5px; line-height: 18px; color: var(--u-ink2, #4A5A54); font-style: italic; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .onb-task { padding: 12px 14px; gap: 10px; } }
+
+/* The new-hire wizard's own pieces (the fields themselves are the theme's .ut-input / .ut-select). */
+/* Back / Next stay reachable on long steps. No backdrop-filter: the bar is opaque instead. */
+.onb-wiz-bar { position: sticky; bottom: 12px; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 16px; background: var(--u-sf, #fff); box-shadow: var(--u-shp, 0 24px 60px -20px rgba(14,27,22,.35)); }
+.onb-done { max-width: 640px; margin: 0 auto; width: 100%; }
+.onb-done__icon { width: 64px; height: 64px; margin: 4px auto 0; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.onb-wiz-label { display: block; margin-bottom: 6px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--u-ink2, #4A5A54); }
+.onb-wiz-req { color: var(--u-rdt, #B42318); }
+.onb-wiz-hint { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--u-ink3, #6A7A73); }
+.onb-wiz-error { margin-top: 4px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--u-rdt, #B42318); }
+.onb-wiz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; }
+@media (max-width: 640px) { .onb-wiz-grid { grid-template-columns: minmax(0, 1fr); } }
+.onb-wiz-steps { overflow-x: auto; scrollbar-width: none; }
+.onb-wiz-steps::-webkit-scrollbar { display: none; }
+.onb-wiz-steps ol { display: flex; min-width: 100%; width: max-content; margin: 0; padding: 0 4px; list-style: none; }
+.onb-wiz-step { flex: 1; min-width: 92px; display: flex; flex-direction: column; align-items: center; }
+.onb-wiz-step__line { height: 2px; flex: 1; border-radius: 999px; background: var(--u-ln, #E3E9E6); }
+.onb-wiz-step__line.is-on { background: var(--u-br, #0F6E56); }
+.onb-wiz-step__line.is-hidden { opacity: 0; }
+.onb-wiz-step__dot { margin: 0 6px; width: 32px; height: 32px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-ink3, #6A7A73);
+  font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.onb-wiz-step__dot:disabled { cursor: not-allowed; }
+.onb-wiz-step__dot:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); border-color: var(--u-br, #0F6E56); }
+.onb-wiz-step__dot.is-current { border-color: transparent; background: var(--u-br, #0F6E56); color: #fff; }
+.onb-wiz-step__dot.is-done { border-color: transparent; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.onb-wiz-step__label { margin-top: 8px; padding: 0 4px; font-size: 11.5px; line-height: 16px; font-weight: 500; white-space: nowrap; color: var(--u-ink3, #6A7A73); }
+.onb-wiz-step__label.is-current { color: var(--u-ink, #0E1B16); }

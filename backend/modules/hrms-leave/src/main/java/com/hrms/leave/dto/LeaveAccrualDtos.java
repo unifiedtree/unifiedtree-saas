@@ -59,7 +59,7 @@ public final class LeaveAccrualDtos {
             UUID leaveTypeId,
             String leaveTypeName,
             int year,
-            /** ACCRUAL, CARRY_FORWARD, LAPSE or ENCASHMENT. */
+            /** ACCRUAL, CARRY_FORWARD, LAPSE, ENCASHMENT or ADJUSTMENT (HR gave everyone a type's days, V143.71). */
             String kind,
             String period,
             double days,

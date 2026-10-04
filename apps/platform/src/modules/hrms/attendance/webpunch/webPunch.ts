@@ -55,11 +55,15 @@ export function deviceLabel(ua: string = typeof navigator === 'undefined' ? '' :
 
 const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `web-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
-/** The punch itself. `face`: the photo, plain base64 JPEG. */
+/**
+ * The punch itself. `face`: the photo, plain base64 JPEG. A check-in also sends the browser's
+ * accuracy, which only the punch-in alert shows ("±15 m"); a server without it ignores it.
+ */
 export function punch(mode: PunchMode, spot: Spot, face: string, place?: string | null): Promise<AttendanceDto> {
   const common = { latitude: spot.latitude, longitude: spot.longitude, faceImageBase64: face, deviceId: deviceLabel(), ...(place ? { locationName: place } : {}) }
+  const accuracy = spot.accuracy != null && Number.isFinite(spot.accuracy) ? { accuracy: Math.round(spot.accuracy * 10) / 10 } : {}
   return mode === 'in'
-    ? apiJson<AttendanceDto>('/v1/attendance/checkin', { method: 'POST', body: JSON.stringify({ ...common, checkInMethod: 'WEB', clientEventId: newId(), offlineCaptured: false }) })
+    ? apiJson<AttendanceDto>('/v1/attendance/checkin', { method: 'POST', body: JSON.stringify({ ...common, ...accuracy, checkInMethod: 'WEB', clientEventId: newId(), offlineCaptured: false }) })
     : apiJson<AttendanceDto>('/v1/attendance/checkout', { method: 'POST', body: JSON.stringify({ ...common, checkOutMethod: 'WEB', offlineCaptured: false }) })
 }
 
