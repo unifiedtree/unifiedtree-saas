@@ -447,12 +447,14 @@ button.uk-stat { font: inherit; font-family: var(--u-font, 'Inter', system-ui, s
 .uk-stat--live-stack .uk-stat__tile { width: 42px; height: 42px; border-radius: 13px; }
 .uk-stat__tile .uk-stat__halo { transform: scale(calc(1 + var(--fx, 0) * .24)); transition: transform .6s cubic-bezier(.34,1.56,.64,1), opacity .45s; }
 .uk-stat__tile > svg:not(.uk-aniicon) { stroke-width: 1.9; }
-.uk-stat--live .uk-stat__body { flex: 1; gap: 1px; }
+/* The words keep their room and the sparkline gives way first (down to 44px): with a 0 basis the body took only
+   what the 84px line left, so a four-across row cut "Team working today" to "Team worki…". */
+.uk-stat--live .uk-stat__body { flex: 1 1 auto; gap: 1px; }
 .uk-stat--live-stack .uk-stat__body { gap: 1px; }
 .uk-stat--live .uk-stat__label { font-size: 14px; line-height: 20px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .uk-stat--live .uk-stat__value { font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: -.035em; white-space: nowrap; }
 .uk-stat--live .uk-stat__note { font-size: 13px; line-height: 18px; color: var(--u-ink2, #4A5A54); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.uk-stat--live .uk-stat__spark { position: relative; flex-shrink: 1; min-width: 44px; align-self: flex-end; margin-bottom: 6px; overflow: visible; color: var(--k, #0F6E56); }
+.uk-stat--live .uk-stat__spark { position: relative; flex-shrink: 1000; min-width: 44px; align-self: flex-end; margin-bottom: 6px; overflow: visible; color: var(--k, #0F6E56); }
 .uk-stat--live-stack .uk-stat__top { gap: 10px; }
 .uk-stat--live-stack .uk-stat__spark { flex-shrink: 1; min-width: 40px; overflow: visible; color: var(--k, #0F6E56); }
 .uk-stat--live-stack .uk-stat__label { font-size: 13.5px; line-height: 19px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

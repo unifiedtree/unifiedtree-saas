@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { StaffStatusResponse } from '../api/useAttendance'
-import type { DayBuckets } from '../attendance/attendanceBuckets'
+import { dayBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import {
-  attendanceExceptions, attRows, dayRange, lateNote, monthSpan, niceScale, payrollHint, payrollMonths, pctOf, quickActions, scheduledOf,
-  sectionPills, trendColumns, workingWindow,
+  attendanceExceptions, attRows, dayRange, lateNote, monthSpan, niceScale, payrollHint, payrollMonths, pctOf, quickActions, rollNote, rollTotal,
+  scheduledOf, sectionPills, trendColumns, workingWindow,
 } from './dashboardModel'
 
 const day = (p: Partial<DayBuckets> = {}): DayBuckets => ({ total: 10, present: 8, regular: 6, late: 2, halfDay: 0, wfh: 0, onLeave: 1, notMarked: 1, absent: 0, earlyOut: 0, other: 0, ...p })
@@ -115,5 +115,41 @@ describe('quick actions', () => {
       { key: 'rep', label: 'View reports', path: '/c', allowed: true },
     ])
     expect(qa.map((q) => q.key)).toEqual(['att', 'rep'])
+  })
+})
+
+describe('Total employees', () => {
+  it('is everyone on the roll, never the day’s attendance roster', () => {
+    // 11 on the roll: the summary's headcount wins, then the headcount report's, then the directory's count.
+    expect(rollTotal({ headcount: 11, activeEmployees: 1, probation: 10, onNotice: 0 }, [{ total: 4 }], 7)).toBe(11)
+    expect(rollTotal({ activeEmployees: 1 }, [{ total: 4 }, { total: '7' }], 3)).toBe(11)
+    expect(rollTotal(undefined, undefined, 11)).toBe(11)
+    expect(rollTotal(undefined, undefined, undefined)).toBeNull()
+    // A real zero is a zero, not "unknown".
+    expect(rollTotal({ headcount: 0 }, undefined, undefined)).toBe(0)
+  })
+  it('the note adds up to the figure: confirmed, on probation and serving notice', () => {
+    expect(rollNote({ headcount: 11, activeEmployees: 1, probation: 10, onNotice: 0 }, false, '1–4 Oct')).toBe('1 active · 10 on probation')
+    expect(rollNote({ headcount: 12, activeEmployees: 1, probation: 10, onNotice: 1 }, false, '')).toBe('1 active · 10 on probation · 1 on notice')
+    expect(rollNote({ headcount: 0, activeEmployees: 0, probation: 0, onNotice: 0 }, false, '')).toBe('No one on the roll yet')
+    // An older server sends the confirmed count alone: no split that reads as if the rest had left.
+    expect(rollNote({ activeEmployees: 1 }, false, '')).toBe('Everyone on the roll')
+    // A past day: that month's joiners and leavers.
+    expect(rollNote({ headcount: 11, activeEmployees: 1, probation: 10, joinedInMonth: 2, leftInMonth: 1 }, true, '1–4 Oct')).toBe('2 joined · 1 left, 1–4 Oct')
+  })
+})
+
+describe('a weekly off on the team’s day', () => {
+  it('lists the people off without counting them as scheduled, missing or absent', () => {
+    const staff = [
+      person({ fullName: 'Aisha Khan', status: 'WEEKLY_OFF', effectiveStatus: 'WEEKLY_OFF' }),
+      person({ fullName: 'E2E Emp', status: 'WEEKLY_OFF', effectiveStatus: 'WEEKLY_OFF' }),
+    ]
+    const c = dayBuckets({ date: '2026-10-04', staffStatuses: staff } as never, '2026-10-04')
+    expect(c.total).toBe(2)
+    expect(scheduledOf(c)).toBe(0)
+    expect(c.notMarked + c.absent + c.present + c.onLeave).toBe(0)
+    expect(attRows(staff, 'all', false).map((r) => r.status)).toEqual(['Weekly off', 'Weekly off'])
+    expect(attRows(staff, 'none', false)).toEqual([])
   })
 })

@@ -118,7 +118,7 @@ export function HomePage() {
   })
   const paySchedule = usePaySchedule({ enabled: canPayslips })
   const inbox = useApprovalsInbox({ tab: 'all', size: 4 }, { enabled: team })
-  const teamDash = useTeamDashboard(today, undefined, team && canTeamToday)
+  const teamDash = useTeamDashboard(today, undefined, team && canTeamToday, false, { includeWeeklyOff: true })
   const trend = useAttendanceTrend(addDays(today, -30), today, undefined, team && canTeamToday)
   const summary = useTeamSummary({ enabled: team && canMessage })
 

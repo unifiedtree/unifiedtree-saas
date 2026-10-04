@@ -39,13 +39,17 @@ export interface DashboardVm {
   daily: Record<string, DayBuckets>; holidays: { date: string; name: string }[]
   counts: DayBuckets; staff: StaffStatusResponse[]; liveLoading: boolean; liveError: unknown
   stats: {
-    showTotal: boolean; showAtt: boolean; total: number; totalNote: string; presentNote: string; leaveNote: string; lateNote: string
+    showTotal: boolean; showAtt: boolean
+    /** Everyone on the roll on the day (null until known), with its own loading: it isn't the attendance roster. */
+    total: number | null; totalLoading: boolean; totalNote: string; presentNote: string; leaveNote: string; lateNote: string
     spark: { present: Series; leave: Series; late: Series; half: Series; wfh: Series; none: Series; absent: Series }; sparkDot?: number
   }
   quick: { key: string; label: string; path: string; hint: string; kind?: QuickIconKind }[]
   seats: { used: number; total: number } | null
   addEmployee: { disabledReason: string | null } | null
   canExport: boolean; exporting: boolean; exportName: string
+  /** Today's web punch for the viewer ("Your day" says they may punch from the web): check in, check out, or none. */
+  punch: 'in' | 'out' | null
   inbox: Inbox; canAtt: boolean; canFix: boolean; canLeave: boolean; canWfh: boolean
   trendCols: TrendColumn[]; trendLoading: boolean; trendError: unknown
   showNotices: boolean; notices: NoticeVm[]; noticeTotal: number; noticesLoading: boolean; noticesError: boolean; noticePage: number; noticePages: number; canManageNotices: boolean
@@ -55,7 +59,7 @@ export interface DashboardVm {
   holidaysHref: string | null
   showProbations: boolean; probations: UpcomingProbation[]; probationsLoading: boolean; probationsError: unknown; canDecideProbation: boolean; canProbationConfig: boolean
   showDept: boolean; showPerformers: boolean; showOnboarding: boolean
-  departments: { id: string | null; name: string; active: number }[]; deptLoading: boolean; deptError: unknown
+  departments: { id: string | null; name: string; people: number }[]; deptLoading: boolean; deptError: unknown
   performers: { id: string; name: string; dept: string; rating: number; reviews: number }[]; performersLoading: boolean; performersError: unknown
   onboarding: { id: string; name: string; status: string; statusLabel: string; completed: number; total: number }[]; onboardingLoading: boolean; onboardingError: unknown
   showHiring: boolean; showProjects: boolean
@@ -71,6 +75,8 @@ export interface DashboardPageProps {
   refetch: Record<'live' | 'trend' | 'notices' | 'probations' | 'dept' | 'performers' | 'onboarding' | 'hiring' | 'projects' | 'payroll' | 'activity', () => void>
   onNavigate: (path: string) => void
   onDate: (iso: string | null) => void
+  /** Opens the web face punch (the container owns the dialog). */
+  onPunch: (mode: 'in' | 'out') => void
   onExport: () => void
   onNoticePage: (p: number) => void
   onSaveNotice: (n: { id?: string | null; title: string; body: string; expiry: string | null }) => Promise<boolean>
@@ -95,7 +101,7 @@ function useStuck() {
   return { sentinel, stuck }
 }
 
-export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, onNoticePage, onSaveNotice, onArchiveNotice, projectsOpen, onProjects }: DashboardPageProps) {
+export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, onExport, onNoticePage, onSaveNotice, onArchiveNotice, projectsOpen, onProjects }: DashboardPageProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const pills = sectionPills(vm.sections)
   const ready = !vm.liveLoading && !vm.noticesLoading
@@ -124,9 +130,10 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
       </span>
     )
 
-  const statCard = (props: Parameters<typeof StatCard>[0]) => <StatCard key={props.label} {...props} loading={vm.liveLoading} />
+  const statCard = (props: Parameters<typeof StatCard>[0]) => <StatCard key={props.label} loading={vm.liveLoading} {...props} />
   const cards = [
-    s.showTotal && statCard({ label: 'Total employees', aniIcon: 'users', accent: 'people', value: liveDisabled ? null : s.total, note: s.totalNote, onClick: () => go('/hrms/employees') }),
+    // The headcount has its own source and loading (not the day's attendance), so a failed roster doesn't blank it.
+    s.showTotal && statCard({ label: 'Total employees', aniIcon: 'users', accent: 'people', value: s.total, loading: s.totalLoading, note: s.totalNote, onClick: () => go('/hrms/employees') }),
     s.showAtt && statCard({ label: 'Present', aniIcon: 'present', accent: 'present', value: liveDisabled ? null : c.present, note: s.presentNote, spark: s.spark.present, sparkDot: s.sparkDot, sparkLabel: `Present over the last ${s.spark.present?.length ?? 0} working days`, onClick: () => go(att('PRESENT')) }),
     s.showAtt && statCard({ label: 'On leave', aniIcon: 'leave', accent: 'leave', value: liveDisabled ? null : c.onLeave, note: s.leaveNote, spark: s.spark.leave, sparkDot: s.sparkDot, onClick: () => go(att('ON_LEAVE')) }),
     s.showAtt && statCard({ label: 'Late arrivals', aniIcon: 'late', accent: 'late', value: liveDisabled ? null : c.late, note: s.lateNote, spark: s.spark.late, sparkDot: s.sparkDot, onClick: () => go(att('LATE')) }),
@@ -160,6 +167,9 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
             actions={<>
               <DateChipButton sel={sel} today={vm.today} daily={vm.daily} holidays={vm.holidays} onApply={onDate}
                 onOpenTracking={(iso) => go(`/hrms/attendance?tab=team&date=${iso}`)} />
+              {/* The viewer's own punch, as on Home at /me: this dashboard is their Home. */}
+              {vm.punch === 'out' && <Button variant="secondary" size={46} icon="logOut" onClick={() => onPunch('out')}>Check out</Button>}
+              {vm.punch === 'in' && <Button variant="secondary" size={46} icon="scanFace" onClick={() => onPunch('in')}>Check in</Button>}
               {vm.canExport && <Button variant="secondary" size={46} icon="download" onClick={onExport} loading={vm.exporting} title={`Downloads ${vm.exportName}`}>{vm.exporting ? 'Preparing…' : 'Export headcount'}</Button>}
               {vm.addEmployee && <Button variant="primary" size={46} icon="userPlus" disabled={!!vm.addEmployee.disabledReason} title={vm.addEmployee.disabledReason ?? undefined}
                 onClick={() => go('/hrms/employees?add=1')}>Add employee</Button>}
@@ -238,7 +248,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onExport, o
               actions={vm.canReadEmployees ? <Button variant="plain" size={32} trailingIcon="arrowRight" onClick={() => go('/hrms/employees')}>Open directory</Button> : undefined} />
             <div className="ud-grid3">
               {vm.showDept && <DeptCard rows={vm.departments} loading={vm.deptLoading} error={vm.deptError} onRetry={refetch.dept}
-                sub={isToday ? 'Active employees by department. Click a bar to filter the directory.' : `Active employees by department on ${fmtShort(sel)}. Click a bar to filter the directory.`}
+                sub={isToday ? 'Employees by department. Click a bar to filter the directory.' : `Employees by department on ${fmtShort(sel)}. Click a bar to filter the directory.`}
                 onPick={(id) => go(`/hrms/employees?departmentId=${encodeURIComponent(id || 'none')}`)} />}
               {vm.showPerformers && <PerformersCard rows={vm.performers} loading={vm.performersLoading} error={vm.performersError} onRetry={refetch.performers}
                 sub={isToday ? 'Average rating across submitted reviews.' : `Average rating across reviews submitted by ${fmtShort(sel)}.`} onOpen={() => go('/hrms/performance')} />}

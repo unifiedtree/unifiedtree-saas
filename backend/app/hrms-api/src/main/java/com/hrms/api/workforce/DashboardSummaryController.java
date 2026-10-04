@@ -32,7 +32,11 @@ public class DashboardSummaryController {
   if(past!=null)return statsOn(companyId,past,auth);
   UUID tenant=TenantContext.requireTenantId();LocalDate today=LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
   Map<String,Object> result=new LinkedHashMap<>();
-  if(allowed(auth,"hrms.employee.read"))result.put("activeEmployees",jdbc.queryForObject("SELECT count(*) FROM hrms.employees WHERE tenant_id=? AND company_id=? AND employment_status='ACTIVE'",Long.class,tenant,companyId));
+  // Everyone on the roll today and their status, by the history view's rule (DashboardAsOf, as the headcount
+  // report), so the Total employees tile is the headcount on whichever day is shown and its split adds up to it.
+  // Today used to send only the confirmed (ACTIVE) count, and the tile fell back to the day's attendance roster,
+  // which leaves out people on their weekly off: "Total employees 0" every Sunday.
+  if(allowed(auth,"hrms.employee.read"))putHeadcount(result,history.headcount(tenant,companyId,today));
   if(allowed(auth,"hrms.hiring.read"))result.put("openRoles",jdbc.queryForObject("SELECT count(*) FROM hiring_mgmt.job_requisitions WHERE tenant_id=? AND company_id=? AND status='OPEN'",Long.class,tenant,companyId));
   if(allowed(auth,"hrms.compliance.read")){
    var compliance=jdbc.queryForMap("""
@@ -65,7 +69,7 @@ public class DashboardSummaryController {
   Map<String,Object> result=new LinkedHashMap<>();
   if(allowed(auth,"hrms.employee.read")){
    DashboardAsOf.Headcount h=history.headcount(tenant,companyId,date);
-   result.put("activeEmployees",(long)h.active());result.put("headcount",(long)h.total());result.put("joinedInMonth",(long)h.joined());result.put("leftInMonth",(long)h.left());
+   putHeadcount(result,h);result.put("joinedInMonth",(long)h.joined());result.put("leftInMonth",(long)h.left());
   }
   if(allowed(auth,"hrms.hiring.read"))result.put("openRoles",jdbc.queryForObject("SELECT count(*) FROM hiring_mgmt.job_requisitions WHERE tenant_id=? AND company_id=? AND created_at<? AND (status='OPEN' OR (status IN ('CLOSED','ON_HOLD') AND updated_at>=?))",Long.class,tenant,companyId,end,end));
   if(allowed(auth,"hrms.compliance.read")){
@@ -84,6 +88,11 @@ public class DashboardSummaryController {
    result.put("monthlyPayroll",runs.isEmpty()?null:runs.getFirst().get("amount"));
   }
   result.put("month",date.toString().substring(0,7));result.put("asOf",date.toString());return result;
+ }
+ /** The roll on a day: everyone on it (headcount), and how many are confirmed (active), on probation and serving notice. */
+ static void putHeadcount(Map<String,Object> result,DashboardAsOf.Headcount h){
+  result.put("activeEmployees",(long)h.active());result.put("headcount",(long)h.total());
+  result.put("probation",(long)h.probation());result.put("onNotice",(long)h.onNotice());
  }
  @GetMapping("/alerts")
  @PreAuthorize("hasAuthority('org.company.read')")
