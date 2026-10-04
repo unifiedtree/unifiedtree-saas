@@ -274,6 +274,8 @@ function ApplyToAllDialog({ type, justSaved, onClose }: { type: LeaveTypeRespons
   const count = p ? p.changing + p.adding : 0
   const accruing = p?.accrualFrequency === 'MONTHLY' || p?.accrualFrequency === 'QUARTERLY'
   const named = (b: { employeeName: string | null; employeeCode: string | null }) => b.employeeName || b.employeeCode || 'Someone'
+  /** A balance below 0, e.g. "-1 day", "-2.5 days". */
+  const below = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} ${Math.abs(n) === 1 ? 'day' : 'days'}`
 
   const run = async () => {
     if (!p || !count) return
@@ -304,7 +306,7 @@ function ApplyToAllDialog({ type, justSaved, onClose }: { type: LeaveTypeRespons
               {p.belowZero > 0 && (
                 <Note tone="amber">
                   {`${p.belowZero} ${p.belowZero === 1 ? 'person has' : 'people have'} already used or asked for more, so their balance will show below 0: `}
-                  {p.belowZeroPeople.map((b) => `${named(b)} (${days(b.availableAfter)})`).join(', ')}
+                  {p.belowZeroPeople.map((b) => `${named(b)} (${below(b.availableAfter)})`).join(', ')}
                   {p.belowZero > p.belowZeroPeople.length ? ` and ${p.belowZero - p.belowZeroPeople.length} more` : ''}.
                 </Note>
               )}
@@ -437,7 +439,8 @@ export function LeaveTypes({
   }
 
   return (
-    <div className="space-y-4">
+    // min-w-0: inside the Leave page grid, let the table scroll inside its card on a phone instead of widening the page.
+    <div className="space-y-4 min-w-0">
       {(() => { const actions = (
           <Can code={P.LEAVE_TYPE_WRITE}>
             {!isLoading && types.length === 0 && (
