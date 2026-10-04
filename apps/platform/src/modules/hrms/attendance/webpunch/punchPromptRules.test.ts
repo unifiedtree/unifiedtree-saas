@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { P } from '@unifiedtree/sdk'
 import {
-  anotherDialogOpen, markOpened, mayPunchFromWeb, notNowToday, openedThisVisit, promptDecision, saveNotNow, type PromptFacts,
+  anotherDialogOpen, markOpened, mayPunchFromWeb, openedThisVisit, promptDecision, type PromptFacts,
 } from './punchPromptRules'
 
 const TODAY = '2026-10-05'
@@ -100,13 +100,6 @@ describe('what this browser remembers', () => {
   beforeEach(() => { g.localStorage = fakeStorage(); g.sessionStorage = fakeStorage() })
   afterEach(() => { delete g.localStorage; delete g.sessionStorage; delete g.document })
 
-  it('"Not now" holds for the rest of that day, for that person only', () => {
-    expect(notNowToday('u-not-now', TODAY)).toBe(false)
-    saveNotNow('u-not-now', TODAY)
-    expect(notNowToday('u-not-now', TODAY)).toBe(true)
-    expect(notNowToday('u-not-now', TOMORROW)).toBe(false)
-    expect(notNowToday('u-someone-else', TODAY)).toBe(false)
-  })
 
   it('opens at most once per visit and day, per person', () => {
     expect(openedThisVisit('u-visit', TODAY)).toBe(false)
@@ -124,8 +117,6 @@ describe('what this browser remembers', () => {
 
   it('with storage blocked nothing throws, and the page still remembers its own visit', () => {
     g.localStorage = fakeStorage(true); g.sessionStorage = fakeStorage(true)
-    expect(notNowToday('u-blocked', TODAY)).toBe(false)
-    expect(() => saveNotNow('u-blocked', TODAY)).not.toThrow()
     expect(openedThisVisit('u-blocked', TODAY)).toBe(false)
     expect(() => markOpened('u-blocked', TODAY)).not.toThrow()
     expect(openedThisVisit('u-blocked', TODAY)).toBe(true)
@@ -133,8 +124,6 @@ describe('what this browser remembers', () => {
 
   it('with no storage at all (outside a browser) nothing throws either', () => {
     delete g.localStorage; delete g.sessionStorage
-    expect(notNowToday('u-none', TODAY)).toBe(false)
-    expect(() => saveNotNow('u-none', TODAY)).not.toThrow()
     expect(openedThisVisit('u-none', TODAY)).toBe(false)
   })
 

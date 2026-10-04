@@ -1,7 +1,9 @@
 // The check-in prompt after sign-in (DECISIONS 21, the NextWave reference): once the welcome has
 // gone and the shell is on screen, the web punch dialog opens by itself in check-in mode, for
 // someone who can check in from the web and hasn't yet today. The rules are in punchPromptRules.ts.
-// "Not now" hides it for the rest of the day in this browser; closing it hides it for this visit.
+// It is required: it can't be put aside while a check-in is possible. Only when one isn't (no enrolled
+// face and no self-enrolment, a locked face, outside the office, a blocked camera) can the person
+// continue without checking in, and then it stays away for this visit.
 // The shell loads this file only for people who may punch from the web (mayPunchFromWeb).
 import { Component, useEffect, useState, type ReactNode } from 'react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
@@ -10,7 +12,7 @@ import { useWebPunchSetting, webPunchAllowed } from '../../api/shared/useWebPunc
 import { useMeEmployee } from '../../ess/home/homeApi'
 import { useMyDay } from './useMyDay'
 import { WebPunchDialog } from './WebPunchDialog'
-import { anotherDialogOpen, markOpened, notNowToday, openedThisVisit, promptDecision, saveNotNow } from './punchPromptRules'
+import { anotherDialogOpen, markOpened, openedThisVisit, promptDecision } from './punchPromptRules'
 
 export function PunchPrompt({ ready }: { ready: boolean }) {
   return <Quiet><Prompt ready={ready} /></Quiet>
@@ -18,10 +20,10 @@ export function PunchPrompt({ ready }: { ready: boolean }) {
 
 function Prompt({ ready }: { ready: boolean }) {
   const userId = useSdkStore((s) => s.user?.id) ?? ''
-  // Settled once per visit: straight away when this browser says not to ask again today.
+  // Settled once per visit: straight away when it already opened in this tab today.
   const [settled, setSettled] = useState<'open' | 'skip' | null>(() => {
     const today = istToday()
-    return !userId || notNowToday(userId, today) || openedThisVisit(userId, today) ? 'skip' : null
+    return !userId || openedThisVisit(userId, today) ? 'skip' : null
   })
   const [open, setOpen] = useState(false)
 
@@ -48,8 +50,8 @@ function Prompt({ ready }: { ready: boolean }) {
     <WebPunchDialog
       open
       mode="in"
+      required
       onClose={() => setOpen(false)}
-      onNotNow={() => { saveNotNow(userId, istToday()); setOpen(false) }}
     />
   )
 }

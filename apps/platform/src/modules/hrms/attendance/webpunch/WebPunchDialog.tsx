@@ -13,8 +13,10 @@
 // their own face (attendance.face.enroll.self) the dialog offers it first (the web enrolment, the
 // same one the profile uses) and comes back here when it's done; otherwise it says who can enrol it.
 //
-// The check-in prompt after sign-in (PunchPrompt.tsx) opens this same dialog with `onNotNow`, which
-// adds "Not now" at the bottom; nothing else changes.
+// The check-in prompt after sign-in (PunchPrompt.tsx) opens this same dialog with `required`: then it
+// can't be closed while a check-in is possible. Only when one isn't (no enrolled face and no
+// self-enrolment, a locked face, outside the office, a blocked camera, or the face status failing to
+// load) does it offer "Continue without checking in", so nobody is locked out of the site.
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Dialog, useToast } from '@/design/kit/overlays'
@@ -36,8 +38,8 @@ export interface WebPunchDialogProps {
   mode: PunchMode
   /** Called with the saved record once the punch is recorded (the dialog then closes itself). */
   onDone?: (record: AttendanceDto) => void
-  /** Adds "Not now" (the check-in prompt after sign-in): the caller remembers it and closes the dialog. */
-  onNotNow?: () => void
+  /** The prompt after sign-in: no way to put it aside while a check-in is possible. */
+  required?: boolean
 }
 
 export function WebPunchDialog(props: WebPunchDialogProps) {
@@ -47,7 +49,7 @@ export function WebPunchDialog(props: WebPunchDialogProps) {
 
 const SELF = { kind: 'self' } as const
 
-function OpenWebPunch({ onClose, mode, onDone, onNotNow }: WebPunchDialogProps) {
+function OpenWebPunch({ onClose, mode, onDone, required }: WebPunchDialogProps) {
   const qc = useQueryClient()
   const toast = useToast()
   const canEnroll = useCanSelfEnrollFace()
@@ -74,7 +76,10 @@ function OpenWebPunch({ onClose, mode, onDone, onNotNow }: WebPunchDialogProps) 
   const cam = useCamera(showCamera)
 
   const close = () => { if (!busy) { cam.stop(); onClose() } }
-  const notNow = () => { if (!busy) { cam.stop(); onNotNow?.() } }
+  // A required dialog can be put aside only when checking in isn't possible here and now; those
+  // people get "Continue without checking in" and can still use the Check in button later.
+  const cannotPunch = status.isError || locked || (notEnrolled && !canEnroll) || outside || cam.line.state === 'bad' || !!problem?.stop
+  const mustPunch = !!required && !cannotPunch
 
   const go = async () => {
     if (busy || !where.spot) return
@@ -174,13 +179,17 @@ function OpenWebPunch({ onClose, mode, onDone, onNotNow }: WebPunchDialogProps) 
   return (
     <Dialog
       open
-      onClose={close}
+      onClose={mustPunch ? () => {} : close}
+      hideClose={mustPunch}
+      closeOnBackdrop={!required}
       busy={busy}
       width={760}
       icon="shield"
       title={`${Verb} with your face`}
-      sub="We match your face with the one you enrolled, and note where you are, as the mobile app does."
-      footer={onNotNow ? <Button variant="secondary" disabled={busy} title="Hide this until tomorrow" onClick={notNow}>Not now</Button> : undefined}
+      sub={required
+        ? 'Check in with your face to carry on. We match it with the one you enrolled, and note where you are, as the mobile app does.'
+        : 'We match your face with the one you enrolled, and note where you are, as the mobile app does.'}
+      footer={required && cannotPunch ? <Button variant="secondary" disabled={busy} onClick={close}>Continue without checking in</Button> : undefined}
     >
       <div className="uwp" data-busy={busy ? '' : undefined}>
         <CameraBox videoRef={cam.videoRef} on={showCamera} scanning={busy} />

@@ -7,8 +7,7 @@
 //   - their company allows web check-in (GET /v1/attendance/web-punch-setting), and "Your day" agrees;
 //   - "Your day" (GET /v1/attendance/my-day, Home's source of today) says they haven't checked in,
 //     on a day they work (not on leave, a holiday, a weekly off, or a day before they started);
-//   - they didn't press "Not now" today (IST) in this browser, and it hasn't opened already in
-//     this visit (this browser tab, today);
+//   - it hasn't opened already in this visit (this browser tab, today);
 //   - no other dialog or panel is open.
 // Anything still loading waits; anything missing, failing or not available means no prompt.
 // The Check in buttons on Home and My Attendance work as before whatever happens here.
@@ -59,20 +58,9 @@ export function promptDecision(f: PromptFacts): PromptDecision {
 // ── What this browser remembers (a convenience: storage can be unavailable, so every read and
 //    write is guarded, and without it the prompt simply asks at most once per page load) ──
 
-const notNowKey = (userId: string) => `ut.punch-prompt.not-now:${userId}`
 const openedKey = (userId: string) => `ut.punch-prompt.opened:${userId}`
 /** This page's own memory of the visit, for when session storage can't be used. */
 const openedHere = new Set<string>()
-
-/** "Not now" was pressed on `today` (IST yyyy-MM-dd) in this browser. */
-export function notNowToday(userId: string, today: string): boolean {
-  try { return localStorage.getItem(notNowKey(userId)) === today } catch { return false }
-}
-
-/** "Not now": no prompt again for the rest of `today`, in any tab of this browser. */
-export function saveNotNow(userId: string, today: string): void {
-  try { localStorage.setItem(notNowKey(userId), today) } catch { /* storage unavailable: it still won't open again this visit */ }
-}
 
 /** The prompt already opened in this visit (this tab) on `today`. */
 export function openedThisVisit(userId: string, today: string): boolean {
