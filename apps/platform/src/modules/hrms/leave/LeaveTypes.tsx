@@ -510,7 +510,7 @@ export function LeaveTypes({
                   <div className="inline-flex items-center gap-1 justify-end w-full">
                     {t.isActive && (
                       <HrButton size="sm" variant="ghost" onClick={() => setApplying({ type: t, justSaved: false })}
-                        title={`Give everyone ${t.annualEntitlement} days of ${t.name} for this year`}>
+                        title={`Give everyone ${days(t.annualEntitlement)} of ${t.name} for this year`}>
                         <Users size={13} aria-hidden="true" />
                         Apply to everyone
                       </HrButton>
