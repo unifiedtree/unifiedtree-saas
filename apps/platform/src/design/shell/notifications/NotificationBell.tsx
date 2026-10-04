@@ -1,5 +1,5 @@
 // The top bar's bell and its popover (HrmsPlatform.dc.html L40, L74). The count is the server's
-// unread count; the list is the person's real notifications from the last 7 days, each with its
+// unread count; the list is everything still unread plus the rest of the last 7 days, each with its
 // module, how long ago, one line of its text and a gold dot while unread. A row marks itself read
 // and opens where it belongs (core/notifications/notificationRoutes.ts).
 import { useEffect, useRef } from 'react'
@@ -7,11 +7,11 @@ import { Popover } from '@/design/kit/overlays'
 import { EmptyState, ErrorState, SkeletonList } from '@/design/kit/display'
 import { dashIcon } from '@/design/dc/icons'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
-import { LAST_DAYS, timeAgo, withinDays } from '@/core/notifications/notificationRoutes'
+import { LAST_DAYS, bellRows, timeAgo } from '@/core/notifications/notificationRoutes'
 import { ShellIcon } from '../shellIcons'
 import './notifications.css'
 
-/** How many rows the popover lists (as before the redesign). */
+/** How many rows the popover lists (as before the redesign); more only when more are unread. */
 const MAX_ROWS = 8
 
 export interface NotificationBellProps {
@@ -40,7 +40,7 @@ export function NotificationBell({ open, onToggle, onClose, onNavigate }: Notifi
   }, [open, fetchList])
 
   const now = new Date()
-  const rows = withinDays(notifications, now).slice(0, MAX_ROWS)
+  const rows = bellRows(notifications, now, MAX_ROWS)
 
   let body
   if (loading && !loaded) body = <div className="ut-bellpop__state"><SkeletonList rows={3} pill={false} label="Loading notifications" /></div>
@@ -102,7 +102,7 @@ export function NotificationBell({ open, onToggle, onClose, onNavigate }: Notifi
         <div className="ut-bellpop__scroll">{body}</div>
         <div className="ut-bellpop__foot">
           {unreadCount > 0 && <button type="button" className="ut-bellpop__all" onClick={() => void markAllAsRead()}>Mark all as read</button>}
-          <span className="ut-bellpop__span">Last {LAST_DAYS} days</span>
+          <span className="ut-bellpop__span">Last {LAST_DAYS} days and all unread</span>
         </div>
       </Popover>
     </>

@@ -261,3 +261,15 @@ export function withinDays<T extends { createdAt: string }>(rows: readonly T[], 
   const from = now.getTime() - days * 86_400_000
   return rows.filter((r) => { const t = new Date(r.createdAt).getTime(); return !Number.isNaN(t) && t >= from })
 }
+
+/**
+ * The popover's rows, in the order given (newest first): every unread one, however old (the badge
+ * counts them all, so each must be there to be read), then read ones from the last 7 days up to
+ * {@code max} rows in all.
+ */
+export function bellRows<T extends { createdAt: string; isRead: boolean }>(rows: readonly T[], now: Date = new Date(), max = 8): T[] {
+  const unread = rows.filter((r) => !r.isRead)
+  const read = withinDays(rows.filter((r) => r.isRead), now).slice(0, Math.max(0, max - unread.length))
+  const keep = new Set<T>([...unread, ...read])
+  return rows.filter((r) => keep.has(r))
+}
