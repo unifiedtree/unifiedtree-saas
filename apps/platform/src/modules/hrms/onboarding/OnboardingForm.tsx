@@ -2,17 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  Camera, Check, CheckCircle2, Copy, FileText, Laptop, Plus, Trash2, Upload, X,
+  Camera, Check, Copy, FileText, Laptop, Plus, Trash2, Upload, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { addMonths, format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
-import { EmptyState } from '@unifiedtree/ui-kit'
-import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import {
+  Button, Callout, EmptyState, KeyValueGrid, MiniStat, MiniStatGrid, PageFrame, PageHeader, Section, StatusPill,
+  type ButtonProps, type StatusTone,
+} from '@/design/kit/display'
+import { Toggle as KitToggle, useToast as useKitToast } from '@/design/kit/overlays'
 import { DateField } from '@/shared/components/calendar'
-import { DesignFrame } from '@/design/dc/DesignFrame'
-import { ModulePage } from '@/design/module/ModuleKit'
-import { useToast } from '@/shared/hooks/useToast'
+import './onboarding.css'
 import {
   useBranches, useCompanies, useDepartments, useDesignations, useEmploymentTypes,
 } from '../api/useOrg'
@@ -206,13 +207,13 @@ function Field({
 }) {
   return (
     <div className={clsx('min-w-0', className)}>
-      <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">
-        {label} {required && <span className="text-danger">*</span>}
+      <label className="onb-wiz-label">
+        {label} {required && <span className="onb-wiz-req">*</span>}
       </label>
       {children}
       {error
-        ? <p className="mt-1 text-xs font-medium text-red-500">{error}</p>
-        : hint ? <p className="mt-1 text-xs text-text-tertiary">{hint}</p> : null}
+        ? <p className="onb-wiz-error">{error}</p>
+        : hint ? <p className="onb-wiz-hint">{hint}</p> : null}
     </div>
   )
 }
@@ -229,6 +230,7 @@ function Sel({ error, className, children, ...props }: React.SelectHTMLAttribute
   )
 }
 
+/** One step's card: the kit Section (title, one-line description, actions on the right). */
 function Card({ title, description, actions, children }: {
   title: string
   description?: string
@@ -236,22 +238,35 @@ function Card({ title, description, actions, children }: {
   children: React.ReactNode
 }) {
   return (
-    <section className="ut-card mb-5 p-5 sm:p-6">
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-text-primary">{title}</h2>
-          {description && <p className="mt-0.5 text-[13px] text-text-secondary">{description}</p>}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-      </div>
+    <Section title={title} sub={description} actions={actions} rise={false}>
       {children}
-    </section>
+    </Section>
   )
 }
 
 /** Two-column form grid — 1 column on phones, as in the reference layout. */
 function Grid2({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">{children}</div>
+  return <div className="onb-wiz-grid">{children}</div>
+}
+
+/** The old hr-kit button API on the kit Button: primary by default, "ghost" = the kit's secondary, "sm" = 32px. */
+function WizButton({ variant = 'primary', size, className, children, ...rest }: Omit<ButtonProps, 'variant' | 'size' | 'children'> & {
+  variant?: 'primary' | 'ghost'
+  size?: 'sm'
+  children: React.ReactNode
+}) {
+  return (
+    <Button {...(rest as Omit<ButtonProps, 'children'>)} variant={variant === 'ghost' ? 'secondary' : 'primary'} size={size === 'sm' ? 32 : 38}
+      block={className?.includes('w-full')} className={className?.replace('w-full', '').trim() || undefined}>
+      {children}
+    </Button>
+  )
+}
+
+/** The old pill tones on the kit StatusPill. */
+const PILL_TONE: Record<'info' | 'gray' | 'warn' | 'ok' | 'red', StatusTone> = { info: 'info', gray: 'muted', warn: 'warning', ok: 'success', red: 'danger' }
+function Pill({ tone, children }: { tone: keyof typeof PILL_TONE; children: React.ReactNode }) {
+  return <StatusPill tone={PILL_TONE[tone]}>{children}</StatusPill>
 }
 
 /** Read-only, copyable Employee ID well shown on the first two steps. */
@@ -259,16 +274,8 @@ function EmployeeIdField({ value, onCopy }: { value: string; onCopy: () => void 
   return (
     <Field label="Employee ID" hint="Automatically generated">
       <div className="flex gap-2">
-        <Input readOnly value={value} placeholder="Generated on create" className="flex-1 cursor-default bg-bg-subtle" />
-        <button
-          type="button"
-          onClick={onCopy}
-          aria-label="Copy employee ID"
-          title="Copy employee ID"
-          className="flex h-9.5 w-10 shrink-0 items-center justify-center rounded-xl border border-border-default bg-[var(--bg-surface)] text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
-        >
-          <Copy size={15} />
-        </button>
+        <Input readOnly value={value} placeholder="Generated on create" className="flex-1 cursor-default" />
+        <Button variant="secondary" size={38} icon={<Copy size={15} />} onClick={onCopy} aria-label="Copy employee ID" title="Copy employee ID" />
       </div>
     </Field>
   )
@@ -284,57 +291,35 @@ function Stepper({ steps, active, reached, onJump }: {
 }) {
   const activeIndex = steps.findIndex((s) => s.key === active)
   return (
-    <div className="mb-6 overflow-x-auto scrollbar-hide">
-      <ol className="flex w-max min-w-full items-start gap-0 px-1">
+    <nav className="onb-wiz-steps" aria-label="Onboarding steps">
+      <ol>
         {steps.map((s, i) => {
           const done = i < activeIndex
           const current = i === activeIndex
           const reachable = i <= reached
           return (
-            <li key={s.key} className="flex min-w-[92px] flex-1 flex-col items-center">
+            <li key={s.key} className="onb-wiz-step">
               <div className="flex w-full items-center">
                 {/* Left connector — hidden on the first step so the row starts flush. */}
-                <span
-                  aria-hidden
-                  className={clsx(
-                    'h-0.5 flex-1 rounded-full',
-                    i === 0 ? 'opacity-0' : done || current ? 'bg-[var(--interactive-primary)]' : 'bg-border-default',
-                  )}
-                />
+                <span aria-hidden className={clsx('onb-wiz-step__line', i === 0 ? 'is-hidden' : (done || current) && 'is-on')} />
                 <button
                   type="button"
                   disabled={!reachable}
                   aria-current={current ? 'step' : undefined}
+                  aria-label={`${s.label}${done ? ', done' : ''}`}
                   onClick={() => reachable && onJump(s.key)}
-                  className={clsx(
-                    'mx-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]',
-                    current && 'border-transparent bg-[var(--interactive-primary)] text-white shadow-[0_4px_14px_0_rgba(15,110,86,0.35)]',
-                    done && 'border-transparent bg-[var(--accent-bg)] text-[var(--accent-fg)]',
-                    !current && !done && 'border-border-default bg-[var(--bg-surface)] text-text-tertiary',
-                    reachable ? 'cursor-pointer' : 'cursor-not-allowed',
-                  )}
+                  className={clsx('onb-wiz-step__dot', current && 'is-current', done && 'is-done')}
                 >
-                  {done ? <Check size={14} strokeWidth={3} /> : i + 1}
+                  {done ? <Check size={14} strokeWidth={3} aria-hidden /> : i + 1}
                 </button>
-                <span
-                  aria-hidden
-                  className={clsx(
-                    'h-0.5 flex-1 rounded-full',
-                    i === steps.length - 1 ? 'opacity-0' : done ? 'bg-[var(--interactive-primary)]' : 'bg-border-default',
-                  )}
-                />
+                <span aria-hidden className={clsx('onb-wiz-step__line', i === steps.length - 1 ? 'is-hidden' : done && 'is-on')} />
               </div>
-              <span className={clsx(
-                'mt-2 whitespace-nowrap px-1 text-center text-[11px] font-semibold',
-                current ? 'text-text-primary' : 'text-text-tertiary',
-              )}>
-                {s.label}
-              </span>
+              <span aria-hidden className={clsx('onb-wiz-step__label', current && 'is-current')}>{s.label}</span>
             </li>
           )
         })}
       </ol>
-    </div>
+    </nav>
   )
 }
 
@@ -380,7 +365,13 @@ type FormState = typeof EMPTY_FORM
 
 export const OnboardingForm: React.FC = () => {
   const navigate = useNavigate()
-  const { toast } = useToast()
+  // The kit toast (success 2.6s, errors stay up); a warning reads as a plain notice.
+  const kitToast = useKitToast()
+  const toast = (message: string, type: 'success' | 'error' | 'info' | 'warning') => {
+    if (type === 'success') kitToast.success(message)
+    else if (type === 'error') kitToast.error(message)
+    else kitToast.info(message)
+  }
 
   // A reload used to throw away everything typed so far. The draft below keeps
   // it in this browser for a day; see onboardingDraft.ts for what is left out.
@@ -1003,96 +994,73 @@ export const OnboardingForm: React.FC = () => {
   if (created) {
     const dept = activeDepartments.find((d) => d.id === created.departmentId)
     return (
-      <DesignFrame>
-      <div className="mx-auto max-w-xl">
-        <div className="ut-card p-6 text-center sm:p-8" style={{ borderRadius: 16 }}>
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-bg)]">
-            <CheckCircle2 size={34} className="text-[#059669]" />
+      <PageFrame label="Employee created">
+      <div className="onb-done onb-stack">
+        <PageHeader eyebrow="Onboarding · New hire" title="Employee created" sub="The employee record has been created and Employee ID has been generated." />
+        <Section title="New employee" rise={false}>
+          <div className="onb-form">
+            <div className="onb-done__icon" aria-hidden="true"><Check size={30} strokeWidth={2.5} /></div>
+            <KeyValueGrid items={[
+              { key: 'name', label: 'Employee Name', value: [created.firstName, created.lastName].filter(Boolean).join(' ') },
+              {
+                key: 'code', label: 'Employee ID', value: (
+                  <span className="onb-row">
+                    <span>{created.employeeCode}</span>
+                    <Button variant="secondary" size={30} icon={<Copy size={12} />} onClick={() => copyEmployeeId(created.employeeCode)}>Copy</Button>
+                  </span>
+                ),
+              },
+              { key: 'dept', label: 'Department', value: dept?.name ?? '—' },
+              { key: 'joining', label: 'Joining Date', value: created.dateOfJoining ?? '—' },
+              {
+                // Reports what actually happened rather than always claiming "Onboarding": the
+                // checklist is a second write that can be skipped (no template) or fail on its own.
+                key: 'status', label: 'Status', value: finishing ? <Pill tone="info">Finishing setup</Pill> : instanceStarted
+                  ? <Pill tone="info">Onboarding in progress</Pill>
+                  : <Pill tone="gray">Employee only</Pill>,
+              },
+            ]} />
+
+            <div role="status" className="onb-muted" style={{ fontSize: 13.5, lineHeight: '20px' }}>
+              {recordSaving ? 'Saving supplementary onboarding details...'
+                : recordError ? <><p role="alert" style={{ margin: 0, color: 'var(--u-rdt, #B42318)' }}>Employee created, but some onboarding details or files could not be saved: {recordError}. Keep this page open to retry pending uploads.</p><WizButton disabled={finishing} variant="ghost" className="mt-2" onClick={() => saveSupplementary(created.id)}>Retry pending saves</WizButton></>
+                : recordSaved ? 'Benefits, asset issues, selected policies and joining details are saved on the employee profile.' : null}
+            </div>
+            {!canConfigurePayroll && <Callout tone="neutral">The annual CTC and bank account are saved. A payroll administrator must configure the component breakup in the employee's Payroll tab.</Callout>}
+            {finishing && <p className="onb-muted" role="status" style={{ margin: 0 }}>Saving the hire's setup and starting the selected checklist. Please keep this page open.</p>}
+            {!finishing && !instanceStarted && (
+              <Callout tone="warning" icon="alert">
+                {instanceError
+                  ? <>The employee was created, but the onboarding checklist could not be started: {instanceError} You can start it from the onboarding dashboard.</>
+                  : <>No onboarding template was selected, so this hire has no checklist and will not appear on the onboarding dashboard.</>}
+              </Callout>
+            )}
+
+            {accessOutcome && (
+              <div role="status">
+                <Callout tone={accessOutcome.state === 'error' ? 'warning' : 'neutral'}>
+                  {accessOutcome.state === 'saving' ? 'Sending the login invite and saving their access…'
+                    : accessOutcome.state === 'done' ? accessOutcome.message
+                      : <>
+                        <span>{accessOutcome.message} You can finish it in <Link to="/users" className="onb-link">Users &amp; access</Link>.</span>
+                        <WizButton variant="ghost" className="mt-2" onClick={() => finishAccess(created.id, created.email || form.email.trim())}>Try again</WizButton>
+                      </>}
+                </Callout>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              <WizButton disabled={finishing || recordSaving} className="w-full" onClick={() => navigate(`/hrms/employees/${created.id}`)}>
+                Go to Employee Profile
+              </WizButton>
+              <WizButton disabled={finishing || recordSaving} variant="ghost" className="w-full" onClick={() => navigate('/hrms/onboarding/instances')}>
+                Continue Onboarding
+              </WizButton>
+            </div>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">Employee created</h1>
-          <p className="mx-auto mt-1.5 max-w-sm text-[13px] text-text-secondary">
-            The employee record has been created and Employee ID has been generated.
-          </p>
-
-          <dl className="mt-6 grid grid-cols-1 gap-x-6 gap-y-4 rounded-2xl border border-border-default bg-bg-subtle/50 p-5 text-left sm:grid-cols-2">
-            <div className="min-w-0">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Employee Name</dt>
-              <dd className="mt-0.5 truncate text-sm font-semibold text-text-primary">
-                {[created.firstName, created.lastName].filter(Boolean).join(' ')}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Employee ID</dt>
-              <dd className="mt-0.5 flex items-center gap-2">
-                <span className="truncate text-sm font-semibold text-text-primary">{created.employeeCode}</span>
-                <button
-                  type="button"
-                  onClick={() => copyEmployeeId(created.employeeCode)}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border-default bg-[var(--bg-surface)] px-2 py-0.5 text-[11px] font-semibold text-text-secondary transition-colors hover:text-text-primary"
-                >
-                  <Copy size={11} /> Copy
-                </button>
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Department</dt>
-              <dd className="mt-0.5 truncate text-sm font-semibold text-text-primary">{dept?.name ?? '—'}</dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Joining Date</dt>
-              <dd className="mt-0.5 truncate text-sm font-semibold text-text-primary">{created.dateOfJoining ?? '—'}</dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Status</dt>
-              {/* Reports what actually happened rather than always claiming
-                  "Onboarding": the checklist is a second write that can be
-                  skipped (no template) or fail on its own. */}
-              <dd className="mt-1">
-                {finishing ? <HrStatusPill tone="info">Finishing setup</HrStatusPill> : instanceStarted
-                  ? <HrStatusPill tone="info">Onboarding in progress</HrStatusPill>
-                  : <HrStatusPill tone="gray">Employee only</HrStatusPill>}
-              </dd>
-            </div>
-          </dl>
-
-          <div className="mt-5 rounded-xl border border-border-default p-4 text-left text-sm" role="status">
-            {recordSaving ? 'Saving supplementary onboarding details...'
-              : recordError ? <><p role="alert">Employee created, but some onboarding details or files could not be saved: {recordError}. Keep this page open to retry pending uploads.</p><HrButton disabled={finishing} variant="ghost" className="mt-2" onClick={() => saveSupplementary(created.id)}>Retry pending saves</HrButton></>
-              : recordSaved ? 'Benefits, asset issues, selected policies and joining details are saved on the employee profile.' : null}
-          </div>
-          {!canConfigurePayroll && <p className="mt-3 text-sm text-text-secondary">The annual CTC and bank account are saved. A payroll administrator must configure the component breakup in the employee's Payroll tab.</p>}
-          {finishing && <p className="mt-4 text-sm" role="status">Saving the hire's setup and starting the selected checklist. Please keep this page open.</p>}
-          {!finishing && !instanceStarted && (
-            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-800">
-              {instanceError
-                ? <>The employee was created, but the onboarding checklist could not be started: {instanceError} You can start it from the onboarding dashboard.</>
-                : <>No onboarding template was selected, so this hire has no checklist and will not appear on the onboarding dashboard.</>}
-            </div>
-          )}
-
-          {accessOutcome && (
-            <div role="status" className={clsx('mt-3 rounded-xl border px-4 py-3 text-left text-sm',
-              accessOutcome.state === 'error' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-border-default text-text-secondary')}>
-              {accessOutcome.state === 'saving' ? 'Sending the login invite and saving their access…'
-                : accessOutcome.state === 'done' ? accessOutcome.message
-                  : <>
-                    <p>{accessOutcome.message} You can finish it in <Link to="/users" className="font-semibold underline">Users &amp; access</Link>.</p>
-                    <HrButton variant="ghost" className="mt-2" onClick={() => finishAccess(created.id, created.email || form.email.trim())}>Try again</HrButton>
-                  </>}
-            </div>
-          )}
-
-          <div className="mt-6 flex flex-col gap-2.5">
-            <HrButton disabled={finishing || recordSaving} className="w-full" onClick={() => navigate(`/hrms/employees/${created.id}`)}>
-              Go to Employee Profile
-            </HrButton>
-            <HrButton disabled={finishing || recordSaving} variant="ghost" className="w-full" onClick={() => navigate('/hrms/onboarding/instances')}>
-              Continue Onboarding
-            </HrButton>
-          </div>
-        </div>
+        </Section>
       </div>
-      </DesignFrame>
+      </PageFrame>
     )
   }
 
@@ -1101,9 +1069,10 @@ export const OnboardingForm: React.FC = () => {
   const head = STEP_HEAD[step]
 
   return (
-    <ModulePage crumb="Onboarding · New hire" title={head.title} subtitle={head.description}
-      actions={<HrButton variant="ghost" onClick={() => navigate('/hrms/onboarding/instances')}>Cancel</HrButton>}>
-    <div style={{ maxWidth: 1024, minWidth: 0 }}>
+    <PageFrame label="New hire">
+    <PageHeader eyebrow="Onboarding · New hire" title={head.title} sub={head.description}
+      actions={<Button variant="secondary" size={40} onClick={() => navigate('/hrms/onboarding/instances')}>Cancel</Button>} />
+    <div className="onb-stack" style={{ maxWidth: 1024 }}>
 
       <Stepper steps={steps} active={step} reached={reached} onJump={goTo} />
 
@@ -1235,7 +1204,7 @@ export const OnboardingForm: React.FC = () => {
             <EmployeeIdField value={employeeIdPreview} onCopy={() => copyEmployeeId(employeeIdPreview)} />
             <Field label="Status">
               <div className="flex h-9.5 items-center">
-                <HrStatusPill tone="info">Onboarding</HrStatusPill>
+                <Pill tone="info">Onboarding</Pill>
               </div>
             </Field>
 
@@ -1271,7 +1240,7 @@ export const OnboardingForm: React.FC = () => {
             </div>
 
             {designationQuery.isPending ? <div role="status" className="py-3 text-sm text-text-secondary">Loading designations...</div>
-            : designationQuery.isError ? <div role="alert" className="text-sm text-red-700">Could not load designations. <HrButton variant="ghost" onClick={() => designationQuery.refetch()}>Try again</HrButton></div>
+            : designationQuery.isError ? <div role="alert" className="text-sm text-red-700">Could not load designations. <WizButton variant="ghost" onClick={() => designationQuery.refetch()}>Try again</WizButton></div>
             : useDesignationFreeText ? (
               <div id="field-designationText">
                 <Field label="Designation" required error={errors.designationText}
@@ -1362,13 +1331,15 @@ export const OnboardingForm: React.FC = () => {
       {/* ── 3. Documents ──────────────────────────────────────────────────── */}
       {step === 'documents' && (
         <>
-          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <CountTile tone="warn" label="Pending" value={docCounts.pending} />
-            <CountTile tone="ok" label="Verified" value={docCounts.verified} />
-            <CountTile tone="red" label="Rejected" value={docCounts.rejected} />
-          </div>
+          <Section title="Verification" rise={false}>
+            <MiniStatGrid>
+              <MiniStat label="Pending" value={docCounts.pending} tone="warning" countUp={false} />
+              <MiniStat label="Verified" value={docCounts.verified} tone="success" countUp={false} />
+              <MiniStat label="Rejected" value={docCounts.rejected} tone="danger" countUp={false} />
+            </MiniStatGrid>
+          </Section>
 
-          <section className="ut-card mb-5 overflow-hidden">
+          <section className="ut-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] border-collapse text-left">
                 <thead>
@@ -1399,13 +1370,13 @@ export const OnboardingForm: React.FC = () => {
                         <td className="px-5 py-3.5">
                           {!entry
                             ? row.required
-                              ? <HrStatusPill tone="warn">Pending</HrStatusPill>
-                              : <HrStatusPill tone="gray">Not Required</HrStatusPill>
+                              ? <Pill tone="warn">Pending</Pill>
+                              : <Pill tone="gray">Not Required</Pill>
                             : entry.status === 'VERIFIED'
-                              ? <HrStatusPill tone="ok">Verified</HrStatusPill>
+                              ? <Pill tone="ok">Verified</Pill>
                               : entry.status === 'REJECTED'
-                                ? <HrStatusPill tone="red">Rejected</HrStatusPill>
-                                : <HrStatusPill tone="warn">Pending</HrStatusPill>}
+                                ? <Pill tone="red">Rejected</Pill>
+                                : <Pill tone="warn">Pending</Pill>}
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1667,7 +1638,7 @@ export const OnboardingForm: React.FC = () => {
                 <span className="rounded-full bg-[var(--accent-bg)] px-3 py-1 text-xs font-bold text-[var(--accent-fg)]">
                   {policies.filter((p) => policyPack[p.id]).length}/{policies.length} selected
                 </span>
-                <HrButton
+                <WizButton
                   size="sm"
                   variant="ghost"
                   onClick={() => {
@@ -1676,17 +1647,16 @@ export const OnboardingForm: React.FC = () => {
                   }}
                 >
                   {policies.every((p) => policyPack[p.id]) ? 'Clear all' : 'Select all'}
-                </HrButton>
+                </WizButton>
               </>
             ) : undefined
           }
         >
           {policies.length === 0 ? (
             <EmptyState
-              variant="first-run"
               icon={<FileText size={22} />}
               title="No active policies"
-              description="Publish a policy from HRMS → Policies and it will be offered here for every new hire."
+              hint="Publish a policy from HRMS → Policies and it will be offered here for every new hire."
             />
           ) : (
             <ul className="flex flex-col gap-2">
@@ -1738,15 +1708,14 @@ export const OnboardingForm: React.FC = () => {
         <Card
           title="Assets to Issue"
           description="Record the assets handed to this employee. These details are saved with their onboarding record."
-          actions={<HrButton size="sm" onClick={addAsset}><Plus size={14} /> Add Asset</HrButton>}
+          actions={<WizButton size="sm" onClick={addAsset}><Plus size={14} /> Add Asset</WizButton>}
         >
           {assets.length === 0 ? (
             <EmptyState
-              variant="first-run"
               icon={<Laptop size={22} />}
               title="No assets added"
-              description="Add the laptop, devices and accessories this hire needs on day one."
-              primaryAction={{ label: 'Add Asset', onClick: addAsset }}
+              hint="Add the laptop, devices and accessories this hire needs on day one."
+              action={<Button variant="primary" size={36} icon="plus" onClick={addAsset}>Add Asset</Button>}
             />
           ) : (
             <div className="flex flex-col gap-3">
@@ -1930,69 +1899,34 @@ export const OnboardingForm: React.FC = () => {
 
       {/* Sticky action bar — Back / Next stay reachable on long steps and on
           phones where the header has scrolled away. */}
-      <div className="sticky bottom-3 z-10 mt-6 flex items-center justify-between gap-3 rounded-2xl border border-border-default bg-[var(--bg-surface)]/95 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.35)] backdrop-blur">
-        <span className="text-xs font-medium text-text-tertiary">
+      <div className="onb-wiz-bar">
+        <span className="onb-muted">
           Step {stepIndex + 1} of {steps.length}
         </span>
-        <div className="flex items-center gap-2.5">
-          <HrButton variant="ghost" onClick={handleBack}>Back</HrButton>
+        <div className="onb-row">
+          <WizButton variant="ghost" onClick={handleBack}>Back</WizButton>
           {isLastStep ? (
-            <HrButton onClick={handleCreate} disabled={createEmp.isPending}>
+            <WizButton onClick={handleCreate} disabled={createEmp.isPending}>
               {createEmp.isPending ? 'Creating…' : 'Create Employee'}
-            </HrButton>
+            </WizButton>
           ) : (
-            <HrButton onClick={handleNext} disabled={step === 'employment' && (designationQuery.isPending || designationQuery.isError)}>Next</HrButton>
+            <WizButton onClick={handleNext} disabled={step === 'employment' && (designationQuery.isPending || designationQuery.isError)}>Next</WizButton>
           )}
         </div>
       </div>
     </div>
-    </ModulePage>
+    </PageFrame>
   )
 }
 
 // ── Small pieces ─────────────────────────────────────────────────────────────
 
-function CountTile({ tone, label, value }: { tone: 'warn' | 'ok' | 'red'; label: string; value: number }) {
-  const ring = {
-    warn: 'border-amber-200/80 bg-amber-50/70 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300',
-    ok: 'border-emerald-200/80 bg-emerald-50/70 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300',
-    red: 'border-rose-200/80 bg-rose-50/70 text-rose-700 dark:border-rose-800/40 dark:bg-rose-950/40 dark:text-rose-300',
-  }[tone]
-  return (
-    <div className={clsx('flex items-center justify-between gap-3 rounded-2xl border px-4 py-3', ring)}>
-      <span className="text-[13px] font-semibold">{label}</span>
-      <span className="text-lg font-bold leading-none">{value}</span>
-    </div>
-  )
-}
-
+/** The design's switch row (UtSection "toggles"): the kit Toggle, the whole row clickable. */
 function Toggle({ label, hint, checked, onChange }: {
   label: string
   hint?: string
   checked: boolean
   onChange: (v: boolean) => void
 }) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border-default bg-[var(--bg-surface)] px-4 py-3 transition-colors hover:border-border-strong focus-within:ring-2 focus-within:ring-[var(--border-focus)]">
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span
-        aria-hidden
-        className={clsx(
-          'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors',
-          checked ? 'border-[#059669] bg-[#059669] text-white' : 'border-border-strong bg-[var(--bg-surface)]',
-        )}
-      >
-        {checked && <Check size={13} strokeWidth={3} />}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[13px] font-semibold text-text-primary">{label}</span>
-        {hint && <span className="mt-0.5 block text-[11px] text-text-tertiary">{hint}</span>}
-      </span>
-    </label>
-  )
+  return <KitToggle checked={checked} onChange={onChange} label={label} description={hint} size="md" />
 }

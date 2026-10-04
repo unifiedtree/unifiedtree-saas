@@ -27,6 +27,13 @@
 .ut-bellpop__title { font-size: 13.5px; font-weight: 500; line-height: 1.4; }
 /* One clamped line of the text (it carries details such as a rejection reason). */
 .ut-bellpop__body { font-size: 12.5px; line-height: 1.4; color: var(--u-ink2, #4A5A54); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A punch-in alert's map link, under its row's text (8px row padding + 34px icon + 12px gap). */
+.ut-bellpop__map {
+  display: inline-flex; align-items: center; gap: 5px; margin: -4px 0 6px 54px; padding: 2px 4px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 500; color: var(--u-brt, #0F6E56); text-decoration: none;
+}
+.ut-bellpop__map:hover { text-decoration: underline; }
+.ut-bellpop__map:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs2, #D2EADF)); }
 .ut-bellpop__meta { font-size: 12px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; }
 .ut-bellpop__dot { width: 8px; height: 8px; margin-top: 6px; flex-shrink: 0; border-radius: 50%; background: var(--u-gd, #C8912E); }
 .ut-bellpop__state { padding: 4px 16px 16px; }

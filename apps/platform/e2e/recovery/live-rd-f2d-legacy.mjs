@@ -151,8 +151,9 @@ try {
   check('owner: Leave (Approvals) shows the design stat cards', (await page.locator('.uk-stat.uk-stat--stat').count()) > 0)
 
   // View pills: role=group + aria-pressed, one pressed; picking another moves it.
-  const group = page.locator('[role=group]:has(> .uk-fpill)').first()
-  const pills = group.locator('button.uk-fpill')
+  // ModuleKit Views are the kit PillTabs (4 Oct): they sit in the page header's hero card as a segmented control.
+  const group = page.locator('[role=group]:has(> .uk-ptab)').first()
+  const pills = group.locator('button.uk-ptab')
   const nPills = await pills.count()
   const pressed0 = await group.locator('button[aria-pressed="true"]').count()
   check('owner: Leave view pills are a labelled group with one pressed pill', nPills > 1 && pressed0 === 1 && !!(await group.getAttribute('aria-label')), `${nPills} pills, ${pressed0} pressed`)

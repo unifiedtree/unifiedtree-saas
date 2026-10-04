@@ -17,6 +17,7 @@ import com.hrms.attendance.dto.GeoFenceZoneRequest;
 import com.hrms.attendance.dto.GeoFenceZoneResponse;
 import com.hrms.attendance.dto.ManualAttendanceRequest;
 import com.hrms.attendance.dto.MonthlyStatsResponse;
+import com.hrms.attendance.dto.PunchInRecordedEvent;
 import com.hrms.attendance.dto.WeeklyDayResponse;
 import com.hrms.attendance.dto.WeeklySummaryResponse;
 import com.hrms.attendance.entity.AttendanceCorrectionRequest;
@@ -168,6 +169,20 @@ public class AttendanceService {
                 wfhDay, false, null);
     }
 
+    @Transactional
+    public AttendanceDto checkInJson(UUID employeeId, UUID companyId, UUID branchId, UUID departmentId,
+                                     double latitude, double longitude,
+                                     String faceBase64, String checkInMethodStr, UUID tenantId,
+                                     String locationName, String zoneName,
+                                     String deviceId, String clientEventId,
+                                     boolean wfhDay, boolean offlineCaptured, Instant capturedAt) {
+        // 16-arg overload from before punch-in alerts (V143.72): no location
+        // accuracy, which only the alert uses.
+        return checkInJson(employeeId, companyId, branchId, departmentId, latitude, longitude,
+                faceBase64, checkInMethodStr, tenantId, locationName, zoneName, deviceId, clientEventId,
+                wfhDay, offlineCaptured, capturedAt, null);
+    }
+
     /**
      * @param capturedAt when the punch actually happened ON THE DEVICE. Offline
      *                   punches sit in the mobile queue and can flush hours
@@ -178,6 +193,9 @@ public class AttendanceService {
      *                   check-in instant, and the late calculation. Pass
      *                   {@code null} (online punches, older APKs, web) for the
      *                   original server-clock behaviour.
+     * @param accuracyMeters the device's accuracy for latitude/longitude, when it
+     *                   sent one. Not stored on the record; it goes into the
+     *                   punch-in alert (V143.72) only.
      */
     @Transactional
     public AttendanceDto checkInJson(UUID employeeId, UUID companyId, UUID branchId, UUID departmentId,
@@ -185,7 +203,8 @@ public class AttendanceService {
                                      String faceBase64, String checkInMethodStr, UUID tenantId,
                                      String locationName, String zoneName,
                                      String deviceId, String clientEventId,
-                                     boolean wfhDay, boolean offlineCaptured, Instant capturedAt) {
+                                     boolean wfhDay, boolean offlineCaptured, Instant capturedAt,
+                                     Double accuracyMeters) {
         if (clientEventId != null && !clientEventId.isBlank()) {
             Optional<AttendanceRecord> syncedRecord = attendanceRecordRepository.findByClientEventId(clientEventId);
             if (syncedRecord.isPresent()) {
@@ -268,6 +287,7 @@ public class AttendanceService {
         log.info("Check-in recorded: id={}, employee={}, method={}", saved.getId(), employeeId, method);
 
         publishCheckinEvent(saved, tenantId, method);
+        publishPunchIn(saved, tenantId, method, accuracyMeters, backdated, serverNow);
         return toDto(saved);
     }
 
@@ -1376,6 +1396,7 @@ public class AttendanceService {
             logEvent(saved, AttendanceEventType.CHECK_IN, request.latitude(), request.longitude(),
                     null, null, request.employeeId(), null);
             publishCheckinEvent(saved, tenantId, CheckInMethod.FACE_RECOGNITION);
+            publishPunchIn(saved, tenantId, CheckInMethod.FACE_RECOGNITION, null, false, checkInAt);
             return new FaceCheckInResponse(true, saved.getId(), checkInAt, "Check-in successful", result.confidenceScore());
         }
 
@@ -2181,6 +2202,31 @@ public class AttendanceService {
             kafkaTemplate.send(CHECKIN_TOPIC, tenantId.toString(), event);
         } catch (Exception e) {
             log.warn("Failed to publish check-in event for employee={}: {}", saved.getEmployeeId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Tells the punch-in alerts (V143.72) about a saved punch-in. They are sent
+     * only after this transaction commits, on their own thread
+     * (PunchAlertNotifier), so nothing here can slow the punch down; and a
+     * failure to hand the event over is logged, never thrown, so it can't undo
+     * the punch either.
+     *
+     * @param offline    the phone sent the punch later (an offline punch, stamped with its capture time)
+     * @param receivedAt when the server received the punch
+     */
+    private void publishPunchIn(AttendanceRecord saved, UUID tenantId, CheckInMethod method, Double accuracyMeters,
+                                boolean offline, Instant receivedAt) {
+        if (eventPublisher == null || saved == null) return;
+        try {
+            eventPublisher.publishEvent(new PunchInRecordedEvent(
+                    tenantId, saved.getId(), saved.getEmployeeId(), saved.getCompanyId(), saved.getAttendanceDate(),
+                    saved.getCheckInAt(), method != null ? method.name() : null,
+                    saved.getCheckInLatitude(), saved.getCheckInLongitude(), accuracyMeters,
+                    saved.getAttendanceStatus() == AttendanceStatus.LATE, saved.getLateByMinutes(),
+                    saved.getAttendanceType() == AttendanceType.WFH, offline, receivedAt));
+        } catch (RuntimeException e) {
+            log.warn("Punch-in alert not queued for record {}: {}", saved.getId(), e.getMessage());
         }
     }
 }

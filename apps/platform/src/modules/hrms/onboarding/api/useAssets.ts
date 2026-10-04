@@ -3,23 +3,35 @@ import { apiJson } from '@/core/api/client'
 import { asAvailable, useAvailableQuery } from '../../api/shared/available'
 import type { AssetIssueBrief, AssetProblemKind } from '../myAssetsApi'
 
+/** A problem the holder reported that HR hasn't resolved yet (BW-70); the same shape My assets reads. */
+export type { AssetIssueBrief }
+
 export interface Asset {
   id: string; companyId: string; employeeId?: string; assetTag: string; assetType: string;
   assetName: string; serialNo?: string; status: string; assignedAt?: string; returnedAt?: string; conditionNotes?: string
-  // BW-69 / BW-70 (absent on older servers):
-  /** Who has it now; only for callers who may read employee records. */
+  // Added by the redesign's asset list (BW-69, BW-70); absent on an older server.
+  /** Who has it now; only for callers who can read employee records. */
   holderName?: string | null
-  /** Who had it last, once it is back; same rule. */
+  /** Who had it last, once it's back; same rule. */
   lastHolderName?: string | null
-  /** The holder confirmed they have it (or it counted as confirmed when confirmations started). */
+  /** The holder confirmed they have it. */
   confirmedAt?: string | null
+  /** EMPLOYEE, or BACKFILL for hand-overs from before confirmations started. */
   confirmationSource?: string | null
-  /** Handed over and not confirmed yet. */
+  /** Handed over and not confirmed yet. Null while the confirmations table is missing. */
   confirmationPending?: boolean | null
   /** A problem the holder reported that hasn't been resolved. */
   openIssue?: AssetIssueBrief | null
 }
 export type AssetInput = Pick<Asset, 'companyId' | 'assetTag' | 'assetType' | 'assetName' | 'serialNo' | 'conditionNotes'>
+
+/** A reported problem as HR's list shows it. employeeName only for callers who can read employee records. */
+export interface AssetIssue {
+  id: string; assetId: string; assetTag: string; assetName: string; assetType: string | null; companyId: string | null
+  employeeId: string | null; employeeName: string | null; kind: AssetProblemKind | string; note: string | null; status: 'OPEN' | 'RESOLVED' | string
+  reportedAt: string; resolvedAt: string | null; resolvedByName: string | null; resolutionNote: string | null
+}
+
 const key = ['hrms', 'onboarding', 'assets']
 export function useAssets(enabled: boolean) {
   return useQuery({ queryKey: key, queryFn: () => apiJson<Asset[]>('/v1/onboarding/assets'), enabled })
@@ -33,45 +45,25 @@ export function useAssetActions() {
   return { create, assign, receive }
 }
 
-/** A problem an employee reported with their asset, as HR's list shows it (BW-70). */
-export interface AssetIssue {
-  id: string
-  assetId: string
-  assetTag: string
-  assetName: string
-  assetType: string | null
-  companyId: string | null
-  employeeId: string | null
-  /** Only for callers who may read employee records. */
-  employeeName: string | null
-  kind: AssetProblemKind | string
-  note: string | null
-  status: string
-  reportedAt: string
-  resolvedAt: string | null
-  resolvedByName: string | null
-  resolutionNote: string | null
-}
-
 /**
- * GET /v1/onboarding/assets/issues?status=OPEN (hrms.onboarding.asset.write). Until V143.59
- * is applied the server answers FEATURE_NOT_READY: `notAvailable`, and the page leaves the
- * list out.
+ * Problems employees reported with their equipment (GET /v1/onboarding/assets/issues,
+ * hrms.onboarding.asset.write; OPEN by default). Until V143_59 is applied the server answers
+ * 503 FEATURE_NOT_READY, which reads as not available (the block stays hidden).
  */
-export function useAssetIssues(enabled: boolean) {
+export function useAssetIssues(status: 'OPEN' | 'RESOLVED' | 'ALL', enabled: boolean) {
   return useAvailableQuery<AssetIssue[]>({
-    queryKey: [...key, 'issues', 'OPEN'],
-    queryFn: () => asAvailable(() => apiJson<AssetIssue[]>('/v1/onboarding/assets/issues?status=OPEN')),
+    queryKey: [...key, 'issues', status],
+    queryFn: () => asAvailable(() => apiJson<AssetIssue[]>(`/v1/onboarding/assets/issues?status=${status}`)),
     enabled,
   })
 }
 
-/** HR marks a reported problem resolved, with an optional note. */
+/** HR marks a report resolved, with an optional note (blank sends none); the asset list's open problem clears with it. */
 export function useResolveAssetIssue() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note?: string }) =>
-      apiJson<AssetIssue>(`/v1/onboarding/assets/issues/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note: note?.trim() || undefined }) }),
+      apiJson<AssetIssue>(`/v1/onboarding/assets/issues/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   })
 }

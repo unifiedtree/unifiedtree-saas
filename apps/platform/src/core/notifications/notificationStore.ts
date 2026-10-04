@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Notification } from '@/types'
 import { apiJson } from '@/core/api/client'
-import { LAST_DAYS, groupFor, iconForGroup, severityFor, webRouteFor, type AppNotificationType } from './notificationRoutes'
+import { LAST_DAYS, groupFor, iconForGroup, mapUrlFor, severityFor, webRouteFor, type AppNotificationType } from './notificationRoutes'
 
 export type { AppNotificationType } from './notificationRoutes'
 
@@ -47,6 +47,8 @@ export interface WebNotification extends Notification {
   group: string
   /** Icon name (design/dc icons) for the module. */
   icon: string
+  /** A punch-in alert's Google Maps link (PUNCH_IN_ALERT), else null. */
+  mapUrl: string | null
 }
 
 export function toDisplay(dto: ServerNotificationDto): WebNotification {
@@ -62,6 +64,7 @@ export function toDisplay(dto: ServerNotificationDto): WebNotification {
     kind: dto.type,
     group,
     icon: iconForGroup(group),
+    mapUrl: mapUrlFor(dto.type, dto.data),
   }
 }
 

@@ -1,4 +1,4 @@
-/* global process, console */
+/* global console, process */
 // Browser check of the Assets view (Onboarding & assets → Assets) and the
 // compliance filing calendar: register an asset, assign it, take it back,
 // check its history after a reload, then page the calendar. The QA asset is
@@ -21,15 +21,15 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL(url => !url.pathname.includes('login'), { timeout: 60000 })
   await page.goto(base + '/hrms/onboarding/instances?view=assets')
-  // P-HIRE: the page's button reads "Register an asset" (design); the company is a plain select,
-  // filled in when there is only one company.
-  await page.getByRole('button', { name: 'Register an asset' }).click()
+  // Redesign (P-WF-PEOPLE): the page's "Register an asset" button, a plain company select, "Give to" on the row,
+  // and a returned asset reads "In store" with "Returned <date> by <name>" in its dates.
+  await page.getByRole('button', { name: /Register (an )?asset/ }).first().click()
   let dialog = page.getByRole('dialog')
-  const pickCompany = dialog.getByLabel('Company', { exact: true })
-  if ((await pickCompany.count()) && !(await pickCompany.inputValue())) await pickCompany.selectOption({ index: 1 })
-  await dialog.getByLabel('Asset tag', { exact: true }).fill(tag)
-  await dialog.getByLabel('Category', { exact: true }).fill('Laptop')
-  await dialog.getByLabel('Asset name', { exact: true }).fill('UI verification laptop')
+  const company = dialog.getByLabel(/^Company/)
+  if (!(await company.inputValue())) await company.selectOption({ index: 1 })
+  await dialog.getByLabel(/^Asset tag/).fill(tag)
+  await dialog.getByLabel(/^Category/).fill('Laptop')
+  await dialog.getByLabel(/^Asset name/).fill('UI verification laptop')
   await dialog.getByRole('button', { name: 'Register asset' }).click()
   const row = page.getByRole('row').filter({ hasText: tag })
   await expect(row).toBeVisible()
@@ -44,7 +44,8 @@ try {
   dialog = page.getByRole('dialog')
   await dialog.getByLabel('Condition on return').fill('Intact after UI verification')
   await dialog.getByRole('button', { name: 'Record return' }).click()
-  await expect(row.getByText('Returned', { exact: true })).toBeVisible()
+  await expect(row.getByText('In store', { exact: true })).toBeVisible()
+  await expect(row.getByText(/^Returned /)).toBeVisible()
   await page.reload()
   await expect(page.getByRole('row').filter({ hasText: tag }).getByText('Intact after UI verification')).toBeVisible()
   await page.getByRole('row').filter({ hasText: tag }).getByRole('button', { name: 'History', exact: true }).click()

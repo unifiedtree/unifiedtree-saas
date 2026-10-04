@@ -1,4 +1,4 @@
-/* global process, console, fetch */
+/* global console, process, fetch */
 // Live check of the redesigned Onboarding & assets pages against the local API.
 //  - API: removing a template task that a started onboarding uses now works
 //    (was a foreign-key 500) and the run keeps its copy; a task id from another
@@ -83,10 +83,9 @@ try {
   const o = await session('owner@unifiedtree.demo')
   await o.page.goto(base + '/hrms/onboarding/instances'); await settle(o.page)
   for (const v of ['New hires', 'Assets', 'Checklist templates']) check(`owner: "${v}" view`, (await views(o.page).getByRole('button', { name: new RegExp(`^${v}`) }).count()) === 1)
-  // P-HIRE: the design's figures (In progress, Joining this month, Tasks overdue) above the table, and
-  // the counts by status (All, In progress, Completed, On hold) as the table's status filter.
+  // Redesign (P-WF-PEOPLE): the design's "This month" figures, and the status tiles became the table's status filter.
   for (const t of ['In progress', 'Joining this month', 'Tasks overdue']) check(`owner: "${t}" figure`, (await o.page.getByText(t, { exact: true }).count()) > 0)
-  for (const t of ['All', 'In progress', 'Completed', 'On hold']) check(`owner: "${t}" status filter`, (await o.page.getByRole('group', { name: 'Filter by status' }).getByRole('button', { name: new RegExp(`^${t}`) }).count()) === 1)
+  for (const t of ['All', 'In progress', 'On hold', 'Completed']) check(`owner: "${t}" status filter`, (await o.page.locator('[aria-label="Onboarding status"]').getByRole('button', { name: new RegExp(`^${t}`) }).count()) === 1)
   check('owner: "Start onboarding" button', (await o.page.getByRole('button', { name: 'Start onboarding' }).count()) === 1)
   const readerName = sql(`select first_name||' '||coalesce(last_name,'') from hrms.employees where id='${reader.employeeId}'`).trim()
   const row = o.page.getByRole('row').filter({ hasText: readerName }).first()
