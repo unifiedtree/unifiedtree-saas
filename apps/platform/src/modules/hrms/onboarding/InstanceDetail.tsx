@@ -2,7 +2,8 @@
 // prototype PgTalent h-onb, "Open record"). HR sees whose it is and can hold / resume /
 // reopen it and edit the hire details; the new hire (the API only lets them open their own)
 // sees "Your onboarding", including their hiring manager and buddy. Ticking a task off needs
-// hrms.onboarding.task.complete; required tasks can't be skipped.
+// hrms.onboarding.task.complete; required tasks can't be skipped. HR who may edit employees
+// also see the onboarding record saved with the hire (the design's "Open record").
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { usePermission, P } from '@unifiedtree/sdk'
@@ -15,6 +16,7 @@ import { useEmployeesByIds } from '../api/useWorkforce'
 import { instanceState, roleLabel } from './onboardingModel'
 import { dayMon, istTodayIso } from '../hiring/hiringModel'
 import { HireDetailsPanel } from './HireDetails'
+import { OnboardingRecord } from './OnboardingRecord'
 import '../hiring/hiring.css'
 
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
@@ -73,6 +75,7 @@ export const InstanceDetail: React.FC = () => {
   const isHr = usePermission('hrms.onboarding.instance.write')
   const canAct = usePermission(P.HRMS_ONBOARDING_TASK_COMPLETE)
   const canReadEmployees = usePermission('hrms.employee.read')
+  const canWriteEmployees = usePermission('hrms.employee.write')
   const today = istTodayIso()
   const { data: instance, isLoading: instLoading, error: instError, refetch: refetchInst } = useInstance(instanceId!)
   const { data: tasks = [], isLoading: tasksLoading, error: tasksError, refetch: refetchTasks } = useInstanceTasks(instance?.id ?? '')
@@ -139,6 +142,8 @@ export const InstanceDetail: React.FC = () => {
                   {instance && sorted.map((t) => <TaskItem key={t.id} task={t} instanceId={instance.id} canAct={canAct} today={today} />)}
                 </div>
               </Section>
+              {/* The record saved with the hire (joining checklist, assets issued, policies): HR notes, employee.write only. */}
+              {isHr && canWriteEmployees && instance?.employeeId && <OnboardingRecord employeeId={instance.employeeId} />}
             </>
           )}
     </PageFrame>

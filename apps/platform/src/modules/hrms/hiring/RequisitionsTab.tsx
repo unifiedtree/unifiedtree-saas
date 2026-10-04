@@ -61,11 +61,11 @@ export function RequisitionsTab({ creating, onCreateDone }: { creating: boolean;
 
   const columns: TableColumn<JobRequisition>[] = [
     { key: 'title', header: 'Job title', primary: true, render: (r) => r.title },
-    { key: 'openings', header: 'Openings', numeric: true, width: 96, render: (r) => r.openings },
+    { key: 'openings', header: 'Openings', width: 110, render: (r) => <span className="hi-num">{r.openings}</span> },
     { key: 'location', header: 'Location', render: (r) => r.location || '—' },
     { key: 'type', header: 'Type', render: (r) => (r.employmentType ? fmtEnum(r.employmentType) : '—') },
     {
-      key: 'candidates', header: 'Candidates', numeric: true, width: 110, render: (r) => (
+      key: 'candidates', header: 'Candidates', width: 120, render: (r) => (
         <Link to={`/hrms/hiring?tab=pipeline&role=${r.id}`} className="hi-link hi-num"
           aria-label={`${r.candidateCount} ${r.candidateCount === 1 ? 'candidate' : 'candidates'} for ${r.title}: open the pipeline`}>{r.candidateCount}</Link>
       ),

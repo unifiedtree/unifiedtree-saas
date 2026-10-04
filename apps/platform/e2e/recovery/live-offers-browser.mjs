@@ -32,7 +32,9 @@ try {
   await panel.getByRole('button', { name: 'Save draft' }).click()
   await expect(row.getByText('Updated verification role')).toBeVisible()
   const downloadPromise = page.waitForEvent('download')
-  await row.getByRole('button', { name: 'Download PDF' }).click()
+  // A draft's PDF is in the row's menu (P-HIRE: the design shows Edit draft and Send offer email on drafts).
+  await row.getByRole('button', { name: `More for ${name}` }).click()
+  await page.getByRole('menuitem', { name: 'Download PDF' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/^offer-.*\.pdf$/)
   expect(await download.failure()).toBeNull()
@@ -45,10 +47,10 @@ try {
   await expect(row.getByText('Sent', { exact: true })).toBeVisible()
   await expect(row.getByRole('button', { name: 'Edit draft' })).toHaveCount(0)
   // Status changes are in the row's menu; a final decision leaves no menu to change it with.
-  await row.getByRole('button', { name: `Change the offer for ${name}` }).click()
+  await row.getByRole('button', { name: `More for ${name}` }).click()
   await page.getByRole('menuitem', { name: 'Withdraw offer' }).click()
   await expect(row.getByText('Withdrawn', { exact: true })).toBeVisible()
-  await expect(row.getByRole('button', { name: `Change the offer for ${name}` })).toHaveCount(0)
+  await expect(row.getByRole('button', { name: `More for ${name}` })).toHaveCount(0)
   await page.reload()
   await page.locator('[aria-label="Hiring views"]').getByRole('button', { name: /^Offers/ }).click()
   await expect(page.getByRole('row').filter({ hasText: name }).getByText('Withdrawn', { exact: true })).toBeVisible()

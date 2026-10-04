@@ -5,14 +5,15 @@
 //     (BW-67) is stored with the offer, so "Send offer email" starts from it.
 //   - Send offer email asks once for the address (the stored one is filled in): sending
 //     freezes the draft, and the mail service accepting it doesn't prove delivery.
-//   - Download PDF; the status changes (Mark as sent, accepted, declined, Withdraw) are in
-//     the row's menu; a final decision has none.
+//   - A draft's row offers Edit draft and Send offer email, any other offer Download PDF (the
+//     design's actions); the draft's PDF and the status changes (Mark as sent, accepted,
+//     declined, Withdraw) are in the row's menu; a final decision has no status to change.
 import { useState, type FormEvent } from 'react'
 import { MoreHorizontal } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { Button, Callout, CellActions, CellStack, Section, StatusPill, Table, type TableColumn } from '@/design/kit/display'
+import { Button, Callout, CellActions, CellPerson, Section, StatusPill, Table, type TableColumn } from '@/design/kit/display'
 import { Pager } from '@/design/kit/data'
-import { DateInput, Dialog, FieldGrid, Input, Menu, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { DateInput, Dialog, FieldGrid, Input, Menu, PanelButton, Select, SidePanel, Textarea, useToast, type MenuEntry } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
 import {
   useHiringOffers, useCreateHiringOffer, useUpdateHiringOfferStatus, useEditHiringOffer, useEmailHiringOffer, downloadOfferPdf, inr,
@@ -22,7 +23,7 @@ import { OFFER_ACTION, OFFER_LABEL, OFFER_NEXT, OFFER_TONE, istTodayIso, weekday
 
 const PAGE = 20
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
-const stampOf = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+const stampOf = (iso: string) => new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCreateDone: () => void }) {
   const toast = useToast()
@@ -53,7 +54,7 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
   const columns: TableColumn<HiringOffer>[] = [
     {
       key: 'candidate', header: 'Candidate', primary: true, width: '24%', render: (o) => (
-        <CellStack primary={o.candidateName} secondary={o.candidateEmail || o.emailRecipient || (o.notes ? <span title={o.notes}>{o.notes}</span> : undefined)} />
+        <CellPerson name={o.candidateName} sub={o.candidateEmail || o.emailRecipient || (o.notes ? <span title={o.notes}>{o.notes}</span> : undefined)} />
       ),
     },
     { key: 'role', header: 'Role', render: (o) => o.roleTitle },
@@ -63,22 +64,31 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
       key: 'status', header: 'Status', render: (o) => (
         <span className="hi-cellwrap">
           <StatusPill tone={OFFER_TONE[o.status]}>{OFFER_LABEL[o.status]}</StatusPill>
-          {o.emailSubmittedAt && <span className="hi-small">{`Submitted to ${o.emailRecipient ?? 'the candidate'} · ${stampOf(o.emailSubmittedAt)}`}</span>}
+          {o.emailSubmittedAt && <span className="hi-small" title={o.emailRecipient ?? undefined}>{`Submitted to ${o.emailRecipient ?? 'the candidate'}`}<br />{stampOf(o.emailSubmittedAt)}</span>}
         </span>
       ),
     },
     {
-      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', width: 380, render: (o) => {
-        const next = OFFER_NEXT[o.status]
+      // The design's row actions: a draft is edited and emailed, any other offer downloaded. The
+      // rest (the draft's PDF, the status changes) is in the row's menu; a final decision has no
+      // status to change.
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', width: 300, render: (o) => {
+        const draft = canWrite && o.status === 'DRAFT'
+        const next = canWrite ? OFFER_NEXT[o.status] : []
+        const pdf = () => download(o)
+        const items: MenuEntry[] = [
+          ...(draft ? [{ key: 'pdf', label: 'Download PDF', icon: 'download', disabled: downloading !== null, onSelect: pdf }] : []),
+          ...next.map((s) => ({ key: s, label: OFFER_ACTION[s], danger: s === 'WITHDRAWN' || s === 'DECLINED', disabled: update.isPending, onSelect: () => changeStatus(o, s) })),
+        ]
         return (
           <CellActions>
-            <Button size={30} variant="secondary" loading={downloading === o.id} disabled={downloading !== null && downloading !== o.id} onClick={() => download(o)}>Download PDF</Button>
-            {canWrite && o.status === 'DRAFT' && <Button size={30} variant="secondary" onClick={() => setEditing(o)}>Edit draft</Button>}
+            {draft
+              ? <Button size={30} variant="secondary" onClick={() => setEditing(o)}>Edit draft</Button>
+              : <Button size={30} variant="secondary" loading={downloading === o.id} disabled={downloading !== null && downloading !== o.id} onClick={pdf}>Download PDF</Button>}
             {canWrite && !o.emailSubmittedAt && (o.status === 'DRAFT' || o.status === 'SENT') && <Button size={30} variant="soft" onClick={() => setEmailing(o)}>Send offer email</Button>}
-            {canWrite && next.length > 0 && (
-              <Menu label={`Change the offer for ${o.candidateName}`} width={230} placement="bottom-end"
-                items={next.map((s) => ({ key: s, label: OFFER_ACTION[s], danger: s === 'WITHDRAWN' || s === 'DECLINED', disabled: update.isPending, onSelect: () => changeStatus(o, s) }))}
-                trigger={({ props }) => <Button {...props} size={30} variant="plain" icon={<MoreHorizontal size={16} />} aria-label={`Change the offer for ${o.candidateName}`} />} />
+            {items.length > 0 && (
+              <Menu label={`More for ${o.candidateName}`} width={230} placement="bottom-end" items={items}
+                trigger={({ props }) => <Button {...props} size={30} variant="plain" icon={<MoreHorizontal size={16} />} aria-label={`More for ${o.candidateName}`} />} />
             )}
           </CellActions>
         )
@@ -91,7 +101,7 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
       <Section title="Offers" body="flush" loading={query.isLoading} skeleton="table" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching}
         empty={!query.isLoading && !query.error && total === 0 ? { title: 'No offers yet. Create a draft to begin tracking an offer.', icon: 'fileText' } : undefined}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="offers" /> : undefined}>
-        <Table label="Offers" columns={columns} rows={offers} rowKey={(o) => o.id} mobile="cards" minWidth={1040} />
+        <Table label="Offers" columns={columns} rows={offers} rowKey={(o) => o.id} mobile="cards" minWidth={960} />
       </Section>
       {(creating || editing) && <OfferPanel offer={editing} onClose={() => { setEditing(null); onCreateDone() }} onSaved={() => setPage(0)} />}
       {emailing && <EmailOfferDialog offer={emailing} onClose={() => setEmailing(null)} />}
