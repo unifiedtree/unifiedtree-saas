@@ -7,10 +7,19 @@ import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, getDay 
 import { apiJson } from '@/core/api/client'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { Panel, State, RowList, Row, dmy, todayIso } from '@/design/module/ModuleKit'
+import type { FilingStatus } from '../api/useCompliance'
+import { filingPill } from './filingPill'
 
 interface CalendarEvent { id: string; title: string; type: string; date: string; status: string; category?: string }
 const words = (v: string) => v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
-const STATUS_WORD: Record<string, string> = { LATE: 'Filed late' }
+
+function EventPill({ event: e, today }: { event: CalendarEvent; today: string }) {
+  if (e.type === 'STATUTORY_FILING') {
+    const p = filingPill(e.status as FilingStatus, e.date, today)
+    return <HrStatusPill tone={p.tone}>{p.label}</HrStatusPill>
+  }
+  return <HrStatusPill tone={e.status === 'DONE' ? 'ok' : e.status === 'OVERDUE' ? 'red' : 'warn'}>{words(e.status)}</HrStatusPill>
+}
 
 export function FilingCalendar({ companyId }: { companyId: string }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
@@ -60,7 +69,7 @@ export function FilingCalendar({ companyId }: { companyId: string }) {
                 <RowList>
                   {visible.map((e) => (
                     <Row key={e.id} title={e.title} meta={`${dmy(e.date)} · ${e.category || words(e.type)}`}
-                      trail={<HrStatusPill tone={e.status === 'DONE' || e.status === 'FILED' ? 'ok' : e.status === 'OVERDUE' || e.status === 'LATE' ? 'red' : 'warn'}>{STATUS_WORD[e.status] || words(e.status)}</HrStatusPill>} />
+                      trail={<EventPill event={e} today={today} />} />
                   ))}
                 </RowList>
               )}
