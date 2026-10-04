@@ -62,6 +62,7 @@ class EmployeeStatsTest {
         EmployeeStats.Response r = EmployeeStats.compute(List.of(p), TODAY, false, Map.of());
         assertThat(r.leftThisMonth()).isEqualTo(1);
         assertThat(r.exitedThisYear()).isEqualTo(1);
+        assertThat(r.terminatedThisYear()).isEqualTo(1);
     }
 
     @Test
@@ -94,6 +95,28 @@ class EmployeeStatsTest {
                 // on notice: not an exit yet
                 new EmployeeStats.Person(UUID.randomUUID(), "NOTICE_PERIOD", TODAY.minusYears(3), LocalDate.of(2026, 10, 10), null, TODAY, null));
         assertThat(EmployeeStats.compute(people, TODAY, false, Map.of()).exitedThisYear()).isEqualTo(2);
+    }
+
+    @Test
+    void terminatedThisYearIsTheTerminatedShareOfTheSameYearsExits() {
+        List<EmployeeStats.Person> people = List.of(
+                leaver("EXITED", TODAY.minusYears(3), LocalDate.of(2026, 2, 1)),
+                leaver("EXITED", TODAY.minusYears(3), LocalDate.of(2026, 8, 31)),
+                leaver("TERMINATED", TODAY.minusYears(3), LocalDate.of(2026, 6, 30)),
+                // terminated last year: in the all-time count, not this year's
+                leaver("TERMINATED", TODAY.minusYears(3), LocalDate.of(2025, 12, 31)),
+                // terminated with no last working day: dated by the termination date
+                new EmployeeStats.Person(UUID.randomUUID(), "TERMINATED", TODAY.minusYears(3), null, LocalDate.of(2026, 3, 15), null, null),
+                // terminated with no date at all: not counted for any year
+                leaver("TERMINATED", TODAY.minusYears(3), null),
+                // resigned but not yet marked exited: not on the exit tab
+                leaver("RESIGNED", TODAY.minusYears(3), LocalDate.of(2026, 9, 1)));
+        EmployeeStats.Response r = EmployeeStats.compute(people, TODAY, false, Map.of());
+        assertThat(r.exitedThisYear()).isEqualTo(4);
+        assertThat(r.terminatedThisYear()).isEqualTo(2);
+        assertThat(r.counts().terminated()).isEqualTo(4);
+        // resigned or left this year = exitedThisYear - terminatedThisYear, the two EXITED people
+        assertThat(r.exitedThisYear() - r.terminatedThisYear()).isEqualTo(2);
     }
 
     @Test
@@ -144,6 +167,7 @@ class EmployeeStatsTest {
     void emptyWorkspace() {
         EmployeeStats.Response r = EmployeeStats.compute(List.of(), TODAY, false, null);
         assertThat(r.counts().total()).isZero();
+        assertThat(r.terminatedThisYear()).isZero();
         assertThat(r.activeSeries()).hasSize(7).allMatch(pt -> pt.active() == 0);
         assertThat(r.suspendedSince()).isEmpty();
     }

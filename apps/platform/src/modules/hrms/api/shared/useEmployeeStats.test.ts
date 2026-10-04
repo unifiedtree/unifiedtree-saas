@@ -6,7 +6,7 @@ import { answers, expectSharedMapping, fakeApi } from './testing'
 const CO = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 const stats: EmployeeStats = {
   counts: { total: 12, active: 8, probation: 2, notice: 1, suspended: 0, exited: 1, terminated: 0 },
-  joinedThisMonth: 2, leftThisMonth: 1, noticeStartedLast7Days: 1, probationReviewsDueNextMonth: 1, exitedThisYear: 1,
+  joinedThisMonth: 2, leftThisMonth: 1, noticeStartedLast7Days: 1, probationReviewsDueNextMonth: 1, exitedThisYear: 1, terminatedThisYear: 0,
   attritionPercent: null,
   activeSeries: [{ date: '2026-03-31', active: 6 }, { date: '2026-09-27', active: 8 }],
   suspendedSince: [],

@@ -9,12 +9,13 @@ import { ModulePage, Views, useView, StatRow, State, Note } from '@/design/modul
 import {
   useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
   useUserRoles, useGrantRole, useRevokeRole,
-  useCreateRole, useUpdateRole, useDeleteRole, useDuplicateRole,
+  useCreateRole, useUpdateRole, useDeleteRole, useDuplicateRole, useRoleNewPermissionCounts,
   RISK_LABEL, RISK_TONE, isRisky,
 } from '@/modules/rbac/api/useRbac'
 import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
 import { useWorkspaceUsers, useAssignableRoles, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
 import { RoleFields, newRoleBody, roleDraftFor, roleDraftProblem, type RoleDraft } from '@/modules/rbac/components/RoleFields'
+import { NewPermissionsNotice, NewPermissionsReview } from '@/modules/rbac/components/NewPermissionsReview'
 
 type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
@@ -487,26 +488,34 @@ export const Roles: React.FC = () => {
   const [drawerRole, setDrawerRole] = useState<RbacRole | null>(null)
   const [editorState, setEditorState] = useState<RoleEditorState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<RbacRole | null>(null)
+  const [reviewRole, setReviewRole] = useState<RbacRole | null>(null)
   const [moduleFilter, setModuleFilter] = useState('')
 
   const { data: roles = [], isLoading: rolesLoading, error: rolesError, refetch: refetchRoles } = useRoles()
   const { data: permissions = [], isLoading: permsLoading, error: permsError, refetch: refetchPerms } = usePermissionsCatalogue()
+  // Roles the business made don't get new permissions automatically (built-in ones do), so say how many are new.
+  const { data: newPermissionCounts } = useRoleNewPermissionCounts(canWriteRoles)
+  const newByRole = useMemo(() => new Map((newPermissionCounts ?? []).map((c) => [c.roleId, c.newPermissions])), [newPermissionCounts])
 
   const roleColumns: Column<RbacRole>[] = [
     {
       key: 'displayName',
       header: 'Role',
-      cell: (row) => (
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-accent-subtle">
-            <Shield size={13} className="text-accent-default" />
+      cell: (row) => {
+        const fresh = canWriteRoles && row.tenantId ? newByRole.get(row.id) ?? 0 : 0
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-accent-subtle">
+              <Shield size={13} className="text-accent-default" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-text-primary">{row.displayName}</p>
+              <p className="font-mono text-xs text-text-tertiary">{row.code}</p>
+              {fresh > 0 && <NewPermissionsNotice count={fresh} roleName={row.displayName} onReview={() => setReviewRole(row)} />}
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-text-primary">{row.displayName}</p>
-            <p className="font-mono text-xs text-text-tertiary">{row.code}</p>
-          </div>
-        </div>
-      ),
+        )
+      },
     },
     {
       key: 'description',
@@ -738,6 +747,8 @@ export const Roles: React.FC = () => {
       {deleteTarget && (
         <DeleteRoleConfirm role={deleteTarget} onClose={() => setDeleteTarget(null)} />
       )}
+
+      {reviewRole && <NewPermissionsReview role={reviewRole} onClose={() => setReviewRole(null)} />}
     </ModulePage>
   )
 }

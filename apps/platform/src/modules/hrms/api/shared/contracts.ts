@@ -544,6 +544,8 @@ export interface EmployeeStats {
   probationReviewsDueNextMonth: number
   /** EXITED or TERMINATED with a last working day in the current calendar year. */
   exitedThisYear: number
+  /** The TERMINATED people among exitedThisYear (same rule, same year), so exitedThisYear − terminatedThisYear resigned or left otherwise. */
+  terminatedThisYear: number
   /** Attrition in the current calendar year, in percent; null for callers without hrms.report.attrition. */
   attritionPercent: number | null
   /** Seven points, oldest first: the active headcount at the end of each of the last six months, then today. */

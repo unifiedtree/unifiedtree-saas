@@ -74,6 +74,57 @@ export function useSetRolePermissions(roleId: string) {
   })
 }
 
+// ── New permissions on business-made roles (V143.69) ─────────────────────────
+// New permissions go to the built-in roles only; a role a business made gets
+// nothing automatically, so its admin is told and decides. "New" = added after
+// the role was last marked as reviewed (or made), not held, module switched on.
+
+/** A business-made role with new permissions, and how many. Built-in roles never appear. */
+export interface RoleNewPermissionCount {
+  roleId: string
+  newPermissions: number
+}
+
+/** A permission added since the role was last reviewed. */
+export interface NewRolePermission extends RbacPermission {
+  addedAt: string
+}
+
+// Under ROLES_KEY, so saving a role's permissions refreshes the notices too.
+const NEW_PERMISSIONS_KEY = [...ROLES_KEY, 'new-permissions'] as const
+
+/**
+ * How many new permissions each business-made role has. Any failure (an API
+ * from before this existed) reads as "nothing to review": no notice, no error.
+ */
+export function useRoleNewPermissionCounts(enabled = true) {
+  return useQuery({
+    queryKey: NEW_PERMISSIONS_KEY,
+    queryFn: () => apiJson<RoleNewPermissionCount[]>('/v1/rbac/roles/new-permissions'),
+    enabled,
+    retry: false,
+  })
+}
+
+/** The new permissions of one role, for its Review. */
+export function useRoleNewPermissions(roleId: string) {
+  return useQuery({
+    queryKey: [...NEW_PERMISSIONS_KEY, roleId],
+    queryFn: () => apiJson<NewRolePermission[]>(`/v1/rbac/roles/${roleId}/new-permissions`),
+    enabled: !!roleId,
+  })
+}
+
+/** "Mark as reviewed": the role's notice goes until another permission is added. Changes no access. */
+export function useMarkRoleReviewed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (roleId: string) =>
+      apiJson<{ roleId: string; reviewedAt: string }>(`/v1/rbac/roles/${roleId}/permissions-reviewed`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: NEW_PERMISSIONS_KEY }),
+  })
+}
+
 export function useCreateRole() {
   const qc = useQueryClient()
   return useMutation({
