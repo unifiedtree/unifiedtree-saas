@@ -84,6 +84,14 @@ export function consumeWelcomeIntent() {
 
 export const clearWelcomeIntent = consumeWelcomeIntent
 
+/**
+ * Whether the welcome is on screen (AuthProvider provides it). What comes after
+ * the animation, the check-in prompt, waits for it to go instead of opening
+ * underneath it.
+ */
+export const WelcomeOnScreen = React.createContext(false)
+export const useWelcomeOnScreen = () => React.useContext(WelcomeOnScreen)
+
 /* ------------------------------------------------------------------ */
 /*  Shared ground                                                      */
 /* ------------------------------------------------------------------ */

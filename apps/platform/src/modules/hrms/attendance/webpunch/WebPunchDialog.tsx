@@ -12,6 +12,9 @@
 // check on the server before anything is recorded. No face enrolled yet: when the person may enrol
 // their own face (attendance.face.enroll.self) the dialog offers it first (the web enrolment, the
 // same one the profile uses) and comes back here when it's done; otherwise it says who can enrol it.
+//
+// The check-in prompt after sign-in (PunchPrompt.tsx) opens this same dialog with `onNotNow`, which
+// adds "Not now" at the bottom; nothing else changes.
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Dialog, useToast } from '@/design/kit/overlays'
@@ -33,6 +36,8 @@ export interface WebPunchDialogProps {
   mode: PunchMode
   /** Called with the saved record once the punch is recorded (the dialog then closes itself). */
   onDone?: (record: AttendanceDto) => void
+  /** Adds "Not now" (the check-in prompt after sign-in): the caller remembers it and closes the dialog. */
+  onNotNow?: () => void
 }
 
 export function WebPunchDialog(props: WebPunchDialogProps) {
@@ -42,7 +47,7 @@ export function WebPunchDialog(props: WebPunchDialogProps) {
 
 const SELF = { kind: 'self' } as const
 
-function OpenWebPunch({ onClose, mode, onDone }: WebPunchDialogProps) {
+function OpenWebPunch({ onClose, mode, onDone, onNotNow }: WebPunchDialogProps) {
   const qc = useQueryClient()
   const toast = useToast()
   const canEnroll = useCanSelfEnrollFace()
@@ -69,6 +74,7 @@ function OpenWebPunch({ onClose, mode, onDone }: WebPunchDialogProps) {
   const cam = useCamera(showCamera)
 
   const close = () => { if (!busy) { cam.stop(); onClose() } }
+  const notNow = () => { if (!busy) { cam.stop(); onNotNow?.() } }
 
   const go = async () => {
     if (busy || !where.spot) return
@@ -174,6 +180,7 @@ function OpenWebPunch({ onClose, mode, onDone }: WebPunchDialogProps) {
       icon="shield"
       title={`${Verb} with your face`}
       sub="We match your face with the one you enrolled, and note where you are, as the mobile app does."
+      footer={onNotNow ? <Button variant="secondary" disabled={busy} title="Hide this until tomorrow" onClick={notNow}>Not now</Button> : undefined}
     >
       <div className="uwp" data-busy={busy ? '' : undefined}>
         <CameraBox videoRef={cam.videoRef} on={showCamera} scanning={busy} />

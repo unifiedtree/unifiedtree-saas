@@ -164,6 +164,6 @@ export interface MeEmployee {
   weeklyOffDays?: string | null
 }
 
-export function useMeEmployee() {
-  return useQuery({ queryKey: ['employee', 'me'], queryFn: () => apiJson<MeEmployee>('/v1/employees/me'), staleTime: 60_000, retry: false })
+export function useMeEmployee(opts?: { enabled?: boolean }) {
+  return useQuery({ queryKey: ['employee', 'me'], queryFn: () => apiJson<MeEmployee>('/v1/employees/me'), staleTime: 60_000, retry: false, enabled: opts?.enabled ?? true })
 }
