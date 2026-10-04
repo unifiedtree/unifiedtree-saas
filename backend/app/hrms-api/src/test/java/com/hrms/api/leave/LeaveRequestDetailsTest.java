@@ -186,7 +186,7 @@ class LeaveRequestDetailsTest {
                 .getAnnotation(PreAuthorize.class).value());
         // The HR queue stays level-2 only.
         assertEquals("@perm.check('hrms.leave.approve.l2')", LeaveController.class
-                .getMethod("pendingL2Approvals", org.springframework.data.domain.Pageable.class)
+                .getMethod("pendingL2Approvals", Jwt.class, org.springframework.data.domain.Pageable.class)
                 .getAnnotation(PreAuthorize.class).value());
     }
 }
