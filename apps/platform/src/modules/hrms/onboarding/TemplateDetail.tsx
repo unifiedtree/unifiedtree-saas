@@ -15,9 +15,6 @@ import type { OnboardingTask, OnboardingTemplate } from './api/useOnboarding'
 import { dueLabel, offsetOf, roleLabel } from './onboardingModel'
 import './onboarding.css'
 
-// Kept for callers of the old helper.
-export { roleLabel }
-
 function EditTemplatePanel({ template, open, onClose }: { template: OnboardingTemplate; open: boolean; onClose: () => void }) {
   const update = useUpdateTemplate(template.id)
   const toast = useToast()

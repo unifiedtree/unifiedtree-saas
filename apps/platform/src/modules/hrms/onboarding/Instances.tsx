@@ -34,10 +34,6 @@ import './onboarding.css'
 const PAGE_SIZE = 10
 type Tab = 'hires' | 'assets' | 'templates'
 
-// Kept for callers of the old helpers (labels and tones now come from onboardingModel).
-export const statusLabel = runStatusLabel
-export const statusTone = runStatusTone
-
 export const Instances: React.FC = () => {
   const navigate = useNavigate()
   const canReadInstances = usePermission('hrms.onboarding.instance.read')
