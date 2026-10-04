@@ -70,14 +70,50 @@ export const faceEnrollApi = {
 /** The server's order when it doesn't say otherwise (FaceService.CAPTURE_SEQUENCE). */
 export const DEFAULT_SEQUENCE: CaptureAngle[] = ['FRONT', 'LEFT_30', 'RIGHT_30']
 
+// ── the words ────────────────────────────────────────────────────────────────
+// The phone app's enrollment says the same things in the same order
+// (utils/faceEnrolCopy.ts in the attendance app repo): the photos, the tips,
+// why the old face stopped working, consent, why a photo was refused, and
+// done. Someone who enrolls on one and re-enrolls on the other reads the same
+// steps. Change a line here, change it there (both sides pin them in a test).
+// The shared sentences avoid the word itself: this site spells it "enroll",
+// the app "enrol". Nothing asks for a blink: nothing checks one (the face
+// worker's liveness score is a passive check on the still photo).
+
 /** What to ask for at each angle, and the challenge the phone app reports with it. */
 export const ANGLE: Record<CaptureAngle, { label: string; prompt: string; help: string; challenge: Challenge; turn: -1 | 0 | 1 }> = {
-  FRONT: { label: 'Straight', prompt: 'Look straight at the camera', help: 'Keep the face inside the oval and blink once.', challenge: 'BLINK', turn: 0 },
+  FRONT: { label: 'Straight', prompt: 'Look straight at the camera', help: 'Keep the whole face inside the oval.', challenge: 'BLINK', turn: 0 },
   LEFT_30: { label: 'Left', prompt: 'Turn your head a little to the left', help: 'A small turn is enough. Keep the face inside the oval.', challenge: 'TURN_LEFT', turn: -1 },
   RIGHT_30: { label: 'Right', prompt: 'Turn your head a little to the right', help: 'A small turn is enough. Keep the face inside the oval.', challenge: 'TURN_RIGHT', turn: 1 },
   UP_15: { label: 'Chin down', prompt: 'Tilt your chin down a little', help: 'Look just below the camera.', challenge: 'NOD', turn: 0 },
   VARIED_LIGHT: { label: 'Smile', prompt: 'Smile, in brighter light', help: 'Move closer to a window or a lamp.', challenge: 'SMILE', turn: 0 },
 }
+
+/** The intro's first line, for your own face and the server's sequence (HR enrolling someone else names them instead). */
+export function enrolIntro(angles: readonly CaptureAngle[]): string {
+  const n = angles.length || DEFAULT_SEQUENCE.length
+  const standard = angles.length === 0 || (angles.length === DEFAULT_SEQUENCE.length && angles.every((a, i) => a === DEFAULT_SEQUENCE[i]))
+  return standard
+    ? `We’ll take ${n} photos of your face: looking straight at the camera, then turning a little to the left and to the right. It takes about a minute.`
+    : `We’ll take ${n} photos of your face from slightly different angles. It takes about a minute.`
+}
+
+/** The intro's tips, for your own face. */
+export const ENROL_TIPS: readonly string[] = [
+  'Good, even light on your face. Face a window or a lamp.',
+  'Only you in the frame.',
+  'No sunglasses, cap or mask.',
+]
+
+/** HR or an admin reset your face (status REVOKED): why it stopped working. */
+export const RESET_NOTE = 'Your face was reset, so face punch-in is off until you take new photos.'
+
+/** The consent asked before any photo leaves the browser, and what is kept (your own face). */
+export const CONSENT_TEXT = 'I agree to my face being used to mark my attendance.'
+export const PRIVACY_TEXT = 'The photos aren’t stored. Only an encrypted face pattern made from them is kept, and it’s used only to check it’s you at face punch-in.'
+
+/** The last screen, for your own face. */
+export const DONE_TEXT = 'You can now punch in with your face.'
 
 export async function openCamera(): Promise<MediaStream> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -150,14 +186,15 @@ export function cameraErrorText(err: unknown): string {
   }
 }
 
-/** Why the server didn't accept one photo (EnrollmentSampleResponse.rejectionCode). */
+/** Why the server didn't accept one photo (EnrollmentSampleResponse.rejectionCode). The phone app's words too. */
 export function sampleRejectText(r: Pick<SampleResponse, 'rejectionCode' | 'rejectionReason'>): string {
   switch (r.rejectionCode) {
     case 'FAIL_NO_FACE': return 'No face found in this photo. Keep the face inside the oval and take it again.'
     case 'FAIL_MULTIPLE_FACES': return 'More than one face is in this photo. Make sure only one person is in the frame.'
-    case 'FAIL_LOW_QUALITY': return 'This photo is too dark or blurry. Face a light, hold still and take it again.'
-    case 'FAIL_LIVENESS': return 'We couldn’t confirm a live face. Look at the camera, blink, and take it again.'
+    case 'FAIL_LOW_QUALITY': return 'This photo is too dark or blurry. Move a little closer, face a light, hold still and take it again.'
+    case 'FAIL_LIVENESS': return 'We couldn’t confirm a live face. Look straight at the camera and take it again. A printed photo or a screen won’t pass.'
     case 'FAIL_OTHER': return 'This photo couldn’t be checked. Take it again.'
+    case 'DUPLICATE_ANGLE': return 'This photo is already saved. Carry on with the next one.'
     default: return 'This photo wasn’t accepted. Take it again.'
   }
 }

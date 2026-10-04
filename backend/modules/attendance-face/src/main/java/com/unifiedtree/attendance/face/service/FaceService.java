@@ -18,6 +18,7 @@ import com.unifiedtree.attendance.face.dto.FaceDtos.VerifyRequest;
 import com.unifiedtree.attendance.face.dto.FaceDtos.VerifyResponse;
 import com.unifiedtree.attendance.face.worker.FaceWorkerClient;
 import com.unifiedtree.notifications.events.FaceEnrollmentEvent;
+import com.unifiedtree.notifications.events.FaceEnrollmentResetEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -718,9 +719,45 @@ public class FaceService {
      * {@link #requireLoginFor} first.
      */
     public void adminReset(UUID tenantId, UUID loginId, UUID actingAdminId, String reason) {
-        writer.adminReset(tenantId, loginId,
+        int reset = writer.adminReset(tenantId, loginId,
                 actingAdminId,
                 reason == null ? "manual admin reset" : reason);
+        // Tell the person, so their phone takes them to re-enrollment. Only when
+        // there was a face record to reset: someone who never enrolled has
+        // nothing to redo.
+        if (reset > 0) {
+            publishResetSafely(tenantId, loginId, actingAdminId, reason);
+        }
+    }
+
+    /**
+     * Publishes a FaceEnrollmentResetEvent addressed to the person's HR
+     * employee record, which is what notifications and phones are keyed by —
+     * not the login the face rows use (for anyone invited the two differ, and a
+     * notification under the login id never reaches them). Best-effort like the
+     * other face notifications: the reset has already happened either way.
+     */
+    private void publishResetSafely(UUID tenantId, UUID loginId, UUID actingAdminId, String reason) {
+        try {
+            UUID recipient = employeeIdForLogin(tenantId, loginId);
+            UUID resetBy = actingAdminId == null ? null : employeeIdForLogin(tenantId, actingAdminId);
+            eventPublisher.publishEvent(new FaceEnrollmentResetEvent(tenantId,
+                    // An account with no employee record gets its notifications under the account id.
+                    recipient != null ? recipient : loginId,
+                    resetBy,
+                    reason == null || reason.isBlank() ? null : reason.trim()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish FaceEnrollmentResetEvent for login={}: {}", loginId, ex.getMessage());
+        }
+    }
+
+    /** The HR employee record a login belongs to, or null when it has none. */
+    private UUID employeeIdForLogin(UUID tenantId, UUID loginId) {
+        List<UUID> ids = jdbc.queryForList("""
+            SELECT employee_id FROM auth.user_credentials
+             WHERE tenant_id = ? AND id = ? AND employee_id IS NOT NULL
+            """, UUID.class, tenantId, loginId);
+        return ids.isEmpty() ? null : ids.get(0);
     }
 
     // ---------------------------------------------------------------------

@@ -19,8 +19,9 @@ import { format } from 'date-fns'
 import { HrButton, HrDrawer } from '@/shared/components/hr'
 import { dashIcon } from '@/design/dc/icons'
 import {
-  ANGLE, DEFAULT_SEQUENCE, LIGHT_TEXT, WORKER_DOWN_TEXT, captureFrame, cameraErrorText, faceEnrollApi, faceErrorCode, faceErrorText,
-  faceStatusKey, lightProblem, openCamera, sampleRejectText, type CaptureAngle, type FaceTarget,
+  ANGLE, CONSENT_TEXT, DEFAULT_SEQUENCE, DONE_TEXT, ENROL_TIPS, LIGHT_TEXT, PRIVACY_TEXT, RESET_NOTE, WORKER_DOWN_TEXT, captureFrame,
+  cameraErrorText, enrolIntro, faceEnrollApi, faceErrorCode, faceErrorText, faceStatusKey, lightProblem, openCamera, sampleRejectText,
+  type CaptureAngle, type FaceTarget,
 } from './faceEnroll'
 
 type Step = 'intro' | 'camera' | 'review' | 'done'
@@ -35,10 +36,12 @@ const note = (tone: 'amber' | 'red' | 'green'): CSSProperties => ({
       : { background: 'var(--u-brs,#E8F3EE)', border: '1px solid var(--u-brl,#BFDFD1)', color: 'var(--u-brt,#0F6E56)' }),
 })
 
-export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnrolled }: {
+export function FaceEnrollDrawer({ target, reenroll, wasReset, enrolledAt, onClose, onEnrolled }: {
   target: FaceTarget
   /** A face is on record now; this replaces it. */
   reenroll: boolean
+  /** HR or an admin reset the face (status REVOKED): the intro says why it stopped working, as the phone app does. */
+  wasReset?: boolean
   enrolledAt?: string | null
   onClose: () => void
   onEnrolled?: () => void
@@ -171,7 +174,8 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
   }
 
   // ── view ──
-  const title = self ? (reenroll ? 'Re-enroll your face' : 'Enroll your face') : (reenroll ? `Re-enroll ${name}’s face` : `Enroll ${name}’s face`)
+  const again = reenroll || !!wasReset
+  const title = self ? (again ? 'Re-enroll your face' : 'Enroll your face') : (again ? `Re-enroll ${name}’s face` : `Enroll ${name}’s face`)
   const idx = angles.indexOf(current)
   const a = ANGLE[current]
   const refusedShots = angles.filter((x) => shots[x]?.state === 'rejected')
@@ -197,7 +201,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
     body = (
       <div style={{ display: 'grid', gap: 18 }}>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--u-ink2,#4A5A54)' }}>
-          We’ll take {angles.length} photos of {self ? 'your' : `${first}’s`} face: looking straight at the camera, then turning a little to the left and to the right. It takes about a minute.
+          {self ? enrolIntro(angles) : `We’ll take ${angles.length} photos of ${first}’s face: looking straight at the camera, then turning a little to the left and to the right. It takes about a minute.`}
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
           {angles.map((x, i) => (
@@ -209,7 +213,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
         </div>
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8, fontSize: 13.5, color: 'var(--u-ink2,#4A5A54)' }}>
           {(self
-            ? ['Good, even light on your face. Face a window or a lamp.', 'Only you in the frame.', 'No sunglasses, cap or mask.']
+            ? ENROL_TIPS
             : [`${first} sits in front of this computer’s camera, in good, even light.`, `Only ${first} in the frame.`, 'No sunglasses, cap or mask.']
           ).map((t) => (
             <li key={t} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -217,6 +221,9 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
             </li>
           ))}
         </ul>
+        {wasReset && !reenroll && (
+          <p style={note('amber')}>{self ? RESET_NOTE : `${first}’s face was reset, so face punch-in is off for them until new photos are taken.`}</p>
+        )}
         {reenroll && (
           <p style={note('amber')}>
             This replaces the face enrolled{enrolledAt ? ` on ${format(new Date(enrolledAt), 'd MMM yyyy')}` : ''}. The earlier one stops working once the new photos are sent.
@@ -311,10 +318,10 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
         <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px', border: `1px solid ${consent ? 'var(--u-brl,#BFDFD1)' : LINE}`, borderRadius: 12, background: consent ? 'var(--u-brs,#E8F3EE)' : 'var(--u-sf2,#F7F9F8)', cursor: 'pointer', fontSize: 14, lineHeight: 1.45, color: INK }}>
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} disabled={busy}
             style={{ flex: '0 0 auto', width: 18, height: 18, marginTop: 1, accentColor: GREEN, cursor: 'pointer' }} />
-          <span>{self ? 'I agree to my face being used to mark my attendance.' : `${name} agrees to their face being used to mark their attendance.`}</span>
+          <span>{self ? CONSENT_TEXT : `${name} agrees to their face being used to mark their attendance.`}</span>
         </label>
         <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: MUTED }}>
-          The photos aren’t stored. Only an encrypted face pattern made from them is kept, and it’s used only to check it’s {self ? 'you' : first} at face punch-in.
+          {self ? PRIVACY_TEXT : `The photos aren’t stored. Only an encrypted face pattern made from them is kept, and it’s used only to check it’s ${first} at face punch-in.`}
         </p>
         {progress && <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600, color: DEEP }}>{progress}</p>}
       </div>
@@ -330,9 +337,9 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
     body = (
       <div role="status" style={{ display: 'grid', justifyItems: 'center', gap: 12, padding: '36px 8px', textAlign: 'center' }}>
         <span aria-hidden="true" style={{ width: 64, height: 64, borderRadius: 99, display: 'grid', placeItems: 'center', background: 'var(--u-brs,#E8F3EE)', color: GREEN, border: '1px solid var(--u-brl,#BFDFD1)' }}>{dashIcon('check', 30)}</span>
-        <h4 style={{ margin: 0, fontFamily: "var(--u-font)", fontSize: 20, fontWeight: 700, color: INK }}>{reenroll ? 'Face re-enrolled' : 'Face enrolled'}</h4>
+        <h4 style={{ margin: 0, fontFamily: "var(--u-font)", fontSize: 20, fontWeight: 700, color: INK }}>{again ? 'Face re-enrolled' : 'Face enrolled'}</h4>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--u-ink2,#4A5A54)', maxWidth: 340 }}>
-          {self ? 'You can now punch in with your face.' : `${first} can now punch in with their face.`}
+          {self ? DONE_TEXT : `${first} can now punch in with their face.`}
         </p>
       </div>
     )

@@ -195,12 +195,13 @@ public class FaceWriter {
             """, tenantId, employeeId);
     }
 
+    /** @return how many enrollment records were reset: 0 when the person had none (nothing to tell them). */
     @Transactional
-    public void adminReset(UUID tenantId, UUID employeeId, UUID actingAdminId, String reason) {
+    public int adminReset(UUID tenantId, UUID employeeId, UUID actingAdminId, String reason) {
         // Revoke existing templates; the next enrollment-start call recreates the row.
         jdbc.update("UPDATE attendance.face_embedding_templates SET is_active = FALSE "
                   + "WHERE tenant_id = ? AND employee_id = ?", tenantId, employeeId);
-        jdbc.update("""
+        return jdbc.update("""
             UPDATE attendance.face_enrollments
                SET status = 'REVOKED',
                    revoked_at = now(),

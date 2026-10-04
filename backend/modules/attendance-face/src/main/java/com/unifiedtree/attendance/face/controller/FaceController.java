@@ -187,6 +187,8 @@ public class FaceController {
      * invited) gets 409 {@code FACE_NO_LOGIN:…} from
      * {@link FaceService#requireLoginFor}: nothing was reset and the web says so,
      * which is the whole point of this route existing next to the legacy one.
+     * A reset that cleared a face tells the person (bell and phone push); on the
+     * phone, tapping it opens face enrollment.
      */
     @PostMapping("/v1/attendance/face/admin/employees/{employeeId}/reset")
     @PreAuthorize("hasAuthority('attendance.face.admin.reset')")

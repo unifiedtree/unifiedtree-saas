@@ -111,6 +111,7 @@ function OpenWebPunch({ onClose, mode, onDone, required }: WebPunchDialogProps) 
       <FaceEnrollDrawer
         target={SELF}
         reenroll={face?.status === 'NEEDS_REENROLLMENT' || face?.status === 'LOCKED'}
+        wasReset={face?.status === 'REVOKED'}
         enrolledAt={face?.enrolledAt}
         onClose={() => setEnrolling(false)}
         onEnrolled={() => { setNeedsEnrol(false); setEnrolling(false); void status.refetch() }}

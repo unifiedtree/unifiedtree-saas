@@ -18,6 +18,8 @@ public enum AppNotificationType {
     LEAVE_CANCELLED,
     FACE_ENROLLMENT_COMPLETE,
     FACE_ENROLLMENT_FAILED,
+    /** HR or an admin reset the employee's face enrollment; face punch-in is off until they enroll again. */
+    FACE_ENROLLMENT_RESET,
     WFH_SUBMITTED,
     WFH_APPROVED,
     WFH_REJECTED,
