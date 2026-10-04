@@ -176,7 +176,7 @@ function RequisitionPanel({ id, onClose, suggestions, today }: { id?: string; on
                   <Select id="req-company" label="Company" full value={companyId} onChange={(e) => setCompanyId(e.target.value)}
                     options={companies.map((c) => ({ value: c.id, label: c.name }))} />
                 )}
-                <Input id="req-title" label="Job title" required full value={form.title} maxLength={200} placeholder="e.g. Senior Backend Engineer" error={titleError || undefined}
+                <Input id="req-title" label="Job title" full value={form.title} maxLength={200} placeholder="e.g. Senior Backend Engineer" error={titleError || undefined}
                   onChange={(e) => { setForm((f) => ({ ...f, title: e.target.value })); setTitleError('') }} />
                 <Input id="req-openings" label="Openings" type="number" min={1} value={form.openings} onChange={(e) => setForm((f) => ({ ...f, openings: e.target.value }))} />
                 <Select id="req-type" label="Type" value={form.employmentType} onChange={(e) => setForm((f) => ({ ...f, employmentType: e.target.value }))}

@@ -37,7 +37,7 @@ function EditTemplatePanel({ template, onClose }: { template: OnboardingTemplate
         <PanelButton size="lg" variant="primary" busy={update.isPending} disabled={!name.trim()} onClick={() => submit()}>Save changes</PanelButton></>}>
       <form id="tpl-edit" onSubmit={submit} noValidate>
         <FieldGrid columns={1}>
-          <Input id="tpl-edit-name" label="Template name" required value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+          <Input id="tpl-edit-name" label="Template name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
           <Textarea id="tpl-edit-desc" label="Description" rows={3} value={description} maxLength={2000} placeholder="Optional" onChange={(e) => setDescription(e.target.value)} />
           <Toggle checked={active} onChange={setActive} label="Active" description="Offered when starting onboarding." />
         </FieldGrid>
@@ -77,7 +77,7 @@ function AddTaskPanel({ templateId, nextSeq, onClose }: { templateId: string; ne
         <PanelButton size="lg" variant="primary" busy={create.isPending} onClick={() => submit()}>Add task</PanelButton></>}>
       <form id="tpl-task" onSubmit={submit} noValidate className="hi-stack">
         <FieldGrid columns={2}>
-          <Input id="task-title" label="Task" required full value={title} maxLength={200} placeholder="e.g. Complete IT setup" error={titleError || undefined}
+          <Input id="task-title" label="Task" full value={title} maxLength={200} placeholder="e.g. Complete IT setup" error={titleError || undefined}
             onChange={(e) => { setTitle(e.target.value); setTitleError('') }} />
           <Textarea id="task-desc" label="Description" full rows={2} value={description} maxLength={2000} placeholder="Optional" onChange={(e) => setDescription(e.target.value)} />
           <Select id="task-when" label="Due" value={when} onChange={(e) => setWhen(e.target.value as DueWhen)}
@@ -128,7 +128,7 @@ export const TemplateDetail: React.FC = () => {
     { key: 'owner', header: 'Owner role', render: (t) => (t.ownerRole ? roleLabel(t.ownerRole) : '—') },
     { key: 'required', header: 'Required', render: (t) => <StatusPill tone={t.required ? 'success' : 'neutral'}>{t.required ? 'Required' : 'Optional'}</StatusPill> },
     ...(canWrite ? [{
-      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right' as const, render: (t: OnboardingTask, i: number) => (
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right' as const, width: 290, render: (t: OnboardingTask, i: number) => (
         <CellActions>
           <Button size={30} variant="secondary" disabled={reorder.isPending || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${t.title} up`}>Move up</Button>
           <Button size={30} variant="secondary" disabled={reorder.isPending || i === tasks.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${t.title} down`}>Move down</Button>

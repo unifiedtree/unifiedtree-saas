@@ -342,7 +342,8 @@ try {
     const original = await (await loaded).json().catch(() => ({}))
     const head = page.locator('h3', { hasText: /^Hire details$/ })
     await head.waitFor({ timeout: 15000 })
-    const panel = head.locator('xpath=../..')
+    // The card the heading belongs to (a kit Section since P-HIRE; its Edit button sits next to the heading's row).
+    const panel = head.locator('xpath=ancestor::section[1]')
     const accepted = () => page.locator('dt', { hasText: /^Offer accepted$/ }).locator('xpath=following-sibling::dd[1]')
     const before = await textOf(accepted())
     await panel.getByRole('button', { name: 'Edit', exact: true }).click()

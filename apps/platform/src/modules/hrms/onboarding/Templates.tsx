@@ -43,7 +43,7 @@ function CreateTemplatePanel({ onClose }: { onClose: () => void }) {
           {companies.length > 1 && (
             <Select id="tpl-company" label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)} options={companies.map((c) => ({ value: c.id, label: c.name }))} />
           )}
-          <Input id="tpl-name" label="Template name" required value={name} maxLength={200} placeholder="e.g. Engineering onboarding" error={nameError || undefined}
+          <Input id="tpl-name" label="Template name" value={name} maxLength={200} placeholder="e.g. Engineering onboarding" error={nameError || undefined}
             onChange={(e) => { setName(e.target.value); setNameError('') }} />
           <Textarea id="tpl-desc" label="Description" rows={3} value={description} maxLength={2000} placeholder="Optional" onChange={(e) => setDescription(e.target.value)} />
         </FieldGrid>

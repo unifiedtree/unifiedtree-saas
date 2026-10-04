@@ -7,6 +7,8 @@
 .hi-copy { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--u-ink2, #4A5A54); }
 .hi-pills { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .hi-num { font-variant-numeric: tabular-nums; }
+/* A pill with a wrapping note under it, inside a table cell. */
+.hi-cellwrap { display: grid; justify-items: start; gap: 4px; min-width: 0; white-space: normal; }
 .hi-link { color: var(--u-brt, #0F6E56); font-weight: 500; text-decoration: none; }
 .hi-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 .hi-link:focus-visible { outline: none; border-radius: 4px; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
@@ -95,6 +97,8 @@
 .hi-history__sub { margin: 2px 0 0; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
 
 @media (max-width: 640px) {
+  /* Phone cards: a row's buttons wrap instead of running off the card. */
+  .hi-page .uk-table--cards .uk-cell-actions { flex-wrap: wrap; row-gap: 6px; }
   .hi-toolbar { padding: 0 16px 12px; }
   .hi-board { padding: 0 16px 16px; }
   .hi-filter__sel { min-width: 0; max-width: none; flex: 1 1 auto; }

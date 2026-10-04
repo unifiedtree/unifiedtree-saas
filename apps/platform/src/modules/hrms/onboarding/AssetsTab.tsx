@@ -194,11 +194,11 @@ function RegisterAssetPanel({ categories, onClose }: { categories: string[]; onC
       footer={<><PanelButton size="lg" onClick={onClose} disabled={create.isPending}>Cancel</PanelButton><PanelButton size="lg" variant="primary" busy={create.isPending} onClick={submit}>Register asset</PanelButton></>}>
       <form id="asset-create" onSubmit={(e) => { e.preventDefault(); void submit() }} noValidate>
         <FieldGrid columns={2}>
-          <Select id="asset-company" label="Company" required full value={companyId} placeholder="Choose a company" onChange={(e) => set('companyId')(e.target.value)}
+          <Select id="asset-company" label="Company" full value={companyId} placeholder="Choose a company" onChange={(e) => set('companyId')(e.target.value)}
             options={list.map((c) => ({ value: c.id, label: c.name }))} error={companies.isError ? 'Couldn’t load companies. Close the panel and try again.' : undefined} />
-          <Input id="asset-assetTag" label="Asset tag" required maxLength={80} placeholder="e.g. LAP-0042" value={form.assetTag} onChange={(e) => set('assetTag')(e.target.value)} />
-          <Input id="asset-assetType" label="Category" required maxLength={80} placeholder="e.g. Laptop" list="asset-category-options" value={form.assetType} onChange={(e) => set('assetType')(e.target.value)} />
-          <Input id="asset-assetName" label="Asset name" required maxLength={200} placeholder="e.g. ThinkPad T14" value={form.assetName} onChange={(e) => set('assetName')(e.target.value)} />
+          <Input id="asset-assetTag" label="Asset tag" maxLength={80} placeholder="e.g. LAP-0042" value={form.assetTag} onChange={(e) => set('assetTag')(e.target.value)} />
+          <Input id="asset-assetType" label="Category" maxLength={80} placeholder="e.g. Laptop" list="asset-category-options" value={form.assetType} onChange={(e) => set('assetType')(e.target.value)} />
+          <Input id="asset-assetName" label="Asset name" maxLength={200} placeholder="e.g. ThinkPad T14" value={form.assetName} onChange={(e) => set('assetName')(e.target.value)} />
           <Input id="asset-serialNo" label="Serial number" maxLength={120} placeholder="Optional" value={form.serialNo} onChange={(e) => set('serialNo')(e.target.value)} />
           <Textarea id="asset-cond" label="Condition notes" full rows={2} maxLength={4000} placeholder="Optional, e.g. new in box" value={form.conditionNotes} onChange={(e) => set('conditionNotes')(e.target.value)} />
         </FieldGrid>

@@ -118,26 +118,26 @@ export function ScheduleInterviewPanel({ candidate, interview, onClose }: {
       <form id="interview-form" onSubmit={submit} noValidate className="hi-stack">
         <FieldGrid columns={3}>
           {picking && (
-            <Select id="iv-candidate" label="Candidate" required full value={candidateId} error={errors.candidate}
+            <Select id="iv-candidate" label="Candidate" full value={candidateId} error={errors.candidate}
               placeholder={pool.isLoading ? 'Loading candidates…' : choices.length ? 'Choose a candidate' : 'No one in Screening or Interview'}
               hint="People in Screening or Interview can be interviewed."
               options={choices.map((c) => ({ value: c.id, label: `${c.fullName} · ${c.requisitionTitle || STAGE_LABEL[c.stage]}` }))}
               onChange={(e) => { setCandidateId(e.target.value); setErrors((x) => ({ ...x, candidate: undefined })) }} />
           )}
           <Input id="iv-title" label="Interview name" full value={title} maxLength={120} placeholder="e.g. Technical round" onChange={(e) => setTitle(e.target.value)} />
-          <DateInput id="iv-date" label="Date" required min={interview ? undefined : istTodayIso()} value={date} onChange={(e) => setDate(e.target.value)} format="short" />
-          <Input id="iv-time" label="Time (IST)" type="time" required value={time} onChange={(e) => setTime(e.target.value)} />
+          <DateInput id="iv-date" label="Date" min={interview ? undefined : istTodayIso()} value={date} onChange={(e) => setDate(e.target.value)} format="short" />
+          <Input id="iv-time" label="Time (IST)" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           <Select id="iv-dur" label="Duration" value={duration} onChange={(e) => setDuration(e.target.value)} options={durations.map((d) => ({ value: d, label: durationLabel(d) }))} />
         </FieldGrid>
         {interview?.started && <Callout tone="neutral">This interview has already started. Keep its date and time to change only the interviewers (for example to add the person who took it, so they can file a scorecard). A new time must be in the future.</Callout>}
         <FieldGrid columns={3}>
           <Select id="iv-mode" label="How" value={mode} onChange={(e) => { setMode(e.target.value as InterviewMode); setErrors((x) => ({ ...x, where: undefined })) }}
             options={(Object.keys(MODE_LABEL) as InterviewMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))} />
-          <Input id="iv-where" label={where.l} fieldClassName="hi-span2" value={location} maxLength={500} required={mode !== 'PHONE'} type={mode === 'VIDEO' ? 'url' : 'text'}
+          <Input id="iv-where" label={where.l} fieldClassName="hi-span2" value={location} maxLength={500} type={mode === 'VIDEO' ? 'url' : 'text'}
             placeholder={where.ph} hint={where.hint || undefined} error={errors.where} onChange={(e) => { setLocation(e.target.value); setErrors((x) => ({ ...x, where: undefined })) }} />
         </FieldGrid>
         <div className="hi-field-block">
-          <p className="hi-label">Interviewers</p>
+          {people.length > 0 && <p className="hi-label">Interviewers</p>}
           {people.length > 0 && (
             <div className="hi-chosen">
               {people.map((p) => (

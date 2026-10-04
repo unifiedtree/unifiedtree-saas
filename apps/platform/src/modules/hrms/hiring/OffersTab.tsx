@@ -61,12 +61,14 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
     { key: 'joining', header: 'Joining date', render: (o) => <span className="hi-num">{o.joiningDate ? weekdayDay(o.joiningDate, today) : '—'}</span> },
     {
       key: 'status', header: 'Status', render: (o) => (
-        <CellStack primary={<StatusPill tone={OFFER_TONE[o.status]}>{OFFER_LABEL[o.status]}</StatusPill>}
-          secondary={o.emailSubmittedAt ? `Submitted to ${o.emailRecipient ?? 'the candidate'} · ${stampOf(o.emailSubmittedAt)}` : undefined} />
+        <span className="hi-cellwrap">
+          <StatusPill tone={OFFER_TONE[o.status]}>{OFFER_LABEL[o.status]}</StatusPill>
+          {o.emailSubmittedAt && <span className="hi-small">{`Submitted to ${o.emailRecipient ?? 'the candidate'} · ${stampOf(o.emailSubmittedAt)}`}</span>}
+        </span>
       ),
     },
     {
-      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (o) => {
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', width: 380, render: (o) => {
         const next = OFFER_NEXT[o.status]
         return (
           <CellActions>
@@ -89,7 +91,7 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
       <Section title="Offers" body="flush" loading={query.isLoading} skeleton="table" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching}
         empty={!query.isLoading && !query.error && total === 0 ? { title: 'No offers yet. Create a draft to begin tracking an offer.', icon: 'fileText' } : undefined}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="offers" /> : undefined}>
-        <Table label="Offers" columns={columns} rows={offers} rowKey={(o) => o.id} mobile="cards" minWidth={760} />
+        <Table label="Offers" columns={columns} rows={offers} rowKey={(o) => o.id} mobile="cards" minWidth={1040} />
       </Section>
       {(creating || editing) && <OfferPanel offer={editing} onClose={() => { setEditing(null); onCreateDone() }} onSaved={() => setPage(0)} />}
       {emailing && <EmailOfferDialog offer={emailing} onClose={() => setEmailing(null)} />}
@@ -141,13 +143,13 @@ function OfferPanel({ offer, onClose, onSaved }: { offer: HiringOffer | null; on
         <PanelButton size="lg" variant="primary" busy={busy} disabled={!form.companyId} onClick={() => save()}>Save draft</PanelButton></>}>
       <form id="offer-form" onSubmit={save} noValidate className="hi-stack">
         <FieldGrid columns={2}>
-          <Select id="offer-company" label="Company" required full value={form.companyId} disabled={!!offer} placeholder="Select company"
+          <Select id="offer-company" label="Company" full value={form.companyId} disabled={!!offer} placeholder="Select company"
             options={(companies.data ?? []).map((c) => ({ value: c.id, label: c.name }))} onChange={(e) => set('companyId')(e.target.value)} />
-          <Input id="offer-name" label="Candidate name" required value={form.candidateName} maxLength={200} onChange={(e) => set('candidateName')(e.target.value)} />
+          <Input id="offer-name" label="Candidate name" value={form.candidateName} maxLength={200} onChange={(e) => set('candidateName')(e.target.value)} />
           <Input id="offer-email" label="Candidate email" type="email" value={form.candidateEmail} maxLength={254} placeholder="name@email.com"
             hint="Used by Send offer email." onChange={(e) => set('candidateEmail')(e.target.value)} />
-          <Input id="offer-role" label="Role" required value={form.roleTitle} maxLength={200} onChange={(e) => set('roleTitle')(e.target.value)} />
-          <Input id="offer-ctc" label="Annual offered CTC (INR)" required type="number" min={0} step="0.01" value={form.offeredCtc} onChange={(e) => set('offeredCtc')(e.target.value)} />
+          <Input id="offer-role" label="Role" value={form.roleTitle} maxLength={200} onChange={(e) => set('roleTitle')(e.target.value)} />
+          <Input id="offer-ctc" label="Annual offered CTC (INR)" type="number" min={0} step="0.01" value={form.offeredCtc} onChange={(e) => set('offeredCtc')(e.target.value)} />
           <DateInput id="offer-joining" label="Joining date" full value={form.joiningDate} onChange={(e) => set('joiningDate')(e.target.value)} clearable />
           <Textarea id="offer-terms" label="Offer terms (included in PDF)" aria-label="Offer terms" full rows={6} maxLength={20000} value={form.offerTerms}
             hint="Enter the approved candidate-facing terms. Internal notes are never included in the document." onChange={(e) => set('offerTerms')(e.target.value)} />
@@ -181,7 +183,7 @@ function EmailOfferDialog({ offer, onClose }: { offer: HiringOffer; onClose: () 
       footer={<><PanelButton onClick={onClose} disabled={email.isPending}>Cancel</PanelButton>
         <PanelButton variant="primary" busy={email.isPending} onClick={() => send()}>Send offer email</PanelButton></>}>
       <form onSubmit={send} noValidate className="hi-stack">
-        <Input id="offer-recipient" label="Candidate email" type="email" required maxLength={254} value={recipient} autoFocus
+        <Input id="offer-recipient" label="Candidate email" type="email" maxLength={254} value={recipient} autoFocus
           hint="The mail service accepting the message doesn’t confirm it reached the inbox." onChange={(e) => setRecipient(e.target.value)} />
         {email.isError && (
           <p role="alert" className="hi-copy" style={{ color: 'var(--u-danger-text, #B4302A)' }}>

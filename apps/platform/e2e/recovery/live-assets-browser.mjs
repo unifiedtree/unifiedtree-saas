@@ -20,10 +20,12 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL(url => !url.pathname.includes('login'), { timeout: 60000 })
   await page.goto(base + '/hrms/onboarding/instances?view=assets')
-  await page.getByRole('button', { name: 'Register asset' }).click()
+  // P-HIRE: the page's button reads "Register an asset" (design); the company is a plain select,
+  // filled in when there is only one company.
+  await page.getByRole('button', { name: 'Register an asset' }).click()
   let dialog = page.getByRole('dialog')
-  const pickCompany = dialog.locator('button').filter({ hasText: 'Choose a company' })
-  if (await pickCompany.count()) { await pickCompany.click(); await page.getByRole('option').first().click() }
+  const pickCompany = dialog.getByLabel('Company', { exact: true })
+  if ((await pickCompany.count()) && !(await pickCompany.inputValue())) await pickCompany.selectOption({ index: 1 })
   await dialog.getByLabel('Asset tag', { exact: true }).fill(tag)
   await dialog.getByLabel('Category', { exact: true }).fill('Laptop')
   await dialog.getByLabel('Asset name', { exact: true }).fill('UI verification laptop')
@@ -31,7 +33,7 @@ try {
   const row = page.getByRole('row').filter({ hasText: tag })
   await expect(row).toBeVisible()
   await expect(row.getByText('In store', { exact: true })).toBeVisible()
-  await row.getByRole('button', { name: 'Assign', exact: true }).click()
+  await row.getByRole('button', { name: 'Give to', exact: true }).click()
   dialog = page.getByRole('dialog')
   await dialog.getByLabel('Find employee').fill('admin@unifiedtree.demo')
   await dialog.getByRole('button', { name: /Admin User/ }).click()

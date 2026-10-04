@@ -1,8 +1,7 @@
 // Hiring › Pipeline (P-HIRE; prototype PgTalent h-pipe tab 0).
 //   - Recruitment: open, on-hold and closed requisitions, positions to fill and candidates
 //     this quarter, counted on the server (BW-65).
-//   - Pipeline by stage: candidates on open roles by their stage (BW-65); a bar filters the
-//     candidates below to that stage.
+//   - Pipeline by stage: candidates on open roles by their stage (BW-65).
 //   - Conversion and time to hire, from the stage history (BW-66): "—" until there is any.
 //   - Candidates: a table by default, or the board (a column per stage, cards you drag
 //     between stages). ?role=<requisition id | all> and ?stage=<STAGE> filter it (the
@@ -172,7 +171,7 @@ export function PipelineTab({ adding, onAddDone }: { adding: boolean; onAddDone:
     <>
       <RecruitmentFigures requisitions={requisitions} requisitionsLoading={options.isLoading} />
       <SectionGrid>
-        <SectionCell width="half"><StageBars onPick={(s) => setParam('stage', s)} /></SectionCell>
+        <SectionCell width="half"><StageBars /></SectionCell>
         <SectionCell width="half"><Conversion /></SectionCell>
       </SectionGrid>
       <Section title="Candidates" body="flush" error={board.error} onRetry={() => board.refetch()} retrying={board.isFetching}
@@ -225,11 +224,11 @@ function RecruitmentFigures({ requisitions, requisitionsLoading }: { requisition
   )
 }
 
-/** Candidates on open roles by their current stage (BW-65); a bar filters the candidates to its stage. */
-function StageBars({ onPick }: { onPick: (stage: CandidateStage) => void }) {
+/** Candidates on open roles by their current stage (BW-65). */
+function StageBars() {
   const q = useHiringSummary()
   const counts = new Map((q.data?.openRoleStages ?? []).map((s) => [s.stage, s.count]))
-  const items = FUNNEL.map((s) => ({ key: s, label: STAGE_LABEL[s], value: counts.get(s) ?? 0, amount: counts.get(s) ?? 0, title: `Show candidates in ${STAGE_LABEL[s]}`, onClick: () => onPick(s) }))
+  const items = FUNNEL.map((s) => ({ key: s, label: STAGE_LABEL[s], value: counts.get(s) ?? 0, amount: counts.get(s) ?? 0 }))
   const none = items.every((i) => !i.amount)
   return (
     <Section title="Pipeline by stage" sub="Every open role" loading={q.isLoading} skeleton="list" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching}
@@ -354,11 +353,11 @@ function AddCandidatePanel({ requisitions, preferred, sources, onClose }: {
         <PanelButton size="lg" variant="primary" busy={add.isPending} onClick={submit}>Add candidate</PanelButton></>}>
       <form id="candidate-form" onSubmit={(e) => { e.preventDefault(); void submit() }} noValidate>
         <FieldGrid columns={2}>
-          <Select id="cand-role" label="Role" required full value={requisitionId} error={errors.role}
+          <Select id="cand-role" label="Role" full value={requisitionId} error={errors.role}
             placeholder={open.length ? 'Choose a role' : 'No open requisitions yet'}
             options={open.map((r) => ({ value: r.id, label: `${r.title} · ${REQUISITION_LABEL[r.status]}` }))}
             onChange={(e) => { setRequisitionId(e.target.value); setErrors((x) => ({ ...x, role: undefined })) }} />
-          <Input id="cand-name" label="Full name" required full value={form.fullName} maxLength={200} placeholder="e.g. Priya Sharma" error={errors.fullName}
+          <Input id="cand-name" label="Full name" full value={form.fullName} maxLength={200} placeholder="e.g. Priya Sharma" error={errors.fullName}
             onChange={(e) => { setForm((f) => ({ ...f, fullName: e.target.value })); setErrors((x) => ({ ...x, fullName: undefined })) }} />
           <Input id="cand-email" label="Email" type="email" value={form.email} maxLength={254} placeholder="name@email.com"
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
