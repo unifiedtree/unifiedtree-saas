@@ -51,8 +51,9 @@ public class CanonicalAuthController {
      * page, which is correct.
      */
     private static final String RT_COOKIE_PREFIX = "ut_rt_";
-    /** Matches the refresh-token TTL in JwtService (7 days). */
-    private static final int RT_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+    /** A browser session's life without use; browser refresh tokens are issued with the same life. */
+    private static final int RT_COOKIE_MAX_AGE_SECONDS =
+            (int) com.unifiedtree.auth.session.SessionDevice.BROWSER_SESSION_TTL.toSeconds();
 
     private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
             new com.fasterxml.jackson.databind.ObjectMapper()
@@ -471,8 +472,8 @@ public class CanonicalAuthController {
      * re-prompt the login screen — terrible Play-Store experience.
      */
     @PostMapping("/refresh")
-    public LoginResponse refresh(HttpServletRequest httpReq,
-                                 HttpServletResponse res) {
+    public org.springframework.http.ResponseEntity<LoginResponse> refresh(HttpServletRequest httpReq,
+                                                                          HttpServletResponse res) {
         // Two callers, two transports:
         //   mobile — sends the token in the JSON body (no cookie jar)
         //   web    — sends nothing; the httpOnly cookie rides along, which is
@@ -536,7 +537,7 @@ public class CanonicalAuthController {
                 // above always described the correct behaviour, the code just
                 // did not implement it.)
                 //
-                // Failing here is right: the caller gets REFRESH_MISSING and
+                // Failing here is right: the caller gets "no session" (204) and
                 // is sent to this workspace's own login page.
                 if (log.isDebugEnabled()) {
                     log.debug("REFRESH_NO_COOKIE_FOR_TENANT tenant={} — refusing cross-tenant fallback", tenantId);
@@ -560,8 +561,14 @@ public class CanonicalAuthController {
         }
 
         if (token == null || token.isBlank()) {
-            throw new com.hrms.core.exception.BusinessRuleException(
-                    "No refresh token supplied", "REFRESH_MISSING");
+            // Nothing was presented at all (no body token, no cookie for this
+            // workspace): the browser's boot-time check on a tab that isn't
+            // signed in. That is the ordinary signed-out case, not an error, so
+            // answer 204 with no session. It used to be 422 REFRESH_MISSING,
+            // which showed as a failed request in every visitor's console. Every
+            // client reads "no access token" as signed out. A token that WAS
+            // presented and is dead still fails below (and its cookie is dropped).
+            return org.springframework.http.ResponseEntity.noContent().build();
         }
 
         LoginResponse out;
@@ -577,7 +584,7 @@ public class CanonicalAuthController {
         // issued. The cookie must be rewritten or the next reload would send a
         // token that no longer exists and log the user out.
         writeRefreshCookie(res, tenantId, out.refreshToken());
-        return out;
+        return org.springframework.http.ResponseEntity.ok(out);
     }
 
     /**

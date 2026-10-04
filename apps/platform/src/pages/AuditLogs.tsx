@@ -110,7 +110,7 @@ export const AuditLogs: React.FC = () => {
                             <div className="text-xs text-text-tertiary">{formatDistanceToNow(new Date(row.occurredAt), { addSuffix: true })}</div>
                           </td>
                           <td className="text-text-primary">{actorOf(row)}{row.actorName && row.actorEmail && <div className="text-xs text-text-tertiary">{row.actorEmail}</div>}</td>
-                          <td><HrStatusPill tone={actionTone(row.action)}>{words(row.action)}</HrStatusPill></td>
+                          <td><HrStatusPill tone={actionTone(row.action)}>{words(row.action)}</HrStatusPill>{row.summary && <div className="mt-1 max-w-[320px] truncate text-xs text-text-tertiary" title={row.summary}>{row.summary}</div>}</td>
                           <td className="hidden md:table-cell text-text-secondary">{row.resourceType ? words(row.resourceType) : '—'}{row.resourceName && <div className="text-xs text-text-tertiary">{row.resourceName}</div>}</td>
                           <td className="hidden lg:table-cell"><span className="hr-mono text-xs">{row.ip ?? '—'}</span></td>
                           <td className="text-right"><HrButton size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(row) }}>{row.diff ? 'What changed' : 'Details'}</HrButton></td>
@@ -137,6 +137,7 @@ function EventDetail({ event }: { event: AuditEventDto }) {
         { k: 'When', v: new Date(event.occurredAt).toLocaleString('en-IN') },
         { k: 'Who', v: [event.actorName, event.actorEmail].filter(Boolean).join(' · ') || (event.actorUserId ? 'A user' : 'System') },
         { k: 'Action', v: <HrStatusPill tone={actionTone(event.action)}>{words(event.action)}</HrStatusPill> },
+        ...(event.summary ? [{ k: 'What happened', v: event.summary }] : []),
         { k: 'Resource', v: event.resourceType ? words(event.resourceType) : '—' },
         ...(event.resourceName ? [{ k: 'Record', v: event.resourceName }] : []),
         { k: 'IP address', v: event.ip ?? '—' },

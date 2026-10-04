@@ -46,6 +46,7 @@ public class AuditController {
             @RequestParam(required = false) String resource,
             @RequestParam(required = false) String resourceId,
             @RequestParam(required = false) String action,
+            @RequestParam(required = false) List<String> exclude,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "0") int page,
@@ -74,14 +75,16 @@ public class AuditController {
                 null,
                 resource,
                 entityId,
+                // Filtered in the query, so the page and the total only count matching
+                // events (filtering the page afterwards left short pages and a wrong total).
+                action,
+                exclude,
                 fromInstant,
                 toInstant,
                 pageable
         );
 
-        List<AuditEvent> events = result.getContent().stream()
-                .filter(e -> action == null || action.equalsIgnoreCase(e.getAction()))
-                .toList();
+        List<AuditEvent> events = result.getContent();
         // Events store only the actor's user id; resolve names/emails once per
         // page so the feed says who did it instead of printing a raw UUID.
         java.util.Map<UUID, String[]> actors = actorDetails(events.stream()

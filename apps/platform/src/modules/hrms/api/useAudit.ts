@@ -17,6 +17,8 @@ export interface AuditEventDto {
   ip?: string | null
   userAgent?: string | null
   traceId?: string | null
+  /** One line on what happened ("Signed in on Chrome on Windows"), when the writer gave one. */
+  summary?: string | null
   /** The record's display name (an employee's name, a payroll month…), when the server can resolve it. */
   resourceName?: string | null
   /** The app route that opens the record, when it has one. */

@@ -88,12 +88,24 @@ public class LeaveController {
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
         UUID approverId = resolveApprover(employee);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(leaveService.applyLeave(
-                        employeeId,
-                        companyId != null ? companyId : employee.getCompanyId(),
-                        request,
-                        approverId));
+        LeaveRequestResponse created = leaveService.applyLeave(
+                employeeId,
+                companyId != null ? companyId : employee.getCompanyId(),
+                request,
+                approverId);
+        // Saved: record it in the audit log (best effort, never fails the request).
+        if (auditService != null) {
+            try {
+                auditService.record("leave", "LEAVE_APPLIED", "LEAVE_REQUEST", created.id(),
+                        "Applied for %s, %s to %s (%s day%s)".formatted(
+                                created.leaveTypeName() != null ? created.leaveTypeName() : "leave",
+                                created.startDate(), created.endDate(), days(created.totalDays()),
+                                created.totalDays() == 1 ? "" : "s"));
+            } catch (Exception e) {
+                // Audit is best effort (AuditService also swallows its own write errors).
+            }
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     /**

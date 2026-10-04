@@ -14,6 +14,16 @@ public final class SessionDevice {
 
     private SessionDevice() {}
 
+    /**
+     * How long a BROWSER session lasts without use. The web keeps its refresh
+     * token in a cookie that lives this long (rewritten on every refresh), so
+     * a browser idle for longer is signed out whatever the server-side token
+     * life is (90 days in production, for the mobile app). Browser sessions
+     * are issued with this life too, so Settings -> Security never lists a
+     * browser session that can no longer be used.
+     */
+    public static final java.time.Duration BROWSER_SESSION_TTL = java.time.Duration.ofDays(7);
+
     public record ClientInfo(String userAgent, String ipAddress) {}
 
     /** The current HTTP request's user agent and IP, or nulls off a request thread. */

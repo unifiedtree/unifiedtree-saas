@@ -237,7 +237,7 @@ const SessionsSection: React.FC<{ show: Show }> = ({ show }) => {
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
                 <HrButton variant="ghost" onClick={signOutOthers} disabled={others === 0 || a.revokeOthers.isPending}>{a.revokeOthers.isPending ? 'Signing out…' : 'Sign out all other sessions'}</HrButton>
               </div>
-              <SettingsNote>A session is one browser or phone where you’re signed in. It ends after 7 days without use. If you don’t recognise one, sign it out and change your password.</SettingsNote>
+              <SettingsNote>A session is one browser or phone where you’re signed in. In a browser it ends after 7 days without use. In the mobile app it lasts much longer, so leave or a phone left in a drawer doesn’t sign you out; it ends when you sign out there or sign it out here. If you don’t recognise one, sign it out and change your password.</SettingsNote>
             </>
           )}
     </SettingsSection>
