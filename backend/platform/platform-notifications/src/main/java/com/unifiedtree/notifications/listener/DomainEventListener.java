@@ -6,6 +6,7 @@ import com.unifiedtree.notifications.events.CorrectionDecidedEvent;
 import com.unifiedtree.notifications.events.CorrectionSubmittedEvent;
 import com.unifiedtree.notifications.events.EmployeeWelcomeEvent;
 import com.unifiedtree.notifications.events.FaceEnrollmentEvent;
+import com.unifiedtree.notifications.events.FaceEnrollmentResetEvent;
 import com.unifiedtree.notifications.events.LeaveDecidedEvent;
 import com.unifiedtree.notifications.events.LeaveRequestCancelledEvent;
 import com.unifiedtree.notifications.events.LeaveRequestSubmittedEvent;
@@ -76,6 +77,8 @@ public class DomainEventListener {
     private static final String ROUTE_LEAVE_HISTORY = "/leave-history";
     private static final String ROUTE_MY_WFH = "/wfh-apply";
     private static final String ROUTE_MY_CORRECTIONS = "/my-corrections";
+    // The app's face enrollment screen; reason=reset makes it say why the old face stopped working.
+    static final String ROUTE_FACE_REENROL = "/face-enroll?reason=reset";
 
     // Seeded system role ids (V004, tenant_id NULL) — mirror ApproverFallbackResolver
     // so a correction with no reporting manager still reaches a real person.
@@ -451,6 +454,32 @@ public class DomainEventListener {
                     "reason", firstOrElse(e.reason(), "Please ask your manager to reset your face enrolment.")), data);
         } catch (Exception ex) {
             log.warn("Failed to publish FACE notification for {}: {}",
+                    e.employeeId(), ex.getMessage());
+        }
+    }
+
+    /**
+     * HR or an admin reset someone's face: tell them, on the bell and the phone.
+     * Tapping it on the phone opens face enrollment, which says the old face was
+     * reset. Not said "by" anyone when they reset their own, or when the name
+     * can't be read.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onFaceEnrollmentReset(FaceEnrollmentResetEvent e) {
+        if (e.employeeId() == null) return;
+        try {
+            String by = e.resetByEmployeeId() == null || e.resetByEmployeeId().equals(e.employeeId())
+                    ? "" : blankToEmpty(resolveEmployeeName(e.resetByEmployeeId(), e.tenantId()));
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.FACE_ENROLLMENT_RESET.name());
+            data.put("route", ROUTE_FACE_REENROL);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "attendance.face_reset", vars(
+                    "resetBy", by,
+                    "resetByText", by.isEmpty() ? "" : " by " + by,
+                    "reason", blankToEmpty(e.reason()),
+                    "reasonText", reasonText(e.reason())), data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish FACE_ENROLLMENT_RESET notification for {}: {}",
                     e.employeeId(), ex.getMessage());
         }
     }

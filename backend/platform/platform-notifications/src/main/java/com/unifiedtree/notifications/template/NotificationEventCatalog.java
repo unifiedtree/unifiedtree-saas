@@ -220,6 +220,12 @@ public final class NotificationEventCatalog {
                 "Sent to the employee when their face enrolment fails.",
                 "Face enrolment failed", "{{reason}}",
                 ph("reason", "Why it failed, or a request to ask their manager to reset the enrolment")));
+        add(inApp("attendance.face_reset", AppNotificationType.FACE_ENROLLMENT_RESET, "Attendance", "Face enrolment reset", "Employee",
+                "Sent to the employee when HR or an admin resets their face enrolment. Face punch-in is off until they enrol again; on the phone, tapping it opens face enrolment.",
+                "Enrol your face again", "Your face enrolment was reset{{resetByText}}, so face punch-in is off until you enrol again. It takes about a minute.{{reasonText}}",
+                ph("resetBy", "Who reset it, for example Priya Rao (empty when unknown)"),
+                ph("resetByText", "\" by Priya Rao\", or nothing when it isn't known who reset it"),
+                ph("reason", "Why it was reset, when a reason was given (otherwise empty)"), REASON_TEXT));
         add(inApp("attendance.status_changed", AppNotificationType.ATTENDANCE_STATUS_CHANGED, "Attendance", "Attendance status changed", "Employee",
                 "Sent to the employee when a reviewer changes or excuses a day's attendance status, or confirms or rejects their face punch.",
                 "Attendance updated", "{{message}}{{reasonText}}",

@@ -16,7 +16,7 @@ const CATALOG: Record<string, string> = {
   LEAVE_ENCASHMENT_SUBMITTED: 'Leave', LEAVE_ENCASHMENT_APPROVED: 'Leave', LEAVE_ENCASHMENT_REJECTED: 'Leave',
   WFH_SUBMITTED: 'Work from home', WFH_APPROVED: 'Work from home', WFH_REJECTED: 'Work from home', WFH_CANCELLED: 'Work from home',
   CORRECTION_SUBMITTED: 'Attendance', CORRECTION_APPROVED: 'Attendance', CORRECTION_REJECTED: 'Attendance',
-  OVERTIME_REQUESTED: 'Attendance', OVERTIME_APPROVED: 'Attendance', OVERTIME_REJECTED: 'Attendance', FACE_ENROLLMENT_COMPLETE: 'Attendance', FACE_ENROLLMENT_FAILED: 'Attendance',
+  OVERTIME_REQUESTED: 'Attendance', OVERTIME_APPROVED: 'Attendance', OVERTIME_REJECTED: 'Attendance', FACE_ENROLLMENT_COMPLETE: 'Attendance', FACE_ENROLLMENT_FAILED: 'Attendance', FACE_ENROLLMENT_RESET: 'Attendance',
   ATTENDANCE_STATUS_CHANGED: 'Attendance', CHECKIN_REMINDER: 'Attendance', TIMESHEET_SUBMITTED: 'Attendance', TIMESHEET_DECIDED: 'Attendance',
   SHIFT_CHANGE_SUBMITTED: 'Shifts', SHIFT_CHANGE_APPROVED: 'Shifts', SHIFT_CHANGE_REJECTED: 'Shifts',
   EXPENSE_SUBMITTED: 'Expenses and advances', EXPENSE_APPROVED: 'Expenses and advances', EXPENSE_REJECTED: 'Expenses and advances',
@@ -65,6 +65,8 @@ describe('notification routes', () => {
     expect(webRouteFor('OVERTIME_REQUESTED', null)).toBe('/hrms/shifts?tab=overtime')
     expect(webRouteFor('DOCUMENT_UPLOADED', { route: '/documents/pending' })).toBe('/hrms/documents/pending')
     expect(webRouteFor('DOCUMENT_VERIFIED', { route: '/profile' })).toBe('/hrms/documents?view=my')
+    // The phone opens re-enrollment; the web opens the profile's Face enrollment section.
+    expect(webRouteFor('FACE_ENROLLMENT_RESET', { route: '/face-enroll?reason=reset' })).toBe('/profile#st-face')
   })
   it('routes the redesign types', () => {
     expect(webRouteFor('DECISION_UNDONE', { route: '/wfh-apply', kind: 'WFH' })).toBe('/me/wfh')

@@ -15,7 +15,7 @@ import { PAGE_REGISTRY } from '@/shared/navigation/pageRegistry'
 /** Server enum; must stay in lock-step with AppNotificationType. */
 export const NOTIFICATION_TYPES = [
   'LEAVE_SUBMITTED', 'LEAVE_APPROVED', 'LEAVE_REJECTED', 'LEAVE_CANCELLED',
-  'FACE_ENROLLMENT_COMPLETE', 'FACE_ENROLLMENT_FAILED',
+  'FACE_ENROLLMENT_COMPLETE', 'FACE_ENROLLMENT_FAILED', 'FACE_ENROLLMENT_RESET',
   'WFH_SUBMITTED', 'WFH_APPROVED', 'WFH_REJECTED', 'WFH_CANCELLED',
   'CORRECTION_SUBMITTED', 'CORRECTION_APPROVED', 'CORRECTION_REJECTED',
   'SHIFT_CHANGE_SUBMITTED', 'SHIFT_CHANGE_APPROVED', 'SHIFT_CHANGE_REJECTED',
@@ -168,6 +168,8 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
     case 'SHIFT_CHANGE_SUBMITTED': return '/hrms/shifts'
     // Face enrollment happens in the mobile app; Home is the closest web page.
     case 'FACE_ENROLLMENT_COMPLETE': case 'FACE_ENROLLMENT_FAILED': return '/me'
+    // HR reset your face: your profile's Face enrollment, where you can enroll it again.
+    case 'FACE_ENROLLMENT_RESET': return '/profile#st-face'
     // Expenses and advances
     case 'EXPENSE_SUBMITTED': return '/hrms/expenses?tab=approvals'
     case 'EXPENSE_APPROVED': case 'EXPENSE_REJECTED': case 'EXPENSE_CLAIM_RAISED_FOR_YOU': return '/hrms/expenses?tab=my'
@@ -215,7 +217,7 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
 export function severityFor(type: string): 'success' | 'warning' | 'error' | 'info' {
   if (type.endsWith('_APPROVED') || type === 'FACE_ENROLLMENT_COMPLETE' || type === 'WELCOME') return 'success'
   if (type.endsWith('_REJECTED') || type === 'FACE_ENROLLMENT_FAILED' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED') return 'error'
-  if (type.endsWith('_SUBMITTED') || type === 'TRIAL_ENDING_SOON' || type === 'BILLING_OVER_CAP') return 'warning'
+  if (type.endsWith('_SUBMITTED') || type === 'TRIAL_ENDING_SOON' || type === 'BILLING_OVER_CAP' || type === 'FACE_ENROLLMENT_RESET') return 'warning'
   return 'info'
 }
 

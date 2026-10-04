@@ -8,8 +8,10 @@ import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStatus;
 import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStatusResponse;
 import com.unifiedtree.attendance.face.dto.FaceDtos.PersonEnrollmentStatusResponse;
 import com.unifiedtree.attendance.face.worker.FaceWorkerClient;
+import com.unifiedtree.notifications.events.FaceEnrollmentResetEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -296,5 +298,91 @@ class FaceAdminEnrollmentTest {
                     assertThat(rse.getReason()).startsWith("FACE_NO_LOGIN:");
                 });
         verify(writer, never()).adminReset(any(), any(), any(), any());
+    }
+
+    // ── telling the person their face was reset ──────────────────────────────
+    // The phone opens re-enrollment from this notification. Notifications and
+    // phones are keyed by the HR employee record, face rows by the login, so
+    // the event must name the record: addressed to the login, an invited
+    // employee would never see it.
+
+    private static final UUID HR_EMPLOYEE = UUID.fromString("44444444-4444-4444-4444-444444444444");
+
+    private FaceService withEvents(ApplicationEventPublisher events) {
+        return new FaceService(jdbc, writer, mock(FaceWorkerClient.class), mock(EmbeddingCipher.class),
+                events, true, 0.75, 0.07, 0.05, 2, 0.55, true, 0.35, 8, 0, "sface", "sface-1.0");
+    }
+
+    /** The employee record a login belongs to (null: none). Stub after {@link #logins}, which also matches. */
+    private void employeeOf(UUID login, UUID employee) {
+        when(jdbc.queryForList(contains("SELECT employee_id FROM auth.user_credentials"), eq(UUID.class), eq(TENANT), eq(login)))
+                .thenReturn(employee == null ? List.of() : List.of(employee));
+    }
+
+    private static FaceEnrollmentResetEvent published(ApplicationEventPublisher events) {
+        ArgumentCaptor<Object> sent = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(sent.capture());
+        assertThat(sent.getValue()).isInstanceOf(FaceEnrollmentResetEvent.class);
+        return (FaceEnrollmentResetEvent) sent.getValue();
+    }
+
+    @Test
+    void aResetTellsThePersonOnTheirEmployeeRecordNotTheirLogin() {
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        logins(LOGIN);
+        employeeOf(LOGIN, EMPLOYEE);
+        employeeOf(HR, HR_EMPLOYEE);
+        when(writer.adminReset(TENANT, LOGIN, HR, "changed appearance")).thenReturn(1);
+
+        assertThat(new FaceController(withEvents(events)).adminResetByEmployee(EMPLOYEE, "changed appearance", hrJwt())
+                .getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(published(events)).isEqualTo(new FaceEnrollmentResetEvent(TENANT, EMPLOYEE, HR_EMPLOYEE, "changed appearance"));
+    }
+
+    @Test
+    void theOldLoginKeyedResetAlsoTellsTheEmployeeRecord() {
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        employeeOf(LOGIN, EMPLOYEE);
+        employeeOf(HR, null);
+        when(writer.adminReset(TENANT, LOGIN, HR, "manual admin reset")).thenReturn(1);
+
+        new FaceController(withEvents(events)).adminReset(LOGIN, null, hrJwt());
+        // No reason given: none is shown (the stored "manual admin reset" is not a reason anyone typed).
+        assertThat(published(events)).isEqualTo(new FaceEnrollmentResetEvent(TENANT, EMPLOYEE, null, null));
+    }
+
+    @Test
+    void anAccountWithNoEmployeeRecordIsToldUnderItsAccountId() {
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        employeeOf(LOGIN, null);
+        employeeOf(HR, HR_EMPLOYEE);
+        when(writer.adminReset(TENANT, LOGIN, HR, "  ")).thenReturn(1);
+
+        withEvents(events).adminReset(TENANT, LOGIN, HR, "  ");
+        assertThat(published(events)).isEqualTo(new FaceEnrollmentResetEvent(TENANT, LOGIN, HR_EMPLOYEE, null));
+    }
+
+    @Test
+    void nobodyIsToldWhenThereWasNoFaceToReset() {
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        logins(LOGIN);
+        when(writer.adminReset(TENANT, LOGIN, HR, "manual admin reset")).thenReturn(0);
+
+        new FaceController(withEvents(events)).adminResetByEmployee(EMPLOYEE, null, hrJwt());
+        verify(writer).adminReset(TENANT, LOGIN, HR, "manual admin reset");
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void aFailedNotificationNeverFailsTheReset() {
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        logins(LOGIN);
+        employeeOf(LOGIN, EMPLOYEE);
+        when(writer.adminReset(TENANT, LOGIN, HR, "manual admin reset")).thenReturn(1);
+        doThrow(new RuntimeException("listener down")).when(events).publishEvent(any(Object.class));
+
+        assertThat(new FaceController(withEvents(events)).adminResetByEmployee(EMPLOYEE, null, hrJwt())
+                .getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(writer).adminReset(TENANT, LOGIN, HR, "manual admin reset");
     }
 }

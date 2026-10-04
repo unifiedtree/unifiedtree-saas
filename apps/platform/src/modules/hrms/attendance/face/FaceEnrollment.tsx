@@ -27,7 +27,7 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
   const target = { kind: 'self' } as const
   const q = useFaceStatus(target, employeeLinked)
   // What was on record when the drawer opened (the status refetches once it's done).
-  const [open, setOpen] = useState<{ reenroll: boolean; enrolledAt?: string | null } | null>(null)
+  const [open, setOpen] = useState<{ reenroll: boolean; wasReset: boolean; enrolledAt?: string | null } | null>(null)
   // A lock with a time: show Re-enroll once that time comes, without a reload.
   const [, setTick] = useState(0)
   const unlocksAt = q.data?.status === 'LOCKED' ? q.data.unlocksAt ?? null : null
@@ -61,7 +61,7 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
               <span style={{ fontSize: 13.5, color: 'var(--u-ink2,#4A5A54)', lineHeight: 1.45 }}>{d.detail}</span>
             </div>
             {d.canEnroll && (
-              <HrButton variant={d.enrolled ? 'ghost' : 'primary'} onClick={() => setOpen({ reenroll: d.enrolled, enrolledAt: q.data?.enrolledAt })}>
+              <HrButton variant={d.enrolled ? 'ghost' : 'primary'} onClick={() => setOpen({ reenroll: d.enrolled, wasReset: q.data?.status === 'REVOKED', enrolledAt: q.data?.enrolledAt })}>
                 {d.enrolled ? 'Re-enroll' : 'Enroll my face'}
               </HrButton>
             )}
@@ -70,7 +70,7 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
         </>
       )}
       {open && (
-        <FaceEnrollDrawer target={target} reenroll={open.reenroll} enrolledAt={open.enrolledAt}
+        <FaceEnrollDrawer target={target} reenroll={open.reenroll} wasReset={open.wasReset} enrolledAt={open.enrolledAt}
           onClose={() => setOpen(null)} onEnrolled={() => void q.refetch()} />
       )}
     </SettingsSection>
