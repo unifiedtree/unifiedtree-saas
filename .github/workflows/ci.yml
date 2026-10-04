@@ -34,6 +34,9 @@ jobs:
               - 'pnpm-lock.yaml'
             backend:
               - 'backend/**'
+              # Without this, a change to the test settings below skips the very
+              # job it changes, and the run reports success having tested nothing.
+              - '.github/workflows/ci.yml'
 
   frontend-lint-typecheck:
     needs: changes
