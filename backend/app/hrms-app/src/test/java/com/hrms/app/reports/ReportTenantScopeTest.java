@@ -153,6 +153,45 @@ class ReportTenantScopeTest {
         assertTenantScoped(perDay.getValue(), perDayArgs.getValue());
     }
 
+    /**
+     * Audit, 5 Oct: the attendance summary, the attendance tile and the leave
+     * balance report counted ACTIVE only, so people on probation or notice
+     * were missing (10 of 11 in demo-hrms). They now count everyone still
+     * employed, the same people Leave › All balances lists.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void attendanceAndLeaveReportsCountProbationAndNoticeNotJustActive() {
+        when(jdbc.queryForList(anyString(), eq(UUID.class), any(Object[].class))).thenReturn(List.of(UUID.randomUUID()));
+        reports.attendanceSummaryReport(CO, D.minusDays(6), D);
+        reports.leaveBalanceReport(CO, 2026);
+        reports.attendanceDaily(CO, D.minusDays(2), D);
+        ArgumentCaptor<String> rows = ArgumentCaptor.forClass(String.class);
+        verify(jdbc, atLeastOnce()).queryForList(rows.capture(), any(Object[].class));
+        ArgumentCaptor<String> ids = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).queryForList(ids.capture(), eq(UUID.class), any(Object[].class));
+        ArgumentCaptor<String> perDay = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(perDay.capture(), any(org.springframework.jdbc.core.RowCallbackHandler.class), any(Object[].class));
+        List<String> all = new ArrayList<>(rows.getAllValues());
+        all.add(ids.getValue());
+        all.add(perDay.getValue());
+        assertThat(all).hasSize(4).allSatisfy(q -> assertThat(q)
+                .contains("e.is_active = TRUE")
+                .doesNotContain("employment_status = 'ACTIVE'")
+                .doesNotContain("%s"));
+        // The leave balance report takes everyone still employed; the attendance ones the people on the
+        // roll during the range (ON_ROLL_DURING), so someone who left mid-range keeps the days they worked.
+        assertThat(all).filteredOn(q -> q.contains("leave_balances")).hasSize(1)
+                .allSatisfy(q -> assertThat(q).contains(ReportService.STILL_EMPLOYED));
+        assertThat(all).filteredOn(q -> !q.contains("leave_balances")).hasSize(3)
+                .allSatisfy(q -> assertThat(q).contains(ReportService.ON_ROLL_DURING));
+        // Probation and notice are not excluded; separated people and soft-deleted rows are.
+        assertThat(ReportService.STILL_EMPLOYED)
+                .doesNotContain("PROBATION").doesNotContain("NOTICE_PERIOD")
+                .contains("e.is_active = TRUE")
+                .contains("NOT IN ('EXITED', 'TERMINATED', 'RESIGNED', 'RETIRED')");
+    }
+
     @Test
     void workedDaysAreCountedPerDayLikeTheSummaryCountsPresentDays() {
         UUID a = UUID.randomUUID(), b = UUID.randomUUID();

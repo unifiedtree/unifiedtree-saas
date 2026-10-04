@@ -120,6 +120,19 @@ public class ReportService {
                   )
             """;
 
+    /**
+     * Who the leave balance report counts: everyone still working here, the
+     * same people Leave › All balances lists (not soft-deleted, not
+     * separated). It, like the attendance reports, used to
+     * count ACTIVE only, so people on probation (every new joiner, for six
+     * months by default) or serving notice were silently left out, and the
+     * leave balance report disagreed with All balances. (The attendance
+     * summary and tile take ON_ROLL_DURING, and leave out soft-deleted rows
+     * the same way: e.is_active = TRUE.)
+     */
+    static final String STILL_EMPLOYED =
+            "e.is_active = TRUE AND e.employment_status NOT IN ('EXITED', 'TERMINATED', 'RESIGNED', 'RETIRED')";
+
     // ── 1. Headcount Report ───────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -238,6 +251,7 @@ public class ReportService {
                    AND ar.tenant_id = ?
                    AND ar.attendance_date BETWEEN ? AND ?
                 WHERE e.tenant_id = ?
+                  AND e.is_active = TRUE
                   AND e.company_id = ?
                   AND""" + ON_ROLL_DURING + """
                 GROUP BY e.id, e.employee_code, e.first_name, e.last_name, d.name
@@ -276,7 +290,7 @@ public class ReportService {
      * People who came in on each day of [from, to] (BW-87, the Reports
      * Center's attendance tile), counted exactly as the attendance summary
      * counts present days: the same people (the company's people on the roll
-     * during the range, ON_ROLL_DURING), the effective status when the policy
+     * during the range, ON_ROLL_DURING, not soft-deleted), the effective status when the policy
      * service is there (present, late or half day), else one per attendance
      * record. So the days add up to the summary's total present days for the
      * same range. Every day of the range is listed; a day nobody came in has 0.
@@ -287,7 +301,7 @@ public class ReportService {
         Map<LocalDate, Long> perDay = new TreeMap<>();
         for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) perDay.put(d, 0L);
         List<UUID> ids = jdbc.queryForList(
-                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.company_id = ? AND" + ON_ROLL_DURING,
+                "SELECT e.id FROM hrms.employees e WHERE e.tenant_id = ? AND e.is_active = TRUE AND e.company_id = ? AND" + ON_ROLL_DURING,
                 UUID.class, t, companyId, toDate, fromDate);
         Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff = effective(ids, fromDate, toDate);
         if (!eff.isEmpty()) {
@@ -298,6 +312,7 @@ public class ReportService {
                       FROM attendance.records ar
                       JOIN hrms.employees e ON e.id = ar.employee_id AND e.tenant_id = ?
                      WHERE ar.tenant_id = ?
+                       AND e.is_active = TRUE
                        AND e.company_id = ?
                        AND ar.attendance_date BETWEEN ? AND ?
                        AND""" + ON_ROLL_DURING + """
@@ -353,9 +368,9 @@ public class ReportService {
                 WHERE lb.tenant_id = ?
                   AND e.company_id = ?
                   AND lb.year = ?
-                  AND e.employment_status = 'ACTIVE'
+                  AND %s
                 ORDER BY e.last_name, lt.name
-                """;
+                """.formatted(STILL_EMPLOYED);
         UUID t = tenant();
         return jdbc.queryForList(sql, t, t, t, t, companyId, year);
     }

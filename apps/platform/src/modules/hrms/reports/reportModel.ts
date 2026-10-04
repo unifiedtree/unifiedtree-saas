@@ -21,7 +21,9 @@ export function datedParams(to: string, asOf: string): Record<string, string> {
 }
 
 /** A tile's small chart (prototype kinds: bars, line, split), or a line of text when there is nothing to draw. */
-export type Mini = { kind: 'bars'; values: number[]; hi: number[] } | { kind: 'line'; values: number[] } | { kind: 'split'; a: number; aLabel: string; bLabel: string } | { kind: 'none'; text: string }
+// A split is two shares (b fills the rest of the bar), or three when b has its own width and c fills the rest.
+export type Mini = { kind: 'bars'; values: number[]; hi: number[] } | { kind: 'line'; values: number[] }
+  | { kind: 'split'; a: number; aLabel: string; bLabel: string; b?: number; cLabel?: string } | { kind: 'none'; text: string }
 
 export const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0)
 export function miniFor(key: string, s: ReportSummary | undefined): Mini | null {
@@ -39,7 +41,10 @@ export function miniFor(key: string, s: ReportSummary | undefined): Mini | null 
       const g = s.diversity
       if (!g || !g.total) return { kind: 'none', text: 'No one counted yet' }
       if (!g.women && !g.men) return { kind: 'none', text: 'No gender recorded yet' }
-      return { kind: 'split', a: pct(g.men, g.total), aLabel: `${pct(g.men, g.total)}% men`, bLabel: `${pct(g.women, g.total)}% women` }
+      const men = pct(g.men, g.total), women = pct(g.women, g.total)
+      // Everyone else (other genders and people with none on file) gets its own share, not the women's bar.
+      if (g.total - g.men - g.women <= 0) return { kind: 'split', a: men, aLabel: `${men}% men`, bLabel: `${women}% women` }
+      return { kind: 'split', a: men, aLabel: `${men}% men`, b: women, bLabel: `${women}% women`, cLabel: `${Math.max(0, 100 - men - women)}% other or unknown` }
     }
     case 'attendance': {
       const v = (s.attendance?.days ?? []).map((x) => x.present)

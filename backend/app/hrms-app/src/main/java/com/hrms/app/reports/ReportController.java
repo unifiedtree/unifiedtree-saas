@@ -62,7 +62,7 @@ public class ReportController {
     }
 
     @GetMapping("/leave-balance")
-    @Operation(summary = "Leave balances for all active employees for a given year")
+    @Operation(summary = "Leave balances for a given year, for everyone still employed (probation and notice included)")
     @PreAuthorize("@perm.check('hrms.report.leave')")
     public List<Map<String, Object>> leaveBalance(
             @RequestParam UUID companyId,
