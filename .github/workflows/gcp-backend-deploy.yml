@@ -52,6 +52,24 @@ jobs:
       - name: Build & test
         working-directory: backend
         run: mvn -B -ntp -pl app/hrms-app -am verify
+        env:
+          # The integration tests boot the canonical-prod profile, which deliberately
+          # refuses to start on missing secrets (so production can never run on a
+          # known key). Supply test-only values here instead of weakening that profile.
+          # Same settings as attendance-leave-it.yml; keep the two in step.
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+          # AES-256 key for EmbeddingCipher: must decode to EXACTLY 32 bytes. In-repo dev
+          # value, not a secret; production reads it from Secret Manager.
+          UNIFIEDTREE_FACE_ENCRYPTION_KEY: "ZGV2LW9ubHktZG8tbm90LXVzZS1pbi1wcm9kISEhISE="
+          # canonical-prod defaults this to CHANGE_ME (9 chars), which fails startup by
+          # design; EmployeeSearchIT is the one class that does not override it.
+          UNIFIEDTREE_JWT_SECRET: "integration-test-only-jwt-secret-must-be-32-plus-chars"
+          # FirebaseAdminConfig is matchIfMissing = true and dies without Google credentials.
+          UNIFIEDTREE_FIREBASE_ENABLED: "false"
+          # The live SubscriptionAccessGuard (com.hrms.api.saasguard) answers 402 for any
+          # tenant with no subscription row. Grandfather every fixture tenant the ITs use:
+          # TENANT_A, TENANT_B (AbstractIntegrationTest) and T1-T4 (FreshTenantLeaveFlowIT).
+          UNIFIEDTREE_SUBSCRIPTION_GRANDFATHER_TENANT_IDS: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb,11110000-0000-0000-0000-000000000001,22220000-0000-0000-0000-000000000002,33330000-0000-0000-0000-000000000003,44440000-0000-0000-0000-000000000004"
 
   deploy:
     needs: build-test
@@ -86,12 +104,21 @@ jobs:
           # Startup probe gates traffic; a failed rollout keeps the old revision live.
 
       - name: Smoke test
+        # The service's run.app URL answers 404 to everything (ingress is
+        # internal-and-cloud-load-balancing) and actuator lives on a separate
+        # management port, so neither can be reached from here. Check instead
+        # that the new revision is the one actually serving -- `gcloud run deploy`
+        # can report success while the revision dies on startup and traffic stays
+        # on the old one -- then that the public API answers through the load
+        # balancer.
         run: |
-          URL=$(gcloud run services describe "$SERVICE" --region "${{ vars.GCP_REGION }}" \
-                 --project "${{ vars.GCP_PROJECT_ID }}" --format='value(status.url)')
+          REGION="${{ vars.GCP_REGION }}"; PROJECT="${{ vars.GCP_PROJECT_ID }}"
+          read -r READY CREATED < <(gcloud run services describe "$SERVICE" --region "$REGION"               --project "$PROJECT" --format='value(status.latestReadyRevisionName,status.latestCreatedRevisionName)')
+          echo "latestReady=$READY latestCreated=$CREATED"
+          [ "$READY" = "$CREATED" ] || { echo "new revision is not serving"; exit 1; }
           for i in $(seq 1 10); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/actuator/health" || true)
-            [ "$code" = "200" ] && echo "health OK" && exit 0
+            code=$(curl -s -o /dev/null -w '%{http_code}'               "https://api.unifiedtree.com/api/v1/public/workspace-status?subdomain=demo-hrms" || true)
+            [ "$code" = "200" ] && echo "public API OK on $READY" && exit 0
             sleep 6
           done
-          echo "health check failed"; exit 1
+          echo "public API check failed (last status $code)"; exit 1

@@ -111,6 +111,23 @@ jobs:
           DB_PASSWORD: nexus
           REDIS_HOST: localhost
           JWT_SECRET: test-secret-key-minimum-256-bits-long-for-testing
+          # The integration tests boot the canonical-prod profile, which deliberately
+          # refuses to start on missing secrets (so production can never run on a
+          # known key). Supply test-only values here instead of weakening that profile.
+          # Same settings as attendance-leave-it.yml; keep the two in step.
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+          # AES-256 key for EmbeddingCipher: must decode to EXACTLY 32 bytes. In-repo dev
+          # value, not a secret; production reads it from Secret Manager.
+          UNIFIEDTREE_FACE_ENCRYPTION_KEY: "ZGV2LW9ubHktZG8tbm90LXVzZS1pbi1wcm9kISEhISE="
+          # canonical-prod defaults this to CHANGE_ME (9 chars), which fails startup by
+          # design; EmployeeSearchIT is the one class that does not override it.
+          UNIFIEDTREE_JWT_SECRET: "integration-test-only-jwt-secret-must-be-32-plus-chars"
+          # FirebaseAdminConfig is matchIfMissing = true and dies without Google credentials.
+          UNIFIEDTREE_FIREBASE_ENABLED: "false"
+          # The live SubscriptionAccessGuard (com.hrms.api.saasguard) answers 402 for any
+          # tenant with no subscription row. Grandfather every fixture tenant the ITs use:
+          # TENANT_A, TENANT_B (AbstractIntegrationTest) and T1-T4 (FreshTenantLeaveFlowIT).
+          UNIFIEDTREE_SUBSCRIPTION_GRANDFATHER_TENANT_IDS: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb,11110000-0000-0000-0000-000000000001,22220000-0000-0000-0000-000000000002,33330000-0000-0000-0000-000000000003,44440000-0000-0000-0000-000000000004"
 
   docker-build:
     needs: [frontend-build, backend-build-test]
