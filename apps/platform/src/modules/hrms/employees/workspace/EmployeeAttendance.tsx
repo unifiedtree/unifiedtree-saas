@@ -34,6 +34,7 @@ import { useEmployeeShift, useEmployeeShiftHistory } from '../../api/useShiftPol
 import { useStatusHistory, statusLabel } from '../../api/useAttendanceReview'
 import { useAssistedPunches, punchedByMap } from '../../api/useAssistedPunches'
 import { SectionState, SubSection } from './shared'
+import { hhmmIst } from '../../attendance/daily/dailyModel'
 
 /** Server-side day classifications from WeeklyDayResponse.status. */
 const DAY_TONE: Record<string, PillTone> = {
@@ -68,9 +69,10 @@ function fmtDay(iso?: string | null) {
   try { return format(parseISO(iso), 'd MMM yyyy') } catch { return iso }
 }
 
+// India time, as every other attendance screen (and the app) prints a punch.
+// date-fns `format` printed it in the browser's own time zone instead.
 function fmtTime(iso?: string) {
-  if (!iso) return '—'
-  try { return format(parseISO(iso), 'HH:mm') } catch { return '—' }
+  return hhmmIst(iso)
 }
 
 function Metric({ icon: Icon, label, value, hint }: {
