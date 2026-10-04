@@ -193,8 +193,9 @@ public class WfhController {
             @PageableDefault(size = 20) Pageable pageable) {
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        // Admin / HR: everyone's but their own, which they may not decide (audit 5 Oct 2026).
         PageResponse<WfhRequestResponse> page = adminOrHr
-                ? service.getAllPending(pageable)
+                ? service.getAllPending(callerOrNull(jwt), pageable)
                 : service.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
         return ResponseEntity.ok(enrichPage(page));
     }
@@ -357,5 +358,14 @@ public class WfhController {
     private UUID extractEmployeeId(Jwt jwt) {
         String empId = jwt.getClaimAsString("employee_id");
         return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());
+    }
+
+    /** The caller, for leaving their own requests out of the admin / HR queue; null (nothing left out) when the token doesn't say. */
+    private UUID callerOrNull(Jwt jwt) {
+        try {
+            return jwt == null ? null : extractEmployeeId(jwt);
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
     }
 }

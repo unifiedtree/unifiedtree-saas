@@ -72,6 +72,16 @@ public interface WfhRequestRepository extends JpaRepository<WfhRequest, UUID> {
     Page<WfhRequest> findAllPending(Pageable pageable);
 
     /**
+     * {@link #findAllPending} without one person's own requests: their HR /
+     * admin queue (audit 5 Oct 2026). Nobody may decide their own WFH
+     * (WFH_SELF_APPROVAL), as the managers' queue above already reflects.
+     */
+    @Query(value = "SELECT wr.* FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING' AND wr.employee_id <> :me ORDER BY wr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING' AND wr.employee_id <> :me",
+        nativeQuery = true)
+    Page<WfhRequest> findAllPendingExcept(@Param("me") UUID me, Pageable pageable);
+
+    /**
      * Any existing WFH request for the same employee that overlaps
      * [{@code fromDate}, {@code toDate}] and is currently in one of the
      * given statuses. Used at apply time to block a duplicate submission on

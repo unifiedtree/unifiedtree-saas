@@ -15,7 +15,11 @@ public record LeaveTypeRequest(
         @NotNull(message = "Category is required")
         LeaveCategory category,
 
-        @Positive(message = "Annual entitlement must be positive")
+        // 0 is allowed (5 Oct 2026, client: "I'm not able to keep the leaves as
+        // zero"): a type nobody is credited automatically, like comp-off or
+        // leave HR grants case by case. Balances, accrual and the next-credit
+        // note already handle a 0 quota (nothing divides by it).
+        @PositiveOrZero(message = "Annual entitlement can't be negative")
         double annualEntitlement,
 
         @Min(value = 0, message = "Max consecutive days must be non-negative")

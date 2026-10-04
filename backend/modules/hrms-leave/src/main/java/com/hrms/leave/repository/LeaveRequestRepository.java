@@ -85,6 +85,22 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
     Page<LeaveRequest> findAllPending(Pageable pageable);
 
     /**
+     * {@link #findAllPending} without one person's own requests: the HR / admin
+     * queue of that person (audit 5 Oct 2026). Nobody may decide their own leave
+     * (LeaveService.assertNotSelfApproval), so an owner's own request in their
+     * own queue was an Approve button the server always refuses. The managers'
+     * queue has left them out since B4 ({@link #findPendingForManager}); another
+     * HR manager or admin still sees and decides them.
+     */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING' AND lr.employee_id <> :me ORDER BY lr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING' AND lr.employee_id <> :me",
+        nativeQuery = true)
+    Page<LeaveRequest> findAllPendingExcept(@Param("me") UUID me, Pageable pageable);
+
+    /** HR's queue of one status (PENDING_L2) without one person's own requests; see {@link #findAllPendingExcept}. */
+    Page<LeaveRequest> findByStatusAndEmployeeIdNot(ApprovalStatus status, UUID employeeId, Pageable pageable);
+
+    /**
      * Approval-history query for a manager: returns leaves this manager has
      * already DECIDED (APPROVED, REJECTED, CANCELLED — anything except PENDING).
      * Same broadened match as {@link #findPendingForManager} — the manager
