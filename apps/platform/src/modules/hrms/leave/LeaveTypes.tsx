@@ -1,14 +1,17 @@
 import React, { useState } from 'react'
-import { Plus, Tag, Loader2, Zap, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Tag, Loader2, Zap, Pencil, Trash2, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
 import { Can, usePermission, P } from '@unifiedtree/sdk'
-import { TableSkeleton } from '@unifiedtree/ui-kit'
+import { TableSkeleton, Modal } from '@unifiedtree/ui-kit'
 import { DataTable } from '@/shared/components/DataTable'
-import { useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, type LeaveTypeResponse } from '../api/useLeave'
+import {
+  useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, useLeaveTypeApplyPreview, useApplyLeaveTypeToAll,
+  type LeaveTypeResponse,
+} from '../api/useLeave'
 import { useCompanies } from '../api/useOrg'
 import { HrPageHeader, HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
-import { SubHeading } from '@/design/module/ModuleKit'
+import { SubHeading, Note, Facts, State, days } from '@/design/module/ModuleKit'
 
 // Indian standard: PL 1.5/month (18/year) carry-forward max 30;
 // SL 1/month (12/year) no carry-forward; CL 1/month (12/year) no carry-forward.
@@ -54,9 +57,11 @@ interface TypeDrawerProps {
   companyId: string
   editType?: LeaveTypeResponse
   onClose: () => void
+  /** An edit changed the days a year: balances people already have still show the old days. */
+  onDaysChanged?: (saved: LeaveTypeResponse) => void
 }
 
-function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
+function TypeDrawer({ companyId, editType, onClose, onDaysChanged }: TypeDrawerProps) {
   const { toast } = useToast()
   const isEdit = !!editType
   const create = useCreateLeaveType()
@@ -90,8 +95,9 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
     }
     try {
       if (isEdit) {
-        await update.mutateAsync({ id: editType!.id, data: { ...form } })
+        const saved = await update.mutateAsync({ id: editType!.id, data: { ...form } })
         toast('Leave type updated', 'success')
+        if (saved && Number(form.annualEntitlement) !== editType!.annualEntitlement) onDaysChanged?.(saved)
       } else {
         await create.mutateAsync({ companyId, data: { ...form } })
         toast('Leave type created', 'success')
@@ -163,6 +169,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
                 onChange={(e) => set('annualEntitlement', Number(e.target.value))}
                 className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
               />
+              <p className="mt-1 text-xs text-text-tertiary">0 = none. Balances people already have change only when you apply the type to everyone.</p>
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Max Consecutive</label>
@@ -250,6 +257,70 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
   )
 }
 
+// ── Apply to everyone ─────────────────────────────────────────────────────────
+
+/**
+ * Gives everyone still working in the company the type's days for this leave
+ * year (4 Oct 2026). A balance is made once a year with the type's days at that
+ * moment, so editing the type never changes balances people already have. This
+ * is the explicit step that does, after showing what changes: days used and
+ * pending stay, so anyone who already took more shows below 0.
+ */
+function ApplyToAllDialog({ type, justSaved, onClose }: { type: LeaveTypeResponse; justSaved: boolean; onClose: () => void }) {
+  const { toast } = useToast()
+  const preview = useLeaveTypeApplyPreview(type.id)
+  const apply = useApplyLeaveTypeToAll()
+  const p = preview.data
+  const count = p ? p.changing + p.adding : 0
+  const accruing = p?.accrualFrequency === 'MONTHLY' || p?.accrualFrequency === 'QUARTERLY'
+  const named = (b: { employeeName: string | null; employeeCode: string | null }) => b.employeeName || b.employeeCode || 'Someone'
+
+  const run = async () => {
+    if (!p || !count) return
+    try {
+      const r = await apply.mutateAsync({ id: type.id, days: p.annualEntitlement })
+      const n = r.changed + r.added
+      toast(`${r.leaveTypeName}: ${n} ${n === 1 ? 'balance' : 'balances'} set for ${r.year}`, 'success')
+      onClose()
+    } catch (err: unknown) {
+      toast((err as Error)?.message ?? 'Couldn’t apply the leave type', 'error')
+    }
+  }
+
+  return (
+    <Modal open onOpenChange={(o: boolean) => { if (!o) onClose() }} title={`Give everyone ${type.name}?`}
+      description={`Sets everyone’s ${p?.year ?? new Date().getFullYear()} balance to ${days(p?.annualEntitlement ?? type.annualEntitlement)} a year${accruing ? ', credited up to today' : ''}. Days already used or pending stay.`} size="sm">
+      <div style={{ display: 'grid', gap: 12 }}>
+        {justSaved && <Note>Saved. Balances people already have still show the old days until you apply the new ones.</Note>}
+        {preview.isLoading ? <State kind="loading" height={96} />
+          : preview.error ? <State kind="error" title="Couldn’t work out what changes" description={(preview.error as Error)?.message} onRetry={() => preview.refetch()} />
+            : p && <>
+              <Facts min={120} items={[
+                { k: 'People', v: String(p.people) },
+                ...p.changes.map((c) => ({ k: `${days(c.from)} → ${days(c.to)}`, v: `${c.people} ${c.people === 1 ? 'person' : 'people'}` })),
+                ...(p.adding ? [{ k: 'New balances', v: String(p.adding) }] : []),
+                ...(p.unchanged ? [{ k: 'Already right', v: String(p.unchanged) }] : []),
+              ]} />
+              {p.belowZero > 0 && (
+                <Note tone="amber">
+                  {`${p.belowZero} ${p.belowZero === 1 ? 'person has' : 'people have'} already used or asked for more, so their balance will show below 0: `}
+                  {p.belowZeroPeople.map((b) => `${named(b)} (${days(b.availableAfter)})`).join(', ')}
+                  {p.belowZero > p.belowZeroPeople.length ? ` and ${p.belowZero - p.belowZeroPeople.length} more` : ''}.
+                </Note>
+              )}
+              {!count && <Note tone="green">Everyone already has these days. Nothing to change.</Note>}
+            </>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <HrButton variant="ghost" onClick={onClose}>Not now</HrButton>
+          <HrButton onClick={run} disabled={!p || !count || apply.isPending}>
+            {apply.isPending ? 'Applying…' : count ? `Apply to ${count} ${count === 1 ? 'person' : 'people'}` : 'Apply'}
+          </HrButton>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Type Row ──────────────────────────────────────────────────────────────────
 
 function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEdit: (t: LeaveTypeResponse) => void; onDeactivate: (t: LeaveTypeResponse) => void }) {
@@ -332,6 +403,7 @@ export function LeaveTypes({
   const deactivate = useDeactivateLeaveType()
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<LeaveTypeResponse | null>(null)
+  const [applying, setApplying] = useState<{ type: LeaveTypeResponse; justSaved: boolean } | null>(null)
   const [seeding, setSeeding] = useState(false)
 
   const handleDeactivate = async (type: LeaveTypeResponse) => {
@@ -407,6 +479,8 @@ export function LeaveTypes({
           </Can>
         </div>
       ) : (
+        <>
+        {canWrite && <Note>Changing a type’s days doesn’t change balances people already have. Use “Apply to everyone” to give everyone the type’s days for this year.</Note>}
         <TableCard>
           <DataTable
             columns={[
@@ -431,6 +505,13 @@ export function LeaveTypes({
               ...(canWrite ? [{
                 key: 'actions', header: '', render: (t: LeaveTypeResponse) => (
                   <div className="inline-flex items-center gap-1 justify-end w-full">
+                    {t.isActive && (
+                      <HrButton size="sm" variant="ghost" onClick={() => setApplying({ type: t, justSaved: false })}
+                        title={`Give everyone ${t.annualEntitlement} days of ${t.name} for this year`}>
+                        <Users size={13} aria-hidden="true" />
+                        Apply to everyone
+                      </HrButton>
+                    )}
                     <button onClick={() => setEditing(t)} title="Edit" className="p-1.5 text-text-tertiary hover:text-[#047857] rounded-lg hover:bg-bg-base transition-colors">
                       <Pencil size={14} />
                     </button>
@@ -447,10 +528,13 @@ export function LeaveTypes({
             emptyMessage="No leave types configured."
           />
         </TableCard>
+        </>
       )}
 
       {showAdd && companyId && <TypeDrawer companyId={companyId} onClose={() => setShowAdd(false)} />}
-      {editing && <TypeDrawer companyId={companyId} editType={editing} onClose={() => setEditing(null)} />}
+      {editing && <TypeDrawer companyId={companyId} editType={editing} onClose={() => setEditing(null)}
+        onDaysChanged={(saved) => { if (saved.isActive) setApplying({ type: saved, justSaved: true }) }} />}
+      {applying && <ApplyToAllDialog key={applying.type.id} type={applying.type} justSaved={applying.justSaved} onClose={() => setApplying(null)} />}
     </div>
   )
 }

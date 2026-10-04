@@ -653,3 +653,76 @@ export function useDeactivateLeaveType() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'types'] }),
   })
 }
+
+// ── Apply a leave type to everyone (4 Oct 2026) ─────────────────────────────
+// A balance is made once a year per person with the type's days at that moment;
+// editing the type never changes it. These give everyone still working in the
+// type's company the type's days for this leave year, after a preview
+// (LeaveTypeApplyController, permission leave.type.write).
+
+/** Balances going from `from` to `to` days, for `people` people. */
+export interface LeaveTypeApplyChange { from: number; to: number; people: number }
+/** Someone who has used or asked for more than the new days: their balance would show below 0. */
+export interface LeaveTypeApplyBelowZero { employeeId: string; employeeName: string | null; employeeCode: string | null; takenDays: number; availableAfter: number }
+export interface LeaveTypeApplyPreview {
+  leaveTypeId: string
+  leaveTypeName: string
+  year: number
+  annualEntitlement: number
+  accrualFrequency: 'YEARLY' | 'MONTHLY' | 'QUARTERLY'
+  /** Everyone still working in the type's company. */
+  people: number
+  /** People whose balance exists and would get a different number of days. */
+  changing: number
+  /** People without a balance of this type yet this year; they get one. */
+  adding: number
+  unchanged: number
+  belowZero: number
+  changes: LeaveTypeApplyChange[]
+  /** At most 20; `belowZero` is the full count. */
+  belowZeroPeople: LeaveTypeApplyBelowZero[]
+  /** Each change also goes on the balance audit trail (V143.71 applied). */
+  ledgerReady: boolean
+}
+export interface LeaveTypeApplyResult {
+  leaveTypeId: string
+  leaveTypeName: string
+  year: number
+  annualEntitlement: number
+  people: number
+  changed: number
+  added: number
+  unchanged: number
+  belowZero: number
+  ledgerWritten: boolean
+}
+
+/** What giving everyone this type's days would do. Always fresh: it is read when the dialog opens. */
+export function useLeaveTypeApplyPreview(leaveTypeId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'leave', 'types', 'apply-preview', leaveTypeId ?? ''],
+    enabled: enabled && !!leaveTypeId,
+    queryFn: () => apiJson<LeaveTypeApplyPreview>(`/v1/leave/types/${leaveTypeId}/apply-to-all/preview`),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  })
+}
+
+/** Give everyone the type's days. `days` is what the preview showed; the server refuses if the type changed since. */
+export function useApplyLeaveTypeToAll() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, days }: { id: string; days: number }) =>
+      apiJson<LeaveTypeApplyResult>(`/v1/leave/types/${id}/apply-to-all?days=${encodeURIComponent(String(days))}`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'types'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'balances'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'all-balances'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'usage'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'overview'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'employee'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'ledger'] })
+    },
+  })
+}

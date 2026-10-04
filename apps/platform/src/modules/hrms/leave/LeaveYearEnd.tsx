@@ -17,6 +17,8 @@ const errMsg = (e: unknown) => (e instanceof Error && e.message ? e.message : un
 const FREQ: Record<string, string> = { YEARLY: 'Upfront', MONTHLY: 'Monthly', QUARTERLY: 'Quarterly' }
 const KIND: Record<LedgerEntry['kind'], [string, PillTone]> = {
   ACCRUAL: ['Credited', 'ok'], CARRY_FORWARD: ['Carried forward', 'blue'], LAPSE: ['Lapsed', 'gray'], ENCASHMENT: ['Encashed', 'purple'],
+  // V143.71: HR gave everyone a leave type's days (Leave types → Apply to everyone).
+  ADJUSTMENT: ['Set by HR', 'warn'],
 }
 const SHOWN = 50
 
@@ -28,7 +30,7 @@ export function LedgerRows({ entries, showName }: { entries: LedgerEntry[]; show
         const [label, tone] = KIND[l.kind] || [l.kind, 'gray' as PillTone]
         return (
           <Row key={l.id}
-            lead={<span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, background: '#f8fafc', border: '1px solid #eef2f6', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon(l.kind === 'ACCRUAL' ? 'calendarPlus' : l.kind === 'LAPSE' ? 'archive' : l.kind === 'ENCASHMENT' ? 'banknote' : 'calendarCheck', 17)}</span>}
+            lead={<span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, background: '#f8fafc', border: '1px solid #eef2f6', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon(l.kind === 'ACCRUAL' ? 'calendarPlus' : l.kind === 'LAPSE' ? 'archive' : l.kind === 'ENCASHMENT' ? 'banknote' : l.kind === 'ADJUSTMENT' ? 'pencil' : 'calendarCheck', 17)}</span>}
             title={`${showName ? `${l.employeeName || 'Employee'}${l.employeeCode ? ` · ${l.employeeCode}` : ''} · ` : ''}${l.leaveTypeName || 'Leave'} · ${days(Number(l.days))}`}
             meta={`${l.note || l.period} · ${stamp(l.createdAt)}`}
             trail={<HrStatusPill tone={tone}>{label}</HrStatusPill>} />
