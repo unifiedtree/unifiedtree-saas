@@ -15,7 +15,10 @@ public record LeaveTypeRequest(
         @NotNull(message = "Category is required")
         LeaveCategory category,
 
-        @Positive(message = "Annual entitlement must be positive")
+        // 0 is allowed (4 Oct 2026): a business may give a type no days at all,
+        // e.g. while it decides, or for leave granted case by case. Was
+        // @Positive, which refused 0 with "must be positive".
+        @PositiveOrZero(message = "Days a year can't be below 0")
         double annualEntitlement,
 
         @Min(value = 0, message = "Max consecutive days must be non-negative")
