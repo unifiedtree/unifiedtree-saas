@@ -56,6 +56,7 @@ try {
   // ── department manager ──
   const mgr = await login('mgr@unifiedtree.demo')
   check('manager: holds hrms.kpi.progress, not performance.write', mgr.perms.includes('hrms.kpi.progress') && !mgr.perms.includes('hrms.performance.write'))
+  check('manager: no company-wide hrms.kpi.manage (V143.87)', !mgr.perms.includes('hrms.kpi.manage'))
   const kpis = await mgr.call(`/v1/performance/kpis?search=${encodeURIComponent('QA scope KPI')}&size=50`)
   const titles = (kpis.json?.items || []).map((k) => k.title)
   check('manager: KPI list shows the team KPI, not the other one', titles.includes(`QA scope KPI team ${stamp}`) && !titles.includes(`QA scope KPI other ${stamp}`), titles.join(' | '))

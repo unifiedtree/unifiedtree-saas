@@ -17,7 +17,9 @@ import java.util.stream.Collectors;
  * Whose performance data (reviews, cycle progress, KPIs, the rating
  * directory) the caller may see. Decided 2026-09-25 with the client:
  * <ul>
- *   <li>Admin / HR ({@link KpiAccessScope#ADMIN_PERMISSIONS}): the whole company.</li>
+ *   <li>Admin / HR ({@link KpiAccessScope#REVIEW_ADMIN_PERMISSIONS}): the whole company.
+ *       hrms.kpi.manage alone does not count here; it is company-wide for KPIs and
+ *       goals only ({@link KpiService}).</li>
  *   <li>Managers ({@link KpiAccessScope#TEAM_PERMISSION}): <b>their team</b>, defined exactly like the My team
  *       page ({@link TeamEmployeeScope}): everyone in the department(s) they head,
  *       or their direct reports if they head none. Never themselves; their own
@@ -38,7 +40,7 @@ public class PerformanceTeamScope {
     /** {@code null} when the caller sees the whole company; otherwise the employee ids they may see. */
     public Set<UUID> visibleEmployeeIds() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        KpiAccessScope scope = KpiAccessScope.from(auth);
+        KpiAccessScope scope = KpiAccessScope.forReviews(auth);
         return switch (scope.kind()) {
             case ADMIN -> null;
             case SELF -> Set.of(scope.employeeId());

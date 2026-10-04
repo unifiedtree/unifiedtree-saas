@@ -822,6 +822,7 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - New permission `hrms.kpi.progress` goes to DEPT_MANAGER. OWNER and SUPER_ADMIN also get it, because the startup check `OwnerPermissionInvariantCheck` requires OWNER to hold every permission.
   - The API only allows it on KPIs owned by their team. Managers still can't create or drop KPIs.
   - In the UI they see "Your team's goals & KPIs" with a note, and an "Update progress" button.
+  - **Fixed 5 Oct (production audit):** DEPT_MANAGER still held `hrms.kpi.manage` from V090, so every department manager saw the whole company in People and Goals & KPIs and could open anyone's performance page. `V143_87` takes that grant off the built-in role (apply by hand). The API also no longer lets `hrms.kpi.manage` open other people's reviews, ratings, cycle progress or the performance directory; only `hrms.performance.write` sees the company there (`KpiAccessScope.forReviews`), the same rule the web already used.
 - **Fixed: overdue KPIs never turned "At risk".** `KpiService.flipOverdueToAtRisk` existed but nothing called it. The new `KpiAtRiskJob` runs nightly at 00:15 IST and at startup, for every tenant.
 - **Fixed (found while checking): Manual entry offered Save to department managers.**
   - Saving needs `attendance.workforce.admin` since V143.5, so the server refused them.
