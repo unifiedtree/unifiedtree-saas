@@ -1,6 +1,6 @@
 # Ownership transfer — design (A-29)
 
-Status: **draft for the owner's OK** (6 Oct 2026). Nothing is built yet.
+Status: **owner answered the 5 questions on 6 Oct 2026** (see §6). Nothing is built yet.
 Spec: master context §12 — the new owner gets access, ownership moves, the old owner keeps a transition period of up to
 ~15 days (can guide, cannot act as owner), then loses full access.
 
@@ -29,17 +29,19 @@ Billing checks read the permissions **inside the token**, so a role change only 
 3. **On accept, in one transaction:**
    - new owner: gets `OWNER` + `SUPER_ADMIN`; gets an `account_workspaces` row with role `OWNER` (account created if missing);
      `tenants.owner_account_id`, `contact_email`, `contact_phone`, `admin_name` and `subscriptions.contact_email` move to them.
-   - old owner: loses `OWNER` + `SUPER_ADMIN` and gets the **transition access** (see Q1) until `accepted_at + 15 days`;
-     their `account_workspaces` role becomes `ADMIN` for that period.
+   - old owner: loses `OWNER` + `SUPER_ADMIN` and gets the built-in **`ADMIN`** role (full admin = owner minus billing,
+     owner decision Q1) until `accepted_at + 15 days`; their `account_workspaces` role becomes `ADMIN` for that period.
    - both people's sessions are signed out (`SessionService.revokeAll`) so the new permissions apply at once.
    - audit row via `AccessAudit` (same transaction): who, from, to, when, transition end date.
 4. **Transition (up to 15 days).** The old owner sees a banner "You handed ownership to Asha on 6 Oct. Your access ends on
    21 Oct." The new owner can end it early ("End transition now"). The old owner cannot undo the transfer.
-5. **End.** A daily job (and the "end now" button) removes the transition access. What the old owner keeps is Q2.
-   Audit row + email to both.
+5. **End.** A daily job (and the "end now" button) removes the old owner's `ADMIN` role. If they are also an employee they
+   keep their employee self-service (Q2); otherwise their login is deactivated and their `account_workspaces` row set to
+   `REMOVED`. Audit row + email to both.
 
-Billing handover — see Q3. The Razorpay subscription is not tied to a person (only an email in its notes), so it keeps
-running; the autopay mandate, however, is the **old owner's card/UPI/bank**.
+Billing handover (Q3): the Razorpay subscription is not tied to a person, so it keeps running on the old owner's mandate.
+From accept, the new owner sees "Set up autopay with your payment method before <next due date>" (banner + the normal
+reminders); once they do, the old mandate is replaced. Billing does not pause.
 
 ## 3. Data
 
@@ -71,17 +73,13 @@ No new permission: every action checks "is the caller the current owner / the na
 - The role changes (grant/revoke `OWNER`, `SUPER_ADMIN`, transition access) must go through `WorkspaceAccessService`
   (`app/hrms-api/.../access`, your lane, being changed for roles per company). I need **one narrow service method**
   `transferOwnership(tenantId, fromUserId, toUserId, transitionRoleCode)` or your OK to write it there.
-- Q5 below changes `AccessPolicy` (your lane).
+- One owner only (Q5): `AccessPolicy` / the Access screen must stop granting or revoking `OWNER` directly — the transfer
+  becomes the only way. That is in your lane; the transfer service will be the single caller allowed to move `OWNER`.
 
-## 6. Questions for the owner (please answer before I build — recommended option first)
+## 6. Owner decisions (6 Oct 2026)
 
-1. **Old owner during the 15 days:** (a) *view-only* across the business, can't change anything **(recommended — "can guide,
-   cannot act")**, or (b) Admin (owner minus billing — can still change most things).
-2. **After the 15 days, if the old owner is also an employee:** (a) keeps normal employee self-service (punch, leave,
-   payslips) **(recommended)**, or (b) loses all access.
-3. **Billing:** (a) the new owner is asked to set up autopay with their own payment method before the next due date; until
-   then the old mandate keeps charging **(recommended)**, or (b) billing pauses until the new owner sets it up.
-4. **Who can become owner:** (a) only someone who already has a login in this business **(recommended; invite them first
-   otherwise)**, or (b) any email. (With one business per person, they cannot own another business.)
-5. **More than one owner?** Today the Access screen lets an owner make other people owners. (a) Exactly one owner; the
-   transfer is the only way to change it **(recommended)**, or (b) keep allowing several owners.
+1. Old owner during the 15 days: **full admin access** (built-in `ADMIN`: everything except billing and ownership).
+2. After the 15 days, an old owner who is also an employee **keeps employee self-service**.
+3. The new owner **sets up autopay with their own payment method** before the next due date; until then the old mandate keeps charging.
+4. Only someone who **already has a login in this business** can become owner (invite them first otherwise).
+5. **Exactly one owner**; the transfer is the only way to change it.
