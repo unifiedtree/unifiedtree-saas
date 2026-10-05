@@ -319,6 +319,26 @@ public class InvitationService {
 
     @Transactional
     public void requestPasswordReset(String email, UUID tenantId) {
+        requestPasswordReset(email, tenantId, null);
+    }
+
+    /**
+     * @param workspaceSubdomain the workspace whose page the request came from
+     *        (the SPA's X-Tenant-Subdomain), used when {@code tenantId} is null.
+     */
+    @Transactional
+    public void requestPasswordReset(String email, UUID tenantId, String workspaceSubdomain) {
+        // 2026-10-05: a signed-out "Reset Password" on <workspace>.unifiedtree.com
+        // arrives with no tenant (the TenantContextFilter only trusts a JWT), so
+        // the workspace used to be picked from the email alone: the one it most
+        // recently signed in to. For an address in two workspaces that is the
+        // OTHER one, so the link reset the other workspace's password and this
+        // workspace kept refusing the new one ("Invalid email or password").
+        // The page's own workspace now wins whenever the address has a sign-in
+        // there; otherwise routing by email is unchanged.
+        if (tenantId == null) {
+            tenantId = workspaceWithAccount(workspaceSubdomain, email);
+        }
         // auth.user_credentials runs FORCE ROW LEVEL SECURITY with the policy
         // `tenant_id = current_tenant_id()`. This endpoint is unauthenticated, so
         // unless a tenant is bound on the DB session BEFORE the lookup, the query
@@ -429,22 +449,33 @@ public class InvitationService {
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
         setDbTenantContext(tenantId);
 
-        UserCredentials creds = credRepo.findById(rt.userId())
-            .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
-
-        creds.setPasswordHash(passwordService.hash(newPassword));
-        // Activate the account if it was still inactive — an invited employee
-        // who used the reset link (instead of the accept-invite link) would
-        // otherwise still hit "Account is inactive" on the next login. Also
-        // clear any temporary lock from too many earlier failed attempts.
-        if (!creds.isActive()) creds.setActive(true);
-        creds.setFailedLoginCount(0);
-        creds.setLockedUntil(null);
-        credRepo.save(creds);
+        // One explicit UPDATE of the token's own sign-in row (its id AND its
+        // workspace), checked: if it changes no row, the reset fails loudly and
+        // the token stays unused, instead of the page saying "Password updated"
+        // while the password the person signs in with is untouched.
+        // Also activates an invited employee who used the reset link instead of
+        // the accept-invite link (else "Account is inactive" on the next login),
+        // clears any temporary lock from earlier failed attempts, and stamps
+        // password_updated_at so a reset is visible on the row.
+        List<String> updated = jdbc.queryForList("""
+            UPDATE auth.user_credentials
+               SET password_hash = ?, password_updated_at = now(), updated_at = now(),
+                   version = version + 1, is_active = true,
+                   failed_login_count = 0, locked_until = NULL
+             WHERE id = ? AND tenant_id = ?
+            RETURNING email
+            """, String.class, passwordService.hash(newPassword), rt.userId(), tenantId);
+        if (updated.size() != 1) {
+            log.error("Password reset changed {} sign-in rows for token {} (user {}, tenant {}) - refused",
+                    updated.size(), rt.id(), rt.userId(), tenantId);
+            throw new BusinessRuleException(
+                    "Your password could not be changed. Request a new reset link and try again.",
+                    "RESET_NOT_APPLIED");
+        }
 
         markTokenUsed(rt.id());
 
-        log.info("Password reset completed for user {}", creds.getEmail());
+        log.info("Password reset completed for user {}", updated.get(0));
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -543,6 +574,25 @@ public class InvitationService {
         v.put("inviteLink", inviteUrl);
         v.put("expiresIn", "72 hours");
         return v;
+    }
+
+    /**
+     * The workspace with this subdomain when the address has a sign-in there,
+     * else null (unknown workspace, or not a member: the caller then routes by
+     * email as before). platform.tenants has no RLS; the credential count runs
+     * with that workspace bound, like every other auth.user_credentials read.
+     */
+    private UUID workspaceWithAccount(String subdomain, String email) {
+        if (subdomain == null || subdomain.isBlank() || email == null || email.isBlank()) return null;
+        List<UUID> ids = jdbc.queryForList(
+            "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?)", UUID.class, subdomain.trim());
+        if (ids.isEmpty()) return null;
+        UUID tenantId = ids.get(0);
+        setDbTenantContext(tenantId);
+        Integer n = jdbc.queryForObject(
+            "SELECT count(*)::int FROM auth.user_credentials WHERE tenant_id = ? AND lower(email) = lower(?)",
+            Integer.class, tenantId, email);
+        return n != null && n > 0 ? tenantId : null;
     }
 
     private String loadTenantSlug(UUID tenantId) {

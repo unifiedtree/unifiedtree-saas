@@ -52,8 +52,12 @@ public class InvitationController {
     @PostMapping("/v1/auth/forgot-password")
     @PreAuthorize("permitAll()")
     public ResponseEntity<Void> forgotPassword(
-            @RequestBody ForgotPasswordRequest req) {
-        // Tenant context from X-Tenant-Subdomain or X-Tenant-ID header (set by TenantContextFilter)
+            @RequestBody ForgotPasswordRequest req,
+            @RequestHeader(value = "X-Tenant-Subdomain", required = false) String workspaceSubdomain) {
+        // Tenant context is set only for a signed-in caller (JWT claim): the
+        // TenantContextFilter does not read X-Tenant-Subdomain. A signed-out
+        // request from a workspace's own page is routed by that header in
+        // requestPasswordReset (see the 2026-10-05 note there).
         UUID tenantId = TenantContext.getTenantId();
         // 2026-09-09: the SPA's /forgot-password page sent the SUBDOMAIN string
         // ("src") in this field, which was typed UUID. Jackson rejected the body
@@ -66,7 +70,7 @@ public class InvitationController {
         // (requestPasswordReset -> resolveLoginTenant) does the work. Old SPA
         // bundles still cached in browsers stop 400ing too.
         if (tenantId == null) tenantId = parseUuidOrNull(req.tenantId());
-        invitationService.requestPasswordReset(req.email(), tenantId);
+        invitationService.requestPasswordReset(req.email(), tenantId, workspaceSubdomain);
         return ResponseEntity.ok().build();
     }
 
