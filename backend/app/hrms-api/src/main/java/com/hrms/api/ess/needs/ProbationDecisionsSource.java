@@ -16,8 +16,8 @@ import java.util.Locale;
 
 /**
  * For a manager who may confirm or extend their team's probation
- * ({@code hrms.probation.team.decide}, DECISIONS 15; granted only to owners and
- * super admins until an admin gives it to managers): people in their team (the
+ * ({@code hrms.probation.team.decide}, DECISIONS 15; the built-in manager roles hold
+ * it since V143.85): people in their team (the
  * My team rule, {@link TeamEmployeeScope#teamOf}) still on probation whose end
  * date is within the workspace's probation reminder window (Probation settings,
  * the same window the probation reminders use), or already past. Read from the

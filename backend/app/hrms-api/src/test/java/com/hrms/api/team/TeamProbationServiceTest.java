@@ -146,4 +146,59 @@ class TeamProbationServiceTest {
         when(read.members(jwt)).thenReturn(List.of());
         assertEquals(List.of(), service.list(30, jwt));
     }
+
+    /**
+     * A manager (DEPT_MANAGER / MANAGER: attendance.team.read, no
+     * attendance.workforce.admin) decides only for their own team, through the
+     * real My team rule: their direct report yes; a colleague outside the team,
+     * or themself, no. The company-wide list is never consulted.
+     */
+    @Test void aManagerDecidesOnlyForTheirOwnTeam() {
+        com.hrms.employee.repository.EmployeeRepository repo = mock(com.hrms.employee.repository.EmployeeRepository.class);
+        com.hrms.employee.workforce.repository.WorkforceDepartmentRepository depts =
+                mock(com.hrms.employee.workforce.repository.WorkforceDepartmentRepository.class);
+        com.hrms.api.attendance.TeamEmployeeScope scope = new com.hrms.api.attendance.TeamEmployeeScope(repo, depts);
+        TeamReadService realRead = new TeamReadService(scope, repo, depts, jdbc,
+                mock(com.unifiedtree.rbac.security.PermissionChecker.class));
+        TeamProbationService real = new TeamProbationService(realRead, jdbc, workforce, probation, holders,
+                mock(AuditService.class), events);
+        Employee manager = new Employee();
+        manager.setId(me);
+        manager.setCompanyId(UUID.randomUUID());
+        manager.setEmploymentStatus(EmploymentStatus.ACTIVE);
+        Employee report = new Employee();
+        report.setId(member);
+        report.setEmploymentStatus(EmploymentStatus.PROBATION);
+        UUID colleague = UUID.randomUUID();
+        when(repo.findById(me)).thenReturn(java.util.Optional.of(manager));
+        when(depts.findByDepartmentHeadEmployeeId(me)).thenReturn(List.of());
+        when(repo.findByManagerId(me)).thenReturn(List.of(report, manager));
+        personIs("PROBATION", LocalDate.of(2026, 10, 5));
+
+        LocalDate on = LocalDate.of(2026, 10, 5);
+        assertEquals("ACTIVE", real.confirm(member, on, jwt).employmentStatus());
+        verify(workforce).confirm(member, on);
+        for (UUID notInTeam : List.of(colleague, me)) {
+            assertEquals("NOT_IN_TEAM", assertThrows(HrmsException.class,
+                    () -> real.confirm(notInTeam, null, jwt)).getErrorCode());
+            assertEquals("NOT_IN_TEAM", assertThrows(HrmsException.class,
+                    () -> real.extend(notInTeam, LocalDate.of(2026, 12, 1), null, jwt)).getErrorCode());
+        }
+        verify(workforce, times(1)).confirm(any(), any());
+        verifyNoInteractions(probation);
+        verify(repo, never()).findActiveByCompany(any());
+    }
+
+    @Test void v143_85GivesTheBuiltInManagerRolesTheTeamDecidePermissionOnly() throws Exception {
+        String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "../hrms-app/src/main/resources/db/canonical/V143_85__managers_decide_team_probation.sql"));
+        String statement = sql.substring(sql.indexOf("INSERT INTO rbac.role_permissions"));
+        assertTrue(statement.contains("'hrms.probation.team.decide'"));
+        assertTrue(statement.contains("r.tenant_id IS NULL"), "built-in roles only");
+        assertTrue(statement.contains("r.code IN ('DEPT_MANAGER', 'MANAGER')"));
+        assertTrue(statement.contains("ON CONFLICT DO NOTHING"), "idempotent");
+        assertFalse(sql.contains("DELETE FROM"), "adds a grant, removes none");
+        assertFalse(sql.contains("INSERT INTO rbac.permissions"), "the permission already exists (V143.55)");
+        assertEquals(1, sql.split("INSERT INTO", -1).length - 1, "one statement");
+    }
 }

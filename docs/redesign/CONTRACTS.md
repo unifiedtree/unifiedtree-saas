@@ -26,7 +26,7 @@ The hook files live in `apps/platform/src/modules/hrms/api/shared/`, one per hoo
 ## New permissions (constants in `packages/sdk/src/permissions/codes.ts`; the OWNER writes the migration + `rbac.permissions` row + grants)
 | code | module | name to seed | grants | owner (migration) |
 |---|---|---|---|---|
-| hrms.probation.team.decide | hrms | Confirm or extend team probation | OWNER, SUPER_ADMIN | P-TEAM (V143_55) |
+| hrms.probation.team.decide | hrms | Confirm or extend team probation | OWNER, SUPER_ADMIN, ADMIN (V143_67), DEPT_MANAGER, MANAGER (V143_85) | P-TEAM (V143_55) |
 | hrms.team.message | hrms | Message your team | OWNER, SUPER_ADMIN, DEPT_MANAGER, MANAGER | P-TEAM (V143_55) |
 | hrms.leave.apply.others | leave | Apply for leave for others | OWNER, SUPER_ADMIN, ADMIN, HR_MANAGER, FINANCE_LEAD (same as `hrms.advance.request.others`) | P-LEAVE (V143_56) |
 | hrms.expense.claim.others | expense | Raise expense claims for others | same five | P-EXP (V143_57) |

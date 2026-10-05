@@ -6,8 +6,8 @@
 //        ends within `days`, plus every overdue one; soonest first.
 //   POST /v1/team/probation/{employeeId}/confirm  { confirmationDate? }   → TeamProbationDecision
 //   POST /v1/team/probation/{employeeId}/extend   { newEndDate, note? }   → TeamProbationDecision
-//        Permission: @perm.check('hrms.probation.team.decide') (OWNER and
-//        SUPER_ADMIN only by default, DECISIONS 15) + the person is in the
+//        Permission: @perm.check('hrms.probation.team.decide') (OWNER,
+//        SUPER_ADMIN, ADMIN, DEPT_MANAGER, MANAGER by default; V143_85) + the person is in the
 //        caller's team. Reuses today's probation service; HR and the employee
 //        are told (PROBATION_TEAM_DECISION); audited. Show the buttons only
 //        with P.HRMS_PROBATION_TEAM_DECIDE. The stored auto-extend setting stays

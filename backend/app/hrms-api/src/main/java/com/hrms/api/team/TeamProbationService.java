@@ -30,9 +30,9 @@ import java.util.stream.Collectors;
 
 /**
  * Probation for managers (redesign BW-11, DECISIONS 15): managers see their
- * team's probation end dates; with {@code hrms.probation.team.decide} (OWNER
- * and SUPER_ADMIN by default) they can also confirm or extend, for people in
- * their team only.
+ * team's probation end dates; with {@code hrms.probation.team.decide} (OWNER,
+ * SUPER_ADMIN, ADMIN, DEPT_MANAGER and MANAGER by default, V143.55/.67/.85)
+ * they can also confirm or extend, for people in their team only.
  *
  * <p>Confirm and extend reuse today's code unchanged: the employee record's
  * confirm ({@link WorkforceEmployeeService#confirm}, what HR's Confirm calls)
