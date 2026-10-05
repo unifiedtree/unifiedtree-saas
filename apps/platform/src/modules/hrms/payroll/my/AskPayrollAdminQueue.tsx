@@ -3,7 +3,8 @@
 // which opens only this queue, never a payroll run) clicks "Answer", writes a
 // reply inside the side panel, and the employee is notified without the
 // answer's text. Anyone else is refused by the API (403), so Answer stays
-// disabled for them. An answered question can be removed by the asker.
+// disabled for them. The same people can Remove an answered question: it leaves
+// this queue (kept as CLOSED), and the employee still sees it with its answer.
 // Source: GET /v1/payroll/queries, POST /v1/payroll/queries/{id}/answer,
 // DELETE /v1/payroll/queries/{id} (BW-59).
 import { useState } from 'react'
@@ -106,7 +107,7 @@ export function AskPayrollQueue() {
               <footer style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {r.status === 'OPEN'
                   ? <Button size={32} onClick={() => openPanel(r)} disabled={!canAnswer} aria-label={canAnswer ? 'Answer this question' : 'Only the payroll team or HR can answer'}>Answer</Button>
-                  : <Button size={32} variant="ghost" onClick={async () => {
+                  : <Button size={32} variant="ghost" title="Takes it off this list. The employee still sees the answer." onClick={async () => {
                     try { await remove.mutateAsync(r.id); toast.success('Question removed') } catch (err) { toast.error(errorText(err)) }
                   }}>Remove</Button>}
               </footer>

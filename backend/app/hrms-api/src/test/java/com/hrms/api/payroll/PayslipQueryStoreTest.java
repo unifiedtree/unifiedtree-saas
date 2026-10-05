@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.AdditionalMatchers.and;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -65,6 +66,7 @@ class PayslipQueryStoreTest {
         assertNotReady(() -> store.list(TENANT, null, 200));
         assertNotReady(() -> store.list(TENANT, "OPEN", 200));
         assertNotReady(() -> store.answer(TENANT, UUID.randomUUID(), "Because.", null, null));
+        assertNotReady(() -> store.close(TENANT, UUID.randomUUID()));
     }
 
     @Test
@@ -90,5 +92,26 @@ class PayslipQueryStoreTest {
         when(jdbc.update(contains("AND status = 'OPEN'"), any(Object[].class))).thenReturn(1, 0);
         assertTrue(store.answer(TENANT, UUID.randomUUID(), "Because.", UUID.randomUUID(), EMP));
         assertFalse(store.answer(TENANT, UUID.randomUUID(), "Because.", UUID.randomUUID(), EMP));
+    }
+
+    @Test
+    void removingOnlyClosesAnAnsweredQuestionOfTheCallersWorkspace() {
+        UUID id = UUID.randomUUID();
+        when(jdbc.update(anyString(), any(Object[].class))).thenReturn(1, 0);
+        assertTrue(store.close(TENANT, id));
+        assertFalse(store.close(TENANT, id));
+        verify(jdbc, times(2)).update(and(contains("SET status = 'CLOSED'"),
+                contains("WHERE tenant_id = ? AND id = ? AND status = 'ANSWERED'")), eq(TENANT), eq(id));
+        verify(jdbc, never()).update(contains("DELETE"), any(Object[].class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theWholeQueueLeavesOutRemovedQuestionsAndStatusClosedListsThem() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(List.of());
+        store.list(TENANT, null, 200);
+        verify(jdbc).query(contains("WHERE q.tenant_id = ? AND q.status <> 'CLOSED'"), any(RowMapper.class), eq(TENANT), eq(200));
+        store.list(TENANT, "CLOSED", 200);
+        verify(jdbc).query(contains("WHERE q.tenant_id = ? AND q.status = ?"), any(RowMapper.class), eq(TENANT), eq("CLOSED"), eq(200));
     }
 }

@@ -19,9 +19,10 @@ const question: PayslipQuery = {
   message: 'Why is my September net lower?', status: 'OPEN', answer: null, answeredByName: null, answeredAt: null,
   createdAt: '2026-09-27T09:00:00Z',
 }
+let rows: PayslipQuery[] = [question]
 vi.mock('../../api/usePayrollRuns', async () => ({
   ...(await vi.importActual<object>('../../api/usePayrollRuns')),
-  usePayQueries: () => ({ data: [question], isLoading: false, error: null, refetch: () => {} }),
+  usePayQueries: () => ({ data: rows, isLoading: false, error: null, refetch: () => {} }),
   useAnswerPayQuery: () => ({ mutateAsync: async () => ({}), isPending: false }),
   useDeletePayQuery: () => ({ mutateAsync: async () => undefined, isPending: false }),
 }))
@@ -60,6 +61,22 @@ describe('Ask payroll queue: who may answer', () => {
     const b = answerButton(render(['payroll.runs.read']))
     expect(b).toContain('disabled')
     expect(b).toContain('aria-label="Only the payroll team or HR can answer"')
+  })
+})
+
+describe('Ask payroll queue: Remove', () => {
+  const answered: PayslipQuery = { ...question, id: 'q2', status: 'ANSWERED', answer: 'Your LOP day is the 2nd.', answeredByName: 'Finance Lead', answeredAt: '2026-09-28T09:00:00Z' }
+
+  it('sits on an answered question only, and says the employee keeps the answer', () => {
+    rows = [question, answered]
+    try {
+      const html = render(['payroll.queries.answer'])
+      expect(html.match(/>Remove</g)?.length).toBe(1)
+      expect(html.match(/>Answer</g)?.length).toBe(1)
+      expect(html).toContain('title="Takes it off this list. The employee still sees the answer."')
+    } finally {
+      rows = [question]
+    }
   })
 })
 
