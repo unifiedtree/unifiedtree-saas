@@ -108,10 +108,11 @@ try {
     await drawer.waitFor({ state: 'hidden', timeout: 5000 })
 
     await page.getByPlaceholder('Search name, code, email or role…').fill('Reader')
-    const row = page.locator('tr', { hasText: 'Reader User' }).first()
+    // The directory is on the redesign kit (P-WF-PEOPLE): kit row menu and a kit dialog.
+    const row = page.locator('tbody tr').filter({ has: page.locator('th', { hasText: 'Reader User' }) }).first()
     await row.getByRole('button', { name: 'More actions' }).click()
-    await page.locator('#utm-portal .pop .opt', { hasText: 'Start exit' }).click()
-    const modal = page.locator('.modal[role=dialog]')
+    await page.getByRole('menuitem', { name: 'Start exit' }).click()
+    const modal = page.getByRole('dialog', { name: /^Start exit for / })
     await modal.waitFor({ timeout: 5000 })
     const lwd = modal.getByRole('combobox', { name: 'Last working day' })
     check('master Start exit: last working day is prefilled', /\d{1,2} \w{3} \d{4}/.test(await textOf(lwd)), await textOf(lwd))

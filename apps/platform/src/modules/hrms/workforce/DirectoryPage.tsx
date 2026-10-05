@@ -12,7 +12,7 @@
 //   - Import, Export (the same CSV and export log), Add employee, a row's quick profile, Edit
 //     details, Start exit (last working day → notice or exited), bulk Change status and Export.
 // Actions that change people need hrms.employee.write; Import needs hrms.employee.import.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MoreVertical } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
@@ -60,6 +60,7 @@ export function DirectoryPage({ allowed, failed, loading, retry }: DirectoryPage
     : 'Everyone on the roster, with their role, branch and status.'
 
   const [form, setForm] = useState<{ emp?: Rec } | null>(null)
+  const shown = useRef<Rec[] | null>(null)
   // ?add=1 (the dashboard's "Add employee") opens the form once the lists are in; the flag then leaves the URL.
   const [params, setParams] = useSearchParams()
   const wantsAdd = params.get('add') === '1'
@@ -72,7 +73,7 @@ export function DirectoryPage({ allowed, failed, loading, retry }: DirectoryPage
   const actions = ready ? (
     <>
       {canImport && <Button size={40} icon="upload" onClick={() => act.importEmployees()}>Import</Button>}
-      <Button size={40} icon="download" onClick={() => act.exportEmployees(people)}>Export</Button>
+      <Button size={40} icon="download" onClick={() => act.exportEmployees(shown.current ?? people)}>Export</Button>
       {canWrite && <Button size={40} variant="primary" icon="plus" onClick={() => setForm({})}>Add employee</Button>}
     </>
   ) : undefined
@@ -86,7 +87,7 @@ export function DirectoryPage({ allowed, failed, loading, retry }: DirectoryPage
       {!allowed ? <EmptyState icon="lock" title="You don’t have access to this section" hint="Ask an admin if you need it." />
         : failed ? <ErrorState title="This page couldn’t load" error={failed} onRetry={retry} />
           : loading ? <><SkeletonStats count={5} /><div className="ut-card wf-card"><SkeletonTable rows={8} cols={6} label="Loading employees" /></div></>
-            : <Directory stats={stats.notAvailable ? null : stats.data ?? null} statsLoading={stats.isLoading} canWrite={canWrite} onEdit={(emp) => setForm({ emp })} />}
+            : <Directory stats={stats.notAvailable ? null : stats.data ?? null} statsLoading={stats.isLoading} canWrite={canWrite} onEdit={(emp) => setForm({ emp })} shown={shown} />}
       {form && <EmployeeFormPanel emp={form.emp} onClose={() => setForm(null)} />}
     </PageFrame>
   )
@@ -97,9 +98,11 @@ interface DirectoryProps {
   statsLoading: boolean
   canWrite: boolean
   onEdit: (emp: Rec) => void
+  /** The rows the filters leave: the header's Export exports them, as before. */
+  shown: MutableRefObject<Rec[] | null>
 }
 
-function Directory({ stats, statsLoading, canWrite, onEdit }: DirectoryProps) {
+function Directory({ stats, statsLoading, canWrite, onEdit, shown }: DirectoryProps) {
   const { db, update, toast, route, act } = useMasterApp()
   const M = useMaps(db)
   const E = db.employees
@@ -120,6 +123,7 @@ function Directory({ stats, statsLoading, canWrite, onEdit }: DirectoryProps) {
     filterEmployees(E, { status, dept, branch, type, q, milestone: { on: !!ms.value, ids: ms.ids } }, M.look), sort, M.look),
   [E, status, dept, branch, type, q, ms.value, ms.ids, sort, M.look])
   useEffect(() => { setPage(0) }, [status, dept, branch, type, q, sort.k, sort.d, ms.value, ms.ids])
+  shown.current = rows
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   const cur = Math.min(page, pages - 1)
   const slice = rows.slice(cur * PAGE_SIZE, (cur + 1) * PAGE_SIZE)
@@ -203,7 +207,7 @@ function Directory({ stats, statsLoading, canWrite, onEdit }: DirectoryProps) {
 
   return (
     <>
-      <StatGrid min={200} label="Workforce figures">
+      <StatGrid min={165} label="Workforce figures">
         {cards.map((k, i) => (
           <StatCard key={k.key} variant="stat" index={i} label={k.label} icon={k.icon} tone={k.tone} value={k.value} loading={statsLoading}
             spark={k.spark} sparkLabel={k.spark ? 'Active people, last months' : undefined} delta={k.delta} mood={k.delta && k.delta !== '0' ? 'good' : 'flat'} trend="up"
@@ -218,7 +222,7 @@ function Directory({ stats, statsLoading, canWrite, onEdit }: DirectoryProps) {
           <Dropdown className="wf-filter" label="Department" options={deptOpts} value={dept} onChange={(x) => setDept(x)} searchable menuWidth={260} />
           <Dropdown className="wf-filter" label="Branch" options={branchOpts} value={branch} onChange={(x) => setBranch(x)} searchable={branchOpts.length > 7} menuWidth={240} />
           <Dropdown className="wf-filter" label="Type" options={typeOpts} value={type} onChange={(x) => setType(x)} searchable={false} menuWidth={200} />
-          <Dropdown className="wf-filter wf-filter--wide" label="Milestone" options={msOpts} value={ms.value} onChange={(x) => ms.set(x)} searchable={false} menuWidth={280} />
+          <Dropdown className="wf-filter wf-filter--wide wf-filter--milestone" label="Milestone" options={msOpts} value={ms.value} onChange={(x) => ms.set(x)} searchable={false} menuWidth={280} />
           {any && <Button size={36} variant="ghost" icon="x" onClick={clear}>Clear</Button>}
           <span className="wf-count" aria-live="polite">{rows.length} of {E.length} shown</span>
         </div>

@@ -37,7 +37,11 @@ async function signIn(email) {
   return { page, errors, failed, settle }
 }
 const drawer = (page) => page.locator('#utm-portal .drawer')
-const toastSeen = (page, re) => page.locator('.toast').filter({ hasText: re }).first().waitFor({ timeout: 15000 }).then(() => true, () => false)
+// Employee Master (the Workforce directory) is on the redesign kit: kit table, side panels and toasts (.uko-toast).
+const EMP_ROWS = 'table[aria-label="Employees"] tbody tr'
+const profilePanel = (page) => page.getByRole('dialog', { name: 'Employee profile' })
+const editPanel = (page) => page.getByRole('dialog', { name: /^Edit / })
+const toastSeen = (page, re) => page.locator('.toast, .uko-toast').filter({ hasText: re }).first().waitFor({ timeout: 15000 }).then(() => true, () => false)
 async function save(page, cta) { await drawer(page).getByRole('button', { name: cta }).click() }
 /** Open a row's ⋮ menu and pick an item. */
 async function rowMenu(page, rowText, item) {
@@ -87,24 +91,25 @@ try {
   await page.goto(base + '/hrms/employees'); await settle()
   await page.getByRole('heading', { name: 'Employee Master' }).waitFor()
   const total = Number(sql("select count(*) from hrms.employees where tenant_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and coalesce(is_active,true)"))
-  check('headcount table lists every employee', await page.locator('.tbar .meta').filter({ hasText: new RegExp(`of ${total}$`) }).count() === 1, `${total}`)
+  // The directory is on the redesign kit (P-WF-PEOPLE): its count, table, side panels and toasts are the kit's.
+  check('headcount table lists every employee', await page.locator('.wf-count').filter({ hasText: new RegExp(` of ${total} shown$`) }).count() === 1, `${total}`)
   await page.getByPlaceholder('Search name, code, email or role…').fill('EMP-0001')
   await page.waitForTimeout(300)
-  check('search narrows the table', (await page.locator('table.t tbody tr').count()) === 1)
+  check('search narrows the table', (await page.locator(EMP_ROWS).count()) === 1)
   const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Export$/ }).click()])
   check('Export downloads a CSV of the rows shown', /employees-.*\.csv$/.test(csv.suggestedFilename()) && await toastSeen(page, /Exported 1 employee to CSV/))
-  await page.locator('table.t tbody tr').first().click()
-  await drawer(page).waitFor()
-  check('row opens the profile drawer', await drawer(page).getByText('Employee profile').count() > 0 && await drawer(page).getByText('EMP-0001').count() > 0)
+  await page.locator(EMP_ROWS).first().click()
+  await profilePanel(page).waitFor()
+  check('row opens the profile drawer', await profilePanel(page).count() === 1 && await profilePanel(page).getByText('EMP-0001').count() > 0)
   const phoneBefore = sql("select coalesce(phone,'') from hrms.employees where employee_code='EMP-0001'")
-  await drawer(page).getByRole('button', { name: /Edit details/ }).click()
-  await drawer(page).getByPlaceholder('+91 98xxx xxxxx').fill('+91 90000 12345')
-  await save(page, /Save changes/)
+  await profilePanel(page).getByRole('button', { name: /Edit details/ }).click()
+  await editPanel(page).getByPlaceholder('+91 98xxx xxxxx').fill('+91 90000 12345')
+  await editPanel(page).getByRole('button', { name: /Save changes/ }).click()
   check('editing an employee saves to the API', await toastSeen(page, /Saved changes to/) && sql("select phone from hrms.employees where employee_code='EMP-0001'") === '+91 90000 12345')
   sql(`update hrms.employees set phone=${phoneBefore ? `'${phoneBefore}'` : 'null'} where employee_code='EMP-0001'`)
   await page.goto(base + '/hrms/employees'); await settle()
-  await page.locator('table.t tbody tr').first().click()
-  await drawer(page).getByRole('button', { name: /Full record/ }).click()
+  await page.locator(EMP_ROWS).first().click()
+  await profilePanel(page).getByRole('button', { name: /Full record/ }).click()
   await page.waitForURL(/\/hrms\/employees\/[0-9a-f-]{36}$/, { timeout: 15000 }).catch(() => {})
   check('"Full record" opens the employee page', /\/hrms\/employees\/[0-9a-f-]{36}$/.test(page.url()))
 
