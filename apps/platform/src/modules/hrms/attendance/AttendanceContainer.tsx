@@ -31,7 +31,7 @@ import { useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDelete
 import { usePendingShiftRequests, useDecidedShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../api/useShiftRequests'
 import { useHolidays } from '../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { DailyTracking } from './daily/DailyTracking'
 
 type St = 'live' | 'loading' | 'empty' | 'error'
@@ -127,8 +127,9 @@ function ModuleAttendancePage() {
   const canReview = usePermission('attendance.status.review') // the review list (V143.10)
   const canOverride = usePermission('attendance.status.override') // change a day, decide face punches
   const isHr = canTeam
-  // Owners and admins don't get a My Attendance tab (the Leave page hides its personal tabs the same way).
-  const { isAdmin } = useRoles()
+  // My Attendance: by default not for owners and admins (the personal pages rule, usePersonalPages,
+  // as the Leave page's personal tabs).
+  const personal = usePersonalPages()
   const canFaceList = canFace || canReview
   const weekAgo = addDays(today, -6)
   const [target, setTarget] = useState<StatusTarget | null>(null)
@@ -549,7 +550,7 @@ function ModuleAttendancePage() {
           initialStatus={params.get('status') || ''}
           date={date}
           viewAs={isHr ? 'admin' : 'employee'}
-          hideMine={isAdmin}
+          hideMine={!personal}
           mobile={mobile}
           data={{ ...data, reviewBlock }}
           states={states}

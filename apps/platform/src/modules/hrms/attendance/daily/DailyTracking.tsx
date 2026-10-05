@@ -12,7 +12,7 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission, useAnyPermission, P } from '@unifiedtree/sdk'
 import { CountBadge, PageFrame, PillTabs, type PillTab } from '@/design/kit/display'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { isReadyPage } from '@/shared/navigation/pageRegistry'
 import { useCorrectionApprovals } from '../../api/useAttendance'
 import { useFaceReviewEvents, useReviewExceptions } from '../../api/useAttendanceReview'
@@ -29,11 +29,13 @@ export type DailyTab = 'team' | 'face' | 'corrections' | 'review' | 'my' | 'time
 
 export interface DailyPerms {
   team: boolean; face: boolean; review: boolean; override: boolean; approve: boolean; self: boolean
-  admin: boolean; report: boolean; assist: boolean; timesheetApprove: boolean; isAdminRole: boolean; leaveOthers: boolean
+  admin: boolean; report: boolean; assist: boolean; timesheetApprove: boolean; leaveOthers: boolean
+  /** My Attendance, your own fixes and timesheet: the personal pages rule (usePersonalPages). */
+  personalPages: boolean
 }
 
 export function useDailyPerms(): DailyPerms {
-  const { isAdmin } = useRoles()
+  const personal = usePersonalPages()
   return {
     team: usePermission(P.ATTENDANCE_TEAM_READ),
     face: usePermission(P.ATTENDANCE_FACE_ADMIN_READ),
@@ -46,7 +48,7 @@ export function useDailyPerms(): DailyPerms {
     assist: useAnyPermission([P.ATTENDANCE_ASSISTED_PUNCH_TEAM, P.ATTENDANCE_ASSISTED_PUNCH_ANY]),
     timesheetApprove: usePermission(P.HRMS_TIMESHEET_APPROVE),
     leaveOthers: usePermission(P.HRMS_LEAVE_APPLY_OTHERS),
-    isAdminRole: isAdmin,
+    personalPages: personal,
   }
 }
 
@@ -58,8 +60,8 @@ export function dailyTabs(p: DailyPerms, timesheetReady: boolean): DailyTab[] {
   if (p.team && (p.face || p.review)) tabs.push('face')
   tabs.push('corrections')
   if (p.team && p.review) tabs.push('review')
-  if (p.self && !p.isAdminRole) tabs.push('my')
-  if (timesheetReady && ((p.self && !p.isAdminRole) || p.timesheetApprove)) tabs.push('timesheet')
+  if (p.self && p.personalPages) tabs.push('my')
+  if (timesheetReady && ((p.self && p.personalPages) || p.timesheetApprove)) tabs.push('timesheet')
   // Staff open on their own month; Regularization moves after it (today's order).
   if (!p.team) {
     const i = tabs.indexOf('my')

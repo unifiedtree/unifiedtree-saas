@@ -125,6 +125,56 @@ export function useMarkRoleReviewed() {
   })
 }
 
+// ── Personal pages per role (V143.90) ────────────────────────────────────────
+// Whether the people holding a role see My work and the other "My …" pages. Off
+// by default for OWNER, SUPER_ADMIN, COMPANY_ADMIN and ADMIN, on for every other
+// role; only the workspace owner changes it, built-in roles included. People
+// see a change at their next sign-in or page reload.
+
+/** One role's personal pages setting. */
+export interface RolePersonalPages {
+  roleId: string
+  code: string
+  displayName: string
+  systemRole: boolean
+  /** On or off now (the owner's choice, else the default). */
+  enabled: boolean
+  /** The owner changed it from the default. */
+  overridden: boolean
+  defaultEnabled: boolean
+}
+
+export interface PersonalPagesSettings {
+  /** The signed-in person is the workspace owner. */
+  canEdit: boolean
+  /** Saving works (the server's table is there). */
+  ready: boolean
+  roles: RolePersonalPages[]
+}
+
+// Under ROLES_KEY, so it refreshes with the roles.
+const PERSONAL_PAGES_KEY = [...ROLES_KEY, 'personal-pages'] as const
+
+/** Every role's setting. A server from before it existed answers an error: the switch shows a note instead. */
+export function useRolePersonalPages(enabled = true) {
+  return useQuery({
+    queryKey: PERSONAL_PAGES_KEY,
+    queryFn: () => apiJson<PersonalPagesSettings>('/v1/rbac/personal-pages'),
+    enabled,
+    retry: false,
+  })
+}
+
+/** Turn personal pages on or off for one role (the owner only; the server checks). */
+export function useSetRolePersonalPages() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ roleId, enabled }: { roleId: string; enabled: boolean }) =>
+      apiJson<RolePersonalPages>(`/v1/rbac/personal-pages/${roleId}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PERSONAL_PAGES_KEY }),
+  })
+}
+
 export function useCreateRole() {
   const qc = useQueryClient()
   return useMutation({

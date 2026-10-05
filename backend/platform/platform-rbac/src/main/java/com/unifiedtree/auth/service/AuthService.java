@@ -99,6 +99,23 @@ public class AuthService {
     }
 
     /**
+     * Works out "personalPages" for the sign-in answer and /me (V143.90). Optional,
+     * so tests can build the service bare; without it the field is null and the
+     * clients keep their own role rule.
+     */
+    private com.unifiedtree.rbac.service.PersonalPagesService personalPages;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setPersonalPages(com.unifiedtree.rbac.service.PersonalPagesService personalPages) {
+        this.personalPages = personalPages;
+    }
+
+    /** Whether this person sees the personal pages; null when the service is absent. */
+    private Boolean personalPagesFor(UUID tenantId, List<UUID> roleIds) {
+        return personalPages == null ? null : personalPages.forRoles(tenantId, roleIds);
+    }
+
+    /**
      * Resolve which workspace an email belongs to WITHOUT an authenticated
      * tenant context — used for email-only login (the app sends no workspace).
      *
@@ -484,7 +501,7 @@ public class AuthService {
         return new LoginResponse(
             access.token(), refreshPlain, access.expiresAt(),
             creds.getId(), creds.getEmployeeId(), tenantId, creds.getEmail(),
-            firstName, lastName, roleCodes, permissions);
+            firstName, lastName, roleCodes, permissions, personalPagesFor(tenantId, roleIds));
     }
 
     /**
@@ -554,7 +571,8 @@ public class AuthService {
             }
         }
         
-        return new MeResponse(userId, tenantId, creds.getEmail(), firstName, lastName, roleCodes, permissions, activeModules);
+        return new MeResponse(userId, tenantId, creds.getEmail(), firstName, lastName, roleCodes, permissions, activeModules,
+            personalPagesFor(tenantId, roleIds));
     }
 
     // ---- helpers --------------------------------------------------------------

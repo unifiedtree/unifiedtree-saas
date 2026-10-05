@@ -67,6 +67,7 @@ export const AcceptInvite: React.FC = () => {
         lastName:      res.lastName,
         roles:         res.roles,
         permissions:   res.permissions,
+        personalPages: res.personalPages,
         tenantId:      res.tenantId,
         tenantSlug:    res.tenantSlug,
         tenantName:    res.tenantName,

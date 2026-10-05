@@ -8,7 +8,7 @@ import { useNavigationGuard } from '@/design/shell/navigationGuard'
 import { SettingsPage, SettingsSection, SettingsToggleRow, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { istToday } from '@/design/dc/dates'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { apiJson } from '@/core/api/client'
 import type { EmploymentStatus, WorkforceEmployee } from '@/modules/hrms/api/useWorkforce'
 import { useEmergencyContacts, useEmployeeAddresses } from '@/modules/hrms/api/useEmployeeProfile'
@@ -162,15 +162,16 @@ export const Profile: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ── what the person may read about themselves ──
-  const { isAdmin } = useRoles()
+  const personal = usePersonalPages()
   const canCheckin = usePermission('attendance.checkin.self')
   const canPay = usePermission('payroll.structure.read.self'), canSlips = usePermission('payroll.payslip.read.self')
   const canLeave = usePermission('leave.request.self'), canClaims = usePermission('hrms.expense.claim.self')
   const canDocs = usePermission('hrms.document.read.self'), canLetters = usePermission('hrms.letters.read.self')
   const canPerf = usePermission('hrms.performance.review.self')
   const canFace = useCanSelfEnrollFace()
-  // The client's rule: an admin's own profile has no Attendance (as My Attendance).
-  const showAttendance = canCheckin && !isAdmin
+  // The client's rule: by default an admin's own profile has no Attendance (as My Attendance; the
+  // personal pages rule, usePersonalPages: the owner sets it per role).
+  const showAttendance = canCheckin && personal
 
   // ── data: the login, the employee row, the work record (BW-98), own sections (BW-99) ──
   const linked = !!user?.employeeId

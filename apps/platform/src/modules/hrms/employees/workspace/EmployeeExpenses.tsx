@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Receipt } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { Button } from '@/design/kit/display'
 import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
@@ -33,9 +33,9 @@ export function EmployeeExpenses({ employeeId, firstName, self, name }: { employ
   // New claim on behalf (BW-61): never for yourself (that is your own claim, from Expenses).
   const canOthers = usePermission(P.HRMS_EXPENSE_CLAIM_OTHERS) && !self
   const [onBehalf, setOnBehalf] = useState(false)
-  // Your own new claim opens My claims, which owners and admins don't have (the rule My work uses).
-  const { isAdmin } = useRoles()
-  const canClaimSelf = usePermission('hrms.expense.claim.self') && !isAdmin
+  // Your own new claim opens My claims, which by default owners and admins don't have (the personal pages rule, usePersonalPages: the owner sets it per role).
+  const personal = usePersonalPages()
+  const canClaimSelf = usePermission('hrms.expense.claim.self') && personal
   const [page, setPage] = useState(0)
   const [open, setOpen] = useState<string | null>(null)
   const claims = useEmployeeClaims(employeeId, page, PAGE_SIZE)

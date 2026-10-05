@@ -26,7 +26,7 @@ const WEEK_STATE: Record<string, { label: string; tone: StatusTone }> = {
 const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export function Timesheet({ perms }: { perms: DailyPerms }) {
-  const mine = perms.self && !perms.isAdminRole
+  const mine = perms.self && perms.personalPages
   return (
     <>
       <PageHeader title="Timesheet" sub={mine ? 'What you worked on this week, by project. It doesn’t change your attendance or pay.' : 'Timesheets your team sent for approval.'} />
