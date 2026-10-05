@@ -19,7 +19,7 @@ import { useHome } from '@/design/shell/useHome'
 import { READY_PAGES } from '@/shared/navigation/pageRegistry'
 import { greetingName } from '@/shared/hooks/greetingName'
 import { useAttendanceHistory, useAttendanceTrend, useTeamDashboard } from '../../api/useAttendance'
-import { useLeaveTypes, useMyBalances, useMyLeaves } from '../../api/useLeave'
+import { useColleaguesOff, useLeaveTypes, useMyBalances, useMyLeaves } from '../../api/useLeave'
 import { useMyInterviews } from '../../api/useHiring'
 import { useMyWfhRequests } from '../../api/useWfh'
 import { useHolidays, useWeekendDays } from '../../api/useSettings'
@@ -27,6 +27,7 @@ import type { MyPayslip } from '../../api/usePayrollRuns'
 import { usePaySchedule } from '../../api/shared/usePaySchedule'
 import { useApprovalsInbox } from '../../api/shared/useApprovalsInbox'
 import { useTeamSummary } from '../../api/shared/useTeamSummary'
+import { useTeamTimeOff } from '../../api/shared/useTeamTimeOff'
 import type { ApprovalsInbox, InboxTab } from '../../api/shared/contracts'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../../attendance/attendanceBuckets'
 import { clockIst, workingWindow } from '../../dashboard/dashboardModel'
@@ -34,11 +35,13 @@ import { WebPunchDialog } from '../../attendance/webpunch/WebPunchDialog'
 import { AssistedPunchDialog } from '../../attendance/webpunch/AssistedPunchDialog'
 import { AttendanceHistory } from '../AttendanceHistory'
 import { TimeEntries } from '../TimeEntries'
-import { HOME_KEYS, useAroundMe, useBreak, useMeEmployee, useMyDay, useMyRequests, useNeedsYou, useUndoCheckOut } from './homeApi'
+import { HOME_KEYS, useAroundMe, useBreak, useCelebrations, useMeEmployee, useMyDay, useMyRequests, useNeedsYou, useUndoCheckOut } from './homeApi'
 import {
   CalendarCard, LeaveCard, MyRequestsCard, NeedsYouCard, PayCard, ShortcutsCard, UpcomingEventsCard, YourDay, type Shortcut,
 } from './HomeBlocks'
 import { AssistedPunchPanel, MessageTeamDialog, TeamPunchEntry, TodaysTeam, WaitingForYou } from './TeamBlocks'
+import { CelebrationsCard, OffThisWeekCard, UpcomingHolidaysCard } from './PeopleBlocks'
+import { nextHolidays, offFromColleagues, offFromTeam, weekOf } from './peopleModel'
 import {
   calendarDays, calendarSub, greetingWord, hm, lateDaysNote, lateSeries, latestPayslip, leaveDays, leaveNote, liveActiveMinutes, longWeekendTip,
   mainBalance, money, monthName, monthOf, monthWord, num, presentSeries, relDay, shiftMinutes, things, weeklyOffSet, wfhDaysInMonth,
@@ -89,6 +92,10 @@ export function HomePage() {
   const canTeamToday = useAnyPermission(['attendance.team.read', 'attendance.workforce.admin'])
   const canAssist = useAnyPermission(['attendance.assisted_punch.team', 'attendance.assisted_punch.any'])
   const canMessage = usePermission('hrms.team.message')
+  // Off this week: the team's time off for team approvers (/v1/team/time-off's own rule), else
+  // same-department colleagues (/v1/leave/team-off needs leave.balance.read); nobody else sees it.
+  const canTeamOff = useAnyPermission(['attendance.team.read', P.HRMS_LEAVE_APPROVE_L1, 'wfh.approve'])
+  const canColleaguesOff = usePermission('leave.balance.read')
 
   // ── the clock: the greeting, Your day's timer and the line move on ──
   const [now, setNow] = useState(() => new Date())
@@ -121,6 +128,10 @@ export function HomePage() {
   const teamDash = useTeamDashboard(today, undefined, team && canTeamToday, false, { includeWeeklyOff: true })
   const trend = useAttendanceTrend(addDays(today, -30), today, undefined, team && canTeamToday)
   const summary = useTeamSummary({ enabled: team && canMessage })
+  const celebrations = useCelebrations(30)
+  const week = useMemo(() => weekOf(today), [today])
+  const teamOff = useTeamTimeOff(week.from, week.to, { enabled: canTeamOff })
+  const colleaguesOff = useColleaguesOff(week.from, week.to, !canTeamOff && canColleaguesOff)
 
   // ── Your day ──
   const myDay = day.notAvailable ? undefined : day.data
@@ -146,6 +157,12 @@ export function HomePage() {
   const off = useMemo(() => weeklyOffSet(me.data?.weeklyOffDays, weekend.data?.weekendDays), [me.data?.weeklyOffDays, weekend.data?.weekendDays])
   const holidayList = useMemo(() => [...(holidays.data ?? []), ...(holidaysNext.data ?? [])]
     .filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName })), [holidays.data, holidaysNext.data])
+  const upcomingHolidays = useMemo(() => nextHolidays(holidayList, today, 3), [holidayList, today])
+  const offPeople = useMemo(() => canTeamOff
+    ? offFromTeam(teamOff.data ?? [], week, today)
+    : offFromColleagues(colleaguesOff.data?.days ?? [], today), [canTeamOff, teamOff.data, colleaguesOff.data, week, today])
+  const offQuery = canTeamOff ? teamOff : colleaguesOff
+  const showOff = canTeamOff ? !teamOff.notAvailable : canColleaguesOff
   const myLeaves = useMemo(() => leaves.data?.content ?? [], [leaves.data])
   const wfhRequests = useMemo(() => wfh.data?.content ?? [], [wfh.data])
   const wfhThisMonth = useMemo(() => wfhDaysInMonth(wfhRequests, month, off), [wfhRequests, month, off])
@@ -203,9 +220,11 @@ export function HomePage() {
     ...(canTeamToday ? [{ key: 'team-schedule', label: 'Team schedule', kind: 'swap' as const, hint: 'Who works when', path: READY_PAGES.has('P-TEAM') ? '/team?view=schedule' : '/team' }] : []),
     ...(canMessage ? [{ key: 'message', label: 'Message team', kind: 'megaphone' as const, hint: teamLabel ? `Post to ${teamLabel}` : 'Post to your team', onClick: () => setMessageOpen(true) }] : []),
     ...(canLeave ? [{ key: 'leave', label: 'Apply for leave', kind: 'home' as const, hint: main ? `${num(main.available)} ${main.leaveTypeName.replace(/\s*leave$/i, '').toLowerCase()} days left` : undefined, path: '/hrms/leave?tab=apply' }] : []),
+    ...(canLeave ? [{ key: 'balance', label: 'Leave balance', kind: 'chart' as const, hint: bal.length ? `${bal.length} leave ${bal.length === 1 ? 'type' : 'types'}` : undefined, path: '/hrms/leave?tab=balances' }] : []),
     ...(canPayslips ? [{ key: 'payslip', label: 'Payslip', kind: 'download' as const, hint: slip ? `${monthName(slip.periodMonth)} is ready` : undefined, path: '/me/payslips' }] : []),
   ] : [
     ...(canLeave ? [{ key: 'leave', label: 'Apply for leave', kind: 'calendar' as const, hint: main ? `${num(main.available)} ${main.leaveTypeName.replace(/\s*leave$/i, '').toLowerCase()} days left` : undefined, path: '/hrms/leave?tab=apply' }] : []),
+    ...(canLeave ? [{ key: 'balance', label: 'Leave balance', kind: 'chart' as const, hint: bal.length ? `${bal.length} leave ${bal.length === 1 ? 'type' : 'types'}` : undefined, path: '/hrms/leave?tab=balances' }] : []),
     ...(canWfh ? [{ key: 'wfh', label: 'Work from home', kind: 'home' as const, hint: wfh.data ? `${daysWord(wfhThisMonth.length)} this month` : undefined, path: '/me/wfh' }] : []),
     ...(canShift ? [{ key: 'fix', label: 'Fix a punch', kind: 'clock' as const, hint: missed[0]?.detail ?? 'Ask to correct a punch', badge: missed.length, path: missed[0]?.link ?? '/hrms/attendance?tab=my' }] : []),
     ...(canPayslips ? [{ key: 'payslip', label: 'Payslip', kind: 'download' as const, hint: slip ? `${monthName(slip.periodMonth)} is ready` : undefined, path: '/me/payslips' }] : []),
@@ -314,6 +333,14 @@ export function HomePage() {
           {!reqs.notAvailable && (
             <MyRequestsCard requests={reqs.data?.requests ?? []} loading={reqs.isLoading} error={reqs.error} onRetry={() => reqs.refetch()} today={today} onOpen={go} />
           )}
+          {showOff && (
+            <OffThisWeekCard people={offPeople} scope={canTeamOff ? 'team' : 'department'} loading={offQuery.isLoading} error={offQuery.error}
+              onRetry={() => offQuery.refetch()} />
+          )}
+          {!celebrations.notAvailable && (
+            <CelebrationsCard items={celebrations.data?.items ?? []} loading={celebrations.isLoading} error={celebrations.error}
+              onRetry={() => celebrations.refetch()} today={today} onSeeAll={() => go('/me/celebrations')} />
+          )}
         </div>
         <div className="uh-col">
           {team && canTeamToday && (
@@ -332,6 +359,10 @@ export function HomePage() {
                 payday={payday} loading={payslips.isLoading} error={payslips.error} onRetry={() => payslips.refetch()} onAll={() => go('/me/payslips')} />
             )}
           </div>
+          {!!companyId && (
+            <UpcomingHolidaysCard holidays={upcomingHolidays} loading={holidays.isLoading} error={holidays.error} onRetry={() => holidays.refetch()} today={today}
+              onOpen={() => go('/hrms/leave?tab=holidays')} />
+          )}
           {!around.notAvailable && (
             <UpcomingEventsCard items={around.data?.items ?? []} loading={around.isLoading} error={around.error} onRetry={() => around.refetch()} today={today} onOpen={go} />
           )}

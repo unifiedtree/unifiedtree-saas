@@ -9,6 +9,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import { asAvailable, defaultApi, useAvailableQuery, type ApiFetch, type SharedQueryOptions } from '../../api/shared/available'
+import { fromAroundMe, fromCelebrations, type CelebrationsData } from './peopleModel'
 
 /** Query-key prefixes for Home's own lists. */
 export const HOME_KEYS = {
@@ -16,6 +17,7 @@ export const HOME_KEYS = {
   myRequests: ['ess', 'my-requests'],
   needsYou: ['ess', 'needs-you'],
   aroundMe: ['ess', 'around-me'],
+  celebrations: ['ess', 'celebrations'],
   eligible: ['attendance', 'assisted-punch', 'eligible'],
 } as const
 
@@ -166,4 +168,25 @@ export interface MeEmployee {
 
 export function useMeEmployee(opts?: { enabled?: boolean }) {
   return useQuery({ queryKey: ['employee', 'me'], queryFn: () => apiJson<MeEmployee>('/v1/employees/me'), staleTime: 60_000, retry: false, enabled: opts?.enabled ?? true })
+}
+
+// ── Celebrations (birthdays, work anniversaries, Welcome aboard) ────────────
+//   GET /v1/ess/celebrations?days=   a week back to `days` ahead, and who joined in the last 30 days.
+// A server without it (404) falls back to around-me's birthdays and anniversaries, with no
+// Welcome aboard; the mobile app reads it the same way (services/api/celebrations.api.ts).
+
+export function celebrationsQuery(days: number, api: ApiFetch = defaultApi): SharedQueryOptions<CelebrationsData> {
+  return {
+    queryKey: [...HOME_KEYS.celebrations, days],
+    queryFn: async () => {
+      const own = await asAvailable(() => api<Parameters<typeof fromCelebrations>[0]>(`/v1/ess/celebrations?days=${days}`))
+      if (own.available) return { available: true, value: fromCelebrations(own.value) }
+      const around = await asAvailable(() => api<AroundMeResponse>(`/v1/ess/around-me?days=${days}`))
+      return around.available ? { available: true, value: fromAroundMe(around.value.items) } : around
+    },
+  }
+}
+
+export function useCelebrations(days = 30, enabled = true) {
+  return useAvailableQuery<CelebrationsData>({ ...celebrationsQuery(days), enabled, staleTime: 5 * 60_000 })
 }

@@ -88,3 +88,35 @@
   .uh-day { gap: 8px 12px; }
   .uh-day__bar { flex-basis: 100%; order: 5; }
 }
+
+/* ── Celebrations, Off this week, Upcoming holidays (PeopleBlocks.tsx) ──── */
+.uh-faces { list-style: none; margin: 0; padding: 4px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 14px 8px; }
+.uh-faces__btn {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px 6px;
+  border: 0; border-radius: 12px; background: transparent; color: var(--u-ink, #0E1B16); font: inherit; cursor: pointer;
+}
+.uh-faces__btn:hover { background: var(--u-hv, #F0F4F2); }
+.uh-faces__btn:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.uh-faces__name { margin-top: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
+.uh-faces__when { font-size: 11.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; }
+.uh-faces__when--today { color: var(--u-brt, #0F6E56); font-weight: 500; }
+.uh-faces__more {
+  width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.uh-face { position: relative; display: inline-flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.uh-chip {
+  position: relative; margin-top: -9px; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  font-size: 10.5px; font-weight: 600; line-height: 16px; letter-spacing: .02em;
+  border: 2px solid var(--u-sf, #fff); background: var(--u-hv, #F0F4F2); color: var(--u-ink2, #4A5A54);
+}
+.uh-chip--bday { background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); }
+.uh-chip--anniv { background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.uh-chip--new { background: var(--u-info-soft, #E6F1FA); color: var(--u-info-text, #1D6A9E); }
+.uh-today {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; white-space: nowrap;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); font-size: 12px; font-weight: 600;
+}
+.uh-off-when { font-size: 12.5px; color: var(--u-ink2, #4A5A54); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.uh-past { opacity: .55; }
+.uh-cel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
