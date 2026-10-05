@@ -282,7 +282,8 @@ try {
   const MODULES_CODE = /\/(src\/pages\/Modules\.tsx|assets\/Modules-[\w-]+\.js)(\?.*)?$/
   const PROFILE_CODE = /\/(src\/modules\/hrms\/employees\/EmployeeDetail\.tsx|assets\/EmployeeDetail-[\w-]+\.js)(\?.*)?$/
   const failFirst = (re, n = 1) => async (page) => {
-    const html = await (await fetch(base + '/')).text()
+    // Node can't resolve demo.localhost (the browser can): the same server by its address.
+    const html = await (await fetch(base.replace('//demo.localhost', '//127.0.0.1') + '/')).text()
     let hits = 0
     await page.route(re, (r) => (hits++ < n ? r.fulfill({ status: 200, contentType: 'text/html', body: html }) : r.continue()))
     page.hits = () => hits
