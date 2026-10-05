@@ -1,13 +1,16 @@
 // "Request overtime" (DECISIONS 22): anyone who punches in (attendance.checkin.self) can ask for overtime on a day they
 // choose, from 60 days back to 30 days ahead, with the minutes and a reason. Their approver approves or rejects it;
 // they can withdraw it while it waits. Overtime is recorded, never paid. While the server can't take requests yet the
-// section says so and offers nothing (FEATURE_NOT_READY / 404).
+// section says so and offers nothing (FEATURE_NOT_READY / 404). The day is picked on the "Select date" picker (single
+// day, weekly offs and holidays marked), as the app's overtime form.
 import { useState } from 'react'
 import { Button, EmptyState, Section, SkeletonList, StatusPill, errorText } from '@/design/kit/display'
-import { DateInput, FieldGrid, Input, PanelButton, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { FieldGrid, FormField, Input, PanelButton, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { DateRangeButton, DateRangeDialog } from '@/design/kit/DateRangePicker'
 import { addDays, fmtShort } from '@/design/dc/dates'
 import { useMyOvertimeRequests, useRequestOvertime, useWithdrawOvertimeRequest, type OvertimeRequest } from '../../api/useOvertime'
 import { hm, statusOf, toMinutes } from './shiftModel'
+import { useMyWorkCalendar } from '../useMyWorkCalendar'
 
 export function MyOvertime({ today, minimumMinutes }: { today: string; minimumMinutes: number | null }) {
   const toast = useToast()
@@ -64,6 +67,10 @@ export function RequestOvertimePanel({ open, onClose, today, minimumMinutes }: {
   const toast = useToast()
   const ask = useRequestOvertime()
   const [f, setF] = useState({ date: today, hours: '1', minutes: '', reason: '' })
+  const [picking, setPicking] = useState(false)
+  const min = addDays(today, -60)
+  const max = addDays(today, 30)
+  const calendar = useMyWorkCalendar(min, max, open)
   const minutes = toMinutes(f.hours, f.minutes)
   const reason = f.reason.trim()
   const blocked = !f.date ? 'Choose the day'
@@ -93,8 +100,9 @@ export function RequestOvertimePanel({ open, onClose, today, minimumMinutes }: {
         </>
       )}>
       <div className="apl-form">
-        <DateInput label="Day" required min={addDays(today, -60)} max={addDays(today, 30)} value={f.date} onChange={(_e, v) => setF({ ...f, date: v })}
-          hint="Up to 60 days back or 30 days ahead." />
+        <FormField hint="Up to 60 days back or 30 days ahead.">
+          <DateRangeButton single from={f.date} startLabel="Day *" onOpen={() => setPicking(true)} />
+        </FormField>
         <FieldGrid columns={2}>
           <Input label="Hours" type="number" min={0} max={24} inputMode="numeric" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} />
           <Input label="Minutes" type="number" min={0} max={59} inputMode="numeric" value={f.minutes} onChange={(e) => setF({ ...f, minutes: e.target.value })} />
@@ -108,6 +116,8 @@ export function RequestOvertimePanel({ open, onClose, today, minimumMinutes }: {
         </p>
         <Textarea label="Reason" required rows={3} maxLength={500} placeholder="For example: month-end closing" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
       </div>
+      <DateRangeDialog open={picking} onClose={() => setPicking(false)} mode="single" title="Select day" from={f.date} min={min} max={max} today={today}
+        calendar={calendar} onDone={(r) => { setF({ ...f, date: r.from }); setPicking(false) }} />
     </SidePanel>
   )
 }

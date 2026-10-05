@@ -2,14 +2,17 @@
 // be corrected. POST /v1/attendance/corrections (attendance.checkin.self) with the day, the times
 // (IST, as the page labels them) and the reason, plus optional proof (uploaded when it's chosen,
 // POST /corrections/attachments). Who it goes to comes from GET /v1/me/approvers?for=correction
-// (BW-122); without that endpoint the line is left out.
+// (BW-122); without that endpoint the line is left out. The day is picked on the "Select date"
+// picker (single day, weekly offs and holidays marked), as the app's correction form.
 import { useState } from 'react'
 import { Callout } from '@/design/kit/display'
-import { FieldGrid, Input, PanelButton, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { FieldGrid, FormField, Input, PanelButton, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { DateRangeButton, DateRangeDialog } from '@/design/kit/DateRangePicker'
 import { addDays, istToday } from '@/design/dc/dates'
 import { useCreateCorrection } from '../../api/useAttendance'
 import { uploadCorrectionProof } from '../../api/useAttendanceReview'
 import { useApprovers } from '../../api/shared/useApprovers'
+import { useMyWorkCalendar } from '../useMyWorkCalendar'
 
 const t2m = (t: string) => { const [h, m] = (t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0) }
 
@@ -29,6 +32,8 @@ function OpenFix({ onClose, prefill }: { onClose: () => void; prefill?: FixDayPr
   const [reason, setReason] = useState(prefill?.reason || '')
   const [proof, setProof] = useState<{ name: string; url?: string; busy?: boolean; error?: string } | null>(null)
   const [tried, setTried] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const calendar = useMyWorkCalendar(addDays(today, -366), today)
   const create = useCreateCorrection()
   const approver = useApprovers('correction')
   const goesTo = approver.notAvailable ? null : approver.data?.approver?.name ?? null
@@ -80,7 +85,9 @@ function OpenFix({ onClose, prefill }: { onClose: () => void; prefill?: FixDayPr
         </>
       )}>
       <FieldGrid columns={2}>
-        <Input label="Which day" type="date" full value={date} max={today} onChange={(e) => setDate(e.target.value)} error={tried ? problems.date : undefined} />
+        <FormField full error={tried ? problems.date : undefined}>
+          <DateRangeButton single from={date} startLabel="Which day" invalid={tried && !!problems.date} onOpen={() => setPicking(true)} />
+        </FormField>
         <Input label="Came in at" type="time" value={inAt} onChange={(e) => setIn(e.target.value)} />
         <Input label="Left at" type="time" value={outAt} onChange={(e) => setOut(e.target.value)} error={tried ? problems.time : undefined} />
         <Textarea label="What happened" required full rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)}
@@ -92,6 +99,8 @@ function OpenFix({ onClose, prefill }: { onClose: () => void; prefill?: FixDayPr
           error={proof?.error ? `${proof.name}: ${proof.error}` : undefined} />
       </FieldGrid>
       {goesTo && <Callout tone="neutral" icon="userCheck">It goes to <b>{goesTo}</b> for approval.</Callout>}
+      <DateRangeDialog open={picking} onClose={() => setPicking(false)} mode="single" title="Select day" from={date} max={today} today={today}
+        calendar={calendar} onDone={(r) => { setDate(r.from); setPicking(false) }} />
     </SidePanel>
   )
 }

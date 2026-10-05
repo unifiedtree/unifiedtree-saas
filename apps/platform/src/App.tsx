@@ -12,6 +12,7 @@ import { LoginPage } from '@/core/auth/LoginPage'
 
 import { PendingApproval } from '@/pages/PendingApproval'
 import { NoAccess } from '@/pages/NoAccess'
+import { NotFound } from '@/pages/NotFound'
 import { AcceptInvite } from '@/pages/AcceptInvite'
 import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
@@ -198,7 +199,7 @@ function MovedTo({ to }: { to: string }) {
 const InspectorView = lazyPage(() => import('@/modules/hrms/compliance/InspectorView'))
 
 /** Every route. Kept outside App so the table can also be registered for preloading (lazyPage.ts). */
-const ROUTE_TREE = (
+export const ROUTE_TREE = (
   <>
       {/* Public */}
       <Route path="/inspection" element={<InspectorView />} />
@@ -931,7 +932,8 @@ const ROUTE_TREE = (
         <Route path="/pos"                element={<ComingSoonRoute moduleKey="pos" />} />
         <Route path="/reports"            element={<ComingSoonRoute moduleKey="reports" />} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Any other address: "Page not found" in the shell (it used to fall through to Home without a word). */}
+        <Route path="*" element={<NotFound />} />
       </Route>
   </>
 )

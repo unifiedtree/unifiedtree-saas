@@ -48,3 +48,13 @@
 .ut-bellpop__all:hover { text-decoration: underline; }
 .ut-bellpop__all:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs2, #D2EADF)); }
 .ut-bellpop__span { margin-left: auto; font-size: 12px; color: var(--u-ink3, #6A7A73); }
+/* Notifications | Messages (the app's Alerts tabs), full width under the heading. */
+.ut-bellpop__tabs { padding: 0 16px 10px; flex-shrink: 0; }
+.ut-bellpop__tabs .uk-seg { display: flex; width: 100%; box-sizing: border-box; }
+.ut-bellpop__tabs .uk-seg__opt { flex: 1 1 0; justify-content: center; }
+/* A Team message: the sender's initials, who and when, the team, then the whole text. */
+.ut-bellpop__msg { display: flex; align-items: flex-start; gap: 12px; padding: 10px 8px; border-radius: 10px; }
+.ut-bellpop__msghead { display: flex; align-items: baseline; gap: 8px; }
+.ut-bellpop__msghead .ut-bellpop__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ut-bellpop__msghead .ut-bellpop__meta { flex-shrink: 0; }
+.ut-bellpop__msgbody { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--u-ink, #0E1B16); white-space: pre-wrap; overflow-wrap: anywhere; }

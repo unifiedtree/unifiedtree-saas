@@ -2,17 +2,23 @@
 // unread count; the list is everything still unread plus the rest of the last 7 days, each with its
 // module, how long ago, one line of its text and a gold dot while unread. A row marks itself read
 // and opens where it belongs (core/notifications/notificationRoutes.ts).
-import { useEffect, useRef } from 'react'
+// Two tabs, as the app's Alerts: Notifications, and Messages (Team messages sent to you, which
+// used to show only on Home). Messages is left out when the server doesn't have Team messages.
+import { useEffect, useRef, useState } from 'react'
 import { Popover } from '@/design/kit/overlays'
-import { EmptyState, ErrorState, SkeletonList } from '@/design/kit/display'
+import { EmptyState, ErrorState, SegmentedControl, SkeletonList } from '@/design/kit/display'
 import { dashIcon } from '@/design/dc/icons'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import { LAST_DAYS, bellRows, timeAgo } from '@/core/notifications/notificationRoutes'
+import { useTeamMessages } from '@/modules/hrms/api/shared/useTeamMessages'
 import { ShellIcon } from '../shellIcons'
+import { TEAM_MESSAGE_DAYS, TeamMessagesList } from './TeamMessagesList'
 import './notifications.css'
 
 /** How many rows the popover lists (as before the redesign); more only when more are unread. */
 const MAX_ROWS = 8
+
+export type BellView = 'notifications' | 'messages'
 
 export interface NotificationBellProps {
   open: boolean
@@ -32,6 +38,11 @@ export function NotificationBell({ open, onToggle, onClose, onNavigate }: Notifi
   const markAllAsRead = useNotificationStore((s) => s.markAllAsRead)
   const unreadCount = useNotificationStore((s) => s.unreadCount())
   const fetchList = useNotificationStore((s) => s.fetch)
+  const [view, setView] = useState<BellView>('notifications')
+  // Read when the popover opens, like the list. Not there yet (404 / 503): no Messages tab.
+  const messages = useTeamMessages(TEAM_MESSAGE_DAYS, { enabled: open })
+  const withMessages = !messages.notAvailable
+  const showing: BellView = withMessages ? view : 'notifications'
 
   // The background poll only refreshes the unread count (NotificationProvider); the list is
   // fetched when the popover opens.
@@ -43,7 +54,10 @@ export function NotificationBell({ open, onToggle, onClose, onNavigate }: Notifi
   const rows = bellRows(notifications, now, MAX_ROWS)
 
   let body
-  if (loading && !loaded) body = <div className="ut-bellpop__state"><SkeletonList rows={3} pill={false} label="Loading notifications" /></div>
+  if (showing === 'messages') {
+    body = <TeamMessagesList messages={messages.data} loading={messages.isLoading} error={messages.error} now={now}
+      onRetry={() => void messages.refetch()} retrying={messages.isFetching} />
+  } else if (loading && !loaded) body = <div className="ut-bellpop__state"><SkeletonList rows={3} pill={false} label="Loading notifications" /></div>
   else if (error && !notifications.length) body = <div className="ut-bellpop__state"><ErrorState title="Couldn’t load notifications" error={error} onRetry={() => void fetchList()} retrying={loading} /></div>
   else if (!rows.length) {
     body = (
@@ -96,13 +110,28 @@ export function NotificationBell({ open, onToggle, onClose, onNavigate }: Notifi
       <Popover open={open} onClose={onClose} anchorRef={anchor} placement="bottom-end" width={370} maxHeight={560}
         role="dialog" aria-label="Notifications" className="ut-bellpop" initialFocus="none">
         <div className="ut-bellpop__head">
-          <span className="ut-bellpop__heading">Notifications</span>
-          <span className="ut-bellpop__new">{unreadCount > 0 ? `${unreadCount} new` : 'All caught up'}</span>
+          {/* "Alerts" over the two tabs, as the app names it; just "Notifications" without Messages. */}
+          <span className="ut-bellpop__heading">{withMessages ? 'Alerts' : 'Notifications'}</span>
+          {showing === 'notifications' && <span className="ut-bellpop__new">{unreadCount > 0 ? `${unreadCount} new` : 'All caught up'}</span>}
         </div>
-        <div className="ut-bellpop__scroll">{body}</div>
+        {withMessages && (
+          <div className="ut-bellpop__tabs">
+            <SegmentedControl<BellView> label="Alerts" size="lg" value={showing} onChange={setView} options={[
+              { value: 'notifications', label: 'Notifications', count: unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : null, controls: 'ut-bellpop-body' },
+              { value: 'messages', label: 'Messages', controls: 'ut-bellpop-body' },
+            ]} />
+          </div>
+        )}
+        <div className="ut-bellpop__scroll" id="ut-bellpop-body" role={withMessages ? 'tabpanel' : undefined}>{body}</div>
         <div className="ut-bellpop__foot">
-          {unreadCount > 0 && <button type="button" className="ut-bellpop__all" onClick={() => void markAllAsRead()}>Mark all as read</button>}
-          <span className="ut-bellpop__span">Last {LAST_DAYS} days and all unread</span>
+          {showing === 'messages' ? (
+            <span className="ut-bellpop__span">Messages from the last {TEAM_MESSAGE_DAYS} days</span>
+          ) : (
+            <>
+              {unreadCount > 0 && <button type="button" className="ut-bellpop__all" onClick={() => void markAllAsRead()}>Mark all as read</button>}
+              <span className="ut-bellpop__span">Last {LAST_DAYS} days and all unread</span>
+            </>
+          )}
         </div>
       </Popover>
     </>

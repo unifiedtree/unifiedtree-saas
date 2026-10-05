@@ -47,6 +47,8 @@ public class CanonicalTenantCompatibilityController {
     private final DepartmentService departments;
     private final BranchService branches;
     private final WorkforceDepartmentRepository departmentRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
 
     public CanonicalTenantCompatibilityController(
             CompanyService companies,
@@ -64,7 +66,10 @@ public class CanonicalTenantCompatibilityController {
     public MobilePage<MobileCompanyResponse> listCompanies(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        // Company access (V143.93): company-scoped people get only the companies they may access.
+        java.util.Set<UUID> allowed = companyAccess == null ? null : companyAccess.accessibleCompanyIds();
         List<MobileCompanyResponse> rows = companies.list().stream()
+                .filter(c -> allowed == null || allowed.contains(c.id()))
                 .map(this::toCompany)
                 .toList();
         return page(rows, page, size);

@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.unifiedtree.rbac.repository.RolePermissionRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
 import com.unifiedtree.rbac.entity.UserRole;
+import com.unifiedtree.security.tenant.CompanyContext;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -126,6 +127,11 @@ public class PermissionChecker {
             log.warn("PermissionChecker called without userId/tenantId in context — denying");
             return Set.of();
         }
+
+        // A request in a company the caller reaches through a grant runs with
+        // their permissions there (CompanyAccessFilter), like its JWT authorities.
+        CompanyContext.Scope scope = CompanyContext.getScope();
+        if (scope != null) return scope.permissions();
 
         return cache.get(cacheKey(tenantId, userId), k -> loadPermissions(userId));
     }
