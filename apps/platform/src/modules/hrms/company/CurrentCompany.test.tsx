@@ -19,11 +19,11 @@ vi.mock('@unifiedtree/sdk', async (importOriginal) => {
 })
 vi.mock('@/shared/navigation/useAccess', () => ({ useAccessContext: () => ({ modules: ['hrms'] }) }))
 
-import { companyHeaderFor, setCompanyHeader } from '@/core/api/client'
+import { HttpError, companyHeaderFor, setCompanyHeader } from '@/core/api/client'
 import { CURRENT_USER_KEY } from '@/shared/hooks/useCurrentUser'
 import { CompanySwitcher } from '@/design/shell/CompanySwitcher'
-import { CurrentCompanyProvider, companyStorageKey, resolveCompany, useCurrentCompany, type CurrentCompanyValue } from './CurrentCompany'
-import { accessibleCompaniesQuery, isCompanyNeutral, readMeCompanies, type AccessibleCompanies, type CompanySource } from './companySource'
+import { CurrentCompanyProvider, companyStorageKey, isCompanyAccessDenied, resolveCompany, useCurrentCompany, type CurrentCompanyValue } from './CurrentCompany'
+import { accessibleCompaniesQuery, isCompanyNeutral, isWorkspaceWide, readMeCompanies, type AccessibleCompanies, type CompanySource } from './companySource'
 
 const A = { id: 'co-a', name: 'Acme Labs' }
 const B = { id: 'co-b', name: 'Beta Works' }
@@ -189,20 +189,43 @@ describe('the list (companySource)', () => {
     await expect(q.queryFn()).resolves.toEqual({ companies: [A, B], homeId: B.id })
   })
 
+  it('today, someone who is not workspace-wide (an employee, a manager): just their own company', async () => {
+    const answers = { '/v1/hrms/companies': [{ ...A, active: true }, { ...B, active: true }], '/v1/users/me': { id: 'u-2', companyId: B.id } }
+    await expect(accessibleCompaniesQuery(true, new QueryClient(), 'hrms-companies', api(answers), false).queryFn()).resolves.toEqual({ companies: [B], homeId: B.id })
+    // …with no employee record of their own, every company (as the server's allCompanies).
+    const noRecord = { ...answers, '/v1/users/me': { id: 'u-3', companyId: null } }
+    await expect(accessibleCompaniesQuery(true, new QueryClient(), 'hrms-companies', api(noRecord), false).queryFn()).resolves.toEqual({ companies: [A, B], homeId: null })
+    expect(isWorkspaceWide(['EMPLOYEE', 'DEPT_MANAGER'])).toBe(false)
+    expect(isWorkspaceWide(['HR_MANAGER'])).toBe(true)
+  })
+
   it('today, without the list permission: just the person’s own company', async () => {
     const q = accessibleCompaniesQuery(false, new QueryClient(), 'hrms-companies', api({ '/v1/users/me': { id: 'u-1', companyId: A.id, companyName: A.name } }))
     await expect(q.queryFn()).resolves.toEqual({ companies: [A], homeId: A.id })
   })
 
-  it('next: GET /v1/me/companies, with roles and the home company', async () => {
+  it('next: GET /v1/me/companies (the contract’s shape), with the person’s roles and home company', async () => {
     const q = accessibleCompaniesQuery(true, new QueryClient(), 'me-companies', api({
-      '/v1/me/companies': { homeCompanyId: B.id, companies: [{ companyId: A.id, companyName: A.name, role: 'DEPT_MANAGER' }, { companyId: B.id, companyName: B.name, role: 'EMPLOYEE' }] },
+      '/v1/me/companies': {
+        homeCompanyId: B.id, allCompanies: false,
+        companies: [
+          { companyId: B.id, name: B.name, logoUrl: null, home: true, access: 'HOME', roles: [{ code: 'DEPT_MANAGER', name: 'Dept Manager', source: 'ROLES' }] },
+          { companyId: A.id, name: A.name, logoUrl: null, home: false, access: 'GRANT', roles: [{ code: 'EMPLOYEE', name: 'Employee', source: 'GRANT' }] },
+        ],
+      },
     }))
-    await expect(q.queryFn()).resolves.toEqual({ companies: [{ ...A, role: 'DEPT_MANAGER' }, { ...B, role: 'EMPLOYEE' }], homeId: B.id })
+    await expect(q.queryFn()).resolves.toEqual({ companies: [{ ...B, role: 'Dept Manager' }, { ...A, role: 'Employee' }], homeId: B.id })
   })
 
-  it('reads a bare list with a home flag too', () => {
-    expect(readMeCompanies([{ id: A.id, name: A.name }, { id: B.id, name: B.name, home: true }])).toEqual({ companies: [{ ...A, role: null }, { ...B, role: null }], homeId: B.id })
+  it('no role line for workspace-wide people (same roles everywhere), and a home flag without homeCompanyId', () => {
+    expect(readMeCompanies({ homeCompanyId: null, allCompanies: true, companies: [{ companyId: A.id, name: A.name, home: false, access: 'WORKSPACE', roles: [{ code: 'OWNER', name: 'Owner' }] }] }))
+      .toEqual({ companies: [{ ...A, role: null }], homeId: null })
+    expect(readMeCompanies({ companies: [{ companyId: A.id, name: A.name }, { companyId: B.id, name: B.name, home: true }] }).homeId).toBe(B.id)
+  })
+
+  it('knows the server’s “no access to this company” answer', () => {
+    expect(isCompanyAccessDenied(new HttpError('You don’t have access to this company.', 403, { errorCode: 'COMPANY_ACCESS_DENIED' }))).toBe(true)
+    expect(isCompanyAccessDenied(new HttpError('Forbidden', 403, { errorCode: 'ACCESS_DENIED' }))).toBe(false)
   })
 
   it('keeps the person, the company lists and workspace-wide data over a switch', () => {

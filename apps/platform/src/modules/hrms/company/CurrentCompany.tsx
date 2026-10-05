@@ -10,14 +10,14 @@
 //     (PlatformShell keys its page on `version`), so nothing from the previous company stays on screen
 //
 // A workspace with one company has no switch: the same company, the same data and no selector.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAnyPermission, useAuthStore } from '@unifiedtree/sdk'
 import { setCompanyHeader } from '@/core/api/client'
 import { useAccessContext } from '@/shared/navigation/useAccess'
 import { COMPANY_LIST_PERMISSIONS, useCompanies } from '../api/useOrg'
-import { COMPANY_SOURCE, accessibleCompaniesQuery, isCompanyNeutral, type AccessibleCompany, type CompanySource } from './companySource'
+import { ACCESSIBLE_COMPANIES_KEY, COMPANY_SOURCE, accessibleCompaniesQuery, isCompanyNeutral, isWorkspaceWide, type AccessibleCompany, type CompanySource } from './companySource'
 
 export interface CurrentCompanyValue {
   /** The companies the person may work in. */
@@ -46,9 +46,15 @@ function readStored(key: string): string | null {
   if (!key) return null
   try { return localStorage.getItem(key) } catch { return null }
 }
-function writeStored(key: string, id: string) {
+function writeStored(key: string, id: string | null) {
   if (!key) return
-  try { localStorage.setItem(key, id) } catch { /* private window or storage blocked: the choice lasts this visit */ }
+  try { if (id) localStorage.setItem(key, id); else localStorage.removeItem(key) } catch { /* private window or storage blocked: the choice lasts this visit */ }
+}
+
+/** The server's answer when the X-Company-Id (or a companyId) is a company the person can't open. */
+export function isCompanyAccessDenied(error: unknown): boolean {
+  const e = error as { status?: number; payload?: { errorCode?: string } } | null
+  return e?.status === 403 && e.payload?.errorCode === 'COMPANY_ACCESS_DENIED'
 }
 
 /** The chosen company if it is in the list, else the home company, else the first. */
@@ -73,7 +79,8 @@ export function CurrentCompanyProvider({ children, source = COMPANY_SOURCE, api 
   const tenantId = useAuthStore((s) => s.tenant?.id ?? '')
   const hasHrms = useAccessContext().modules.includes('hrms')
   const canList = useAnyPermission(COMPANY_LIST_PERMISSIONS)
-  const query = useQuery({ ...accessibleCompaniesQuery(canList, qc, source, api), enabled: signedIn && hasHrms, staleTime: 60_000 })
+  const wide = isWorkspaceWide(useAuthStore((s) => s.user?.roles))
+  const query = useQuery({ ...accessibleCompaniesQuery(canList, qc, source, api, wide), enabled: signedIn && hasHrms, staleTime: 60_000 })
   const companies = query.data?.companies ?? NONE
   const homeId = query.data?.homeId ?? null
 
@@ -102,6 +109,21 @@ export function CurrentCompanyProvider({ children, source = COMPANY_SOURCE, api 
       setParams((cur) => { const next = new URLSearchParams(cur); next.set('co', id); return next }, { replace: true })
     }
   }, [companyId, companies, source, qc, key, params, setParams])
+
+  // Access to the current company was taken away (the server answers COMPANY_ACCESS_DENIED): forget the
+  // choice, load the list again and land on the home company (company-access contract §1).
+  const denied = useRef('')
+  useEffect(() => qc.getQueryCache().subscribe((event) => {
+    if (event.type !== 'updated' || event.action.type !== 'error' || !isCompanyAccessDenied(event.action.error)) return
+    if (!companyId || denied.current === companyId) return
+    denied.current = companyId
+    writeStored(key, null)
+    qc.removeQueries({ predicate: (q) => !isCompanyNeutral(q.queryKey) })
+    setSel({ key, chosen: null })
+    setVersion((v) => v + 1)
+    // Under ['hrms', 'companies']: the list the selector reads and the one it is built from.
+    void qc.invalidateQueries({ queryKey: ACCESSIBLE_COMPANIES_KEY.slice(0, 2) })
+  }), [qc, companyId, key])
 
   // A link to another company (?co=) switches to it, and is remembered like a pick in the selector.
   useEffect(() => {

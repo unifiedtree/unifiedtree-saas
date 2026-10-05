@@ -5,7 +5,6 @@
 import { ChevronDown } from 'lucide-react'
 import { Menu } from '@/design/kit/Menu'
 import { mayLeaveCompany, useCurrentCompany } from '@/modules/hrms/company/CurrentCompany'
-import { roleLabel } from '@/shared/navigation/roleLabels'
 import { guardedGo } from './navigationGuard'
 import { ShellIcon } from './shellIcons'
 
@@ -22,7 +21,7 @@ export function CompanySwitcher() {
       items={companies.map((c) => ({
         key: c.id,
         label: c.name,
-        sub: c.role ? roleLabel(c.role) : undefined,
+        sub: c.role || undefined,
         icon: <ShellIcon name="building" size={18} />,
         checked: c.id === company.id,
         onSelect: () => { if (c.id !== company.id) guardedGo(() => { if (mayLeaveCompany()) setCompany(c.id) }) },
