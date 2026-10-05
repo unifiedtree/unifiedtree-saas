@@ -284,7 +284,8 @@ async function selfTest(t) {
   let hits = 0
   await t.page.route(code, (r) => (hits++ < 2 ? r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>gone</title>' }) : r.continue()))
   await t.page.goto(base + '/inspection', { waitUntil: 'domcontentloaded' }).catch(() => {})
-  await t.page.waitForFunction(() => /This page hit an error/.test(document.body.innerText), null, { timeout: 60_000 }).catch(() => {})
+  // The app reloads itself once on the way: keep asking across the reload (a waitForFunction would end with it).
+  for (let i = 0; i < 120 && !(await errorScreen(t.page)); i++) await t.page.waitForTimeout(500)
   const seen = await errorScreen(t.page)
   await t.page.unroute(code)
   t.errors.length = 0; t.cons.length = 0; t.fives.length = 0; t.denied.length = 0
@@ -514,6 +515,7 @@ try {
     for (const [url, what] of DETAIL) {
       await go(t, url)
       const crashed = await record(t, 'detail', url, { what })
+      if (SHOTS && /sparse/.test(what)) await t.page.screenshot({ path: `${shots}/w19-sweep-${who}-${width}-${what.replace(/[^a-z0-9]+/gi, '_')}.png` }).catch(() => {})
       if (!crashed && /^\/hrms\/employees\//.test(url) && !(await t.page.locator('.upf-name').count())) continue
       if (!crashed) tabsClicked += await clickTabs(t, url)
     }
