@@ -85,6 +85,15 @@ public class ApprovalsInboxService {
     }
 
     public Inbox inbox(String tab, int page, int size, Jwt jwt, Authentication auth) {
+        return inbox(tab, page, size, false, jwt, auth);
+    }
+
+    /**
+     * The inbox; with {@code includeL2}, also the leave requests waiting for HR (kind LEAVE_L2, under Leave)
+     * for a caller with hrms.leave.approve.l2. Off by default, so a client that only knows the single-step
+     * leave decision keeps today's list.
+     */
+    public Inbox inbox(String tab, int page, int size, boolean includeL2, Jwt jwt, Authentication auth) {
         String asked = tab == null || tab.isBlank() ? "all" : tab.trim().toLowerCase(java.util.Locale.ROOT);
         if (!InboxAccess.TAB_ORDER.contains(asked)) {
             throw new HrmsException("Choose one of: all, leave, attendance, requests, expenses.", HttpStatus.BAD_REQUEST,
@@ -94,7 +103,7 @@ public class ApprovalsInboxService {
         int pageSize = size <= 0 ? DEFAULT_SIZE : Math.min(size, MAX_SIZE);
 
         InboxAccess a = access(jwt, auth);
-        List<String> tabs = a.tabs();
+        List<String> tabs = a.tabs(includeL2);
         if (!tabs.contains(asked)) {
             throw new HrmsException("You can't see this list of approvals.", HttpStatus.FORBIDDEN, "INBOX_TAB_NOT_ALLOWED");
         }
@@ -130,6 +139,16 @@ public class ApprovalsInboxService {
             }
         }
 
+        // Leave waiting for HR (PENDING_L2), under Leave, when asked for.
+        List<InboxQueries.Row> leaveL2 = List.of();
+        if (a.leaveL2In(includeL2, "all")) {
+            List<InboxQueries.Row> rows = read(InboxQueries.LEAVE_L2, unavailable, () -> queries.leaveL2(tenantId, a));
+            if (rows != null) {
+                for (InboxQueries.Row r : rows) r.canDecide = a.canDecideLeaveL2(r.employeeId, (UUID) r.extra.get("approverId"));
+                leaveL2 = rows;
+            }
+        }
+
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String t : InboxAccess.TAB_ORDER) counts.put(t, 0);
         byKind.forEach((kind, rows) -> {
@@ -138,10 +157,13 @@ public class ApprovalsInboxService {
         });
         counts.merge("requests", timesheets.size(), Integer::sum);
         counts.merge("all", timesheets.size(), Integer::sum);
+        counts.merge("leave", leaveL2.size(), Integer::sum);
+        counts.merge("all", leaveL2.size(), Integer::sum);
 
         List<InboxQueries.Row> inTab = new ArrayList<>();
         for (DecisionKind kind : a.kinds(asked)) inTab.addAll(byKind.getOrDefault(kind, List.of()));
         if (a.timesheetsIn(asked)) inTab.addAll(timesheets);
+        if (a.leaveL2In(includeL2, asked)) inTab.addAll(leaveL2);
         inTab.sort(NEWEST_FIRST);
         int from = (int) Math.min((long) page * pageSize, inTab.size());
         List<InboxQueries.Row> pageRows = new ArrayList<>(inTab.subList(from, Math.min(from + pageSize, inTab.size())));
@@ -165,8 +187,10 @@ public class ApprovalsInboxService {
     private void enrich(UUID tenantId, List<InboxQueries.Row> rows, InboxAccess a, Set<UUID> team, LocalDate today) {
         Map<DecisionKind, List<InboxQueries.Row>> byKind = new EnumMap<>(DecisionKind.class);
         for (InboxQueries.Row r : rows) {
-            // Timesheet weeks bring their one fact (the hours) from the source query.
-            if (r.decisionKind() != null) byKind.computeIfAbsent(r.decisionKind(), k -> new ArrayList<>()).add(r);
+            // Timesheet weeks bring their one fact (the hours) from the source query. Leave waiting for HR
+            // gets the same facts and warnings as any leave request.
+            DecisionKind kind = InboxQueries.LEAVE_L2.equals(r.kind) ? DecisionKind.LEAVE : r.decisionKind();
+            if (kind != null) byKind.computeIfAbsent(kind, k -> new ArrayList<>()).add(r);
         }
         // Colleagues' names are shown only when the caller sees them anyway: the whole tenant for
         // leave level 2, else their team.

@@ -74,8 +74,11 @@ public class TeamController {
     public ApprovalsInboxService.Inbox approvals(@RequestParam(defaultValue = "all") String kind,
                                                  @RequestParam(defaultValue = "0") int page,
                                                  @RequestParam(defaultValue = "20") int size,
+                                                 // Leave waiting for HR (kind LEAVE_L2): only for a client that decides
+                                                 // it with /v1/leave/{id}/l2-decision (the phone app). Off by default.
+                                                 @RequestParam(defaultValue = "false") boolean includeL2,
                                                  @AuthenticationPrincipal Jwt jwt, Authentication auth) {
-        return inbox.inbox(kind, page, size, jwt, auth);
+        return inbox.inbox(kind, page, size, includeL2, jwt, auth);
     }
 
     @Operation(summary = "Team members whose probation ends within the given days, and every overdue one")
