@@ -59,6 +59,11 @@ selector, app picker). Server side (`CompanyAccessFilter`, after authentication)
 `GET /v1/hrms/companies` and `GET /v1/tenant/companies` return only the caller's accessible companies for
 company-scoped callers (everyone else: unchanged).
 
+Team views (attendance dashboard, My team, approvals, … — everything on `TeamEmployeeScope`) follow the
+company selected with the header: company-wide callers get that company's people, managers their
+department/direct reports in that company. No header: as before. (`CompanyContext.getCompanyId()` is the
+header's company only; a `companyId` parameter never changes which team is shown.)
+
 ## API
 
 - `GET /v1/me/companies` — the caller's companies, home first, each with the caller's role(s) there.
@@ -86,6 +91,6 @@ SELECT a.company_id, a.user_id FROM rbac.user_company_access a;
 ## Not enforced yet
 
 Request bodies that carry a `companyId` (creates/updates) are not checked against access; endpoints whose
-`companyId` is optional list every company when it is omitted; team/approval views follow reporting lines,
-not the current company; services that read roles straight from `rbac.user_roles` (not from the token)
-see the home roles. See the build report for the endpoint list.
+`companyId` is optional list every company when it is omitted; services that take the company from the
+caller's own employee record (not `TeamEmployeeScope`) ignore the header; services that read roles straight
+from `rbac.user_roles` (not from the token) see the home roles. See the build report for the endpoint list.
