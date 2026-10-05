@@ -200,6 +200,65 @@ class PayslipQueryServiceTest {
         assertEquals("ANSWER_TOO_LONG", tooLong.getErrorCode());
     }
 
+    // ── "Remove" ──────────────────────────────────────────────────────────────
+
+    @Test
+    void removingAnAnsweredQuestionClosesItAndAuditsWithoutTheText() {
+        when(store.find(TENANT, QUERY)).thenReturn(Optional.of(row("ANSWERED", ANSWER, "Finance Lead")));
+        when(store.close(TENANT, QUERY)).thenReturn(true);
+
+        service.remove(TENANT, QUERY);
+
+        verify(store).close(TENANT, QUERY);
+        verify(jdbc).execute("SET LOCAL app.tenant_id = '" + TENANT + "'");
+        ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
+        verify(audit).record(eq("payroll"), eq("PAYSLIP_QUERY_REMOVED"), eq("payslip_query"), eq(QUERY), summary.capture());
+        assertEquals("Removed Reader User's answered question about their Sep 2026 payslip from the queue", summary.getValue());
+        assertFalse(summary.getValue().contains("September net"), "the audit line never quotes the question");
+        verifyNoInteractions(notifier);
+    }
+
+    @Test
+    void anOpenQuestionCannotBeRemoved() {
+        when(store.find(TENANT, QUERY)).thenReturn(Optional.of(row("OPEN", null, null)));
+        HrmsException e = assertThrows(HrmsException.class, () -> service.remove(TENANT, QUERY));
+        assertEquals(HttpStatus.CONFLICT, e.getStatus());
+        assertEquals("QUERY_NOT_ANSWERED", e.getErrorCode());
+        verify(store, never()).close(any(), any());
+        verifyNoInteractions(audit, notifier);
+    }
+
+    @Test
+    void anotherWorkspacesOrAnUnknownQuestionIsNotFound() {
+        UUID other = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        // The store only finds a question in the caller's workspace.
+        when(store.find(other, QUERY)).thenReturn(Optional.of(row("ANSWERED", ANSWER, "Finance Lead")));
+        when(store.find(TENANT, QUERY)).thenReturn(Optional.empty());
+        HrmsException e = assertThrows(HrmsException.class, () -> service.remove(TENANT, QUERY));
+        assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
+        assertEquals("QUERY_NOT_FOUND", e.getErrorCode());
+        verify(store, never()).close(any(), any());
+        verifyNoInteractions(audit);
+    }
+
+    @Test
+    void removingTwiceIsNotAnError() {
+        when(store.find(TENANT, QUERY)).thenReturn(Optional.of(row("CLOSED", ANSWER, "Finance Lead")));
+        when(store.close(TENANT, QUERY)).thenReturn(false);
+        assertDoesNotThrow(() -> service.remove(TENANT, QUERY));
+        verifyNoInteractions(audit);
+    }
+
+    @Test
+    void theEmployeeStillSeesARemovedQuestionAsAnswered() {
+        when(store.listForEmployee(TENANT, READER, RUN, 200)).thenReturn(List.of(row("CLOSED", ANSWER, "Finance Lead")));
+        PayslipQueryService.PayslipQueryDto mine = service.mine(TENANT, READER, RUN).get(0);
+        assertEquals("ANSWERED", mine.status());
+        assertEquals(ANSWER, mine.answer());
+        // The payroll team's own view keeps the real status.
+        assertEquals("CLOSED", PayslipQueryService.dto(row("CLOSED", ANSWER, "Finance Lead")).status());
+    }
+
     @Test
     void theQueueFiltersByAKnownStatusAndCapsItsSize() {
         when(store.list(eq(TENANT), any(), anyInt())).thenReturn(List.of(row("OPEN", null, null)));

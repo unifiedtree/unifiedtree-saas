@@ -27,6 +27,10 @@ import java.util.UUID;
  *       people answering at the same time can't overwrite each other.</li>
  *   <li>The payroll team is told a question is waiting, and the employee that
  *       it was answered. Neither notification carries the text.</li>
+ *   <li>"Remove" takes an answered question off the queue: it is marked CLOSED,
+ *       never deleted (the runtime role has no DELETE on the table). An open
+ *       question can't be removed (409). The employee still sees a removed
+ *       question as answered, with its answer.</li>
  *   <li>While V143.58 isn't applied, every call answers 503 FEATURE_NOT_READY.</li>
  * </ul>
  */
@@ -94,7 +98,7 @@ public class PayslipQueryService {
     public List<PayslipQueryDto> mine(UUID tenantId, UUID employeeId, UUID runId) {
         bindTenant(tenantId);
         if (employeeId == null) return List.of();
-        return store.listForEmployee(tenantId, employeeId, runId, 200).stream().map(PayslipQueryService::dto).toList();
+        return store.listForEmployee(tenantId, employeeId, runId, 200).stream().map(PayslipQueryService::forAsker).toList();
     }
 
     // ── The payroll team's side ───────────────────────────────────────────────
@@ -135,6 +139,30 @@ public class PayslipQueryService {
         return dto(answered);
     }
 
+    /**
+     * "Remove": takes an answered question off the payroll team's queue (status
+     * CLOSED). Another workspace's question, or one that isn't there, is 404; an
+     * open one is 409 (answer it first). Removing it twice is not an error.
+     */
+    @Transactional
+    public void remove(UUID tenantId, UUID id) {
+        bindTenant(tenantId);
+        PayslipQueryStore.QueryRow row = store.find(tenantId, id)
+                .orElseThrow(() -> new HrmsException("Question not found", HttpStatus.NOT_FOUND, "QUERY_NOT_FOUND"));
+        if ("OPEN".equals(row.status())) {
+            throw new HrmsException("Answer this question before removing it", HttpStatus.CONFLICT, "QUERY_NOT_ANSWERED");
+        }
+        if (!store.close(tenantId, id)) return; // already removed
+        try {
+            // Who removed whose question, never the text.
+            audit.record("payroll", "PAYSLIP_QUERY_REMOVED", "payslip_query", id,
+                    "Removed %s's answered question about their %s payslip from the queue".formatted(
+                            row.employeeName() == null ? "an employee" : row.employeeName(), row.period()));
+        } catch (Exception e) {
+            log.warn("Audit for removing payslip question {} failed: {}", id, e.getMessage());
+        }
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     /** Everyone who may answer, each once, the payroll team first, at most MAX_RECIPIENTS; never the asker. */
@@ -156,9 +184,18 @@ public class PayslipQueryService {
     }
 
     static PayslipQueryDto dto(PayslipQueryStore.QueryRow r) {
+        return dto(r, r.status());
+    }
+
+    /** The asker's view: a question the payroll team removed from its queue (CLOSED) is still answered to them. */
+    static PayslipQueryDto forAsker(PayslipQueryStore.QueryRow r) {
+        return dto(r, "CLOSED".equals(r.status()) && r.answer() != null ? "ANSWERED" : r.status());
+    }
+
+    private static PayslipQueryDto dto(PayslipQueryStore.QueryRow r, String status) {
         return new PayslipQueryDto(r.id(), r.runId(), r.period(), r.periodMonth(), r.periodYear(),
                 r.employeeId(), r.employeeName(), r.employeeCode(), r.companyId(), r.companyName(),
-                r.message(), r.status(), r.answer(), r.answeredByName(), r.answeredAt(), r.createdAt());
+                r.message(), status, r.answer(), r.answeredByName(), r.answeredAt(), r.createdAt());
     }
 
     private void bindTenant(UUID tenantId) {

@@ -177,10 +177,14 @@ public class PayslipQueryStore {
                         + " ORDER BY q.created_at DESC LIMIT ?", ROW, tenantId, employeeId, runId, limit));
     }
 
-    /** The payroll team's queue: every question in the workspace, newest first, optionally one status. */
+    /**
+     * The payroll team's queue: the workspace's questions, newest first, optionally one status. Without a
+     * status, questions taken off the queue ("Remove", CLOSED) are left out; status CLOSED lists them.
+     */
     public List<QueryRow> list(UUID tenantId, String status, int limit) {
         return FeatureNotReady.guard(() -> status == null
-                ? jdbc.query(SELECT + " WHERE q.tenant_id = ? ORDER BY q.created_at DESC LIMIT ?", ROW, tenantId, limit)
+                ? jdbc.query(SELECT + " WHERE q.tenant_id = ? AND q.status <> 'CLOSED' ORDER BY q.created_at DESC LIMIT ?",
+                        ROW, tenantId, limit)
                 : jdbc.query(SELECT + " WHERE q.tenant_id = ? AND q.status = ? ORDER BY q.created_at DESC LIMIT ?",
                         ROW, tenantId, status, limit));
     }
@@ -193,6 +197,16 @@ public class PayslipQueryStore {
                    answered_at = now(), updated_at = now()
              WHERE tenant_id = ? AND id = ? AND status = 'OPEN'
             """, answer, userId, employeeId, tenantId, id));
+        return n != null && n > 0;
+    }
+
+    /** Takes an ANSWERED question off the queue (status CLOSED); false when it isn't ANSWERED (or isn't there). */
+    public boolean close(UUID tenantId, UUID id) {
+        Integer n = FeatureNotReady.guard(() -> jdbc.update("""
+            UPDATE payroll.payslip_queries
+               SET status = 'CLOSED', updated_at = now()
+             WHERE tenant_id = ? AND id = ? AND status = 'ANSWERED'
+            """, tenantId, id));
         return n != null && n > 0;
     }
 

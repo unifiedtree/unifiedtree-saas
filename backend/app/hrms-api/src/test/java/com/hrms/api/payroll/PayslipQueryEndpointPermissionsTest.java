@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * V143.86: HR answers payslip questions with payroll.queries.answer, not with
- * payroll.runs.manage. The question queue (list + answer) opens for either code;
+ * payroll.runs.manage. The question queue (list, answer, remove) opens for either code;
  * every other payroll endpoint ignores the new one, so it never reaches a run.
  */
 class PayslipQueryEndpointPermissionsTest {
@@ -42,6 +42,7 @@ class PayslipQueryEndpointPermissionsTest {
         assertEquals("@perm.hasAny('payroll.runs.manage','payroll.queries.answer')", PayslipQueryController.ANSWER_GUARD);
         assertGuard("list", "/queries", PayslipQueryController.ANSWER_GUARD);
         assertGuard("answer", "/queries/{id}/answer", PayslipQueryController.ANSWER_GUARD);
+        assertGuard("remove", "/queries/{id}", PayslipQueryController.ANSWER_GUARD);
         // The employee's own side is unchanged.
         assertGuard("mine", "/payslips/me/queries", "hasAuthority('payroll.payslip.read.self')");
         assertGuard("ask", "/payslips/me/{runId}/queries", "hasAuthority('payroll.payslip.read.self')");
@@ -49,7 +50,8 @@ class PayslipQueryEndpointPermissionsTest {
 
     @Test
     void theNewCodeAloneOpensOnlyTheQuestionQueue() {
-        assertEquals(Set.of("PayslipQueryController.list", "PayslipQueryController.answer"), opened(Set.of(ANSWER)));
+        assertEquals(Set.of("PayslipQueryController.list", "PayslipQueryController.answer", "PayslipQueryController.remove"),
+                opened(Set.of(ANSWER)));
     }
 
     @Test
@@ -57,6 +59,7 @@ class PayslipQueryEndpointPermissionsTest {
         Set<String> open = opened(Set.of(MANAGE));
         assertTrue(open.contains("PayslipQueryController.list"), open.toString());
         assertTrue(open.contains("PayslipQueryController.answer"), open.toString());
+        assertTrue(open.contains("PayslipQueryController.remove"), open.toString());
     }
 
     @Test
@@ -64,6 +67,7 @@ class PayslipQueryEndpointPermissionsTest {
         Set<String> open = opened(Set.of("payroll.payslip.read.self"));
         assertFalse(open.contains("PayslipQueryController.list"), open.toString());
         assertFalse(open.contains("PayslipQueryController.answer"), open.toString());
+        assertFalse(open.contains("PayslipQueryController.remove"), open.toString());
         assertTrue(open.contains("PayslipQueryController.ask"), open.toString());
     }
 
@@ -75,7 +79,7 @@ class PayslipQueryEndpointPermissionsTest {
         withAnswer.add(ANSWER);
         Set<String> gained = new TreeSet<>(opened(withAnswer));
         gained.removeAll(opened(hr));
-        assertEquals(Set.of("PayslipQueryController.answer", "PayslipQueryController.list"), gained);
+        assertEquals(Set.of("PayslipQueryController.answer", "PayslipQueryController.list", "PayslipQueryController.remove"), gained);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

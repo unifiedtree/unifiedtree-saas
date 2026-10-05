@@ -26,6 +26,9 @@ import java.util.UUID;
  *       {@code payroll.queries.answer}, which reaches only this queue and never
  *       a payroll run; read from the database so a new grant works without
  *       signing in again).</li>
+ *   <li>The same people: {@code DELETE /v1/payroll/queries/{id}} takes an
+ *       answered question off the queue ("Remove"). It is kept, marked CLOSED,
+ *       and the employee still sees it with its answer on their payslip.</li>
  * </ul>
  * The literal {@code /payslips/me/queries} is more specific than
  * {@code /payslips/me/{runId}}, so it is never taken for a run id.
@@ -76,5 +79,12 @@ public class PayslipQueryController {
                                                       @AuthenticationPrincipal Jwt jwt) {
         return service.answer(TenantContext.getTenantId(), TenantContext.getUserId(),
                 MyPayController.ownEmployeeId(jwt), id, req.answer());
+    }
+
+    @DeleteMapping("/queries/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(ANSWER_GUARD)
+    public void remove(@PathVariable UUID id) {
+        service.remove(TenantContext.getTenantId(), id);
     }
 }
