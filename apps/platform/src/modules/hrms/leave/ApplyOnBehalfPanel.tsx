@@ -6,11 +6,13 @@
 // request goes through their normal approver chain.
 import { useMemo, useState } from 'react'
 import { Button } from '@/design/kit/display'
-import { SidePanel, Dropdown, FormField, Select, Textarea, DateInput, useToast } from '@/design/kit/overlays'
+import { SidePanel, Dropdown, FormField, Select, Textarea, useToast } from '@/design/kit/overlays'
+import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit/DateRangePicker'
 import { useApplyLeaveOnBehalf } from '../api/shared/useApplyLeaveOnBehalf'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import { useEmployeeLeaveBalances, useLeaveTypes, useLeavePreview, type LeaveDuration } from '../api/useLeave'
 import { useCompanies } from '../api/useOrg'
+import { useHolidays, useWeekendDays, jsWeekendDays } from '../api/useSettings'
 import { days, todayIso } from '@/design/module/ModuleKit'
 
 const REASON_MAX = 500
@@ -50,6 +52,23 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
   const preview = useLeavePreview(
     { leaveTypeId: f.leaveTypeId, startDate: f.startDate, endDate: end, duration: f.duration, companyId },
     !!picked,
+  )
+
+  // "Select dates": the company's weekly offs and holidays, as the server counts leave.
+  const [picking, setPicking] = useState(false)
+  const [draft, setDraft] = useState<PickedDates | null>(null)
+  const today = todayIso()
+  const wk = useWeekendDays(open && companyId ? companyId : undefined)
+  const hols = useHolidays(open ? companyId : '', Number(today.slice(0, 4)))
+  const holsNext = useHolidays(open ? companyId : '', Number(today.slice(0, 4)) + 1)
+  const cal = useMemo(() => ({
+    off: jsWeekendDays(wk.data?.weekendDays),
+    holidays: new Map([...(hols.data ?? []), ...(holsNext.data ?? [])].filter((h) => h.active !== false).map((h) => [h.holidayDate.slice(0, 10), h.holidayName] as const)),
+  }), [wk.data, hols.data, holsNext.data])
+  const draftDuration: LeaveDuration = draft?.halfDay ? (f.duration === 'HALF_DAY_AFTERNOON' ? 'HALF_DAY_AFTERNOON' : 'HALF_DAY_MORNING') : 'FULL_DAY'
+  const draftPreview = useLeavePreview(
+    { leaveTypeId: f.leaveTypeId, startDate: draft?.from, endDate: draft?.to, duration: draftDuration, companyId },
+    picking && !!picked,
   )
 
   const apply = useApplyLeaveOnBehalf()
@@ -132,16 +151,13 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
               }),
             ]} />
         </FormField>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,160px),1fr))', gap: 12 }}>
-          <FormField label="From" required>
-            <DateInput min={todayIso()} value={f.startDate}
-              onChange={(e) => setF({ ...f, startDate: e.target.value })} />
-          </FormField>
-          <FormField label="To" required>
-            <DateInput min={f.startDate || todayIso()} disabled={half} value={end}
-              onChange={(e) => setF({ ...f, endDate: e.target.value })} />
-          </FormField>
-        </div>
+        <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" endDisabled={half} onOpen={() => setPicking(true)} />
+        <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} min={today} calendar={cal}
+          halfDay={half} noun="leave" onDraftChange={setDraft} serverDays={draftPreview.data?.workingDays ?? null}
+          onDone={(r) => {
+            setF({ ...f, startDate: r.from, endDate: r.to, duration: r.halfDay ? (half ? f.duration : 'HALF_DAY_MORNING') : 'FULL_DAY' })
+            setPicking(false)
+          }} />
         <FormField label="Duration">
           <Select value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value as LeaveDuration })} options={[
             { value: 'FULL_DAY', label: 'Full days' },

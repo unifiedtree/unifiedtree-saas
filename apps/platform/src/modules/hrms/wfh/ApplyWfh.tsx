@@ -14,7 +14,8 @@ import { useHolidays, useWeekendDays } from '../api/useSettings'
 import { useApplyWfhBatch, useCancelWfh, useMyWfhRequests, type WfhApprovalStatus, type WfhRequestResponse } from '../api/useWfh'
 import { useMeEmployee } from '../ess/home/homeApi'
 import { dayRangeLong, leaveDays, monthOf, sentWhen, weeklyOffSet, wfhDaysInMonth } from '../ess/home/homeModel'
-import { blockOf, chipDay, nextWorkingDay, pickLine, spanDays, wfhDayMap, withLine, workingDays } from './wfhModel'
+import { addRange, blockOf, chipDay, nextWorkingDay, pickLine, spanDays, wfhDayMap, withLine, workingDays } from './wfhModel'
+import { DateRangeDialog } from '@/design/kit/DateRangePicker'
 import './wfh.css'
 
 const STATUS: Record<WfhApprovalStatus, [string, StatusTone]> = {
@@ -46,6 +47,7 @@ export function ApplyWfh() {
   const [reason, setReason] = useState('')
   const [tried, setTried] = useState(false)
   const [asking, setAsking] = useState<WfhRequestResponse | null>(null)
+  const [ranging, setRanging] = useState(false)
 
   const off = useMemo(() => weeklyOffSet(me.data?.weeklyOffDays, weekend.data?.weekendDays), [me.data?.weeklyOffDays, weekend.data?.weekendDays])
   const list = useMemo(() => mine.data?.content ?? [], [mine.data])
@@ -68,6 +70,12 @@ export function ApplyWfh() {
     setPicked((p) => (p.includes(day) ? p.filter((d) => d !== day) : p.length >= MAX_DAYS ? p : [...p, day].sort()))
   }
   function next() { setHistory((h) => [...h, start]); setStart(nextWorkingDay(days[days.length - 1] ?? start, off)) }
+  // "Select dates": a range adds its free working days to the chips, and the chips jump to it.
+  function addPicked(from: string, to: string) {
+    setPicked((p) => addRange(p, from, to, off, ctx, MAX_DAYS))
+    if (from !== start) { setHistory((h) => [...h, start]); setStart(from) }
+    setRanging(false)
+  }
   function prev() {
     const back = history[history.length - 1]
     if (!back) return
@@ -113,6 +121,7 @@ export function ApplyWfh() {
               <div className="uw-pager">
                 <span className="uw-label" id="uw-pick">Pick days</span>
                 <span style={{ display: 'inline-flex', gap: 6 }}>
+                  <Button size={30} variant="ghost" icon="calendarDays" onClick={() => setRanging(true)}>Select dates</Button>
                   <Button size={30} variant="ghost" icon="chevronLeft" aria-label="Earlier days" disabled={!history.length} onClick={prev} />
                   <Button size={30} variant="ghost" icon="chevronRight" aria-label="Later days" disabled={!lastShown || nextWorkingDay(lastShown, off) > lastDay} onClick={next} />
                 </span>
@@ -163,6 +172,9 @@ export function ApplyWfh() {
           </ListRows>
         </Section>
       </div>
+
+      <DateRangeDialog open={ranging} onClose={() => setRanging(false)} from="" min={today} max={lastDay} noun="request"
+        calendar={{ off, holidays: ctx.holidays }} onDone={(r) => addPicked(r.from, r.to)} />
 
       <Dialog open={!!asking} onClose={() => setAsking(null)} busy={cancel.isPending} tone="danger" icon="home" closeLabel="Close panel"
         title="Cancel this request?" sub={asking ? `Work from home, ${dayRangeLong(asking.fromDate, asking.toDate)}.` : undefined}

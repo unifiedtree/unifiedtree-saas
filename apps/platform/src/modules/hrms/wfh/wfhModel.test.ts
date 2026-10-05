@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WfhRequestResponse } from '../api/useWfh'
-import { blockOf, nextWorkingDay, pickLine, spanDays, wfhDayMap, withLine, workingDays } from './wfhModel'
+import { addRange, blockOf, nextWorkingDay, pickLine, spanDays, wfhDayMap, withLine, workingDays } from './wfhModel'
 
 const SAT_SUN = new Set([6, 0])
 const req = (over: Partial<WfhRequestResponse>): WfhRequestResponse => ({
@@ -50,5 +50,20 @@ describe('wording', () => {
     expect(withLine({ status: 'APPROVED', approverName: 'Siddharth Rao' })).toBe('Approved by Siddharth Rao')
     expect(withLine({ status: 'CANCELLED', approverName: 'Siddharth Rao' })).toBe('')
     expect(withLine({ status: 'PENDING', approverName: null })).toBe('')
+  })
+})
+
+describe('addRange ("Select dates" on Work from home)', () => {
+  const ctx = { holidays: new Map([['2026-10-02', 'Gandhi Jayanti']]), leave: new Set(['2026-10-07']), wfh: wfhDayMap([req({})]) }
+  it('adds the free working days of the range to what is picked, sorted', () => {
+    // Thu 1 – Fri 9 Oct: 2 Oct holiday, 3–4 weekend, 5–6 asked, 7 leave.
+    expect(addRange(['2026-10-12'], '2026-10-01', '2026-10-09', SAT_SUN, ctx, 31)).toEqual(['2026-10-01', '2026-10-08', '2026-10-09', '2026-10-12'])
+  })
+  it('stops at the most days one request may hold', () => {
+    expect(addRange(['2026-10-01'], '2026-10-08', '2026-10-20', SAT_SUN, ctx, 3)).toEqual(['2026-10-01', '2026-10-08', '2026-10-09'])
+  })
+  it('runs across a month end and a year end', () => {
+    const none = { holidays: new Map<string, string>(), leave: new Set<string>(), wfh: new Map<string, string>() }
+    expect(addRange([], '2026-12-30', '2027-01-04', SAT_SUN, none, 31)).toEqual(['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-04'])
   })
 })
