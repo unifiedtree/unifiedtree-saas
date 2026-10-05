@@ -17,6 +17,8 @@ export interface AcceptInviteResponse {
   tenantSlug: string
   tenantName: string
   activeModules: string[]
+  /** As the sign-in answer's personalPages; absent from older servers. */
+  personalPages?: boolean | null
 }
 
 export async function sendInvite(employeeId: string): Promise<{ sent: boolean; expiresAt: string }> {

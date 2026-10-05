@@ -1,4 +1,4 @@
-import { accessState, type Access, type AccessContext, type AccessState } from './access'
+import { accessState, personalPagesOn, type Access, type AccessContext, type AccessState } from './access'
 import { ADMIN_HOME_CODES, TEAM_APPROVE_CODES } from './shellCodes'
 
 /**
@@ -60,7 +60,6 @@ const SETTINGS = ['settings.read', 'settings.hrconfig.write', 'settings.holidays
 const ORG_SETUP = ['hrms.department.write', 'hrms.branch.write', 'hrms.designation.write']
 const MASTER_ANY = ['hrms.employee.read', 'hrms.department.write', 'hrms.branch.write', 'hrms.designation.write', 'hrms.contractor.read', 'leave.type.write', 'hrms.policy.write', 'attendance.workforce.admin', 'payroll.components.read', 'payroll.settings.read']
 const any = (...codes: string[]): Access => ({ anyOf: codes })
-const notAdminRole = (ctx: AccessContext) => !ctx.adminRole
 const planAdminOnly = (ctx: AccessContext) => ctx.planAdmin
 
 export const SLASH_MODULES: SlashModule[] = [
@@ -110,25 +109,26 @@ page('apps', 'All apps', '/modules', 'Home', 'apps', [], { keywords: ['launcher'
 page('plan', 'Manage plan', '/plan', 'Home', 'apps/plan', [{ when: planAdminOnly }], { aliases: ['plan'], keywords: ['plan', 'subscription', 'add module', 'upgrade', 'seats'] })
 
 // ── My workspace (self-service) ────────────────────────────────────────────
-// The personal pages and views are not for the roles that run the workspace (notAdminRole, My work's
-// rule; each page hides its own "My …" view the same way). Home and My interviews keep their rules.
+// The personal pages and views follow the owner's per-role setting (personalPagesOn: by default not
+// for the roles that run the workspace; each page hides its own "My …" view the same way). Home and
+// My interviews keep their rules.
 page('me', 'Home', '/me', 'Me', 'me', [{ ...any('hrms.ess.read', 'attendance.checkin.self'), module: HR, self: true }], { aliases: ['me/overview', 'me/home'], keywords: ['self service', 'ess', 'my home', 'my workspace'] })
-page('me-attendance', 'My attendance', '/hrms/attendance?tab=my', 'Me', 'me/attendance', [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }], { keywords: ['punch', 'check in', 'my days', 'present'] })
-page('me-leave', 'My leave', '/hrms/leave?tab=my', 'Me', 'me/leave', [{ allOf: ['leave.request.self'], module: HR, self: true, when: notAdminRole }], { keywords: ['time off', 'my requests', 'leave status'] })
-page('me-payslips', 'My payslips', '/me/payslips', 'Me', 'me/payslips', [{ ...any('payroll.payslip.read.self'), module: PAY, self: true, when: notAdminRole }], { aliases: ['payslips', 'payslip'], keywords: ['salary slip', 'pay slip', 'download payslip'] })
-page('me-salary', 'My salary', '/me/salary', 'Me', 'me/salary', [{ ...any('payroll.structure.read.self'), module: PAY, self: true, when: notAdminRole }], { aliases: ['salary'], keywords: ['ctc', 'salary structure', 'pay'] })
-page('me-wfh', 'Work from home', '/me/wfh', 'Me', 'me/wfh', [{ ...any('wfh.request.self'), module: HR, self: true, when: notAdminRole }], { aliases: ['me/work-from-home', 'wfh'], keywords: ['wfh', 'remote', 'home'] })
-page('me-shift', 'Shift change request', '/me/shift-change', 'Me', 'me/shift-change', [{ ...any('hrms.ess.read', 'attendance.checkin.self'), module: HR, self: true, when: notAdminRole }], { keywords: ['change shift', 'shift swap', 'timing'] })
-page('me-documents', 'My documents', '/hrms/documents?view=my', 'Me', 'me/documents', [{ ...any('hrms.document.read.self'), module: HR, when: notAdminRole }], { keywords: ['upload', 'aadhaar', 'pan', 'id proof', 'certificate'] })
-page('me-letters', 'My letters', '/hrms/letters/my', 'Me', 'me/letters', [{ ...any('hrms.letters.read.self'), module: HR, when: notAdminRole }], { keywords: ['offer letter', 'experience letter', 'relieving'] })
-page('me-assets', 'My assets', '/me/assets', 'Me', 'me/assets', [{ ...any('hrms.onboarding.asset.self'), module: HR, self: true, when: notAdminRole }], { keywords: ['laptop', 'equipment', 'handed over', 'returned'] })
+page('me-attendance', 'My attendance', '/hrms/attendance?tab=my', 'Me', 'me/attendance', [{ ...any('attendance.checkin.self'), module: HR, self: true, when: personalPagesOn }], { keywords: ['punch', 'check in', 'my days', 'present'] })
+page('me-leave', 'My leave', '/hrms/leave?tab=my', 'Me', 'me/leave', [{ allOf: ['leave.request.self'], module: HR, self: true, when: personalPagesOn }], { keywords: ['time off', 'my requests', 'leave status'] })
+page('me-payslips', 'My payslips', '/me/payslips', 'Me', 'me/payslips', [{ ...any('payroll.payslip.read.self'), module: PAY, self: true, when: personalPagesOn }], { aliases: ['payslips', 'payslip'], keywords: ['salary slip', 'pay slip', 'download payslip'] })
+page('me-salary', 'My salary', '/me/salary', 'Me', 'me/salary', [{ ...any('payroll.structure.read.self'), module: PAY, self: true, when: personalPagesOn }], { aliases: ['salary'], keywords: ['ctc', 'salary structure', 'pay'] })
+page('me-wfh', 'Work from home', '/me/wfh', 'Me', 'me/wfh', [{ ...any('wfh.request.self'), module: HR, self: true, when: personalPagesOn }], { aliases: ['me/work-from-home', 'wfh'], keywords: ['wfh', 'remote', 'home'] })
+page('me-shift', 'Shift change request', '/me/shift-change', 'Me', 'me/shift-change', [{ ...any('hrms.ess.read', 'attendance.checkin.self'), module: HR, self: true, when: personalPagesOn }], { keywords: ['change shift', 'shift swap', 'timing'] })
+page('me-documents', 'My documents', '/hrms/documents?view=my', 'Me', 'me/documents', [{ ...any('hrms.document.read.self'), module: HR, when: personalPagesOn }], { keywords: ['upload', 'aadhaar', 'pan', 'id proof', 'certificate'] })
+page('me-letters', 'My letters', '/hrms/letters/my', 'Me', 'me/letters', [{ ...any('hrms.letters.read.self'), module: HR, when: personalPagesOn }], { keywords: ['offer letter', 'experience letter', 'relieving'] })
+page('me-assets', 'My assets', '/me/assets', 'Me', 'me/assets', [{ ...any('hrms.onboarding.asset.self'), module: HR, self: true, when: personalPagesOn }], { keywords: ['laptop', 'equipment', 'handed over', 'returned'] })
 page('me-interviews', 'My interviews', '/me/interviews', 'Me', 'me/interviews', [{ ...any('hrms.hiring.interview.self', 'hrms.hiring.read'), module: HR }], { keywords: ['interview', 'scorecard', 'panel', 'candidate feedback'] })
 page('me-incentives', 'My incentives', '/hrms/pli', 'Me', 'me/incentives', [{ ...any('hrms.pli.read.self'), noneOf: ['hrms.pli.read', 'hrms.pli.target.read'], module: PAY }], { keywords: ['pli', 'bonus', 'incentive'] })
-page('me-advances', 'My advances', '/hrms/advances?tab=my', 'Me', 'me/advances', [{ ...any('hrms.advance.request.self'), module: HR, when: notAdminRole }], { keywords: ['loan', 'salary advance', 'emi'] })
-page('me-claims', 'My expense claims', '/hrms/expenses?tab=my', 'Me', 'me/expenses', [{ ...any('hrms.expense.claim.self'), module: HR, when: notAdminRole }], { aliases: ['me/claims'], keywords: ['reimbursement', 'claim', 'receipt'] })
-page('me-reviews', 'My reviews', '/hrms/performance?view=my-reviews', 'Me', 'me/reviews', [{ ...any('hrms.performance.review.self'), module: HR, when: notAdminRole }], { keywords: ['appraisal', 'self review', 'feedback'] })
-page('me-goals', 'My goals', '/hrms/performance?view=my-goals', 'Me', 'me/goals', [{ ...any('hrms.performance.review.self'), module: HR, when: notAdminRole }], { keywords: ['kpi', 'objectives', 'targets'] })
-page('me-training', 'My training', '/hrms/learning?view=my', 'Me', 'me/training', [{ ...any('hrms.learning.enroll.self'), module: HR, when: notAdminRole }], { keywords: ['course', 'learning', 'enrol'] })
+page('me-advances', 'My advances', '/hrms/advances?tab=my', 'Me', 'me/advances', [{ ...any('hrms.advance.request.self'), module: HR, when: personalPagesOn }], { keywords: ['loan', 'salary advance', 'emi'] })
+page('me-claims', 'My expense claims', '/hrms/expenses?tab=my', 'Me', 'me/expenses', [{ ...any('hrms.expense.claim.self'), module: HR, when: personalPagesOn }], { aliases: ['me/claims'], keywords: ['reimbursement', 'claim', 'receipt'] })
+page('me-reviews', 'My reviews', '/hrms/performance?view=my-reviews', 'Me', 'me/reviews', [{ ...any('hrms.performance.review.self'), module: HR, when: personalPagesOn }], { keywords: ['appraisal', 'self review', 'feedback'] })
+page('me-goals', 'My goals', '/hrms/performance?view=my-goals', 'Me', 'me/goals', [{ ...any('hrms.performance.review.self'), module: HR, when: personalPagesOn }], { keywords: ['kpi', 'objectives', 'targets'] })
+page('me-training', 'My training', '/hrms/learning?view=my', 'Me', 'me/training', [{ ...any('hrms.learning.enroll.self'), module: HR, when: personalPagesOn }], { keywords: ['course', 'learning', 'enrol'] })
 page('me-onboarding', 'My onboarding', '/hrms/onboarding/instances?view=hires', 'Me', 'me/onboarding', [{ ...any('hrms.onboarding.instance.read'), noneOf: ['hrms.onboarding.instance.write'], module: HR }], { keywords: ['joining', 'checklist', 'tasks'] })
 page('org-chart', 'Org chart', '/hrms/org-chart', 'Organization', 'org-chart', [{ module: HR, when: (c) => c.self || c.has('hrms.employee.read') }], { aliases: ['orgchart', 'org-tree', 'hierarchy', 'reporting-line'], keywords: ['org chart', 'reporting manager', 'who reports to', 'tree'], pkg: 'P-ORG' })
 page('profile', 'My profile', '/profile', 'Me', 'me/profile', [], { aliases: ['profile', 'settings/profile'], keywords: ['account', 'my details', 'personal', 'password', 'photo'] })
@@ -174,9 +174,9 @@ tab('att-daily', 'team', 'Daily Logs', 'tab=team', 'attendance/daily-logs', [any
 tab('att-daily', 'face', 'Face Punch', 'tab=face', 'attendance/face-punch', [{ allOf: ['attendance.team.read'], anyOf: ['attendance.face.admin.read', 'attendance.status.review'] }], { aliases: ['attendance/face'], keywords: ['face', 'kiosk', 'selfie'] })
 tab('att-daily', 'corrections', 'Regularization', 'tab=corrections', 'attendance/regularization', [], { aliases: ['attendance/corrections', 'attendance/fix', 'attendance/fixes'], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'fix'] })
 tab('att-daily', 'review', 'Review', 'tab=review', 'attendance/review', [{ allOf: ['attendance.team.read', 'attendance.status.review'] }], { aliases: ['attendance/exceptions', 'attendance/status-review'], keywords: ['excuse', 'change status', 'late', 'half day', 'absent', 'no check-out', 'outside zone'] })
-tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['attendance/my', 'attendance/mine'] })
+tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [{ ...any('attendance.checkin.self'), when: personalPagesOn }], { aliases: ['attendance/my', 'attendance/mine'] })
 // Your own week (not for owners and admins), or the weeks your team submits (hrms.timesheet.approve).
-tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self', 'hrms.timesheet.approve'), when: (ctx) => !ctx.adminRole || ctx.has('hrms.timesheet.approve') }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'], pkg: 'P-ATT-DAY' })
+tab('att-daily', 'timesheet', 'Timesheet', 'tab=timesheet', 'attendance/timesheet', [{ ...any('attendance.checkin.self', 'hrms.timesheet.approve'), when: (ctx) => personalPagesOn(ctx) || ctx.has('hrms.timesheet.approve') }], { aliases: ['me/timesheet', 'timesheet'], keywords: ['time entries', 'hours', 'project', 'log time'], pkg: 'P-ATT-DAY' })
 page('att-shifts', 'Shifts & Overtime', '/hrms/shifts', 'Attendance & Time', 'attendance/shifts', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/shifts-overtime', 'shifts'], keywords: ['shift', 'overtime', 'ot', 'roster'] })
 tab('att-shifts', 'schedules', 'Shift Schedules', 'tab=schedules', 'attendance/shift-schedules', [any('attendance.team.read')], { aliases: ['attendance/schedules'], keywords: ['shift timings', 'general shift', 'night shift'] })
 tab('att-shifts', 'roster', 'Shift Roster', 'tab=roster', 'attendance/roster', [any('attendance.team.read')], { keywords: ['assign shift', 'change shift', 'who works when'] })
@@ -188,9 +188,9 @@ page('manual-entry', 'Manual attendance entry', '/hrms/attendance/manual-entry',
 
 // ── Leave ──────────────────────────────────────────────────────────────────
 page('leave', 'Leave', '/hrms/leave', 'Leave', 'leave', [{ ...any('hrms.leave.read', 'hrms.ess.read', 'leave.request.self'), module: HR }], { keywords: ['time off', 'vacation', 'absence'] })
-tab('leave', 'my', 'My leave requests', 'tab=my', 'leave/my-leave', [{ allOf: ['leave.request.self'], when: notAdminRole }], { aliases: ['leave/my'] })
-tab('leave', 'apply', 'Apply for leave', 'tab=apply', 'leave/apply', [{ allOf: ['leave.request.self'], when: notAdminRole }], { keywords: ['request leave', 'time off'] })
-tab('leave', 'balances', 'Leave balances', 'tab=balances', 'leave/balances', [{ allOf: ['leave.request.self'], when: notAdminRole }], { aliases: ['leave/balance'], keywords: ['remaining', 'quota', 'entitlement'] })
+tab('leave', 'my', 'My leave requests', 'tab=my', 'leave/my-leave', [{ allOf: ['leave.request.self'], when: personalPagesOn }], { aliases: ['leave/my'] })
+tab('leave', 'apply', 'Apply for leave', 'tab=apply', 'leave/apply', [{ allOf: ['leave.request.self'], when: personalPagesOn }], { keywords: ['request leave', 'time off'] })
+tab('leave', 'balances', 'Leave balances', 'tab=balances', 'leave/balances', [{ allOf: ['leave.request.self'], when: personalPagesOn }], { aliases: ['leave/balance'], keywords: ['remaining', 'quota', 'entitlement'] })
 tab('leave', 'approvals', 'Leave approvals', 'tab=approvals', 'leave/approvals', [any('hrms.leave.approve.l1')], { aliases: ['leave/approve', 'leave/pending'], keywords: ['approve', 'pending', 'reject'] })
 tab('leave', 'history', 'Decided leave requests', 'tab=history', 'leave/decided', [any('hrms.leave.approve.l1')], { aliases: ['leave/history'] })
 tab('leave', 'all-balances', 'All leave balances', 'tab=all-balances', 'leave/all-balances', [any('hrms.leave.employee.read', 'hrms.report.leave')], { keywords: ['everyone', 'balance report', 'remaining leave'], pkg: 'P-LEAVE' })
@@ -232,8 +232,8 @@ page('pay-bank-setup', 'Bank profiles', '/hrms/bank-disbursement/setup', 'Payrol
 // ── Expenses ───────────────────────────────────────────────────────────────
 page('expenses', 'Expense Center', '/hrms/expenses', 'Expense Management', 'expenses', [{ ...any('hrms.expense.claim.self', 'hrms.expense.claim.read', 'hrms.expense.claim.approve', 'hrms.expense.policy.read', 'hrms.expense.reimbursement', 'hrms.reimb_batch.read'), module: HR }], { keywords: ['expense', 'claim', 'reimbursement', 'travel'] })
 tab('expenses', 'approvals', 'Expense approvals', 'tab=approvals', 'expenses/approvals', [any('hrms.expense.claim.approve', 'hrms.expense.reimbursement')], { keywords: ['approve claims', 'pending claims'] })
-tab('expenses', 'submit', 'Submit an expense claim', 'tab=submit', 'expenses/submit', [{ ...any('hrms.expense.claim.self'), when: notAdminRole }], { aliases: ['expenses/new'], keywords: ['new claim', 'receipt'] })
-tab('expenses', 'my', 'My claims', 'tab=my', 'expenses/my-claims', [{ ...any('hrms.expense.claim.self'), when: notAdminRole }], { aliases: ['expenses/my'] })
+tab('expenses', 'submit', 'Submit an expense claim', 'tab=submit', 'expenses/submit', [{ ...any('hrms.expense.claim.self'), when: personalPagesOn }], { aliases: ['expenses/new'], keywords: ['new claim', 'receipt'] })
+tab('expenses', 'my', 'My claims', 'tab=my', 'expenses/my-claims', [{ ...any('hrms.expense.claim.self'), when: personalPagesOn }], { aliases: ['expenses/my'] })
 tab('expenses', 'batches', 'Reimbursement batches', 'tab=batches', 'expenses/batches', [any('hrms.reimb_batch.read')], { keywords: ['payout', 'batch'] })
 tab('expenses', 'policies', 'Expense policies', 'tab=policies', 'expenses/policies', [any('hrms.expense.policy.read')], { keywords: ['limits', 'rules'] })
 
@@ -243,11 +243,11 @@ tab('performance', 'cycles', 'Review cycles', 'view=cycles', 'performance/cycles
 tab('performance', 'reviews', 'Employee reviews', 'view=reviews', 'performance/reviews', [any('hrms.performance.read')])
 tab('performance', 'kpis', 'Goals & KPIs', 'view=kpis', 'performance/kpis', [any('hrms.performance.read')], { aliases: ['performance/goals', 'kpis'], keywords: ['objectives', 'targets', 'kpi'] })
 tab('performance', 'people', 'Performance by person', 'view=people', 'performance/people', [any('hrms.performance.read')], { keywords: ['employee performance', 'ratings'] })
-tab('performance', 'my-reviews', 'My reviews', 'view=my-reviews', 'performance/my-reviews', [{ ...any('hrms.performance.review.self'), when: notAdminRole }])
-tab('performance', 'my-goals', 'My goals', 'view=my-goals', 'performance/my-goals', [{ ...any('hrms.performance.review.self'), when: notAdminRole }])
+tab('performance', 'my-reviews', 'My reviews', 'view=my-reviews', 'performance/my-reviews', [{ ...any('hrms.performance.review.self'), when: personalPagesOn }])
+tab('performance', 'my-goals', 'My goals', 'view=my-goals', 'performance/my-goals', [{ ...any('hrms.performance.review.self'), when: personalPagesOn }])
 page('learning', 'Learning & Skills', '/hrms/learning', 'Performance & Learning', 'learning', [{ ...any('hrms.learning.read', 'hrms.learning.write', 'hrms.learning.enroll.self', 'hrms.learning.skill.read'), module: HR }], { keywords: ['training', 'course', 'skills'] })
 tab('learning', 'programs', 'Training programs', 'view=programs', 'learning/programs', [any('hrms.learning.read')], { aliases: ['learning/courses'] })
-tab('learning', 'my', 'My training', 'view=my', 'learning/my-training', [{ ...any('hrms.learning.enroll.self'), when: notAdminRole }], { aliases: ['learning/my'] })
+tab('learning', 'my', 'My training', 'view=my', 'learning/my-training', [{ ...any('hrms.learning.enroll.self'), when: personalPagesOn }], { aliases: ['learning/my'] })
 tab('learning', 'skills', 'Skill matrix', 'view=skills', 'learning/skills', [any('hrms.learning.skill.read')], { aliases: ['learning/skill-matrix'] })
 tab('learning', 'approvals', 'Skill approvals', 'view=approvals', 'learning/skill-approvals', [any('hrms.learning.skill.approve')], { keywords: ['skill level', 'self assessment'] })
 tab('learning', 'certifications', 'Certifications', 'view=certifications', 'learning/certifications', [any('hrms.learning.skill.read')])
@@ -328,8 +328,8 @@ const entry = (id: string): PageEntry => {
   if (!e) throw new Error('pageRegistry: unknown page ' + id)
   return e
 }
-/** A My work link: the page's self-service rule, never for the roles that run the workspace (as "Me" was). */
-const mine = (id: string): Access[] => [...entry(id).access, { when: notAdminRole }]
+/** A My work link: the page's self-service rule, with the personal pages rule (by default not for the roles that run the workspace, as "Me" was). */
+const mine = (id: string): Access[] => [...entry(id).access, { when: personalPagesOn }]
 export const MENU_RULES: Record<string, Access[]> = {
   '/dashboard': DASHBOARD_MENU,
   'ess:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true }],
@@ -346,14 +346,14 @@ export const MENU_RULES: Record<string, Access[]> = {
 
   // ── The redesign's rail (design/shell/navModel.ts): one explicit rule per new key, so none falls
   //    back to a wider one. Home is the self-service Home, for people without the admin dashboard.
-  'home:/me': [...entry('me').access, { noneOf: [...ADMIN_HOME_CODES], when: notAdminRole }],
+  'home:/me': [...entry('me').access, { noneOf: [...ADMIN_HOME_CODES], when: personalPagesOn }],
   // My work: today's self-service rules, page by page, with the admin-role exclusion.
-  'mytime:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }],
+  'mytime:/hrms/attendance': [{ ...any('attendance.checkin.self'), module: HR, self: true, when: personalPagesOn }],
   // My Shift for people without the team view (the team's Shifts & Overtime is under Attendance & time).
-  'mytime:/hrms/shifts': [{ ...any('attendance.checkin.self'), noneOf: ['attendance.team.read'], module: HR, self: true, when: notAdminRole }],
+  'mytime:/hrms/shifts': [{ ...any('attendance.checkin.self'), noneOf: ['attendance.team.read'], module: HR, self: true, when: personalPagesOn }],
   'mytime:/me/wfh': mine('me-wfh'),
   'mytime:/me/shift-change': mine('me-shift'),
-  'myleave:/hrms/leave': [{ ...any('leave.request.self'), module: HR, self: true, when: notAdminRole }],
+  'myleave:/hrms/leave': [{ ...any('leave.request.self'), module: HR, self: true, when: personalPagesOn }],
   'mypay:/me/payslips': mine('me-payslips'),
   'mypay:/me/salary': mine('me-salary'),
   'mypay:/hrms/expenses?tab=my': mine('me-claims'),

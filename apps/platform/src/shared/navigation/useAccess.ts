@@ -3,7 +3,7 @@ import { jwtDecode } from 'jwt-decode'
 import { getAccessToken, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
-import type { AccessContext } from './access'
+import { personalPagesShown, type AccessContext } from './access'
 import { visibleEntries, type VisibleEntry } from './pageRegistry'
 
 /** Roles the server lets add modules and change the plan or branding (WorkspacePlanController, BrandingController). */
@@ -29,20 +29,24 @@ export function useAccessContext(): AccessContext {
   // The local store copies the session's modules one render after sign-in (AuthProvider); until it
   // has, read them from the session itself, so nothing module-gated is hidden (or redirected) meanwhile.
   const sessionModules = useSdkStore((s) => s.modules)
+  // The owner's per-role setting, as the server answered at sign-in (null from an older server).
+  const personalPages = useSdkStore((s) => s.personalPages)
   const roleKey = (roles ?? []).join('|')
   const moduleKey = (modules ?? sessionModules.filter((m) => m.enabled).map((m) => m.key)).join('|')
   return useMemo<AccessContext>(() => {
     const wildcard = permissions.has('*')
     const r = roleKey ? roleKey.split('|') : []
+    const adminRole = r.some((x) => (ADMIN_ROLES as readonly string[]).includes(x))
     return {
       has: (code: string) => wildcard || permissions.has(code),
       modules: moduleKey ? moduleKey.split('|') : [],
       // Recomputed whenever the grants change (a new token); employee_id doesn't change within a session.
       self: tokenHasEmployee(),
-      adminRole: r.some((x) => (ADMIN_ROLES as readonly string[]).includes(x)),
+      adminRole,
+      personalPages: personalPagesShown(personalPages, adminRole),
       planAdmin: wildcard || r.some((x) => (PLAN_ADMIN_ROLES as readonly string[]).includes(x)),
     }
-  }, [permissions, roleKey, moduleKey])
+  }, [permissions, roleKey, moduleKey, personalPages])
 }
 
 /** Every page and tab the signed-in person may see (locked-module pages only for plan admins). */

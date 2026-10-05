@@ -164,6 +164,7 @@ export const LoginPage: React.FC = () => {
         lastName:      auth.lastName,
         roles:         auth.roles,
         permissions:   auth.permissions ?? [],
+        personalPages: auth.personalPages,
         tenantId:      status.tenantId,
         tenantSlug:    status.subdomain,
         tenantName:    status.tenantName,

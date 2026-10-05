@@ -70,6 +70,8 @@ export interface LoginWithCredentialsParams {
   tenantSlug: string;
   tenantName: string;
   activeModules: string[];
+  /** The sign-in answer's personalPages (see AuthState.personalPages); absent from older servers. */
+  personalPages?: boolean | null;
 }
 
 export interface AuthState {
@@ -80,6 +82,13 @@ export interface AuthState {
   permissions: Map<string, Scope>;
   modules: ModuleInfo[];
   scopes: ScopeContext;
+  /**
+   * Whether this person sees the personal pages (My work and every "My …"
+   * view): the server's answer from the role settings the owner keeps in
+   * Roles & permissions. null when the server did not send one (a backend from
+   * before it existed); the app then applies its own role rule.
+   */
+  personalPages: boolean | null;
   hydrate: () => Promise<void>;
   /** Set authenticated state directly from credential login response — bypasses /auth/me. */
   loginWithCredentials: (params: LoginWithCredentialsParams) => void;

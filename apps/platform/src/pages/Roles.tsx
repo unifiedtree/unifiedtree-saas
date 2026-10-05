@@ -16,6 +16,7 @@ import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
 import { useWorkspaceUsers, useAssignableRoles, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
 import { RoleFields, newRoleBody, roleDraftFor, roleDraftProblem, type RoleDraft } from '@/modules/rbac/components/RoleFields'
 import { NewPermissionsNotice, NewPermissionsReview } from '@/modules/rbac/components/NewPermissionsReview'
+import { PersonalPagesSwitch } from '@/modules/rbac/components/PersonalPagesSwitch'
 
 type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
@@ -107,6 +108,8 @@ function PermissionsDrawer({
       title={`${role.displayName} — Permissions`}
     >
       <div className="space-y-4">
+        {/* Every role, built-in ones too: the owner keeps or removes My work and the other "My" pages (V143.90). */}
+        <PersonalPagesSwitch role={role} />
         {readOnly && <p className="rounded-lg border border-border-default bg-bg-subtle p-3 text-sm text-text-secondary">System role permissions are fixed. Clone this role from the roles list to customize access for your company.</p>}
         {/* Summary bar */}
         {initialised && (
@@ -655,7 +658,7 @@ export const Roles: React.FC = () => {
       {/* ── Roles ──────────────────────────────────────────────────────── */}
       {activeTab === 'roles' && (
         <div style={{ display: 'grid', gap: 12 }}>
-          <Note>Click a role to see its permissions. Built-in roles can’t be changed: use “Duplicate role” to make a custom copy (for example a “Senior manager” from Dept Manager) and add or remove permissions. You can only give permissions you hold; critical ones only the workspace owner can give. Every change is recorded in the audit log.</Note>
+          <Note>Click a role to see its permissions. Built-in roles can’t be changed: use “Duplicate role” to make a custom copy (for example a “Senior manager” from Dept Manager) and add or remove permissions. You can only give permissions you hold; critical ones only the workspace owner can give. Each role also has a Personal pages switch (My work and the other “My” pages), which only the workspace owner can change. Every change is recorded in the audit log.</Note>
           {rolesLoading ? (
             <State kind="loading" height={220} />
           ) : rolesError ? (

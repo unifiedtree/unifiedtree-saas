@@ -15,6 +15,11 @@
  *     roles, so search must not offer them either. My work and the other
  *     pages' own "My …" views (My claims, My reviews, My documents, …)
  *     follow the same rule.
+ *   - `personalPages`: that rule, now set per role by the workspace owner
+ *     (Roles & permissions, V143.90). The server sends the answer with the
+ *     session; until a server sends one it is exactly `!adminRole`. Every
+ *     personal page, view and quick action reads it (personalPagesOn here,
+ *     usePersonalPages in components).
  *
  * Pure functions only (no React), so the rules can be unit-tested.
  */
@@ -28,9 +33,24 @@ export interface AccessContext {
   self: boolean
   /** OWNER / SUPER_ADMIN / COMPANY_ADMIN / ADMIN (see the note above). */
   adminRole: boolean
+  /** Sees the personal pages (see the note above). Missing = `!adminRole`. */
+  personalPages?: boolean
   /** May add modules and manage the plan (see the note above). */
   planAdmin: boolean
 }
+
+/**
+ * Whether the personal pages (My work and every "My …" view) are shown: the
+ * server's answer when the session carries one, else the role rule from before
+ * the owner could set it per role (not for OWNER / SUPER_ADMIN / COMPANY_ADMIN
+ * / ADMIN).
+ */
+export function personalPagesShown(fromServer: boolean | null | undefined, adminRole: boolean): boolean {
+  return typeof fromServer === 'boolean' ? fromServer : !adminRole
+}
+
+/** The access rule every personal page, view and quick action uses. */
+export const personalPagesOn = (ctx: AccessContext): boolean => ctx.personalPages ?? !ctx.adminRole
 
 /** One clause of an access rule. Every field that is set must pass. */
 export interface Access {

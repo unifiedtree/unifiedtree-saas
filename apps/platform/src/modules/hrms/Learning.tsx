@@ -11,7 +11,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { Button, CountBadge, EmptyState, PageFrame, PageHeader, PillTabs } from '@/design/kit/display'
 import { useSkillAssessmentQueue } from './api/useLearning'
 import { ProgramsView } from './learning/ProgramsView'
@@ -36,17 +36,17 @@ export const Learning = () => {
   const canRead = usePermission('hrms.learning.read')
   const canWrite = usePermission('hrms.learning.write')
   const canEnroll = usePermission('hrms.learning.enroll.self')
-  // Owners and admins don't get My training or "Propose a skill" for themselves (the rule My work,
-  // Leave and Attendance use).
-  const { isAdmin } = useRoles()
+  // My training and "Propose a skill" for yourself: by default not for owners and admins (the personal
+  // pages rule, usePersonalPages: the owner sets it per role).
+  const personal = usePersonalPages()
   const canViewSkills = usePermission('hrms.learning.skill.read')
-  const canAssess = usePermission('hrms.learning.skill.assess.self') && !isAdmin
+  const canAssess = usePermission('hrms.learning.skill.assess.self') && personal
   const canApprove = usePermission('hrms.learning.skill.approve')
   const pending = useSkillAssessmentQueue('PENDING', canApprove)
   const [params, setParams] = useSearchParams()
   const views: { key: View; label: string; count?: number }[] = [
     ...(canRead ? [{ key: 'programs' as const, label: 'Programs' }] : []),
-    ...(canEnroll && !isAdmin ? [{ key: 'my' as const, label: 'My training' }] : []),
+    ...(canEnroll && personal ? [{ key: 'my' as const, label: 'My training' }] : []),
     ...(canViewSkills ? [{ key: 'skills' as const, label: 'Skill matrix' }, { key: 'certifications' as const, label: 'Certifications' }] : []),
     ...(canApprove ? [{ key: 'approvals' as const, label: 'Skill approvals', count: pending.data?.length || undefined }] : []),
   ]

@@ -46,6 +46,8 @@ export type AuthResponse = {
   lastName?: string
   roles: string[]
   permissions?: string[]
+  /** Whether the personal pages (My work, My leave, …) are shown; absent from older servers. */
+  personalPages?: boolean | null
 }
 
 export type WorkspaceStatus = {

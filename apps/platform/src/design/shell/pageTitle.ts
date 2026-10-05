@@ -5,7 +5,7 @@
 //
 // The rules below are a copy of MENU_RULES as they were (pageRegistry.ts); every other link uses its
 // registry entry, as the menu did.
-import { accessState, type Access, type AccessContext } from '@/shared/navigation/access'
+import { accessState, personalPagesOn, type Access, type AccessContext } from '@/shared/navigation/access'
 import { PAGE_REGISTRY } from '@/shared/navigation/pageRegistry'
 
 const HR = 'hrms'
@@ -66,8 +66,8 @@ const GROUPED: [group: string, links: Link[]][] = [
 ]
 
 function visibleBefore(path: string, group: string | undefined, ctx: AccessContext): boolean {
-  // The self-service group was hidden from the roles that run the workspace.
-  if (group === 'ess' && ctx.adminRole) return false
+  // The self-service group follows the personal pages rule (by default hidden from the roles that run the workspace).
+  if (group === 'ess' && !personalPagesOn(ctx)) return false
   const rule = ruleBefore(path, group)
   if (rule) return accessState(rule, ctx) !== 'hidden'
   return ctx.planAdmin
