@@ -7,11 +7,9 @@ import { Search, X } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
 import { HrButton } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
-import {
-  useEmployeeSearch,
-  EMPLOYEE_SEARCH_MIN_CHARS,
-  type EmployeeSearchHit,
-} from '@/shared/search/useEmployeeSearch'
+import { httpStatusOf } from '@/core/api/featureNotReady'
+import type { EmployeeSearchHit } from '@/shared/search/useEmployeeSearch'
+import { useDelegateSearch, DELEGATE_SEARCH_MIN_CHARS, type DelegateSearchSource } from './delegateSearch'
 
 /**
  * "I'm away — my approvals go to Alice." One card on the Profile page.
@@ -21,9 +19,10 @@ import {
  * to the delegate. Already-routed requests are not moved. Expired rows are
  * hidden from the list.
  *
- * Backend: GET/POST/DELETE /v1/me/delegation (isAuthenticated). The employee
- * search uses /v1/search (hrms.employee.read); users without that see the
- * "you can't look up colleagues" message and cannot open the picker.
+ * Backend: GET/POST/DELETE /v1/me/delegation (isAuthenticated). The colleague
+ * picker uses GET /v1/approvals/delegation/candidates (isAuthenticated too, so
+ * managers without hrms.employee.read can choose someone); until that is
+ * deployed it falls back to /v1/search (hrms.employee.read). See delegateSearch.ts.
  */
 
 interface DelegationDto {
@@ -146,7 +145,7 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
   const [toDate, setToDate] = useState(todayIso())
   const [reason, setReason] = useState('')
 
-  const search = useEmployeeSearch(query, true)
+  const search = useDelegateSearch(query)
   const hits: EmployeeSearchHit[] = useMemo(() => search.data?.employees ?? [], [search.data])
 
   const createMut = useMutation({
@@ -201,32 +200,17 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
                 className="w-full rounded-xl border border-border-default bg-[var(--u-sf)] pl-9 pr-3 py-2 text-sm outline-none focus:border-[var(--u-brl)] focus:ring-4 focus:ring-[var(--u-brs)]"
               />
             </div>
-            {query.trim().length >= EMPLOYEE_SEARCH_MIN_CHARS && (
-              <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-[var(--u-sf)]">
-                {search.isError ? (
-                  <p className="p-3 text-xs text-red-600">
-                    You don't have permission to look up colleagues. Ask HR to set the delegation for you.
-                  </p>
-                ) : hits.length === 0 && !search.isFetching ? (
-                  <p className="p-3 text-xs text-text-tertiary">No matches.</p>
-                ) : (
-                  hits.map((h) => (
-                    <button
-                      key={h.id}
-                      type="button"
-                      onClick={() => {
-                        setDelegate(h)
-                        setQuery('')
-                      }}
-                      className="flex w-full items-center gap-2 border-b border-border-subtle px-3 py-2 text-left text-sm last:border-b-0 hover:bg-bg-subtle"
-                    >
-                      <span className="font-medium">{h.displayName}</span>
-                      <span className="text-xs text-text-tertiary">{h.employeeCode}</span>
-                      {h.jobTitle && <span className="ml-auto text-xs text-text-tertiary">{h.jobTitle}</span>}
-                    </button>
-                  ))
-                )}
-              </div>
+            {query.trim().length >= DELEGATE_SEARCH_MIN_CHARS && (
+              <DelegateHits
+                hits={hits}
+                fetching={search.isFetching}
+                error={search.isError ? search.error : null}
+                source={search.data?.source}
+                onPick={(h) => {
+                  setDelegate(h)
+                  setQuery('')
+                }}
+              />
             )}
           </>
         )}
@@ -280,5 +264,45 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
     </div>
   )
 }
+
+/**
+ * The picker's results under the search box. `source` says which endpoint
+ * answered: only the delegation picker's own lists just current colleagues who
+ * can sign in, so only then does "No matches" say so.
+ */
+export const DelegateHits: React.FC<{
+  hits: EmployeeSearchHit[]
+  fetching: boolean
+  error: unknown
+  source?: DelegateSearchSource
+  onPick: (hit: EmployeeSearchHit) => void
+}> = ({ hits, fetching, error, source, onPick }) => (
+  <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-[var(--u-sf)]">
+    {error ? (
+      <p className="p-3 text-xs text-red-600">
+        {httpStatusOf(error) === 403
+          ? "You don't have permission to look up colleagues. Ask HR to set the delegation for you."
+          : "Couldn't search colleagues just now. Try again."}
+      </p>
+    ) : hits.length === 0 && !fetching ? (
+      <p className="p-3 text-xs text-text-tertiary">
+        No matches.{source === 'candidates' && ' Only current colleagues who can sign in are listed.'}
+      </p>
+    ) : (
+      hits.map((h) => (
+        <button
+          key={h.id}
+          type="button"
+          onClick={() => onPick(h)}
+          className="flex w-full items-center gap-2 border-b border-border-subtle px-3 py-2 text-left text-sm last:border-b-0 hover:bg-bg-subtle"
+        >
+          <span className="font-medium">{h.displayName}</span>
+          <span className="text-xs text-text-tertiary">{h.employeeCode}</span>
+          {h.jobTitle && <span className="ml-auto text-xs text-text-tertiary">{h.jobTitle}</span>}
+        </button>
+      ))
+    )}
+  </div>
+)
 
 export default DelegationCard
