@@ -6,6 +6,7 @@ import com.hrms.api.ess.EssSourceRunner;
 import com.hrms.api.ess.EssSourceRunner.Collected;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -73,6 +74,9 @@ public class CelebrationsService {
     private final EssSourceRunner runner;
     private final EmployeeRepository employees;
 
+    // Two constructors (the second is for tests), so Spring must be told which
+    // one to use, or the app fails to start.
+    @Autowired
     public CelebrationsService(JdbcTemplate jdbc, EssSourceRunner runner, EmployeeRepository employees) {
         this(List.of(new Birthdays(jdbc), new Anniversaries(jdbc), new Joiners(jdbc)), runner, employees);
     }
