@@ -33,10 +33,10 @@ import { EmptyState } from '@/shared/components/EmptyState'
 import { FileText, Plus, Trash2, XCircle } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
-import { format } from 'date-fns'
 import { useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents } from '../../api/usePayroll'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { fmtDate } from './profileFormat'
 
 // ── Tab: Bank Accounts (PII) ──────────────────────────────────────────────────
 
@@ -203,15 +203,15 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
               structure” below to define your own.
             </p>
           )}
-          {(structure.earnings ?? structure.lines).length > 0 && (
+          {(structure.earnings ?? structure.lines ?? []).length > 0 && (
             <DataTable
           columns={[
             { key: 'component', header: 'Component', render: (l) => l.componentName },
-            { key: 'type', header: 'Type', render: (l) => <span className="text-text-secondary">{l.category.replace('_', ' ')}</span> },
+            { key: 'type', header: 'Type', render: (l) => <span className="text-text-secondary">{(l.category ?? '').replace('_', ' ')}</span> },
             { key: 'monthly', header: 'Monthly', render: (l) => inr(l.monthlyAmount) },
             { key: 'annual', header: 'Annual', render: (l) => <span className="text-text-secondary">{inr(l.monthlyAmount * 12)}</span> }
           ]}
-          data={[...(structure.earnings ?? structure.lines), ...(structure.deductions ?? [])]}
+          data={[...(structure.earnings ?? structure.lines ?? []), ...(structure.deductions ?? [])]}
           keyField="componentCode"
           emptyMessage="No salary components configured"
         />
@@ -224,7 +224,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
           <h3 className="text-sm font-bold text-text-primary mb-2">History</h3>
           <DataTable
             columns={[
-              { key: 'effective', header: 'Effective', render: (h) => format(new Date(h.effectiveFrom), 'd MMM yyyy') },
+              { key: 'effective', header: 'Effective', render: (h) => fmtDate(h.effectiveFrom) },
               { key: 'ctc', header: 'CTC', render: (h) => inr(h.ctcAnnual) },
               { key: 'status', header: 'Status', render: (h) => h.isCurrent ? <HrStatusPill tone="ok">Current</HrStatusPill> : <HrStatusPill tone="gray">Past</HrStatusPill> }
             ]}

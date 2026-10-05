@@ -9,7 +9,6 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format } from 'date-fns'
 import { ChevronDown, ChevronRight, Receipt } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { useRoles } from '@/shared/hooks/useRoles'
@@ -21,6 +20,7 @@ import { EXPENSE_STATUS_LABEL } from '../../expense/expenseStatus'
 import { ClaimDetailPanel } from '../../Expense'
 import { SectionState, SubSection } from './shared'
 import { NewClaimForPanel } from './OnBehalfPanels'
+import { fmtDate } from './profileFormat'
 
 const TONE: Record<ExpenseStatus, PillTone> = {
   DRAFT: 'gray', SUBMITTED: 'warn', APPROVED: 'ok', APPROVED_FOR_PAY: 'info', REJECTED: 'red', REIMBURSED: 'teal',
@@ -76,7 +76,7 @@ export function EmployeeExpenses({ employeeId, firstName, self, name }: { employ
                     </td>
                     <td className="font-semibold text-text-primary">{inr(c.totalAmount)}</td>
                     <td><HrStatusPill tone={TONE[c.status] || 'gray'}>{EXPENSE_STATUS_LABEL[c.status] ?? c.status}</HrStatusPill></td>
-                    <td className="hidden sm:table-cell whitespace-nowrap text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</td>
+                    <td className="hidden sm:table-cell whitespace-nowrap text-text-secondary">{fmtDate(c.submittedAt)}</td>
                     <td className="hidden md:table-cell text-text-secondary">{receiptSummary(c)}</td>
                   </tr>
                 )

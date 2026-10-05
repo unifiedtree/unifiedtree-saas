@@ -14,7 +14,6 @@
  */
 
 import React, { useState } from 'react'
-import { format } from 'date-fns'
 import { FileText, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { useNavigate } from 'react-router-dom'
@@ -29,6 +28,7 @@ import {
   type EmployeeDocumentV2,
 } from '../../api/useDocument'
 import { SectionState, SubSection, useWsToast } from './shared'
+import { fmtDate } from './profileFormat'
 
 const CATEGORY_TONE: Record<string, PillTone> = {
   CONTRACT: 'purple', ID_PROOF: 'blue', CERTIFICATE: 'teal',
@@ -141,11 +141,11 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
                         {String(d.category).replace(/_/g, ' ')}
                       </HrStatusPill>
                     </td>
-                    <td>{d.issuedDate ? format(new Date(d.issuedDate), 'd MMM yyyy') : '—'}</td>
+                    <td>{fmtDate(d.issuedDate)}</td>
                     <td>
                       {d.expiryDate ? (
                         <span className="flex items-center gap-2">
-                          {format(new Date(d.expiryDate), 'd MMM yyyy')}
+                          {fmtDate(d.expiryDate)}
                           {exp && <HrStatusPill tone={exp.tone}>{exp.label}</HrStatusPill>}
                         </span>
                       ) : '—'}

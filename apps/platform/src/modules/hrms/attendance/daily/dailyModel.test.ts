@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StaffStatusResponse } from '../../api/useAttendance'
-import { byBranch, hhmmIst, hm, inStatus, leaveLine, logPerson, mainShift, methodLabel, rowStatus, statusOnDay, tileKeyOf, versus, workedMinutes } from './dailyModel'
+import { byBranch, hhmmIst, hm, inStatus, leaveLine, logPerson, mainShift, methodLabel, rowStatus, statusMeta, statusOnDay, tileKeyOf, versus, workedMinutes } from './dailyModel'
 
 const row = (o: Partial<StaffStatusResponse>): StaffStatusResponse => ({ employeeId: 'e', employeeCode: 'EMP1', fullName: 'A B', status: 'ABSENT', ...o })
 
@@ -82,5 +82,12 @@ describe('daily tracking view logic', () => {
     // A server that sends no name: the email, as before.
     expect(logPerson({ employeeId: id }, 'reviewer@unifiedtree.com')).toEqual({ name: 'reviewer@unifiedtree.com', sub: 'User cbee09fe' })
     expect(logPerson({ employeeId: id, employeeName: '  ' })).toEqual({ name: 'Unknown user', sub: 'User cbee09fe' })
+  })
+
+  it('names a status, and a day with none gets no label instead of throwing', () => {
+    expect(statusMeta('ABSENT').label).toBe('Absent')
+    expect(statusMeta('EARLY_EXIT').label).toBe('Early exit')
+    expect(statusMeta(null)).toEqual({ label: '', tone: 'neutral' })
+    expect(statusMeta(undefined).label).toBe('')
   })
 })

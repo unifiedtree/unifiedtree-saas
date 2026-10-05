@@ -247,7 +247,9 @@ export interface FaceSummary { tone: PillTone; label: string; detail: string; en
  * unlocks it any time.
  */
 export function describeFace(s: FaceStatus, self: boolean, now = Date.now()): FaceSummary {
-  const on = s.enrolledAt ? format(new Date(s.enrolledAt), 'd MMM yyyy') : null
+  // date-fns throws on a date it can't read; an unreadable one just shows no date.
+  const at = s.enrolledAt ? new Date(s.enrolledAt) : null
+  const on = at && !Number.isNaN(at.getTime()) ? format(at, 'd MMM yyyy') : null
   if (s.hasLogin === false) return { tone: 'gray', label: 'No sign-in yet', detail: 'They can’t sign in yet, so there is no face to enroll. Invite them first.', enrolled: false, locked: false, canEnroll: false }
   switch (s.status) {
     case 'ACTIVE': return { tone: 'ok', label: 'Enrolled', detail: on ? `Enrolled on ${on}` : 'Enrolled', enrolled: true, locked: false, canEnroll: true }

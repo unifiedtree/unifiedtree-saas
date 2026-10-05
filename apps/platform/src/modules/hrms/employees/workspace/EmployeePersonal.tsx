@@ -40,6 +40,7 @@ import { DateField } from '@/shared/components/calendar'
 import { useForm } from 'react-hook-form'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeesByIds } from '../../api/useWorkforce'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { fmtDate } from './profileFormat'
 
 // ── Tab: Contact ─────────────────────────────────────────────────────────────
 
@@ -176,7 +177,7 @@ function IdentityTab({ employeeId, self }: { employeeId: string; self?: boolean 
         <InfoRow label="UAN" value={identity.uan || 'Not on record'} />
         <InfoRow label="ESIC number" value={identity.esicNumber || 'Not applicable'} />
         <InfoRow label="Passport number" value={identity.passportNumber || 'Not on record'} />
-        <InfoRow label="Passport expiry" value={identity.passportExpiry ? format(new Date(identity.passportExpiry), 'd MMM yyyy') : '—'} />
+        <InfoRow label="Passport expiry" value={fmtDate(identity.passportExpiry)} />
       </Facts>
     )
   }

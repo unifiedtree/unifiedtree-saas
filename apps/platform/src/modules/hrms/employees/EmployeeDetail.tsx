@@ -239,7 +239,9 @@ export function EmployeeDetail() {
     const noOut = w?.days?.filter((x) => x.checkInTime && !x.checkOutTime && x.date < today) ?? []
     if (noOut.length) attention.push({ tone: 'amber', title: `${plural(noOut.length, 'day')} with no punch-out this week`, sub: noOut.map((x) => fmtDate(x.date)).join(', '), cta: { label: 'See attendance', onClick: () => setTab('attendance') } })
     if (docPending) attention.push({ tone: 'amber', title: `${plural(docPending, 'document')} to review`, sub: 'Verify each one before payroll uses it', cta: { label: 'Review', onClick: () => setTab('documents') } })
-    if (sum?.expired) attention.push({ tone: 'red', title: `${plural(sum.expired, 'document')} expired`, sub: sum.expiredTitles.slice(0, 3).join(', ') + (sum.expiredTitles.length > 3 ? '…' : ''), cta: { label: 'See documents', onClick: () => setTab('documents') } })
+    // Titles may be missing from an older server's summary: the count still shows.
+    const expiredTitles = sum?.expiredTitles ?? []
+    if (sum?.expired) attention.push({ tone: 'red', title: `${plural(sum.expired, 'document')} expired`, sub: expiredTitles.slice(0, 3).join(', ') + (expiredTitles.length > 3 ? '…' : ''), cta: { label: 'See documents', onClick: () => setTab('documents') } })
 
     // ── Overview: this month ──
     const cells: CalendarDay[] = (month.data ?? []).map((d) => dayCell(d, today))
@@ -292,7 +294,7 @@ export function EmployeeDetail() {
       policies: rec?.selectedPolicies ?? [],
       checklists: [
         rec?.joiningChecklist && Object.keys(rec.joiningChecklist).length ? { title: 'Joining checklist', rows: Object.entries(rec.joiningChecklist).map(([k, ok]) => ({ l: humanize(k), s: ok ? 'Confirmed' : 'Pending', t: ok ? 'ok' as const : 'warn' as const })) } : null,
-        rec?.documentChecklist && Object.keys(rec.documentChecklist).length ? { title: 'Document verification checklist', rows: Object.entries(rec.documentChecklist).map(([k, d]) => ({ l: `${humanize(k)}${d.fileName ? ' · ' + d.fileName : ''}`, s: d.status === 'VERIFIED' ? 'Confirmed' : d.status === 'REJECTED' ? 'Rejected' : 'Pending', t: d.status === 'VERIFIED' ? 'ok' as const : d.status === 'REJECTED' ? 'red' as const : 'warn' as const })) } : null,
+        rec?.documentChecklist && Object.keys(rec.documentChecklist).length ? { title: 'Document verification checklist', rows: Object.entries(rec.documentChecklist).map(([k, d]) => ({ l: `${humanize(k)}${d?.fileName ? ' · ' + d.fileName : ''}`, s: d?.status === 'VERIFIED' ? 'Confirmed' : d?.status === 'REJECTED' ? 'Rejected' : 'Pending', t: d?.status === 'VERIFIED' ? 'ok' as const : d?.status === 'REJECTED' ? 'red' as const : 'warn' as const })) } : null,
       ].filter(Boolean) as OnboardingView['checklists'],
     }
 

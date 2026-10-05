@@ -30,7 +30,8 @@ const STATUS: Record<LeaveApprovalStatus, [string, PillTone]> = {
   APPROVED: ['Approved', 'ok'], REJECTED: ['Rejected', 'red'], CANCELLED: ['Cancelled', 'gray'],
 }
 const PAGE_SIZE = 10
-const n = (d: number) => (Number.isInteger(d) ? String(d) : d.toFixed(1))
+// A figure the server left out shows a dash instead of throwing.
+const n = (d?: number | null) => (d == null || !Number.isFinite(d) ? '—' : Number.isInteger(d) ? String(d) : d.toFixed(1))
 /** An instant as the viewer's calendar day (India for our users), never the UTC date. */
 const onDay = (at?: string) => (at ? new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
 
