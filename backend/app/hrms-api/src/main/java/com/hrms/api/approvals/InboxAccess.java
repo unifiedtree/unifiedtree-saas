@@ -53,6 +53,34 @@ public record InboxAccess(UUID me, boolean leave, boolean wfh, boolean correctio
         return out;
     }
 
+    /**
+     * {@link #tabs()}, plus Leave when the caller asked for leave waiting for HR ({@code includeL2}) and may
+     * decide it (hrms.leave.approve.l2) without holding the first-level permission.
+     */
+    public List<String> tabs(boolean withLeaveL2) {
+        List<String> out = new ArrayList<>(tabs());
+        if (withLeaveL2 && leaveL2 && !out.contains("leave")) {
+            if (out.isEmpty()) out.add("all");
+            out.add(1, "leave");
+        }
+        return out;
+    }
+
+    /** Whether a tab shows leave waiting for HR (PENDING_L2, under Leave): only when asked for and with level 2. */
+    public boolean leaveL2In(boolean withLeaveL2, String tab) {
+        return withLeaveL2 && leaveL2 && ("all".equals(tab) || "leave".equals(tab));
+    }
+
+    /**
+     * Whether POST /v1/leave/{id}/l2-decision would accept this caller: level 2 (which ApproverScopeGuard lets
+     * through for anyone), never their own request, and never one they approved at the first level
+     * (LeaveService.approveL2: LEAVE_L2_SAME_AS_L1).
+     */
+    public boolean canDecideLeaveL2(UUID requesterId, UUID firstLevelApproverId) {
+        return leaveL2 && requesterId != null && !requesterId.equals(me)
+                && (firstLevelApproverId == null || !firstLevelApproverId.equals(me));
+    }
+
     /** The kinds a tab covers for this caller. */
     public List<DecisionKind> kinds(String tab) {
         List<DecisionKind> out = new ArrayList<>();

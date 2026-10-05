@@ -45,6 +45,13 @@ public class InboxQueries {
     /** The row kind of a submitted timesheet week (the web's {@code ApprovalKind} 'TIMESHEET'); it has no Undo. */
     public static final String TIMESHEET = "TIMESHEET";
 
+    /**
+     * The row kind of a leave request a manager approved that waits for HR (PENDING_L2), decided with
+     * POST /v1/leave/{id}/l2-decision; it has no Undo. Listed only when the caller asks for it
+     * ({@code includeL2}), so a client that sends every LEAVE row to the single-step decision never gets one.
+     */
+    public static final String LEAVE_L2 = "LEAVE_L2";
+
     /** One inbox row, as the web's {@code InboxRow}. Facts and warnings are filled in for the page's rows. */
     public static final class Row {
         public final String kind;
@@ -95,9 +102,9 @@ public class InboxQueries {
             this.rejectNeedsReason = rejectNeedsReason;
         }
 
-        /** The undoable kind, or null for a row that has none (a timesheet week). */
+        /** The undoable kind, or null for a row that has none (a timesheet week, a leave waiting for HR). */
         DecisionKind decisionKind() {
-            return TIMESHEET.equals(kind) ? null : DecisionKind.valueOf(kind);
+            return TIMESHEET.equals(kind) || LEAVE_L2.equals(kind) ? null : DecisionKind.valueOf(kind);
         }
     }
 
@@ -146,6 +153,40 @@ public class InboxQueries {
                     r.extra.put("typeName", rs.getString("type_name"));
                     out.add(r);
                 }, args.toArray());
+        return out;
+    }
+
+    /**
+     * Leave waiting for HR, as GET /v1/leave/approvals/pending-l2 lists it: every PENDING_L2 request in the
+     * tenant (the caller holds hrms.leave.approve.l2), without the caller's own. Facts: who approved it at the
+     * first level, and their note. The first-level approver is kept for {@link InboxAccess#canDecideLeaveL2}.
+     */
+    public List<Row> leaveL2(UUID tenantId, InboxAccess a) {
+        List<Row> out = new ArrayList<>();
+        jdbc.query("SELECT lr.id, lr.employee_id, lr.created_at, lr.start_date, lr.end_date, lr.total_days, lr.reason,"
+                        + " lr.duration, lr.approver_id, lr.decision_note, lt.name AS type_name,"
+                        + " NULLIF(TRIM(COALESCE(l1.first_name, '') || ' ' || COALESCE(l1.last_name, '')), '') AS l1_name, " + PERSON
+                        + " FROM leave_mgmt.leave_requests lr " + PERSON_JOIN.formatted("lr")
+                        + " LEFT JOIN leave_mgmt.leave_types lt ON lt.id = lr.leave_type_id AND lt.tenant_id = lr.tenant_id"
+                        + " LEFT JOIN hrms.employees l1 ON l1.id = lr.approver_id AND l1.tenant_id = lr.tenant_id"
+                        + " WHERE lr.tenant_id = ? AND lr.status = 'PENDING_L2' AND lr.employee_id <> ?",
+                (RowCallbackHandler) rs -> {
+                    Timestamp at = rs.getTimestamp("created_at");
+                    Row r = new Row(LEAVE_L2, false, rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
+                            rs.getString("employee_name"), rs.getString("employee_code"), rs.getString("department_name"),
+                            at == null ? Instant.EPOCH : at.toInstant(), firstNonBlank(rs.getString("type_name"), "Leave"),
+                            rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class),
+                            rs.getDouble("total_days"), null, null, rs.getString("reason"));
+                    r.extra.put("status", rs.getString("employment_status"));
+                    r.extra.put("firstName", firstNonBlank(rs.getString("employee_first_name"), rs.getString("employee_name")));
+                    r.extra.put("duration", rs.getString("duration"));
+                    r.extra.put("typeName", rs.getString("type_name"));
+                    r.extra.put("approverId", rs.getObject("approver_id", UUID.class));
+                    r.facts.add(new Fact("managerApproved", "Approved by", firstNonBlank(rs.getString("l1_name"), "Their manager")));
+                    String note = rs.getString("decision_note");
+                    if (note != null && !note.isBlank()) r.facts.add(new Fact("managerNote", "Manager's note", note.trim()));
+                    out.add(r);
+                }, tenantId, a.me());
         return out;
     }
 
