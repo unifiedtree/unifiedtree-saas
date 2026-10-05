@@ -27,3 +27,11 @@ th {
 .workspace-content {
   background-color: var(--bg-canvas, #F3F6F4);
 }
+
+/* ── Password boxes with our own show/hide button ───────────────────────── */
+/* Edge draws its own "reveal" eye inside a password box, so next to our
+   toggle there were two. Hide Edge's where our button follows the box. */
+input[type="password"]:has(+ button)::-ms-reveal,
+input[type="password"]:has(+ button)::-ms-clear {
+  display: none;
+}
