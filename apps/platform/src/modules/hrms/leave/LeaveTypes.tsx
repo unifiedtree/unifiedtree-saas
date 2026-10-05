@@ -13,41 +13,41 @@ import { useCompanies } from '../api/useOrg'
 import { HrPageHeader, HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
 import { SubHeading, Note, Facts, State, days } from '@/design/module/ModuleKit'
 
-// Indian standard: PL 1.5/month (18/year) carry-forward max 30;
-// SL 1/month (12/year) no carry-forward; CL 1/month (12/year) no carry-forward.
+// The usual Indian set: PL (carry-forward max 30), SL and CL (no carry-forward).
+// Days a year start at 0, as on a new company's own types: the admin sets the number they want.
 const INDIAN_DEFAULTS = [
   {
     name: 'Privilege Leave',
     code: 'PL',
     category: 'EARNED',
-    annualEntitlement: 18,
+    annualEntitlement: 0,
     maxConsecutiveDays: 15,
     isCarryForwardAllowed: true,
     maxCarryForwardDays: 30,
     isPaidLeave: true,
-    description: 'Annual earned leave (1.5 days/month)',
+    description: 'Annual earned leave',
   },
   {
     name: 'Sick Leave',
     code: 'SL',
     category: 'SICK',
-    annualEntitlement: 12,
+    annualEntitlement: 0,
     maxConsecutiveDays: 5,
     isCarryForwardAllowed: false,
     maxCarryForwardDays: 0,
     isPaidLeave: true,
-    description: 'Medical and illness leave (1 day/month)',
+    description: 'Medical and illness leave',
   },
   {
     name: 'Casual Leave',
     code: 'CL',
     category: 'CASUAL',
-    annualEntitlement: 12,
+    annualEntitlement: 0,
     maxConsecutiveDays: 5,
     isCarryForwardAllowed: false,
     maxCarryForwardDays: 0,
     isPaidLeave: true,
-    description: 'Short-duration unplanned leave (1 day/month)',
+    description: 'Short-duration unplanned leave',
   },
 ]
 
@@ -70,7 +70,7 @@ function TypeDrawer({ companyId, editType, onClose, onDaysChanged }: TypeDrawerP
     name: editType?.name ?? '',
     code: editType?.code ?? '',
     category: editType?.category ?? 'CASUAL',
-    annualEntitlement: editType?.annualEntitlement ?? 10,
+    annualEntitlement: editType?.annualEntitlement ?? 0,
     maxConsecutiveDays: editType?.maxConsecutiveDays ?? 5,
     isCarryForwardAllowed: editType?.isCarryForwardAllowed ?? false,
     maxCarryForwardDays: editType?.maxCarryForwardDays ?? 0,

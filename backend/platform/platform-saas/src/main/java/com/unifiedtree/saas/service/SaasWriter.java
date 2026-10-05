@@ -274,9 +274,10 @@ public class SaasWriter {
                 // (EARNED/SICK/CASUAL/...). 'PAID' is NOT a LeaveCategory and made
                 // Hibernate fail to hydrate the row -> 500 on /v1/leave/types and
                 // /my/balances -> the empty "No allocations yet" apply-leave screen.
-                new LeaveTypeSeed(UUID.randomUUID(), "Annual Leave", "ANNUAL", 21, "EARNED"),
-                new LeaveTypeSeed(UUID.randomUUID(), "Sick Leave", "SICK", 12, "SICK"),
-                new LeaveTypeSeed(UUID.randomUUID(), "Casual Leave", "CASUAL", 6, "CASUAL"))) {
+                // Days start at 0: the admin sets the number they want (owner decision, Oct 2026).
+                new LeaveTypeSeed(UUID.randomUUID(), "Annual Leave", "ANNUAL", 0, "EARNED"),
+                new LeaveTypeSeed(UUID.randomUUID(), "Sick Leave", "SICK", 0, "SICK"),
+                new LeaveTypeSeed(UUID.randomUUID(), "Casual Leave", "CASUAL", 0, "CASUAL"))) {
             jdbc.update("""
                     INSERT INTO leave_mgmt.leave_types
                         (id, tenant_id, company_id, name, code, annual_entitlement, is_paid_leave,

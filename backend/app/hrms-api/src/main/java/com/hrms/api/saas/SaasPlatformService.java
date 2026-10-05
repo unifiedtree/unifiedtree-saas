@@ -422,10 +422,11 @@ public class SaasPlatformService {
                 VALUES (?, ?, 'Standard 9-6', 'FIXED', '09:00', '18:00', 30, 8.0, true)
                 """, tenantId, companyId);
 
+        // Days start at 0: the admin sets the number they want (owner decision, Oct 2026).
         List<LeaveTypeSeed> leaveTypes = List.of(
-                new LeaveTypeSeed(UUID.randomUUID(), "Annual Leave", "ANNUAL", 21),
-                new LeaveTypeSeed(UUID.randomUUID(), "Sick Leave", "SICK", 12),
-                new LeaveTypeSeed(UUID.randomUUID(), "Casual Leave", "CASUAL", 6)
+                new LeaveTypeSeed(UUID.randomUUID(), "Annual Leave", "ANNUAL", 0),
+                new LeaveTypeSeed(UUID.randomUUID(), "Sick Leave", "SICK", 0),
+                new LeaveTypeSeed(UUID.randomUUID(), "Casual Leave", "CASUAL", 0)
         );
         int year = LocalDate.now().getYear();
         for (LeaveTypeSeed leaveType : leaveTypes) {
