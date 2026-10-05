@@ -304,8 +304,8 @@ export function EmployeeDetail() {
     const basic: EditField[] = [
       { key: 'firstName', label: 'First name', value: emp.firstName || '', required: true },
       { key: 'lastName', label: 'Last name', value: emp.lastName || '' },
-      { key: 'email', label: 'Work email', value: emp.email || '', type: 'email', check: (v) => (/^\S+@\S+\.\S+$/.test(v) ? '' : 'Enter a valid email address') },
-      { key: 'phone', label: 'Mobile', value: emp.phone || '', placeholder: '+91 98450 12345', check: (v) => (/^[+\d][\d\s-]{6,19}$/.test(v) ? '' : 'Enter a valid phone number') },
+      { key: 'email', label: 'Work email', value: emp.email || '', type: 'email', remote: 'email', check: (v) => (/^\S+@\S+\.\S+$/.test(v) ? '' : 'Enter a valid email address') },
+      { key: 'phone', label: 'Mobile', value: emp.phone || '', placeholder: '+91 98450 12345', remote: 'phone', check: (v) => (/^[+\d][\d\s-]{6,19}$/.test(v) ? '' : 'Enter a valid phone number') },
       { key: 'departmentId', label: 'Department', value: emp.departmentId || '', options: departments.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.name })) },
       { key: 'designationId', label: 'Designation', value: emp.designationId || '', options: designations.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.title })) },
       { key: 'branchId', label: 'Branch', value: emp.branchId || '', options: branches.filter((b) => b.active !== false).map((b) => ({ value: b.id, label: b.name })) },
@@ -482,7 +482,7 @@ export function EmployeeDetail() {
       >
         {content}
       </ProfileFrame>
-      <EditProfilePanel open={editOpen} onClose={() => setEditOpen(false)} basic={v.basic} financial={v.financial} onSave={v.saveEdit} onFullForm={() => setFullForm(true)} />
+      <EditProfilePanel open={editOpen} onClose={() => setEditOpen(false)} basic={v.basic} financial={v.financial} onSave={v.saveEdit} onFullForm={() => setFullForm(true)} employeeId={emp?.id} />
       <ShiftPanel open={shiftOpen} onClose={() => setShiftOpen(false)} today={today} {...v.shiftD} />
       <LifecycleDialog kind={life} onClose={() => setLife(null)} name={v.name} today={today} calls={v.lifecycle} />
       <FaceResetDialog open={resetAsk} onClose={() => setResetAsk(false)} name={v.call}

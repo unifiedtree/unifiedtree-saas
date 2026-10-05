@@ -22,6 +22,9 @@ import {
   type CreateWorkforceEmployeePayload, type WorkforceEmployee,
 } from '../api/useWorkforce'
 import { useNextEmployeeCode } from '../api/useSettings'
+// One work email per employee in the workspace (2026-10-05): checked as you type and on Create;
+// a 409 EMAIL_ALREADY_USED from the server lands on the email field. A shared phone is a warning.
+import { emailConflictMessage, useEmailCheck, usePhoneWarning } from '../api/useContactCheck'
 import { useSalaryComponents } from '../api/usePayroll'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -386,6 +389,8 @@ export const OnboardingForm: React.FC = () => {
     initial ? { ...EMPTY_FORM, ...initial.form } : EMPTY_FORM,
   )
   const [errors, setErrors] = useState<Errors>({})
+  const emailCheck = useEmailCheck(form.email)
+  const phoneWarning = usePhoneWarning(form.phone)
   const [photoUrl, setPhotoUrl] = useState('')
   const [docs, setDocs] = useState<Record<string, DocEntry>>({})
   useEffect(() => {
@@ -716,6 +721,7 @@ export const OnboardingForm: React.FC = () => {
     else if (name.length < 2) e.fullName = 'Enter the hire’s full name'
     if (!form.email.trim()) e.email = 'Email address is required'
     else if (!RX.email.test(form.email.trim())) e.email = 'Enter a valid email address'
+    else if (emailCheck.message) e.email = emailCheck.message
     const phone = stripWs(form.phone)
     if (!phone) e.phone = 'Phone number is required'
     else if (!RX.phone.test(phone)) e.phone = 'Enter 10–15 digits, optionally with +'
@@ -890,6 +896,14 @@ export const OnboardingForm: React.FC = () => {
       toast('Fix the highlighted fields to create the employee', 'error')
       return
     }
+    // The email answer for exactly what is typed now (the field's check is debounced).
+    const taken = await emailCheck.settle()
+    if (taken) {
+      setErrors({ email: taken })
+      goTo('basic')
+      toast('Fix the highlighted fields to create the employee', 'error')
+      return
+    }
     setErrors({})
 
     const { firstName, lastName } = splitName(form.fullName)
@@ -978,6 +992,12 @@ export const OnboardingForm: React.FC = () => {
           `${message.replace(/^SEAT_LIMIT[A-Z_]*:?\s*/i, '')} A seat is one active employee — free one up or add seats from Billing.`,
           'error',
         )
+        return
+      }
+      const conflict = emailConflictMessage(err)
+      if (conflict) {
+        setErrors((p) => ({ ...p, email: conflict }))
+        goTo('basic')
         return
       }
       if (/already in use|already exists|duplicate/i.test(message) && /email/i.test(message)) {
@@ -1091,13 +1111,13 @@ export const OnboardingForm: React.FC = () => {
                   </Field>
                 </div>
                 <div id="field-email">
-                  <Field label="Email Address" required error={errors.email}>
-                    <Input type="email" value={form.email} error={!!errors.email} placeholder="name@company.com"
+                  <Field label="Email Address" required error={errors.email || emailCheck.message || undefined}>
+                    <Input type="email" value={form.email} error={!!(errors.email || emailCheck.message)} placeholder="name@company.com"
                       onChange={(e) => set('email', e.target.value)} />
                   </Field>
                 </div>
                 <div id="field-phone">
-                  <Field label="Phone Number" required error={errors.phone}>
+                  <Field label="Phone Number" required error={errors.phone} hint={phoneWarning ?? undefined}>
                     <Input type="tel" value={form.phone} error={!!errors.phone} placeholder="+91 98765 43210"
                       onChange={(e) => set('phone', e.target.value)} />
                   </Field>

@@ -5,6 +5,7 @@ import { Modal, Button, Field, Input } from '@unifiedtree/ui-kit'
 import { useToast } from '@/shared/hooks/useToast'
 import { useAuthStore } from '@/core/auth/authStore'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
+import { emailConflictMessage, useEmailCheck } from '@/modules/hrms/api/useContactCheck'
 import {
   useAssignableRoles, useInviteWorkspaceUser, groupRolesByModule,
 } from '@/modules/rbac/api/useWorkspaceAccess'
@@ -28,6 +29,12 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
   const [lastName, setLastName] = useState('')
   const [createEmployee, setCreateEmployee] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(() => new Set(['EMPLOYEE']))
+  // One email per employee in the workspace (2026-10-05). Checked as you type when an employee is
+  // created; a sign-in-only invite to someone who already signs in reuses their login, so that case
+  // is left to the server, whose 409 lands on the field too.
+  const emailCheck = useEmailCheck(email, { enabled: createEmployee })
+  const [refused, setRefused] = useState<{ value: string; message: string } | null>(null)
+  const emailError = (refused && refused.value === email ? refused.message : null) || emailCheck.message
 
   const groups = useMemo(() => groupRolesByModule(roles), [roles])
 
@@ -38,10 +45,13 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
     return next
   })
 
-  const handleInvite = () => {
+  const handleInvite = async () => {
     if (!email.trim()) { toast('Email is required', 'error'); return }
     const companyId = createEmployee ? companies[0]?.id : undefined
     if (createEmployee && !companyId) { toast('No company found to create employee', 'error'); return }
+    const typed = email
+    const taken = createEmployee ? await emailCheck.settle() : null
+    if (taken) { setRefused({ value: typed, message: taken }); return }
 
     invite.mutate({
       email: email.trim(),
@@ -55,7 +65,11 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
         toast(createEmployee ? 'User invited and HRMS employee created' : 'User invited', 'success')
         onClose()
       },
-      onError: (e) => toast((e as Error).message || 'Failed to invite user', 'error'),
+      onError: (e) => {
+        const conflict = emailConflictMessage(e)
+        if (conflict) { setRefused({ value: typed, message: conflict }); return }
+        toast((e as Error).message || 'Failed to invite user', 'error')
+      },
     })
   }
 
@@ -68,8 +82,8 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
       size="md"
     >
       <div className="space-y-5">
-        <Field label="Email" required>
-          <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" />
+        <Field label="Email" required error={emailError ?? undefined}>
+          <Input type="email" value={email} invalid={!!emailError} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" />
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
@@ -151,7 +165,7 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
 
       <div className="mt-6 flex justify-end gap-3">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={invite.isPending} onClick={handleInvite}>Send invite</Button>
+        <Button loading={invite.isPending} onClick={() => void handleInvite()}>Send invite</Button>
       </div>
     </Modal>
   )

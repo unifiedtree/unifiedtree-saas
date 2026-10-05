@@ -11,8 +11,12 @@
 // The save goes through the Master context's update('employees', …) (masterSync), as before.
 // The "Employee code will be" preview and the "… added as <code>" message use the NEXT CODE OF
 // THE CHOSEN COMPANY (codes are per company since V143_68); it used to be the first company's.
+// Work email (2026-10-05): checked against everyone in the workspace as you type and again on
+// Save (useEmailCheck) — "This email already belongs to …" on the field, and nothing is saved.
+// Mobile: a number someone else has is a warning under the field, never a block.
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNextEmployeeCode } from '../api/useSettings'
+import { useEmailCheck, usePhoneWarning } from '../api/useContactCheck'
 import { Avatar, Callout, Chip } from '@/design/kit/display'
 import { DateInput, Dropdown, FieldGrid, Input, PanelButton, SidePanel, type DropdownOption } from '@/design/kit/overlays'
 import { SegmentedControl } from '@/design/kit/display'
@@ -69,6 +73,11 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
     ? { ...emp }
     : { co: act.defaultCo, branch: (db.branches.find((b) => b.co === act.defaultCo && b.kind === 'Head office') || {}).id || '', type: 'Full-time', joined: TODAY_ISO, shift: '' }))
   const [errs, setErrs] = useState<Record<string, string | null>>({})
+  // The API id of the person being edited: left out of the checks.
+  const selfId = isEdit ? (emp!._key as string | undefined) : undefined
+  const emailCheck = useEmailCheck(String(v.email ?? ''), { excludeEmployeeId: selfId, initial: isEdit ? String(emp!.email ?? '') : undefined })
+  const phoneWarning = usePhoneWarning(String(v.phone ?? ''), { excludeEmployeeId: selfId, initial: isEdit ? String(emp!.phone ?? '') : undefined })
+  const [saving, setSaving] = useState(false)
   const set = (k: string, x: unknown) => {
     setV((o) => { const n: Rec = { ...o, [k]: x }; for (const c of CLEARS[k] || []) n[c] = ''; return n })
     setErrs((e) => ({ ...e, [k]: null }))
@@ -92,10 +101,18 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
   }), [db, v.co, v.dept, v.type, v.agency, act])
 
   const required: [string, boolean][] = [['first', true], ['last', true], ['email', true], ['co', !isEdit], ['branch', true], ['dept', true], ['desig', true], ['joined', true]]
-  const submit = () => {
+  const submit = async () => {
+    if (saving) return
     const e: Record<string, string> = {}
     for (const [k, on] of required) if (on && String(v[k] ?? '').trim() === '') e[k] = 'Required'
     if (!e.email && !EMAIL.test(String(v.email))) e.email = 'Enter a valid email address'
+    if (!e.email) {
+      // The answer for exactly what is typed now, not the last debounced one.
+      setSaving(true)
+      const taken = await emailCheck.settle()
+      setSaving(false)
+      if (taken) e.email = taken
+    }
     setErrs(e)
     if (Object.keys(e).length) return
     const first = String(v.first).trim(), last = String(v.last).trim(), name = `${first} ${last}`
@@ -141,7 +158,7 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
       sub={isEdit ? `${emp!.code} · changes apply from the next payroll run` : 'They get an employee code, login invite and the rules for their classification.'}
       footer={<>
         <PanelButton size="lg" onClick={onClose}>Cancel</PanelButton>
-        <PanelButton size="lg" variant="primary" icon="check" onClick={submit}>{isEdit ? 'Save changes' : 'Add employee'}</PanelButton>
+        <PanelButton size="lg" variant="primary" icon="check" disabled={saving} onClick={() => void submit()}>{isEdit ? 'Save changes' : 'Add employee'}</PanelButton>
       </>}>
       <div className="wf-form">
         <section className="wf-fsec" aria-labelledby="wf-sec-personal">
@@ -149,8 +166,8 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
           <FieldGrid>
             <Input label="First name" required placeholder="e.g. Ananya" value={v.first ?? ''} error={errs.first} onChange={(e) => set('first', e.target.value)} />
             <Input label="Last name" required placeholder="e.g. Sharma" value={v.last ?? ''} error={errs.last} onChange={(e) => set('last', e.target.value)} />
-            <Input label="Work email" required type="email" placeholder="name@company.com" value={v.email ?? ''} error={errs.email} onChange={(e) => set('email', e.target.value)} />
-            <Input label="Mobile" placeholder="+91 98xxx xxxxx" value={v.phone ?? ''} onChange={(e) => set('phone', e.target.value)} />
+            <Input label="Work email" required type="email" placeholder="name@company.com" value={v.email ?? ''} error={errs.email || emailCheck.message} onChange={(e) => set('email', e.target.value)} />
+            <Input label="Mobile" placeholder="+91 98xxx xxxxx" value={v.phone ?? ''} hint={phoneWarning} data-phone-warning={phoneWarning ? '' : undefined} onChange={(e) => set('phone', e.target.value)} />
           </FieldGrid>
         </section>
 

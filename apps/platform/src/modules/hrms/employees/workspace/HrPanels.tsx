@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { Callout } from '@/design/kit/display'
 import { Dialog, FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
+import { emailConflictMessage, useEmailCheck, usePhoneWarning } from '../../api/useContactCheck'
 
 export interface EditField {
   key: string; label: string; value: string
@@ -12,6 +13,11 @@ export interface EditField {
   placeholder?: string; options?: { value: string; label: string }[]
   off?: boolean; hint?: string; required?: boolean
   check?: (v: string) => string
+  /**
+   * Also asked of the server as you type: 'email' — already someone else's in the workspace
+   * (an error, blocks Save); 'phone' — someone else has the number (a warning only).
+   */
+  remote?: 'email' | 'phone'
 }
 
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
@@ -28,24 +34,36 @@ function fieldErrors(fields: EditField[], form: Record<string, string>) {
 }
 
 /** Edit profile: Basic then Financial; "All fields…" opens the full employee form. */
-export function EditProfilePanel({ open, onClose, basic, financial, onSave, onFullForm }: {
+export function EditProfilePanel({ open, onClose, basic, financial, onSave, onFullForm, employeeId }: {
   open: boolean; onClose: () => void; basic: EditField[]; financial: EditField[]
   onSave: (values: Record<string, string>) => Promise<string>; onFullForm: () => void
+  /** The person being edited: left out of the email and phone checks. */
+  employeeId?: string
 }) {
   if (!open) return null
-  return <OpenEdit onClose={onClose} basic={basic} financial={financial} onSave={onSave} onFullForm={onFullForm} />
+  return <OpenEdit onClose={onClose} basic={basic} financial={financial} onSave={onSave} onFullForm={onFullForm} employeeId={employeeId} />
 }
 
-function OpenEdit({ onClose, basic, financial, onSave, onFullForm }: {
+function OpenEdit({ onClose, basic, financial, onSave, onFullForm, employeeId }: {
   onClose: () => void; basic: EditField[]; financial: EditField[]
   onSave: (values: Record<string, string>) => Promise<string>; onFullForm: () => void
+  employeeId?: string
 }) {
   const toast = useToast()
   const [form, setForm] = useState<Record<string, string>>(() => Object.fromEntries([...basic, ...financial].map((f) => [f.key, f.value])))
   const [step, setStep] = useState(0)
   const [shown, setShown] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
-  const basicErrs = fieldErrors(basic, form), finErrs = fieldErrors(financial, form)
+  // The server's word on the email (as you type, and a 409 from Save), shown at once on the field.
+  const emailField = basic.find((f) => f.remote === 'email'), phoneField = basic.find((f) => f.remote === 'phone')
+  const emailCheck = useEmailCheck(emailField ? form[emailField.key] ?? '' : '', { excludeEmployeeId: employeeId, initial: emailField?.value, enabled: !!emailField })
+  const phoneWarning = usePhoneWarning(phoneField ? form[phoneField.key] ?? '' : '', { excludeEmployeeId: employeeId, initial: phoneField?.value, enabled: !!phoneField })
+  const [savedTaken, setSavedTaken] = useState<{ value: string; message: string } | null>(null)
+  const remoteErr = emailField
+    ? (savedTaken && savedTaken.value === (form[emailField.key] ?? '') ? savedTaken.message : emailCheck.message)
+    : null
+  const basicErrs = { ...fieldErrors(basic, form), ...(emailField && remoteErr ? { [emailField.key]: remoteErr } : {}) }
+  const finErrs = fieldErrors(financial, form)
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const fields = (list: EditField[], errs: Record<string, string>, show: boolean) => (
     <FieldGrid columns={2}>
@@ -55,7 +73,8 @@ function OpenEdit({ onClose, basic, financial, onSave, onFullForm }: {
       ) : (
         <Input key={f.key} label={f.label} type={f.type || 'text'} value={form[f.key] ?? ''} disabled={f.off}
           placeholder={f.placeholder} onChange={(e) => set(f.key, e.target.value)}
-          error={show ? errs[f.key] : undefined} hint={!(show && errs[f.key]) ? f.hint : undefined} />
+          error={show || (f.remote === 'email' && remoteErr) ? errs[f.key] : undefined}
+          hint={!(show && errs[f.key]) ? (f.remote === 'phone' && phoneWarning) || f.hint : undefined} />
       ))}
     </FieldGrid>
   )
@@ -63,7 +82,16 @@ function OpenEdit({ onClose, basic, financial, onSave, onFullForm }: {
     if (Object.keys(basicErrs).length) { setShown(new Set([0, 1])); setStep(0); return }
     if (Object.keys(finErrs).length) { setShown(new Set([0, 1])); return }
     setBusy(true)
-    try { toast.success(await onSave(form)); onClose() } catch (e) { toast.error('Couldn’t save the changes', { detail: errText(e) }) } finally { setBusy(false) }
+    try {
+      // What is typed now, not the last debounced answer.
+      const taken = emailField ? await emailCheck.settle() : null
+      if (taken && emailField) { setSavedTaken({ value: form[emailField.key] ?? '', message: taken }); setStep(0); return }
+      toast.success(await onSave(form)); onClose()
+    } catch (e) {
+      const taken = emailConflictMessage(e)
+      if (taken && emailField) { setSavedTaken({ value: form[emailField.key] ?? '', message: taken }); setStep(0) }
+      toast.error('Couldn’t save the changes', { detail: errText(e) })
+    } finally { setBusy(false) }
   }
   const firstErr = (errs: Record<string, string>) => Object.values(errs)[0] || null
   return (

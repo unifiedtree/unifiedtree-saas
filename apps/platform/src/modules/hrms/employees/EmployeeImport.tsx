@@ -4,7 +4,9 @@
 //   - Template: .xlsx, or .csv (GET /v1/bulk-import/employees/template?format=csv). The column
 //     chips come from GET …/columns (today's list when the server doesn't answer).
 //   - Upload: .csv / .xlsx up to 10 MB; a file of 0 rows or more than 1,000 rows is refused.
-//   - Results: rows, ready, problems; the problems in a filterable table (first 100).
+//   - Results: rows, ready, problems; the problems in a filterable table (first 100). An email
+//     someone in the workspace already has names that person on its row, and so does the same
+//     email twice in the file; a phone number someone already has is a note that doesn't block.
 //   - Leaving the page with a validated file asks first (beforeunload), as before.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -17,7 +19,7 @@ import { UploadDrop, UploadFile } from '@/design/kit/data'
 import { Dropdown, FormField, Input, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
 import {
-  countValidRows, parseErrors, useCommitBulkImport, useDownloadTemplate, useImportColumns, useValidateBulkImport, type ParsedError,
+  countValidRows, parseErrors, useCommitBulkImport, useDownloadTemplate, useImportColumns, useValidateBulkImport, type BulkImportNote, type ParsedError,
 } from '../api/useBulkImport'
 import '../workforce/directory.css'
 
@@ -70,6 +72,7 @@ export function EmployeeImport() {
     ? parsedErrors.filter((e) => e.message.toLowerCase().includes(errorFilter.toLowerCase()) || String(e.rowNumber).includes(errorFilter))
     : parsedErrors
   const displayedErrors = filteredErrors.slice(0, SHOWN_ERRORS)
+  const notes = (validationResult?.warnings ?? []).slice(0, SHOWN_ERRORS)
   const hiddenCount = filteredErrors.length - displayedErrors.length
   const commitResult = commitMutation.data ?? null
   const selectedCompany = companies.find((c) => c.id === companyId) ?? companies[0]
@@ -115,6 +118,11 @@ export function EmployeeImport() {
   const steps: StepItem[] = STEPS.map((label, i) => ({
     key: label, label, state: step === 'done' || i + 1 < at ? 'done' : i + 1 === at ? 'current' : 'todo',
   }))
+
+  const noteColumns: TableColumn<BulkImportNote>[] = [
+    { key: 'row', header: 'Row', width: 90, render: (n) => <span className="wf-mono">{n.row || '?'}</span> },
+    { key: 'msg', header: 'Note', render: (n) => <span>{n.column ? `${n.column}: ` : ''}{n.message}</span>, className: 'wf-wrap' },
+  ]
 
   const errorColumns: TableColumn<ParsedError>[] = [
     { key: 'row', header: 'Row', width: 90, render: (e) => <span className="wf-mono">{e.rowNumber || '?'}</span> },
@@ -205,6 +213,13 @@ export function EmployeeImport() {
                     footer={hiddenCount > 0 ? <p className="wf-muted" style={{ margin: 0, textAlign: 'center' }}>… and {plural(hiddenCount, 'more error', 'more errors')} not shown. Fix the file and re-validate to see all.</p> : undefined}>
                     <Table<ParsedError> label="Validation errors" columns={errorColumns} rows={displayedErrors} rowKey={(e) => e.id} minWidth={420}
                       className="wf-errors" stickyHeader empty="No errors match the filter" />
+                  </Section>
+                )}
+
+                {notes.length > 0 && (
+                  <Section title={plural(validationResult.warnings?.length ?? 0, 'thing worth a look', 'things worth a look')} sub="These don't stop the import." body="flush">
+                    <Table<BulkImportNote> label="Notes" columns={noteColumns} rows={notes} rowKey={(n) => `${n.row}_${n.column}_${n.message}`} minWidth={420}
+                      className="wf-errors" />
                   </Section>
                 )}
 

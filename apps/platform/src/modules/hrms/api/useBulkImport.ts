@@ -11,7 +11,11 @@ export interface BulkImportResult {
   errorCount: number
   errors: string[]    // flat "Row N: message" strings from backend
   committed: boolean  // false on validate or failed commit; true only on full commit
+  /** Things worth a look that don't stop the import (e.g. a phone number someone already has). */
+  warnings?: BulkImportNote[]
 }
+
+export interface BulkImportNote { row: number; column?: string | null; message: string }
 
 // ── Derived helper types for UI ───────────────────────────────────────────────
 

@@ -29,6 +29,9 @@ import { useGeofenceZones } from '../api/useGeofence'
 import { useTemplates } from '../onboarding/api/useOnboarding'
 import { sendInvite } from './api/useInvitation'
 import { useNextEmployeeCode } from '../api/useSettings'
+// One work email per employee in the workspace (2026-10-05): checked as you type and on Save;
+// a 409 EMAIL_ALREADY_USED from the server lands on the same field. A shared phone is a warning.
+import { emailConflictMessage, useEmailCheck, usePhoneWarning } from '../api/useContactCheck'
 // Edit-mode prefill for the Financial step. The workforce response DTO strips
 // PII fields for list-safety, so the fetched employee object alone can't tell
 // us pan/uan/esi/bank. We call the same profile endpoints EmployeeDetail's
@@ -485,6 +488,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const [showAddCompany, setShowAddCompany] = useState(false)
 
   const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const emailCheck = useEmailCheck(form.email, { excludeEmployeeId: employee?.id, initial: employee?.email })
+  const phoneWarning = usePhoneWarning(form.phone, { excludeEmployeeId: employee?.id, initial: employee?.phone })
   const set = (key: string, value: string) => {
     setForm((p) => ({ ...p, [key]: value }))
     if (errors[key]) setErrors((p) => ({ ...p, [key]: '' }))
@@ -544,6 +549,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       errs.email = 'Work email is required'
     } else if (!RX.email.test(form.email.trim())) {
       errs.email = 'Enter a valid email address'
+    } else if (emailCheck.message) {
+      errs.email = emailCheck.message
     }
     const phoneClean = stripWs(form.phone)
     if (!phoneClean) {
@@ -651,6 +658,13 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
       setStep(stepForErrors(errs))
+      return
+    }
+    // The email answer for exactly what is typed now (the field's check is debounced).
+    const taken = await emailCheck.settle()
+    if (taken) {
+      setErrors({ email: taken })
+      setStep('basic')
       return
     }
     setErrors({})
@@ -766,6 +780,13 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
         try {
           result = await createEmp.mutateAsync(payload)
         } catch (createErr: unknown) {
+          // Someone else has this email: say who on the field. Never "recover" to their record.
+          const conflict = emailConflictMessage(createErr)
+          if (conflict) {
+            setErrors((p) => ({ ...p, email: conflict }))
+            setStep('basic')
+            return
+          }
           // Dedupe recovery — mirrors the mobile submitWithRecovery pattern.
           // A transient blip mid-POST can hide a 201 from the client; the
           // next click then hits "employee code already in use" but the row
@@ -863,6 +884,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       // to a page that would refuse them.
       const e = err as { message?: string; status?: number; payload?: { errorCode?: string } }
       const message = e?.message ?? 'Failed to save employee'
+      const conflict = emailConflictMessage(err)
+      if (conflict) {
+        setErrors((p) => ({ ...p, email: conflict }))
+        setStep('basic')
+        return
+      }
 
       // Detect on the HTTP STATUS, not on words in the message.
       //
@@ -1078,11 +1105,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Field>
               </div>
 
-              <Field label="Work Email" required error={errors.email}>
-                <Input error={!!errors.email} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" />
+              <Field label="Work Email" required error={errors.email || emailCheck.message || undefined}>
+                <Input error={!!(errors.email || emailCheck.message)} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" />
               </Field>
               <Field label="Phone" required error={errors.phone}>
                 <Input error={!!errors.phone} type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91 9876543210" />
+                {phoneWarning && !errors.phone && <Hint>{phoneWarning}</Hint>}
               </Field>
 
               <Field label="Designation" required error={errors.designationId || errors.designationText}>
