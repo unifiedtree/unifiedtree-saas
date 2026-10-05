@@ -5,16 +5,21 @@
 // anyone. GET /v1/approvals/delegation/candidates is open to everyone who may set a
 // delegation (isAuthenticated, as POST /v1/me/delegation).
 //
-// API (mgr@ = DEPT_MANAGER, no hrms.employee.read):
+// The search is for approvers (anyone holding an approval permission); everyone
+// else gets 403.
+// API (mgr@ = DEPT_MANAGER, approves leave etc., no hrms.employee.read):
 //  - the directory search still refuses them (403); the candidates search answers;
 //  - finds a colleague by name, by employee code and by login email prefix;
 //  - never lists themselves, people who left (EXITED / TERMINATED), or people
-//    without a login; the employee (reader@) gets the same rules;
+//    without a login;
 //  - each hit carries only id, name, code, department, designation and photo;
-//  - under two characters is 400, the limit is capped at 20, signed out is 401.
+//  - under two characters is 400, the limit is capped at 20, signed out is 401;
+//  - the employee (reader@, approves nothing) is refused (403).
 // Browser (mgr@, 1440 and 390 wide): Profile › Preferences › Approval delegation →
 // Add delegation → type a name → pick the colleague → Save → the window is listed →
 // Remove (confirm) → gone. Screenshots of the picker at both widths.
+// Browser (reader@): Add delegation shows the "can't look up colleagues" note and no
+// search box, and no search is sent.
 // Everything it creates (the delegation) is removed at the end.
 //
 //   node e2e/recovery/live-delegate-search.mjs
@@ -121,9 +126,9 @@ try {
   const outside = ids(all).filter((id) => !withLogin.has(id))
   check('api: everyone the picker lists has a login', outside.length === 0, outside.join(','))
 
-  // The employee gets the same rules (they may set a delegation too).
+  // The employee approves nothing, so has nothing to delegate: refused.
   const rRes = await candidates(reader, 'dept')
-  check('api: the employee finds the manager and not themselves', rRes.status === 200 && ids(rRes).includes(MANAGER) && !ids(await candidates(reader, 'reader')).includes(READER), `status=${rRes.status}`)
+  check('api: the employee (approves nothing) is refused (403)', rRes.status === 403 && !JSON.stringify(rRes.json).includes(MANAGER), `status=${rRes.status}`)
 
   // Refusals and limits.
   check('api: one character is refused (400)', (await candidates(mgr, 'r')).status === 400)
@@ -181,6 +186,34 @@ try {
     check(`browser ${tag}: Remove (after the confirm) deletes it`, !!del && del.status() < 300, `status=${del?.status()}`)
     const after = ((await mgr('/v1/me/delegation')).json || []).filter((d) => !before.has(d.id))
     check(`browser ${tag}: nothing of the test is left`, after.length === 0, JSON.stringify(after))
+    await ctx.close()
+  }
+
+  // ── Browser: the employee gets no search box ──
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    const page = await ctx.newPage()
+    page.setDefaultTimeout(45_000)
+    page.setDefaultNavigationTimeout(120_000)
+    const wt = watch(page, 'reader')
+    watched.push(wt)
+    const asked = []
+    page.on('request', (r) => { if (/\/v1\/(approvals\/delegation\/candidates|search\?)/.test(r.url())) asked.push(new URL(r.url()).pathname) })
+    await page.addLocatorHandler(page.getByRole('dialog', { name: 'Check in with your face' }), async (dlg) => {
+      const skip = dlg.getByRole('button', { name: 'Continue without checking in' })
+      if (await skip.isVisible().catch(() => false)) await skip.click()
+      else await page.keyboard.press('Escape')
+    })
+    await signIn(page, 'reader@unifiedtree.demo')
+    await page.goto(base + '/profile#st-delegation', { waitUntil: 'domcontentloaded' })
+    const add = page.getByRole('button', { name: '+ Add delegation' })
+    check('browser employee: Preferences shows Approval delegation with Add', await add.waitFor({ timeout: 30_000 }).then(() => true, () => false))
+    await add.click()
+    const note = page.getByText("You don't have permission to look up colleagues")
+    check("browser employee: the form says they can't look colleagues up", await note.waitFor({ timeout: 15_000 }).then(() => true, () => false))
+    check('browser employee: there is no search box', (await page.getByPlaceholder('Search by name or employee ID').count()) === 0)
+    await page.screenshot({ path: `${SHOTS}/w21-delegate-employee-desktop.png`, fullPage: false })
+    check('browser employee: no colleague search is sent', asked.length === 0, asked.join(','))
     await ctx.close()
   }
 

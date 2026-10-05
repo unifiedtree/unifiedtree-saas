@@ -35,8 +35,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * The approval-delegation colleague picker (GET /v1/approvals/delegation/candidates):
- * who may call it, which workspace and which people it reads, and that only the six
- * picker fields can come back.
+ * who may call it (approvers only), which workspace and which people it reads, and that
+ * only the six picker fields can come back.
  */
 class DelegationCandidatesControllerTest {
 
@@ -52,30 +52,63 @@ class DelegationCandidatesControllerTest {
     // ── who may call it ──────────────────────────────────────────────────────
 
     @Test
-    void theGateIsExactlyTheOneThatLetsSomeoneSetADelegation() throws Exception {
-        String create = guard(ApprovalDelegationController.class.getMethod("create",
-                ApprovalDelegationController.CreateRequest.class, Jwt.class));
-        String candidates = guard(candidatesMethod());
-        assertEquals(create, candidates);
-        assertEquals("isAuthenticated()", candidates);
-        assertFalse(candidates.contains("hrms.employee.read"), "the picker must not need the directory permission");
-        assertNotNull(ApprovalDelegationController.class.getMethod("create",
-                ApprovalDelegationController.CreateRequest.class, Jwt.class).getAnnotation(PostMapping.class));
+    void theGateIsTheApproverListAndNotTheDirectoryPermission() throws Exception {
+        String g = guard(candidatesMethod());
+        assertEquals(DelegationCandidatesController.APPROVER_GUARD, g);
+        String fromList = DelegationCandidatesController.APPROVER_PERMISSIONS.stream()
+                .map(c -> "'" + c + "'").collect(java.util.stream.Collectors.joining(", ", "@perm.hasAny(", ")"));
+        assertEquals(fromList, g, "the guard names exactly APPROVER_PERMISSIONS");
+        assertFalse(g.contains("hrms.employee.read"), "the picker must not need the directory permission");
+        // Setting a delegation itself is unchanged: everyone signed in.
+        assertEquals("isAuthenticated()", guard(ApprovalDelegationController.class.getMethod("create",
+                ApprovalDelegationController.CreateRequest.class, Jwt.class)));
     }
 
     @Test
-    void aDeptManagerWithoutTheDirectoryPermissionGetsInAndAnAnonymousCallerDoesNot() throws Exception {
+    void approversGetInAndSomeoneWhoApprovesNothingDoesNot() throws Exception {
         String g = guard(candidatesMethod());
         // DEPT_MANAGER's codes today: approvals, team management; no hrms.employee.read.
-        Set<String> deptManager = Set.of("hrms.leave.approve.l1", "wfh.approve", "hrms.employee.team.manage",
-                "attendance.regularization.approve", "hrms.expense.claim.approve");
-        assertTrue(allows(g, true, deptManager));
-        // MANAGER and EMPLOYEE (they may set a delegation too, so they may pick a delegate).
-        assertTrue(allows(g, true, Set.of("attendance.overtime.approve", "attendance.team.read")));
-        assertTrue(allows(g, true, Set.of("leave.request.self")));
+        assertTrue(allows(g, true, Set.of("hrms.leave.approve.l1", "wfh.approve", "hrms.employee.team.manage",
+                "attendance.regularization.approve", "hrms.expense.claim.approve")));
+        // MANAGER approves overtime and skills only.
+        assertTrue(allows(g, true, Set.of("attendance.overtime.approve", "attendance.team.read", "leave.request.self")));
+        // A custom role with one approval code, e.g. advances or timesheets.
+        assertTrue(allows(g, true, Set.of("hrms.advance.approve")));
+        assertTrue(allows(g, true, Set.of("hrms.timesheet.approve")));
+        // EMPLOYEE's codes: self-service only. Refused.
+        assertFalse(allows(g, true, Set.of("leave.request.self", "attendance.checkin.self", "hrms.expense.claim.self",
+                "wfh.request.self", "hrms.ess.read", "attendance.team.read")));
+        // The directory permission alone is not approving anything. Refused.
+        assertFalse(allows(g, true, Set.of("hrms.employee.read")));
+        assertFalse(allows(g, true, Set.of()));
         // Not signed in: refused, whatever codes are claimed.
-        assertFalse(allows(g, false, Set.of("hrms.employee.read")));
-        assertFalse(allows(g, false, Set.of()));
+        assertFalse(allows(g, false, Set.of("hrms.leave.approve.l1")));
+    }
+
+    @Test
+    void everyApproveOrDecideGuardInTheApiIsOnTheApproverList() throws Exception {
+        java.util.regex.Pattern code = java.util.regex.Pattern.compile("'([a-z_]+(?:[.][a-z0-9_]+)*[.](?:approve|decide)(?:[.][a-z0-9_]+)*)'");
+        org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider scanner =
+                new org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new org.springframework.core.type.filter.AnnotationTypeFilter(
+                org.springframework.web.bind.annotation.RestController.class));
+        Set<String> used = new java.util.TreeSet<>();
+        List<org.springframework.beans.factory.config.BeanDefinition> controllers = new ArrayList<>(scanner.findCandidateComponents("com.hrms"));
+        controllers.addAll(scanner.findCandidateComponents("com.unifiedtree"));
+        for (var def : controllers) {
+            Class<?> type = Class.forName(def.getBeanClassName(), false, getClass().getClassLoader());
+            List<PreAuthorize> guards = new ArrayList<>();
+            if (type.getAnnotation(PreAuthorize.class) != null) guards.add(type.getAnnotation(PreAuthorize.class));
+            for (Method m : type.getDeclaredMethods()) if (m.getAnnotation(PreAuthorize.class) != null) guards.add(m.getAnnotation(PreAuthorize.class));
+            for (PreAuthorize p : guards) {
+                var mt = code.matcher(p.value());
+                while (mt.find()) used.add(mt.group(1));
+            }
+        }
+        used.removeIf(c -> c.startsWith("platform."));  // our own staff approving sign-ups, not a workspace decision
+        assertTrue(used.contains("hrms.leave.approve.l1"), "the scan found the approval guards: " + used);
+        List<String> missing = used.stream().filter(c -> !DelegationCandidatesController.APPROVER_PERMISSIONS.contains(c)).toList();
+        assertEquals(List.of(), missing, "approval codes used by an endpoint but not on APPROVER_PERMISSIONS");
     }
 
     @Test
@@ -296,8 +329,21 @@ class DelegationCandidatesControllerTest {
 
     private static boolean allows(String expression, boolean signedIn, Set<String> held) {
         StandardEvaluationContext ctx = new StandardEvaluationContext(new Root(signedIn, held));
+        ctx.setBeanResolver((context, name) -> {
+            if ("perm".equals(name)) return new Perm(signedIn, held);
+            throw new IllegalArgumentException("unknown bean @" + name + " in " + expression);
+        });
         Boolean ok = new SpelExpressionParser().parseExpression(expression).getValue(ctx, Boolean.class);
         return Boolean.TRUE.equals(ok);
+    }
+
+    /** Stands in for PermissionChecker (@perm): nothing is held without a signed-in person. */
+    public static final class Perm {
+        private final boolean signedIn;
+        private final Set<String> held;
+        Perm(boolean signedIn, Set<String> held) { this.signedIn = signedIn; this.held = held; }
+        public boolean check(String code) { return signedIn && held.contains(code); }
+        public boolean hasAny(String... codes) { return signedIn && Arrays.stream(codes).anyMatch(held::contains); }
     }
 
     /** The parts of Spring Security's expression root a guard here could use. */

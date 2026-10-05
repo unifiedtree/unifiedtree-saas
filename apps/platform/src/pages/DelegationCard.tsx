@@ -7,9 +7,12 @@ import { Search, X } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
 import { HrButton } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
+import { useAnyPermission, usePermission } from '@unifiedtree/sdk'
 import { httpStatusOf } from '@/core/api/featureNotReady'
-import type { EmployeeSearchHit } from '@/shared/search/useEmployeeSearch'
-import { useDelegateSearch, DELEGATE_SEARCH_MIN_CHARS, type DelegateSearchSource } from './delegateSearch'
+import { EMPLOYEE_SEARCH_PERMISSION, type EmployeeSearchHit } from '@/shared/search/useEmployeeSearch'
+import {
+  useDelegateSearch, delegateSearchVia, DELEGATE_APPROVER_PERMISSIONS, DELEGATE_SEARCH_MIN_CHARS, type DelegateSearchSource,
+} from './delegateSearch'
 
 /**
  * "I'm away — my approvals go to Alice." One card on the Profile page.
@@ -20,9 +23,11 @@ import { useDelegateSearch, DELEGATE_SEARCH_MIN_CHARS, type DelegateSearchSource
  * hidden from the list.
  *
  * Backend: GET/POST/DELETE /v1/me/delegation (isAuthenticated). The colleague
- * picker uses GET /v1/approvals/delegation/candidates (isAuthenticated too, so
- * managers without hrms.employee.read can choose someone); until that is
- * deployed it falls back to /v1/search (hrms.employee.read). See delegateSearch.ts.
+ * picker: approvers use GET /v1/approvals/delegation/candidates (so managers
+ * without hrms.employee.read can choose someone; until it is deployed, the
+ * directory search); others with hrms.employee.read keep /v1/search; anyone else
+ * sees the "you can't look up colleagues" note instead of a search box.
+ * See delegateSearch.ts.
  */
 
 interface DelegationDto {
@@ -145,7 +150,10 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
   const [toDate, setToDate] = useState(todayIso())
   const [reason, setReason] = useState('')
 
-  const search = useDelegateSearch(query)
+  const approver = useAnyPermission(DELEGATE_APPROVER_PERMISSIONS)
+  const canReadDirectory = usePermission(EMPLOYEE_SEARCH_PERMISSION)
+  const via = delegateSearchVia(approver, canReadDirectory)
+  const search = useDelegateSearch(query, via)
   const hits: EmployeeSearchHit[] = useMemo(() => search.data?.employees ?? [], [search.data])
 
   const createMut = useMutation({
@@ -188,6 +196,10 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
               Change
             </button>
           </div>
+        ) : via === null ? (
+          <p className="rounded-xl border border-border-subtle bg-bg-base px-3 py-2 text-xs text-text-secondary">
+            {NO_SEARCH_MESSAGE}
+          </p>
         ) : (
           <>
             <div className="relative">
@@ -265,6 +277,8 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
   )
 }
 
+const NO_SEARCH_MESSAGE = "You don't have permission to look up colleagues. Ask HR to set the delegation for you."
+
 /**
  * The picker's results under the search box. `source` says which endpoint
  * answered: only the delegation picker's own lists just current colleagues who
@@ -280,9 +294,7 @@ export const DelegateHits: React.FC<{
   <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-[var(--u-sf)]">
     {error ? (
       <p className="p-3 text-xs text-red-600">
-        {httpStatusOf(error) === 403
-          ? "You don't have permission to look up colleagues. Ask HR to set the delegation for you."
-          : "Couldn't search colleagues just now. Try again."}
+        {httpStatusOf(error) === 403 ? NO_SEARCH_MESSAGE : "Couldn't search colleagues just now. Try again."}
       </p>
     ) : hits.length === 0 && !fetching ? (
       <p className="p-3 text-xs text-text-tertiary">

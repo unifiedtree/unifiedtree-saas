@@ -5,7 +5,8 @@ import { answers, fakeApi } from '@/modules/hrms/api/shared/testing'
 import { HttpError } from '@/core/api/client'
 import type { EmployeeSearchHit } from '@/shared/search/useEmployeeSearch'
 import {
-  DELEGATE_CANDIDATES_PATH, DELEGATE_CANDIDATE_LIMIT, fallsBackToDirectory, resetDelegateSearch, searchDelegates,
+  DELEGATE_APPROVER_PERMISSIONS, DELEGATE_CANDIDATES_PATH, DELEGATE_CANDIDATE_LIMIT, delegateSearchVia, fallsBackToDirectory,
+  resetDelegateSearch, searchDelegates,
 } from './delegateSearch'
 import { DelegateHits } from './DelegationCard'
 
@@ -15,22 +16,48 @@ const isCandidates = (p: string) => p.startsWith(DELEGATE_CANDIDATES_PATH)
 
 afterEach(() => resetDelegateSearch())
 
+describe('who searches what', () => {
+  it('an approver uses the picker’s own search, with or without the directory permission', () => {
+    expect(delegateSearchVia(true, false)).toBe('candidates')
+    expect(delegateSearchVia(true, true)).toBe('candidates')
+  })
+  it('someone who approves nothing keeps the directory search if they had it, else gets no search box', () => {
+    expect(delegateSearchVia(false, true)).toBe('directory')
+    expect(delegateSearchVia(false, false)).toBeNull()
+  })
+  it('lists the server’s approval permissions (DelegationCandidatesController.APPROVER_PERMISSIONS)', () => {
+    expect(DELEGATE_APPROVER_PERMISSIONS).toEqual([
+      'hrms.leave.approve.l1', 'hrms.leave.approve.l2', 'hrms.leave.encash.approve', 'wfh.approve',
+      'attendance.regularization.approve', 'attendance.overtime.approve', 'hrms.expense.claim.approve', 'hrms.advance.approve',
+      'hrms.timesheet.approve', 'hrms.probation.team.decide', 'hrms.fnf.approve', 'hrms.learning.skill.approve',
+    ])
+    expect(DELEGATE_APPROVER_PERMISSIONS).not.toContain('hrms.employee.read')
+  })
+})
+
 describe('searchDelegates', () => {
-  it('asks the delegation picker’s own endpoint first, with the trimmed text and its limit', async () => {
+  it('an approver asks the picker’s own endpoint, with the trimmed text and its limit', async () => {
     const { api, calls } = fakeApi(() => page([ASHA]))
-    const r = await searchDelegates('  as  ha ', api)
+    const r = await searchDelegates('  as  ha ', 'candidates', api)
     expect(calls.map((c) => c.path)).toEqual([`${DELEGATE_CANDIDATES_PATH}?q=as%20ha&limit=${DELEGATE_CANDIDATE_LIMIT}`])
     expect(r.source).toBe('candidates')
     expect(r.employees).toEqual([ASHA])
   })
 
+  it('the directory search is asked directly for someone who approves nothing', async () => {
+    const { api, calls } = fakeApi(() => page([ASHA]))
+    const r = await searchDelegates('asha', 'directory', api)
+    expect(calls.map((c) => c.path)).toEqual(['/v1/search?q=asha&limit=5'])
+    expect(r.source).toBe('directory')
+  })
+
   it('falls back to the directory search where the endpoint isn’t deployed, and then stops asking for it', async () => {
     const { api, calls } = fakeApi((p) => { if (isCandidates(p)) throw answers.notFound(); return page([ASHA]) })
-    const r = await searchDelegates('asha', api)
+    const r = await searchDelegates('asha', 'candidates', api)
     expect(r.source).toBe('directory')
     expect(r.employees).toEqual([ASHA])
     expect(calls.map((c) => c.path)).toEqual([`${DELEGATE_CANDIDATES_PATH}?q=asha&limit=10`, '/v1/search?q=asha&limit=5'])
-    await searchDelegates('ash', api)
+    await searchDelegates('ash', 'candidates', api)
     expect(calls.map((c) => c.path).slice(2)).toEqual(['/v1/search?q=ash&limit=5'])
   })
 
@@ -39,33 +66,32 @@ describe('searchDelegates', () => {
     for (const err of [methodNotAllowed, answers.notReady()]) {
       resetDelegateSearch()
       const { api } = fakeApi((p) => { if (isCandidates(p)) throw err; return page([]) })
-      await expect(searchDelegates('as', api)).resolves.toMatchObject({ source: 'directory' })
+      await expect(searchDelegates('as', 'candidates', api)).resolves.toMatchObject({ source: 'directory' })
     }
   })
 
-  it('falls back on 403 (a workspace without HRMS) but asks again next time', async () => {
+  it('never falls back on 403: the refusal is shown, the directory isn’t asked', async () => {
     const { api, calls } = fakeApi((p) => { if (isCandidates(p)) throw answers.forbidden(); return page([ASHA]) })
-    await expect(searchDelegates('as', api)).resolves.toMatchObject({ source: 'directory' })
-    await searchDelegates('ash', api)
-    expect(calls.filter((c) => isCandidates(c.path))).toHaveLength(2)
+    await expect(searchDelegates('as', 'candidates', api)).rejects.toMatchObject({ status: 403 })
+    expect(calls.map((c) => c.path)).toEqual([`${DELEGATE_CANDIDATES_PATH}?q=as&limit=10`])
   })
 
   it('shows a real failure as it is, without the directory search', async () => {
     const boom = answers.serverError()
     const { api, calls } = fakeApi(() => { throw boom })
-    await expect(searchDelegates('as', api)).rejects.toBe(boom)
+    await expect(searchDelegates('as', 'candidates', api)).rejects.toBe(boom)
     expect(calls).toHaveLength(1)
   })
 
-  it('passes on the directory search’s 403 for someone without hrms.employee.read on an old server', async () => {
+  it('passes on the directory search’s 403 for an approver without hrms.employee.read on an old server', async () => {
     const { api } = fakeApi((p) => { if (isCandidates(p)) throw answers.notFound(); throw answers.forbidden() })
-    await expect(searchDelegates('as', api)).rejects.toMatchObject({ status: 403 })
+    await expect(searchDelegates('as', 'candidates', api)).rejects.toMatchObject({ status: 403 })
   })
 
   it('knows which answers mean "use the directory instead"', () => {
     expect(fallsBackToDirectory(answers.notFound())).toBe(true)
-    expect(fallsBackToDirectory(answers.forbidden())).toBe(true)
     expect(fallsBackToDirectory(answers.notReady())).toBe(true)
+    expect(fallsBackToDirectory(answers.forbidden())).toBe(false)
     expect(fallsBackToDirectory(answers.serverError())).toBe(false)
     expect(fallsBackToDirectory(answers.invalidParameter())).toBe(false)
     expect(fallsBackToDirectory(new TypeError('Failed to fetch'))).toBe(false)

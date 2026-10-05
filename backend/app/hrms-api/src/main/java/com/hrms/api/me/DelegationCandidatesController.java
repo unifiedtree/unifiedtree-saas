@@ -34,9 +34,12 @@ import java.util.UUID;
  * not choose anyone and could not delegate. The owner agreed (5 Oct 2026) that
  * people may look colleagues up for this one purpose.
  *
- * <p>Who may call it: exactly who may set a delegation —
- * {@link ApprovalDelegationController#create} is {@code isAuthenticated()},
- * and so is this. No permission code is involved.
+ * <p>Who may call it: approvers, i.e. anyone holding at least one of
+ * {@link #APPROVER_PERMISSIONS} (the owner agreed to this for managers; someone
+ * who approves nothing has nothing to delegate). Everyone else gets 403 — even
+ * with {@code hrms.employee.read}, who keeps the directory search for this. Setting
+ * a delegation ({@link ApprovalDelegationController#create}) is unchanged.
+ * No new permission code.
  *
  * <p>Who comes back: the people {@code create} accepts as a delegate, narrowed
  * to those who can act on it. Same workspace only (explicit {@code tenant_id}
@@ -65,6 +68,33 @@ public class DelegationCandidatesController {
     /** At most this many words are matched one by one. */
     static final int MAX_TOKENS = 4;
 
+    /**
+     * The approval permissions: the codes that guard the approve / decide endpoints. Holding any
+     * one makes someone an approver, who may look colleagues up to choose a delegate. Keep in step
+     * with every approve / decide guard (DelegationCandidatesControllerTest scans them), and with
+     * the website's and the app's copies (delegateSearch.ts, utils/delegation.ts).
+     */
+    public static final List<String> APPROVER_PERMISSIONS = List.of(
+            "hrms.leave.approve.l1",             // leave, first level (and the Approvals inbox)
+            "hrms.leave.approve.l2",             // leave, second level
+            "hrms.leave.encash.approve",         // leave encashment
+            "wfh.approve",                       // work from home
+            "attendance.regularization.approve", // attendance corrections, shift-change requests
+            "attendance.overtime.approve",       // overtime
+            "hrms.expense.claim.approve",        // expense claims
+            "hrms.advance.approve",              // salary advances
+            "hrms.timesheet.approve",            // timesheet weeks
+            "hrms.probation.team.decide",        // confirm or extend a report's probation
+            "hrms.fnf.approve",                  // full and final settlements
+            "hrms.learning.skill.approve");      // skill assessments
+
+    /** {@link #APPROVER_PERMISSIONS} as the guard (an annotation needs a constant; the test checks they agree). */
+    static final String APPROVER_GUARD = "@perm.hasAny('hrms.leave.approve.l1', 'hrms.leave.approve.l2', "
+            + "'hrms.leave.encash.approve', 'wfh.approve', 'attendance.regularization.approve', "
+            + "'attendance.overtime.approve', 'hrms.expense.claim.approve', 'hrms.advance.approve', "
+            + "'hrms.timesheet.approve', 'hrms.probation.team.decide', 'hrms.fnf.approve', "
+            + "'hrms.learning.skill.approve')";
+
     /** Statuses of people who are no longer working here (or may not act for now). */
     static final List<String> EXCLUDED_STATUSES =
             List.of("EXITED", "TERMINATED", "SUSPENDED", "RESIGNED", "RETIRED");
@@ -75,9 +105,9 @@ public class DelegationCandidatesController {
         this.jdbc = jdbc;
     }
 
-    @Operation(summary = "Colleagues I can choose as my approval delegate (name, code or email prefix)")
+    @Operation(summary = "Colleagues an approver can choose as their approval delegate (name, code or email prefix)")
     @GetMapping("/candidates")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize(APPROVER_GUARD)
     @Transactional(readOnly = true)
     public EmployeeSearchResponse candidates(@RequestParam String q,
                                              @RequestParam(defaultValue = "" + DEFAULT_LIMIT) int limit,
