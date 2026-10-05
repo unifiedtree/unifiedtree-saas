@@ -73,7 +73,9 @@ async function signIn(email, viewport = { width: 1440, height: 900 }) {
   errors.length = 0; failed.length = 0
   lastPage = page
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(700) }
-  const open = async (path) => { at(`${email} → ${path}`, page); await page.goto(base + path); await settle() }
+  // The check-in prompt after sign-in (people who may punch from the web) sits over the page: carry on past it.
+  const pastPrompt = async () => { const later = page.getByRole('button', { name: 'Continue without checking in' }); if (await later.isVisible().catch(() => false)) { await later.click(); await page.waitForTimeout(400) } }
+  const open = async (path) => { at(`${email} → ${path}`, page); await page.goto(base + path); await settle(); await pastPrompt() }
   return { page, context, errors, failed, companyHeaders, settle, open }
 }
 const selector = (page) => page.locator('button.ut-cosel')
