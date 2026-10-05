@@ -45,11 +45,11 @@ import java.util.UUID;
  *       new workspace.</li>
  * </ol>
  *
- * <p>Multiple free workspaces per account are supported. There is NO
- * "one free per email" cap — the client explicitly wants users to be able
- * to create as many free workspaces as they need. The 7-day trial is
- * per-workspace, not per-email, and it starts LATER (when autopay is set
- * up inside the workspace), not at creation time.
+ * <p>One business per account (owner decision, 6 Oct 2026): an account that
+ * already has a business gets a 409 from {@link SaasService#createFreeWorkspace}.
+ * More HRMS companies are created later inside the business. The 7-day trial
+ * starts LATER (when autopay is set up inside the workspace), not at
+ * creation time.
  */
 @RestController
 @RequestMapping("/v1/public/free-signup")
@@ -132,7 +132,8 @@ public class FreeSignupController {
                 norm(req.adminMobile()),
                 req.country(),
                 req.timezone(),
-                req.currency() == null ? "INR" : req.currency());
+                req.currency() == null ? "INR" : req.currency(),
+                req.firstCompanyName());
 
         log.info("free-signup {} → tenant={} subdomain={} signedIn={}",
                 email, resp.tenantId(), resp.subdomain(), signedInAccountId != null);
@@ -208,7 +209,11 @@ public class FreeSignupController {
 
             @Size(max = 50)  String country,
             @Size(max = 50)  String timezone,
-            @Size(max = 10)  String currency
+            @Size(max = 10)  String currency,
+
+            // The first HRMS company. companyName above is the BUSINESS name.
+            // Optional: blank means the company takes the business name.
+            @Size(max = 150) String firstCompanyName
     ) {
         public FreeSignupRequest {
             // Normalise subdomain to lower-case so downstream uniqueness

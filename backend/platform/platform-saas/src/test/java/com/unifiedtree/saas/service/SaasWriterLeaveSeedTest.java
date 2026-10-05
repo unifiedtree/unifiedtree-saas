@@ -26,7 +26,7 @@ class SaasWriterLeaveSeedTest {
         writer.signup(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 "acme", "unifiedtree.com", "hash", List.of(),
                 new SignupRequest("Acme", "acme", "Asha Rao", "asha@acme.test", null, "password1",
-                        null, null, null, null, null, null, List.of("hrms"), null, null));
+                        null, null, null, null, null, null, List.of("hrms"), null, null, null));
 
         List<Object[]> types = updates(jdbc, "INSERT INTO leave_mgmt.leave_types");
         List<Object[]> balances = updates(jdbc, "INSERT INTO leave_mgmt.leave_balances");

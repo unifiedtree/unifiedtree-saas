@@ -40,7 +40,7 @@ export function HeroSection() {
      free trial" for a beat when a signed-in user with workspaces reloads the
      home page. */
   const { mode: ctaMode, href: ctaHref, ready: ctaReady } = useCtaMode()
-  const ctaLabel = ctaMode === 'trial' ? 'Start free trial' : 'Open your workspace'
+  const ctaLabel = ctaMode === 'trial' ? 'Start free trial' : 'Open your business'
   const reduce = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })

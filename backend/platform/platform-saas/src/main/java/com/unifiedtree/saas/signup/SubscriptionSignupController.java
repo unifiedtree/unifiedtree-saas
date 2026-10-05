@@ -136,6 +136,22 @@ public class SubscriptionSignupController {
                         /*keyId*/                 null));
             }
         }
+        // One business per account (owner decision, 6 Oct 2026). Checked HERE,
+        // before any Razorpay call: provisioning refuses a second business too,
+        // but by then the mandate exists. Anonymous callers whose email already
+        // has a business get the same silent 200 as the enumeration guard above.
+        if (signedInAccountId != null && accountHasBusiness(signedInAccountId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, SaasService.ONE_BUSINESS_PER_ACCOUNT);
+        }
+        if (signedInAccountId == null && emailHasBusiness(email)) {
+            log.warn("subscription-signup silently declined (one business per account) for email={}", email);
+            return ResponseEntity.ok(new SubscriptionSignupResponse(
+                    /*pendingSignupId*/       null,
+                    /*razorpaySubscriptionId*/null,
+                    /*checkoutShortUrl*/      null,
+                    /*mode*/                  mode.name(),
+                    /*keyId*/                 null));
+        }
         // Signed-in caller must not start ANOTHER trial. They add a paid workspace.
         if (mode == Mode.TRIAL && signedInAccountId != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -388,6 +404,21 @@ public class SubscriptionSignupController {
 
     private static String normSubdomain(String s) {
         return s == null ? null : s.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean accountHasBusiness(UUID accountId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM platform.account_workspaces WHERE account_id = ? AND status = 'ACTIVE')",
+                Boolean.class, accountId));
+    }
+
+    private boolean emailHasBusiness(String email) {
+        if (email == null) return false;
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM platform.accounts a"
+                        + " JOIN platform.account_workspaces aw ON aw.account_id = a.id AND aw.status = 'ACTIVE'"
+                        + " WHERE lower(a.email) = ?)",
+                Boolean.class, email.toLowerCase(Locale.ROOT)));
     }
 
     private boolean accountExistsByEmail(String email) {
