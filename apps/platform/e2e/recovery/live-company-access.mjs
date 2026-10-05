@@ -1,0 +1,228 @@
+// Live check for feat/company-access: a person gets a role per company
+// (docs/redesign/COMPANY_ACCESS.md). API only — the web selector and the app picker
+// are built on top of this by other branches.
+//
+//   RECOVERY_DB=ut_w3_dev node e2e/recovery/live-company-access.mjs
+//
+// With a second company B (temporary) next to the demo company A:
+//  - Before any grant: mgr@ (Dept Manager) and reader@ (Employee) see only A in
+//    /v1/me/companies and /v1/hrms/companies; naming B (X-Company-Id, ?companyId=,
+//    /companies/{B}) is 403 COMPANY_ACCESS_DENIED. owner@ sees A and B. No header =
+//    exactly as before; a malformed header is 400.
+//  - B gets an employee with the same code as one in A (EMP001), reporting to mgr@.
+//  - owner@ grants mgr@ Employee in B: mgr@ sees both companies; in B his /me roles are
+//    [EMPLOYEE] and the team dashboard is 403; in A he is still a Dept Manager.
+//  - owner@ makes it Manager in B: mgr@ reads B's team (B's EMP001, not A's people) and
+//    B's departments; reader@ still cannot read B. The grant shows in the admin views.
+//  - The rules: no grant for the home company, no whole-business role per company,
+//    mgr@ cannot grant; rows are invisible from another workspace (RLS, read-only SQL).
+//  - Revoke: B is gone from mgr@'s companies and 403 again. Every change is audited.
+// Everything created (company, employee, grants, audit rows) is removed at the end.
+/* global process, console, fetch */
+import { execFileSync } from 'node:child_process'
+
+const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
+const db = process.env.RECOVERY_DB || 'ut_w3_dev'
+const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
+const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const companyA = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+const psql = 'C:/Program Files/PostgreSQL/18/bin/psql.exe'
+const sql = (q) => execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atqc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+// As the application's own database role, so row-level security applies (read-only).
+const appSql = (tenantId, q) => execFileSync(psql, ['-h', '127.0.0.1', '-p', '55432', '-U', 'ut_app', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atq'],
+  { input: `BEGIN; SET LOCAL app.tenant_id = '${tenantId}'; ${q}; COMMIT;`, env: { ...process.env, PGPASSWORD: process.env.UT_APP_PASSWORD || 'local_recovery_only' } }).toString().trim()
+const lit = (s) => `'${String(s).replace(/'/g, "''")}'`
+const results = []
+const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
+const tag = String(Date.now() % 1000000)
+const tempName = `zz QA Access Co ${tag}` // sorts after every real company
+let companyB = null, empB = null, mgrUser = null
+const start = sql('select now()')
+let where = 'start'
+const at = (name) => { where = name; console.log(`..  ${name}`) }
+
+async function login(email) {
+  const r = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant }, body: JSON.stringify({ tenantId: tenant, email, password }) })
+  if (!r.ok) throw new Error(`login ${email}: ${r.status}`)
+  const d = await r.json()
+  const call = async (method, path, { body, company } = {}) => {
+    const headers = { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }
+    if (company) headers['X-Company-Id'] = company
+    const res = await fetch(api + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    return { status: res.status, json }
+  }
+  call.userId = d.userId
+  call.employeeId = d.employeeId
+  return call
+}
+const ids = (list) => (Array.isArray(list) ? list : []).map((c) => c.id || c.companyId)
+const errorCode = (r) => (r.json && typeof r.json === 'object' ? r.json.errorCode : '')
+
+try {
+  at('sign in')
+  const owner = await login('owner@unifiedtree.demo')
+  const mgr = await login('mgr@unifiedtree.demo')
+  const reader = await login('reader@unifiedtree.demo')
+  mgrUser = mgr.userId
+  check('fixtures: mgr@ and reader@ work in the demo company', !!mgr.userId && !!mgr.employeeId && !!reader.userId)
+
+  // ── before company B exists ──
+  at('baseline')
+  const me0 = await mgr('GET', '/v1/me/companies')
+  check('mgr@ /v1/me/companies: one company, the home one, as Dept Manager', me0.status === 200 && me0.json.homeCompanyId === companyA
+    && me0.json.allCompanies === false && me0.json.companies.length === 1 && me0.json.companies[0].access === 'HOME'
+    && me0.json.companies[0].roles.some((r) => r.code === 'DEPT_MANAGER' && r.source === 'ROLES'), JSON.stringify(me0.json).slice(0, 300))
+  const meNoHeader = await mgr('GET', '/v1/canonical-auth/me')
+  check('no header: /me is as before (DEPT_MANAGER)', meNoHeader.status === 200 && JSON.stringify(meNoHeader.json.roles) === '["DEPT_MANAGER"]')
+
+  at('create company B')
+  const made = await owner('POST', '/v1/hrms/companies', { body: { name: tempName, industry: 'Quality checks', country: 'India', currency: 'INR' } })
+  companyB = made.json && made.json.id
+  check('owner@ creates company B', made.status === 201 && !!companyB, `status ${made.status}`)
+  if (!companyB) throw new Error('no company B')
+
+  at('who sees B')
+  const ownerMe = await owner('GET', '/v1/me/companies')
+  check('owner@ /v1/me/companies: every company (workspace-wide), A first as home', ownerMe.status === 200 && ownerMe.json.allCompanies === true
+    && ids(ownerMe.json.companies).includes(companyB) && ownerMe.json.companies[0].companyId === companyA
+    && ownerMe.json.companies.every((c) => c.access === 'WORKSPACE'))
+  check('owner@ /v1/hrms/companies lists B', ids((await owner('GET', '/v1/hrms/companies')).json).includes(companyB))
+  const mgrList = await mgr('GET', '/v1/hrms/companies')
+  check('mgr@ /v1/hrms/companies lists only A', mgrList.status === 200 && JSON.stringify(ids(mgrList.json)) === JSON.stringify([companyA]), JSON.stringify(ids(mgrList.json)))
+  const readerList = await reader('GET', '/v1/hrms/companies')
+  check('reader@ /v1/hrms/companies lists only A', readerList.status === 200 && JSON.stringify(ids(readerList.json)) === JSON.stringify([companyA]))
+  const appList = await reader('GET', '/v1/tenant/companies')
+  check('reader@ app list /v1/tenant/companies lists only A', appList.status === 200 && !JSON.stringify(appList.json).includes(companyB), `status ${appList.status}`)
+
+  at('refusals before a grant')
+  let r = await mgr('GET', '/v1/hrms/departments', { company: companyB })
+  check('mgr@ X-Company-Id: B → 403 COMPANY_ACCESS_DENIED', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('GET', `/v1/hrms/departments?companyId=${companyB}`)
+  check('mgr@ ?companyId=B (no header, old app) → 403', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status}`)
+  r = await reader('GET', `/v1/hrms/companies/${companyB}`)
+  check('reader@ /companies/{B} → 403', r.status === 403, `status ${r.status}`)
+  r = await reader('GET', `/v1/hrms/departments?companyId=${companyA}`)
+  check('reader@ ?companyId=A (home) → 200 as before', r.status === 200, `status ${r.status}`)
+  r = await mgr('GET', `/v1/hrms/departments?companyId=${companyA}`, { company: companyA })
+  check('mgr@ X-Company-Id: A (home) → 200', r.status === 200, `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('GET', '/v1/hrms/departments', { company: 'not-a-company' })
+  check('malformed X-Company-Id → 400 INVALID_COMPANY_ID', r.status === 400 && errorCode(r) === 'INVALID_COMPANY_ID', `status ${r.status}`)
+  r = await mgr('GET', '/v1/me/companies', { company: companyB })
+  check('/v1/me/companies ignores a company the caller cannot use (recovery)', r.status === 200 && r.json.companies.length === 1)
+  r = await owner('GET', `/v1/hrms/departments?companyId=${companyB}`, { company: companyB })
+  check('owner@ X-Company-Id: B → 200', r.status === 200, `status ${r.status}`)
+  r = await owner('GET', '/v1/hrms/departments', { company: '00000000-0000-0000-0000-00000000abcd' })
+  check('owner@ X-Company-Id: a company not in the workspace → 403', r.status === 403, `status ${r.status}`)
+
+  at('employee in B')
+  const readerCode = sql(`select employee_code from hrms.employees where id='${reader.employeeId}'`)
+  const emp = await owner('POST', '/v1/hrms/employees', { body: { companyId: companyB, employeeCode: readerCode, firstName: 'QA', lastName: `Access ${tag}`, reportingManagerId: mgr.employeeId } })
+  empB = emp.json && (emp.json.id || (emp.json.employee && emp.json.employee.id))
+  check(`company B gets an employee with A's code ${readerCode}, reporting to mgr@`, (emp.status === 201 || emp.status === 200) && !!empB, `status ${emp.status} ${JSON.stringify(emp.json).slice(0, 200)}`)
+  check('the code exists once in each company', sql(`select count(distinct company_id) from hrms.employees where employee_code=${lit(readerCode)} and company_id in ('${companyA}','${companyB}')`) === '2')
+
+  // ── grant: Employee in B ──
+  at('grant Employee in B')
+  r = await owner('POST', `/v1/workspace/users/${mgrUser}/company-access`, { body: { companyId: companyB, roleCode: 'EMPLOYEE' } })
+  const entryB = r.json && r.json.companies && r.json.companies.find((c) => c.companyId === companyB)
+  check('owner@ grants mgr@ Employee in B', r.status === 200 && entryB && entryB.access === 'GRANT' && entryB.roles.some((x) => x.code === 'EMPLOYEE' && x.source === 'GRANT'), `status ${r.status} ${JSON.stringify(r.json).slice(0, 200)}`)
+  const me1 = await mgr('GET', '/v1/me/companies')
+  check('mgr@ now sees both companies, home first', me1.status === 200 && JSON.stringify(ids(me1.json.companies)) === JSON.stringify([companyA, companyB]))
+  check('mgr@ /v1/hrms/companies lists A and B', JSON.stringify(ids((await mgr('GET', '/v1/hrms/companies')).json).sort()) === JSON.stringify([companyA, companyB].sort()))
+  const meB = await mgr('GET', '/v1/canonical-auth/me', { company: companyB })
+  check('in B, /me says Employee (no team permission)', meB.status === 200 && JSON.stringify(meB.json.roles) === '["EMPLOYEE"]'
+    && !meB.json.permissions.includes('attendance.team.read') && meB.json.permissions.includes('leave.request.self'), JSON.stringify(meB.json.roles))
+  r = await mgr('GET', '/v1/attendance/dashboard?includeWeeklyOff=true', { company: companyB })
+  check('in B as Employee: team dashboard is 403', r.status === 403, `status ${r.status}`)
+  r = await mgr('GET', '/v1/attendance/dashboard?includeWeeklyOff=true', { company: companyA })
+  const teamA = (r.json && r.json.staffStatuses || []).map((s) => s.employeeId)
+  check('in A he is still a Dept Manager: team = A people only', r.status === 200 && teamA.includes(reader.employeeId) && !teamA.includes(empB), `status ${r.status} team ${teamA.length}`)
+  r = await mgr('GET', '/v1/attendance/dashboard?includeWeeklyOff=true')
+  const teamNoHeader = (r.json && r.json.staffStatuses || []).map((s) => s.employeeId)
+  check('no header: his team is as before (every direct report)', r.status === 200 && teamNoHeader.includes(reader.employeeId) && teamNoHeader.includes(empB), `team ${teamNoHeader.length}`)
+
+  // ── Manager in B ──
+  at('Manager in B')
+  r = await owner('POST', `/v1/workspace/users/${mgrUser}/company-access`, { body: { companyId: companyB, roleCode: 'DEPT_MANAGER' } })
+  check('owner@ grants mgr@ Dept Manager in B', r.status === 200, `status ${r.status} ${errorCode(r)}`)
+  r = await owner('DELETE', `/v1/workspace/users/${mgrUser}/company-access/${companyB}?roleCode=EMPLOYEE`)
+  const rolesB = (r.json && r.json.companies || []).find((c) => c.companyId === companyB)
+  check('owner@ removes the Employee role in B only', r.status === 200 && rolesB && JSON.stringify(rolesB.roles.map((x) => x.code)) === '["DEPT_MANAGER"]', JSON.stringify(rolesB))
+  r = await mgr('GET', '/v1/attendance/dashboard?includeWeeklyOff=true', { company: companyB })
+  const teamB = (r.json && r.json.staffStatuses || [])
+  check("mgr@ reads B's team: B's employee, none of A's people", r.status === 200 && teamB.some((s) => s.employeeId === empB && s.employeeCode === readerCode)
+    && !teamB.some((s) => s.employeeId === reader.employeeId), `status ${r.status} ${JSON.stringify(teamB.map((s) => s.employeeCode))}`)
+  r = await mgr('GET', `/v1/hrms/departments?companyId=${companyB}`, { company: companyB })
+  check("mgr@ reads B's departments", r.status === 200, `status ${r.status}`)
+  r = await mgr('GET', `/v1/hrms/companies/${companyB}`, { company: companyB })
+  check("mgr@ reads company B's profile", r.status === 200 && r.json.id === companyB, `status ${r.status}`)
+  r = await reader('GET', '/v1/hrms/departments', { company: companyB })
+  check('reader@ still cannot read B', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status}`)
+  r = await reader('GET', `/v1/attendance/dashboard?companyId=${companyB}`)
+  check("reader@ cannot reach B's team through a parameter either", r.status === 403, `status ${r.status}`)
+
+  at('admin views')
+  r = await owner('GET', `/v1/workspace/company-access?companyId=${companyB}`)
+  check('workspace grant list for B: mgr@ as Dept Manager', r.status === 200 && Array.isArray(r.json) && r.json.length === 1
+    && r.json[0].userId === mgrUser && r.json[0].roleCode === 'DEPT_MANAGER' && r.json[0].homeCompanyId === companyA, JSON.stringify(r.json).slice(0, 300))
+  r = await owner('GET', `/v1/workspace/users/${mgrUser}/company-access`)
+  check("mgr@'s access view: A (home) and B (grant)", r.status === 200 && r.json.companies.length === 2 && r.json.companies[1].access === 'GRANT')
+  r = await mgr('GET', `/v1/workspace/users/${mgrUser}/company-access`)
+  check('mgr@ cannot open the admin view (403)', r.status === 403, `status ${r.status}`)
+
+  at('rules')
+  r = await owner('POST', `/v1/workspace/users/${mgrUser}/company-access`, { body: { companyId: companyA, roleCode: 'EMPLOYEE' } })
+  check('no grant for the home company (422 HOME_COMPANY)', r.status === 422 && errorCode(r) === 'HOME_COMPANY', `status ${r.status} ${errorCode(r)}`)
+  r = await owner('POST', `/v1/workspace/users/${mgrUser}/company-access`, { body: { companyId: companyB, roleCode: 'ADMIN' } })
+  check('no whole-business role per company (422 ROLE_IS_WORKSPACE_WIDE)', r.status === 422 && errorCode(r) === 'ROLE_IS_WORKSPACE_WIDE', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', `/v1/workspace/users/${reader.userId}/company-access`, { body: { companyId: companyB, roleCode: 'EMPLOYEE' } })
+  check('mgr@ cannot grant (403)', r.status === 403, `status ${r.status}`)
+  r = await owner('POST', `/v1/workspace/users/${owner.userId}/company-access`, { body: { companyId: companyB, roleCode: 'EMPLOYEE' } })
+  check('nobody changes their own access (403 CANNOT_EDIT_OWN_ACCESS)', r.status === 403 && errorCode(r) === 'CANNOT_EDIT_OWN_ACCESS', `status ${r.status} ${errorCode(r)}`)
+
+  at('workspace isolation')
+  check('RLS: the grant is visible inside the workspace', appSql(tenant, `SELECT count(*) FROM rbac.user_company_access WHERE company_id='${companyB}'`) === '1')
+  check('RLS: …and invisible from another workspace', appSql('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', `SELECT count(*) FROM rbac.user_company_access WHERE company_id='${companyB}'`) === '0')
+
+  // ── revoke ──
+  at('revoke')
+  r = await owner('DELETE', `/v1/workspace/users/${mgrUser}/company-access/${companyB}`)
+  check('owner@ takes away all of mgr@’s access to B', r.status === 200 && !ids(r.json.companies).includes(companyB))
+  const me2 = await mgr('GET', '/v1/me/companies')
+  check('B is gone from mgr@’s companies', me2.status === 200 && JSON.stringify(ids(me2.json.companies)) === JSON.stringify([companyA]))
+  r = await mgr('GET', '/v1/attendance/dashboard', { company: companyB })
+  check('and B is 403 again', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status}`)
+  r = await owner('DELETE', `/v1/workspace/users/${mgrUser}/company-access/${companyB}`)
+  check('revoking again is a harmless no-op', r.status === 200)
+  const audits = sql(`select count(*) from audit.events where entity_id='${mgrUser}' and occurred_at >= '${start}' and summary like ${lit('%' + tempName + '%')}`)
+  check('audit: 2 grants + 2 removals recorded', audits === '4', audits)
+} catch (e) {
+  check('test ran to the end', false, `at "${where}": ${String(e && e.message || e).split('\n').slice(0, 8).join(' | ')}`)
+} finally {
+  // Remove only what this test made: its grants and audit rows, the employee in B, company B.
+  try {
+    if (companyB) sql(`delete from rbac.user_company_access where company_id='${companyB}'`)
+    if (mgrUser) sql(`delete from audit.events where entity_id='${mgrUser}' and occurred_at >= '${start}' and summary like ${lit('%' + tempName + '%')}`)
+    const mine = companyB && sql(`select count(*) from org.companies where id='${companyB}' and name=${lit(tempName)} and tenant_id='${tenant}'`) === '1'
+    if (mine) {
+      const cols = (col) => sql(`select c.table_schema||'.'||c.table_name from information_schema.columns c join information_schema.tables t on t.table_schema=c.table_schema and t.table_name=c.table_name where c.column_name='${col}' and t.table_type='BASE TABLE' and c.table_schema not in ('pg_catalog','information_schema')`).split('\n').filter(Boolean)
+      const empTables = empB ? cols('employee_id') : []
+      const coTables = cols('company_id').filter((t) => t !== 'org.companies')
+      // A few passes: rows that point at other rows go first.
+      for (let pass = 0; pass < 4; pass++) {
+        for (const t of empTables) { try { sql(`delete from ${t} where employee_id='${empB}'`) } catch { /* later pass */ } }
+        if (empB) { try { sql(`delete from audit.events where entity_id='${empB}'`); sql(`delete from hrms.employees where id='${empB}' and company_id='${companyB}'`) } catch { /* later pass */ } }
+        for (const t of coTables) { try { sql(`delete from ${t} where company_id='${companyB}'`) } catch { /* later pass */ } }
+      }
+      sql(`delete from audit.events where entity_id='${companyB}'`)
+      const gone = sql(`with d as (delete from org.companies where id='${companyB}' and name=${lit(tempName)} and tenant_id='${tenant}' returning id) select count(*) from d`)
+      check('cleanup: company B, its employee and the grants removed', gone === '1' && (!empB || sql(`select count(*) from hrms.employees where id='${empB}'`) === '0'))
+    }
+  } catch (err) {
+    check('cleanup: company B, its employee and the grants removed', false, String(err).split('\n')[0])
+  }
+  const failedCount = results.filter((x) => !x.ok).length
+  console.log(`\n${results.length - failedCount}/${results.length} passed`)
+  process.exit(failedCount ? 1 : 0)
+}
