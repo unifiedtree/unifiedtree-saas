@@ -74,10 +74,10 @@ export function PricingPage() {
               className="font-heading font-extrabold text-text-primary text-[24px] sm:text-[27px]"
               style={{ letterSpacing: '-0.025em', lineHeight: 1.1 }}
             >
-              Build your plan
+              HRMS pricing
             </h1>
             <p className="font-body text-[13.5px] text-text-secondary sm:text-sm">
-              Pick modules and team size — your price updates live.
+              One package — HR, Attendance, Leave and Payroll. Priced per user, per company, monthly or yearly.
             </p>
           </motion.div>
 

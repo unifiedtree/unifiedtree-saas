@@ -11,8 +11,8 @@ const categories = [
     title: 'Getting started',
     items: [
       {
-        q: 'How do I create my first workspace?',
-        a: 'Head to the Pricing page, pick your modules and team size, and hit "Create Workspace with This Plan". A 7-day free trial is available on the paid autopay plan — autopay is set up at signup via Razorpay, and the first charge runs at the end of the trial unless you cancel before then.',
+        q: 'How do I create my business?',
+        a: 'Click "Start free trial", enter your business name and your first company, and sign up. Inside your business, set up autopay through Razorpay to start the 7-day free trial; the first charge is on day 8 unless you cancel before then. Each account has one business; add more companies inside HRMS.',
       },
       {
         q: 'How many people can I invite to a workspace?',
@@ -56,7 +56,7 @@ const categories = [
       },
       {
         q: 'How do I cancel?',
-        a: 'Workspace Settings → Subscription → Cancel. You keep access until the end of the paid cycle. See our Terms for the refund policy.',
+        a: 'Workspace Settings → Subscription → Cancel. You keep access until the end of the paid cycle. See our Refund & Cancellation Policy for refunds.',
       },
     ],
   },

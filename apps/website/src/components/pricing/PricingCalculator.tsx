@@ -65,6 +65,8 @@ export function PricingCalculator() {
 
   const dueTotal = billingCycle === 'monthly' ? monthlyTotal : annualTotal
   const dueSuffix = billingCycle === 'monthly' ? '/mo' : '/yr'
+  // The yearly saving comes from the plans (DB), not a fixed number.
+  const annualSavePct = Math.max(0, ...visiblePlans.filter((p) => p.status === 'AVAILABLE').map((p) => p.annualDiscountPct ?? 0))
 
   return (
     <div className="grid gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-7 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -89,8 +91,8 @@ export function PricingCalculator() {
                 )}
                 <span className="relative z-10 flex items-center gap-1.5">
                   {cycle}
-                  {cycle === 'annual' && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billingCycle === 'annual' ? 'bg-lime text-primary' : 'bg-lime/25 text-primary'}`}>Save 10%</span>
+                  {cycle === 'annual' && annualSavePct > 0 && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billingCycle === 'annual' ? 'bg-lime text-primary' : 'bg-lime/25 text-primary'}`}>Save {annualSavePct}%</span>
                   )}
                 </span>
               </button>
@@ -257,7 +259,7 @@ export function PricingCalculator() {
                     <div className="flex items-baseline justify-between gap-2">
                       <div>
                         <p className="font-heading font-bold text-text-primary">Annual total</p>
-                        <p className="mt-0.5 text-xs font-semibold text-primary">Save 10% · billed yearly</p>
+                        <p className="mt-0.5 text-xs font-semibold text-primary">{annualSavePct > 0 ? `Save ${annualSavePct}% · billed yearly` : 'Billed yearly'}</p>
                       </div>
                       <span className="font-heading text-2xl font-bold tabular-nums text-primary">₹<AnimatedPrice value={annualTotal} /></span>
                     </div>
@@ -286,7 +288,7 @@ export function PricingCalculator() {
               </div>
 
               <p className="mt-3 text-center font-body text-[11.5px] text-text-tertiary">
-                Modules are unlocked and autopay is set up inside your workspace.
+                Billed per company. 7-day free trial once autopay is set up; billing starts on day 8.
               </p>
             </div>
           </div>

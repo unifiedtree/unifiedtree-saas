@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { HomePage } from './pages/HomePage'
 import { ModulesPage } from './pages/ModulesPage'
 import { PricingPage } from './pages/PricingPage'
+import { RefundPolicyPage } from './pages/RefundPolicyPage'
 import { LoginPage } from './pages/LoginPage'
 import { UnifiedSignupPage } from './pages/UnifiedSignupPage'
 import { FeaturesPage } from './pages/FeaturesPage'
@@ -55,6 +56,8 @@ function AnimatedRoutes() {
       <Route path="/privacy"           element={<PageTransition><PrivacyPolicyPage /></PageTransition>} />
       <Route path="/terms"             element={<PageTransition><TermsPage /></PageTransition>} />
       <Route path="/cookies"           element={<PageTransition><CookiePolicyPage /></PageTransition>} />
+      <Route path="/refund-policy"     element={<PageTransition><RefundPolicyPage /></PageTransition>} />
+      <Route path="/refunds"           element={<Navigate to="/refund-policy" replace />} />
       <Route path="/start-free-trial"  element={<PageTransition><StartFreeTrialPage /></PageTransition>} />
       <Route path="/login"             element={<PageTransition><LoginPage /></PageTransition>} />
       <Route path="/signup"            element={<PageTransition><UnifiedSignupPage /></PageTransition>} />

@@ -7,9 +7,9 @@ import { presetPlans } from '../data/pricing'
 import { useAuthStore } from '../store/authStore'
 
 const perks = [
-  { icon: Zap, label: 'Free access - core HRMS included', color: '#1DB985' },
-  { icon: Shield, label: 'No credit card required', color: '#059669' },
-  { icon: Clock, label: 'Workspace activates instantly', color: '#1DB985' },
+  { icon: Zap, label: '7-day free trial of HRMS', color: '#1DB985' },
+  { icon: Shield, label: 'Nothing charged until day 8', color: '#059669' },
+  { icon: Clock, label: 'Your business is ready instantly', color: '#1DB985' },
 ]
 
 const steps = [
@@ -60,8 +60,8 @@ export function StartFreeTrialPage() {
               <span className="gradient-text">and log in right away.</span>
             </h1>
             <p className="text-lg text-text-secondary font-body mb-10 max-w-xl mx-auto leading-relaxed">
-              No payment, no approval queue. Plans are displayed for pricing visibility,
-              while signup creates an active workspace immediately.
+              No approval queue. Sign-up creates your business right away; set up autopay
+              inside to start your 7-day free trial. Billing starts on day 8.
             </p>
 
             {/* Interactive Perks in Glass Cards */}

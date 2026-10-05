@@ -31,6 +31,7 @@ const legalLinks = [
   { label: 'Privacy Policy', to: '/privacy' },
   { label: 'Terms of Service', to: '/terms' },
   { label: 'Cookie Policy', to: '/cookies' },
+  { label: 'Refund Policy', to: '/refund-policy' },
 ]
 
 // Social icons were removed on 2026-08-17: they all pointed at `href='#'`

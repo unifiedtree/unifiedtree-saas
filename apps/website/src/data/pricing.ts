@@ -80,20 +80,20 @@ export const presetPlans = [
 
 export const faqItems = [
   {
-    q: 'Can I change my plan at any time?',
-    a: 'Yes. Plans are shown for pricing guidance, and your free workspace can be upgraded later without rebuilding company data.',
+    q: 'How is HRMS priced?',
+    a: 'Per user, per company. HRMS is one package — HR, Attendance, Leave and Payroll — and each company has its own subscription and invoice. Pay monthly or yearly through autopay.',
   },
   {
-    q: 'Is workspace creation free?',
-    a: 'Yes. Company workspace creation is free, no credit card is required, and the workspace activates immediately after signup.',
+    q: 'Is there a free trial?',
+    a: 'Yes, 7 days. Creating your business is free; you start the trial by setting up autopay (card, UPI or bank) through Razorpay. Nothing is charged during the trial. Billing starts on day 8 and then renews on the same date each cycle (for example, 6 Oct – 6 Nov).',
   },
   {
     q: 'How is the employee count calculated?',
     a: 'Employee count is the number of active employees managed in the system, not the number of user logins. You can have fewer admin users than total employees.',
   },
   {
-    q: 'Do I need to pay during signup?',
-    a: 'No. The current signup flow does not collect payment or submit an approval request to UnifiedTree administrators.',
+    q: 'Do I need a card to sign up?',
+    a: 'Not to create your business — sign-up is self-service with no approval step. To use HRMS you set up autopay, which starts the 7-day free trial. Cancel before day 8 and you are not charged.',
   },
   {
     q: 'Is my data secure?',
@@ -109,6 +109,10 @@ export const faqItems = [
   },
   {
     q: 'What happens after signup?',
-    a: 'Your tenant, company domain, admin login, and selected modules are created right away so you can start using the platform.',
+    a: 'Your business, its first company and your admin login are created right away. Set up autopay inside your business to start the 7-day trial; you can add more companies later.',
+  },
+  {
+    q: 'Can I get a refund?',
+    a: 'Monthly plans are non-refundable once a cycle starts; annual plans cancelled within the first 30 days get a pro-rata refund. See the Refund & Cancellation Policy for details.',
   },
 ]
