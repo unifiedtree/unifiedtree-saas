@@ -127,6 +127,17 @@
 }
 .ut-topbar__chip > svg { flex-shrink: 0; }
 .ut-topbar__chiptext { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The company selector (CompanySwitcher): the current company by name; people with 2+ companies only. */
+.ut-cosel {
+  height: 36px; max-width: 240px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px 0 12px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font-family: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.ut-cosel > svg:first-child { flex-shrink: 0; color: var(--u-brt, #0F6E56); }
+.ut-cosel:hover, .ut-cosel[data-open] { border-color: var(--u-brl, #BFDFD1); background: var(--u-brs, #E8F3EE); }
+.ut-cosel__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ut-cosel__chev { flex-shrink: 0; color: var(--u-ink2, #4A5A54); transition: transform .15s; }
+.ut-cosel[data-open] .ut-cosel__chev { transform: rotate(180deg); }
 /* The search gives way first when the module's tabs need the room. */
 .ut-topbar__search { flex: 0 8 400px; width: 400px; min-width: 220px; display: flex; }
 .ut-topbar__icon {
@@ -303,7 +314,7 @@
 .ut-more__signout:hover { background: var(--u-rds, #FCEDEB); }
 
 /* Focus rings (design: soft brand ring + brand border) */
-.ut-topbar__chip:focus-visible,
+.ut-topbar__chip:focus-visible, .ut-cosel:focus-visible,
 .ut-topbar__icon:focus-visible, .ut-more__close:focus-visible, .ut-more__who:focus-visible, .ut-more__view:focus-visible,
 .ut-more__row:focus-visible, .ut-theme__opt:focus-visible, .ut-more__signout:focus-visible {
   outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE), inset 0 0 0 1px var(--u-brl, #BFDFD1);
@@ -391,6 +402,7 @@
   .ut-topbar__search { display: none; }
   .ut-topbar__searchicon { display: flex; }
   .ut-topbar__chip { max-width: 120px; }
+  .ut-cosel { height: 36px; max-width: 150px; margin-right: 2px; padding: 0 8px 0 10px; gap: 5px; font-size: 12.5px; }
   .ut-topbar__main { order: 3; flex: 1 1 100%; min-width: 0; gap: 8px; padding: 0 4px 10px; }
   .ut-topbar__main .uk-ppill { height: 34px; }
   /* The tabs are the bar's second row, a sideways scroller: no module label or arrows (the drawer has them). */

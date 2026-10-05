@@ -14,6 +14,7 @@ import { Button, CellActions, Section, StatusPill, Table, type TableColumn } fro
 import { Pager } from '@/design/kit/data'
 import { FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { useCompanies, type Branch } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   useRequisitions, useRequisition, useCreateRequisition, useUpdateRequisition, useCloseRequisition,
   EMPLOYMENT_TYPES, type JobRequisition,
@@ -120,7 +121,11 @@ function RequisitionPanel({ id, onClose, suggestions, today }: { id?: string; on
     setForm({ title: current.title ?? '', openings: String(current.openings ?? 1), location: current.location ?? '', employmentType: current.employmentType ?? '', description: current.description ?? '' })
     setPrefilled(current.id)
   }, [current, prefilled])
-  useEffect(() => { if (!editing && !companyId && companies.length) setCompanyId(companies[0].id) }, [editing, companies, companyId])
+  // A new requisition starts in the company the top bar's selector is on.
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  useEffect(() => {
+    if (!editing && !companyId && companies.length) setCompanyId(companies.some((c) => c.id === currentCompanyId) ? currentCompanyId : companies[0].id)
+  }, [editing, companies, companyId, currentCompanyId])
 
   // employmentType is free text on the server, so a requisition can carry a value that
   // isn't in the list. Keep it as an option, or saving would quietly rewrite it.

@@ -8,7 +8,7 @@ import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/compon
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { dashIcon } from '@/design/dc/icons'
 import { StatRow, SubHeading, State, RowList, Row, Panel, Note, Facts, days, stamp, todayIso } from '@/design/module/ModuleKit'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useLeaveTypes } from '../api/useLeave'
 import { useCarryForwardPreview, useRunCarryForward, useRunAccrual, useLeaveLedger, type LedgerEntry } from '../api/useLeaveYearEnd'
 
@@ -44,9 +44,9 @@ export function LeaveYearEnd({ toast }: { toast: Toast }) {
   const thisYear = Number(todayIso().slice(0, 4))
   const [year, setYear] = useState(thisYear - 1)
   const [asking, setAsking] = useState(false)
-  const { data: companies = [] } = useCompanies()
+  const { companyId: currentCompanyId } = useCurrentCompany()
   const { data: me } = useCurrentUser()
-  const companyId = companies[0]?.id ?? me?.companyId ?? ''
+  const companyId = currentCompanyId || me?.companyId || ''
   const types = useLeaveTypes(companyId)
   const preview = useCarryForwardPreview(year)
   const run = useRunCarryForward(), accrue = useRunAccrual()

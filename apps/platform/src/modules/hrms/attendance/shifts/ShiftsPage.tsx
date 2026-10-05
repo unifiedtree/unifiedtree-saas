@@ -10,7 +10,7 @@ import { P, usePermission } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
 import { Button, CountBadge, EmptyState, PageFrame, PageHeader, PillTabs } from '@/design/kit/display'
 import { istToday } from '@/design/dc/dates'
-import { useCompanies } from '../../api/useOrg'
+import { useCurrentCompany } from '../../company/CurrentCompany'
 import { useTeamDashboard } from '../../api/useAttendance'
 import { useEmployeeShift, useShiftPolicies } from '../../api/useShiftPolicies'
 import { usePendingShiftRequests } from '../../api/useShiftRequests'
@@ -44,8 +44,7 @@ export function ShiftsPage() {
   const [addKey, setAddKey] = useState(0)
   const [rosterFilter, setRosterFilter] = useState('all')
 
-  const { data: companies = [] } = useCompanies()
-  const companyId: string = companies[0]?.id ?? ''
+  const { companyId } = useCurrentCompany()
   const policies = useShiftPolicies(companyId)
   const shifts = useMemo(() => [...(policies.data ?? [])].sort((a, b) => hhmm(a.startTime).localeCompare(hhmm(b.startTime))), [policies.data])
   // Everyone the roster lists, with their code and department: people on their weekly off too, and a company-wide

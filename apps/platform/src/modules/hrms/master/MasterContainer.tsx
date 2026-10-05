@@ -32,6 +32,7 @@ import { MasterAccessStep } from './MasterAccessStep'
 import { MasterCreateField } from './MasterCreateField'
 import type { CreateKind } from './masterCreate'
 import { useNewPersonAccessRights, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { saveAndRecord } from '@/shared/export/fileExport'
 import { useToast } from '@/design/kit/overlays'
 import { isValidRange, rangeLabel, type DateRange } from '@/design/dc/milestoneRange'
@@ -141,6 +142,10 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const qc = useQueryClient()
+  // The company the top bar's selector is on. With two or more companies the setup pages show that
+  // company's records and Add saves there; one-company workspaces are as before.
+  const { companyId: currentCo, multi } = useCurrentCompany()
+  const globalCo = multi ? currentCo : ''
 
   // ── who may see and change what (the codes each endpoint checks) ──
   const canEmpRead = usePermission(P.HRMS_EMPLOYEE_READ), canEmpWrite = usePermission(P.HRMS_EMPLOYEE_WRITE)
@@ -185,9 +190,9 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
   const route = useMemo(() => ({
     p: page, q: params.get('q') || '', status: STATUS_PARAM[params.get('status') || ''] || params.get('status') || '',
     // departmentId=none (the dashboard's and reports' "No department") is the directory's "No department" option.
-    co: params.get('co') || '', dept: ((d) => (d === 'none' ? '__none' : d))(params.get('departmentId') || params.get('dept') || ''), branch: params.get('branchId') || params.get('branch') || '',
+    co: globalCo || params.get('co') || '', dept: ((d) => (d === 'none' ? '__none' : d))(params.get('departmentId') || params.get('dept') || ''), branch: params.get('branchId') || params.get('branch') || '',
     archived: page === 'branches' && params.get('archived') === '1',
-  }), [page, params])
+  }), [page, params, globalCo])
   const want = (k: string) => page === 'overview' || NEEDS[page]?.includes(k)
   // The Workforce directory drawn on the kit (DirectoryRoute): its messages are kit toasts.
   const ownPage = page === 'employees' && !!directory
@@ -197,7 +202,11 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
   const companiesQ = useCompanies()
   const companies = useMemo(() => companiesQ.data ?? [], [companiesQ.data])
   const coIds = useMemo(() => companies.map((c) => c.id), [companies])
-  const defaultCo = coIds[0] || ''
+  const defaultCo = (globalCo && coIds.includes(globalCo) ? globalCo : coIds[0]) || ''
+  // The companies whose setup records load: the current one on the setup pages; every company for the
+  // people pages and Companies (people are listed, and added, across companies there).
+  const scoped = !!globalCo && coIds.includes(globalCo) && page !== 'employees' && page !== 'companies'
+  const scopeIds = useMemo(() => (scoped ? [globalCo] : coIds), [scoped, globalCo, coIds])
   const opt = { staleTime: 300_000 }
   // Deactivated branches only on the Branches page's "Include inactive" filter, so they never reach a picker.
   const branchesQ = useQuery({
@@ -208,18 +217,18 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
   // includeSelf: the viewer's own shift too (company-wide viewers), so Shift Rules' People matches Shift Schedules.
   const schedQ = useQuery({ queryKey: ['master', 'schedule', TODAY_ISO, 'self'], queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${TODAY_ISO}&to=${TODAY_ISO}&includeSelf=true`), enabled: canTeam && (want('employees') || want('shifts')), ...opt })
   const perCo = <T,>(key: string[], url: (cid: string) => string, on: boolean) => ({
-    queries: coIds.map((cid) => ({ queryKey: [...key, cid], queryFn: () => apiJson<T[]>(url(cid)), enabled: on, ...opt })),
+    queries: scopeIds.map((cid) => ({ queryKey: [...key, cid], queryFn: () => apiJson<T[]>(url(cid)), enabled: on, ...opt })),
     combine: listOf as (rs: UseQueryResult<T[]>[]) => Coll<T>,
   })
   const depts = useQueries(perCo<Department>(['hrms', 'departments'], (c) => `/v1/hrms/departments?companyId=${c}`, canDeptRead && (want('depts') || want('employees'))))
-  const desigs = useQueries({ queries: coIds.map((cid) => ({ queryKey: ['hrms', 'designations', cid, 'all'], queryFn: () => apiJson<Designation[]>(`/v1/hrms/designations?companyId=${cid}`), enabled: canDesRead && (want('desigs') || want('employees')), ...opt })), combine: listOf as (rs: UseQueryResult<Designation[]>[]) => Coll<Designation> })
+  const desigs = useQueries({ queries: scopeIds.map((cid) => ({ queryKey: ['hrms', 'designations', cid, 'all'], queryFn: () => apiJson<Designation[]>(`/v1/hrms/designations?companyId=${cid}`), enabled: canDesRead && (want('desigs') || want('employees')), ...opt })), combine: listOf as (rs: UseQueryResult<Designation[]>[]) => Coll<Designation> })
   const grades = useQueries(perCo<Grade>(['hrms', 'org', 'grades'], (c) => `/v1/hrms/grades?companyId=${c}`, want('grades') || want('employees')))
   const types = useQueries(perCo<EmploymentTypeRecord>(['hrms', 'org', 'employment-types'], (c) => `/v1/hrms/employment-types?companyId=${c}`, want('classes') || want('leaves')))
   // Ended agencies too: they show as inactive with "Reactivate".
   const contractors = useQueries(perCo<Contractor>(['master', 'contractors'], (c) => `/v1/hrms/contractors?companyId=${c}&includeArchived=true`, canContrRead && want('agencies')))
   const shiftsL = useQueries(perCo<ShiftPolicy>(['hrms', 'shift-policies'], (c) => `/v1/shifts?companyId=${c}`, want('shifts') || want('employees')))
   const leavesL = useQueries(perCo<LeaveTypeResponse>(['hrms', 'leave', 'types'], (c) => `/v1/leave/types?companyId=${c}`, want('leaves') || want('employees')))
-  const hrQs = useQueries({ queries: coIds.map((cid) => ({ queryKey: ['hrms', 'settings', 'hr-config', cid], queryFn: () => apiJson<HrConfigResponse>(`/v1/settings/hr-configuration?companyId=${cid}`), enabled: canEmpRead && (want('classes') || want('employees')), retry: false, staleTime: 60_000 })), combine: hrData })
+  const hrQs = useQueries({ queries: scopeIds.map((cid) => ({ queryKey: ['hrms', 'settings', 'hr-config', cid], queryFn: () => apiJson<HrConfigResponse>(`/v1/settings/hr-configuration?companyId=${cid}`), enabled: canEmpRead && (want('classes') || want('employees')), retry: false, staleTime: 60_000 })), combine: hrData })
   const nextCodeQ = useQuery({ queryKey: ['hrms', 'settings', 'next-employee-code', defaultCo], queryFn: () => apiJson<NextEmployeeCodePreview>(`/v1/settings/employee-code/preview?companyId=${defaultCo}`), enabled: !!defaultCo && canEmpWrite && page === 'employees' && !ownPage, retry: false, staleTime: 0 })
   const polQs = useQueries({
     queries: (['ACTIVE', 'DRAFT', 'ARCHIVED'] as const).map((st) => ({
@@ -260,7 +269,7 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     const agencyOf = new Map(contractors.data.flatMap((a) => (a.workerIds ?? []).map((w): [string, string] => [w, a.id])))
     const employees = (empQ.data ?? []).map((e): Rec => ({ ...employeeRec(e, gradeOfDesig, shiftOf), agency: agencyOf.get(e.id) || '' }))
     const nameOf = new Map(employees.map((e) => [e.id, e.name as string]))
-    const hr = new Map(hrQs.map((h, i) => [coIds[i], h]))
+    const hr = new Map(hrQs.map((h, i) => [scopeIds[i], h]))
     const many = companies.length > 1, coName = new Map(companies.map((c) => [c.id, c.name]))
     const known = new Set(Object.keys(ICONS))
     const gradesSorted = grades.data.slice().sort((a, b) => (a.level || 0) - (b.level || 0))
@@ -280,7 +289,7 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
       components: (compQ.data ?? []).map((c) => componentRec(c, setQ.data)),
       statutory: setQ.data ? statutoryRecs(setQ.data, slabsQ.data ?? [], compCodes) : [],
     } as Record<string, Rec[]>
-  }, [empQ.data, companies, branchesQ.data, depts.data, desigs.data, grades.data, types.data, contractors.data, shiftsL.data, leavesL.data, polQs.data, compQ.data, setQ.data, slabsQ.data, schedQ.data, hrQs, coIds])
+  }, [empQ.data, companies, branchesQ.data, depts.data, desigs.data, grades.data, types.data, contractors.data, shiftsL.data, leavesL.data, polQs.data, compQ.data, setQ.data, slabsQ.data, schedQ.data, hrQs, scopeIds])
 
   // ── local edits waiting for the server ──
   const [over, setOver] = useState<Record<string, Rec[]>>({})
@@ -345,9 +354,12 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     document.getElementById('workspace-content')?.scrollTo({ top: 0 })
   }, [navigate])
 
-  const hrDefault = hrQs[coIds.indexOf(defaultCo)]
+  const hrDefault = hrQs[scopeIds.indexOf(defaultCo)]
   const act = {
-    defaultCo, canAssignShift: canShiftAdmin, nextCode: nextCodeQ.data?.preview || '', noticeDays: hrDefault?.defaultNoticePeriodDays,
+    /** The top bar's company (2+ companies): Add forms save there, with no Company field or filter of their own. */
+    globalCo,
+    defaultCo, canAssignShift:
+ canShiftAdmin, nextCode: nextCodeQ.data?.preview || '', noticeDays: hrDefault?.defaultNoticePeriodDays,
     canBands, showAgency: canContrRead, canAgency: canAgencyLink,
     /** Add employee → Access: draws the drawer's Access field (null: the drawer is as before). */
     accessStep: accessRights.visible

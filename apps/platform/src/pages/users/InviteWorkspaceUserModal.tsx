@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import { Modal, Button, Field, Input } from '@unifiedtree/ui-kit'
 import { useToast } from '@/shared/hooks/useToast'
 import { useAuthStore } from '@/core/auth/authStore'
-import { useCompanies } from '@/modules/hrms/api/useOrg'
+import { useCurrentCompany } from '@/modules/hrms/company/CurrentCompany'
 import { emailConflictMessage, useEmailCheck } from '@/modules/hrms/api/useContactCheck'
 import {
   useAssignableRoles, useInviteWorkspaceUser, groupRolesByModule,
@@ -20,7 +20,8 @@ interface Props { open: boolean; onClose: () => void }
 export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => {
   const { toast } = useToast()
   const hasModule = useAuthStore(s => s.hasModule)
-  const { data: companies = [] } = useCompanies()
+  // The employee is created in the company the top bar's selector is on.
+  const { company, multi } = useCurrentCompany()
   const { data: roles = [] } = useAssignableRoles()
   const invite = useInviteWorkspaceUser()
 
@@ -47,7 +48,7 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
 
   const handleInvite = async () => {
     if (!email.trim()) { toast('Email is required', 'error'); return }
-    const companyId = createEmployee ? companies[0]?.id : undefined
+    const companyId = createEmployee ? company?.id : undefined
     if (createEmployee && !companyId) { toast('No company found to create employee', 'error'); return }
     const typed = email
     const taken = createEmployee ? await emailCheck.settle() : null
@@ -108,6 +109,9 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
               Creates a payroll/directory record in HRMS. Uncheck to grant login + roles only
               (the user won't appear in the HRMS employee directory).
             </span>
+            {multi && company && (
+              <span className="block text-xs text-slate-700 mt-1">In <b>{company.name}</b>. To add them to another company, switch company at the top of the page first.</span>
+            )}
           </span>
         </label>
 

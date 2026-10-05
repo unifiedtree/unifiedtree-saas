@@ -11,7 +11,8 @@ import { Callout, FilterPills, KeyValueGrid, SegmentedControl } from '@/design/k
 import { FieldGrid, Input, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { todayIso } from '@/design/module/ModuleKit'
 import { useLetterTemplates } from './api/useLetters'
-import { useBranches, useCompanies, useDepartments, useDesignations } from '../api/useOrg'
+import { useBranches, useDepartments, useDesignations } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import {
   useCreateDistribution, useScheduleDistribution, useScheduledDistributions,
@@ -51,8 +52,7 @@ export function DistributionWizard({ onClose, onCreated, onScheduled }: {
   const scheduled = useScheduledDistributions()
   const canSchedule = !scheduled.notAvailable
 
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id ?? ''
+  const { companyId } = useCurrentCompany()
   const { data: templatesPage } = useLetterTemplates()
   const templates = (templatesPage?.content ?? []).filter((t) => t.active)
   const { data: departments = [] } = useDepartments(companyId)

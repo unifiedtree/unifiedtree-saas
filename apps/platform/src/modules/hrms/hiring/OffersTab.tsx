@@ -15,6 +15,7 @@ import { Button, Callout, CellActions, CellPerson, Section, StatusPill, Table, t
 import { Pager } from '@/design/kit/data'
 import { DateInput, Dialog, FieldGrid, Input, Menu, PanelButton, Select, SidePanel, Textarea, useToast, type MenuEntry } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   useHiringOffers, useCreateHiringOffer, useUpdateHiringOfferStatus, useEditHiringOffer, useEmailHiringOffer, downloadOfferPdf, inr,
   type HiringOffer, type OfferStatus,
@@ -116,8 +117,10 @@ function OfferPanel({ offer, onClose, onSaved }: { offer: HiringOffer | null; on
   const create = useCreateHiringOffer()
   const edit = useEditHiringOffer()
   const busy = create.isPending || edit.isPending
+  // A new offer starts in the company the top bar's selector is on (two or more companies).
+  const { companyId: currentCompanyId, multi } = useCurrentCompany()
   const [form, setForm] = useState(() => ({
-    companyId: offer?.companyId ?? '',
+    companyId: offer?.companyId ?? (multi ? currentCompanyId : ''),
     candidateName: offer?.candidateName ?? '',
     candidateEmail: offer?.candidateEmail ?? '',
     roleTitle: offer?.roleTitle ?? '',

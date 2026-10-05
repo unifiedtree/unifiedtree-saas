@@ -89,8 +89,9 @@ export function DateFilter({ label, value, onChange, min, max }: { label: string
   )
 }
 
-/** The company picker every report page and Workforce analytics share (?co=). */
+/** The company picker every report page and Workforce analytics share (?co=). None with two or more companies: the top bar's selector picks. */
 export function CompanyFilter({ co }: { co: ReturnType<typeof useReportCompany> }) {
+  if (co.global) return null
   return (
     <div className="rp-filters__co">
       <Select aria-label="Company" value={co.company} options={co.options} placeholder={co.company ? undefined : 'Select company…'} size="md"

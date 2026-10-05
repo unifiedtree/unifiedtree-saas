@@ -17,7 +17,7 @@ import { TableSkeleton } from '@unifiedtree/ui-kit'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { HrAvatar, HrButton, HrStatusPill } from '@/shared/components/hr'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useWeekendDays, jsWeekendDays, useHolidays, type HolidayResponse } from '../api/useSettings'
 import { useLeaveCalendarFeed, type LeaveCalendarEntry } from '../api/useLeave'
 
@@ -68,8 +68,8 @@ export function LeaveCalendar() {
   const feed = useLeaveCalendarFeed(from, to, ['APPROVED', 'PENDING', 'PENDING_L2'], canSeeTeam || canSeeOwn)
 
   const { data: me } = useCurrentUser()
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id ?? me?.companyId ?? undefined
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  const companyId = currentCompanyId || me?.companyId || undefined
   const { data: weekendCfg } = useWeekendDays(companyId)
   const weekendDays = useMemo<Set<number>>(() => jsWeekendDays(weekendCfg?.weekendDays), [weekendCfg])
   const { data: holidayList } = useHolidays(companyId ?? '', month.getFullYear())

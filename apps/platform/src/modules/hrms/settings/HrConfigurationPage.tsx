@@ -17,7 +17,7 @@ import { DesignFrame } from '@/design/dc/DesignFrame'
 import {
   SettingsPage, SettingsSection, SettingsGrid, SettingsInput, SettingsValue, SettingsToggleRow, SettingsNote, useSettingsToast, type SettingsNavItem,
 } from '@/design/settings/SettingsKit'
-import { useCompanies } from '../api/useOrg'
+import { useCompanySwitchGuard, useCurrentCompany } from '../company/CurrentCompany'
 import { useHrConfig, useUpdateHrConfig, type HrConfigResponse } from '../api/useSettings'
 import { useProbationConfig, useUpdateProbationConfig, useProbationReminders, useTriggerProbationScan } from '../api/useProbation'
 import { useAttendancePolicy, useSaveAttendancePolicy, type AttendancePolicy, type AllowancePeriod, type AfterAllowance } from '../api/useAttendanceReview'
@@ -91,9 +91,8 @@ export function HrConfigurationPage() {
   const canHrWrite = usePermission(P.SETTINGS_HRCONFIG_WRITE), canSettingsRead = usePermission(P.SETTINGS_READ)
   const canProbRead = usePermission(P.HRMS_PROBATION_CONFIG_READ), canProbWrite = usePermission(P.HRMS_PROBATION_CONFIG_UPDATE), canReminders = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
   const canPolicy = usePermission('attendance.policy.manage')
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const co = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const { companyId: co, company, multi } = useCurrentCompany()
   const hrQ = useHrConfig(co)
   const probQ = useProbationConfig(canProbRead || canProbWrite)
   const reminders = useProbationReminders(canReminders)
@@ -155,6 +154,7 @@ export function HrConfigurationPage() {
   }
   const changed = (Object.keys(f) as (keyof Form)[]).filter((k) => JSON.stringify(f[k]) !== JSON.stringify(saved[k]))
   const dirty = !!edit && changed.length > 0
+  useCompanySwitchGuard(dirty ? 'Discard your unsaved changes for this company?' : null)
   const errKeys = Object.keys(E) as (keyof Form)[]
   const shown = (k: keyof Form) => (tried || changed.includes(k) ? E[k] : undefined)
   const SECTION_OF: Record<string, string> = { prefix: 'ids', next: 'ids', probationMonths: 'probation', reminderDays: 'probation', autoExtendDays: 'probation', noticeDays: 'notice', retirementAge: 'notice', weekend: 'week', grace: 'late', start: 'late', halfDayLate: 'late', allowance: 'late', fullDayHours: 'attendance', halfDayHours: 'attendance', earlyLeave: 'attendance' }
@@ -246,11 +246,10 @@ export function HrConfigurationPage() {
         dirty={dirty} changeCount={changed.length} errorCount={tried ? errKeys.length : errKeys.filter((k) => shown(k)).length}
         onGoToError={() => { setTried(true); document.getElementById('st-' + SECTION_OF[errKeys[0]])?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
         saving={saving} onSave={doSave} onDiscard={() => { setEdit(null); setTried(false) }} toast={toast} onDismissToast={dismiss}>
-        {companies.length > 1 && (
+        {multi && company && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Company</span>
-            <div style={{ minWidth: 240 }}><HrSelect value={co} onChange={(v: string) => { if (dirty && !window.confirm('Discard your unsaved changes for this company?')) return; setCompanyId(v) }} options={companies.map((c) => ({ value: c.id, label: c.name }))} /></div>
-            <span style={{ fontSize: 12.5, color: '#64748b' }}>Probation reminders apply to every company.</span>
+            <span style={{ fontSize: 13, color: 'var(--u-ink2,#4A5A54)' }}>Settings for <b style={{ color: 'var(--u-ink,#0E1B16)' }}>{company.name}</b>. Switch company at the top of the page.</span>
+            <span style={{ fontSize: 12.5, color: 'var(--u-ink3,#64748b)' }}>Probation reminders apply to every company.</span>
           </div>
         )}
 

@@ -17,6 +17,7 @@ import {
   useCompanies, useDepartments, useDesignations, useBranches,
   useGrades, useEmploymentTypes, assignEmployeeShift,
 } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 // The Shift picker MUST be sourced from attendance.shift_policies, because the
 // id it yields is posted straight to assignEmployeeShift → POST
 // /v1/shifts/employee/{id} {shiftPolicyId}, and EmployeeShiftService resolves
@@ -231,10 +232,11 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState(employee?.companyId ?? '')
-  // Once companies load, auto-select the first if none already chosen
+  // A new person starts in the company the top bar's selector is on (one-company workspaces: their company).
+  const { companyId: currentCompanyId } = useCurrentCompany()
   React.useEffect(() => {
-    if (!companyId && companies.length > 0) setCompanyId(companies[0].id)
-  }, [companies])
+    if (!companyId && currentCompanyId) setCompanyId(currentCompanyId)
+  }, [currentCompanyId])
   const [departmentId, setDepartmentId] = useState(employee?.departmentId ?? '')
   const { data: departments = [] } = useDepartments(companyId)
   const { data: designations = [] } = useDesignations(companyId, departmentId || undefined)

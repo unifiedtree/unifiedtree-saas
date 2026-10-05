@@ -18,6 +18,7 @@ import {
 import { UploadDrop, UploadFile } from '@/design/kit/data'
 import { Dropdown, FormField, Input, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   countValidRows, parseErrors, useCommitBulkImport, useDownloadTemplate, useImportColumns, useValidateBulkImport, type BulkImportNote, type ParsedError,
 } from '../api/useBulkImport'
@@ -52,10 +53,11 @@ export function EmployeeImport() {
   const [companyId, setCompanyId] = useState('')
   const [errorFilter, setErrorFilter] = useState('')
 
-  // The first company until one is chosen.
+  // The company the top bar's selector is on, until another is chosen.
+  const { companyId: currentCompanyId } = useCurrentCompany()
   useEffect(() => {
-    if (!companyId && companies.length > 0) setCompanyId(companies[0].id)
-  }, [companies, companyId])
+    if (!companyId && currentCompanyId) setCompanyId(currentCompanyId)
+  }, [currentCompanyId, companyId])
 
   // Leaving with a validated file about to be imported asks first.
   useEffect(() => {
@@ -75,7 +77,7 @@ export function EmployeeImport() {
   const notes = (validationResult?.warnings ?? []).slice(0, SHOWN_ERRORS)
   const hiddenCount = filteredErrors.length - displayedErrors.length
   const commitResult = commitMutation.data ?? null
-  const selectedCompany = companies.find((c) => c.id === companyId) ?? companies[0]
+  const selectedCompany = companies.find((c) => c.id === (companyId || currentCompanyId)) ?? companies[0]
   const companyName = selectedCompany?.name ?? tenantName
 
   const pickFile = (f: File) => {

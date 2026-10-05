@@ -13,7 +13,7 @@ import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone } from '@/shared/components/hr'
 import { ModulePage, StatRow, State, Note, SubHeading, useDesignToast } from '@/design/module/ModuleKit'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import {
   useNotificationTemplates, useCreateNotificationTemplate, useUpdateNotificationTemplate, useDeleteNotificationTemplate,
   useNotificationEvents, findNotificationEvent,
@@ -36,9 +36,8 @@ export const NotificationTemplates: React.FC = () => {
   const canWrite = usePermission('hrms.notiftemplate.write')
   const { show, node } = useDesignToast()
   const confirm = useConfirmDialog()
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
   const [page, setPage] = useState(0)
   const { data, isLoading, isError, error, refetch } = useNotificationTemplates(activeCompany || undefined, page, canRead)
   const templates = useMemo(() => data?.content ?? [], [data])
@@ -121,11 +120,6 @@ export const NotificationTemplates: React.FC = () => {
   return (
     <ModulePage crumb="HR setup" title="Notification templates" subtitle="Message wording by channel and event."
       actions={<>
-        {companies.length > 1 && (
-          <select aria-label="Company" value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-56">
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        )}
         {canWrite && <HrButton onClick={() => setEditing({ id: null, form: emptyForm() })}><Plus size={15} /> New template</HrButton>}
       </>}>
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>

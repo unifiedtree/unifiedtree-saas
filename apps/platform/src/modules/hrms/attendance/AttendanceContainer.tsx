@@ -13,7 +13,7 @@ import { AttendancePage } from '@/design/dc/AttendancePage'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, addDays, fmtShort, fmtWd, isoOf, MON, MONTHS } from '@/design/dc/dates'
 import { toneFor, span, overnight, fmt as fmtTime } from '@/design/dc/shift-util'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   useTeamDashboard, useAttendanceTrend, useAttendanceSources, useMonthlyStats, useAttendanceHistory,
   useMyCorrections, useCorrectionApprovals, useCreateCorrection, useDecideCorrection,
@@ -135,8 +135,8 @@ function ModuleAttendancePage() {
   const [target, setTarget] = useState<StatusTarget | null>(null)
 
   // ── data ──
-  const { data: companies = [] } = useCompanies()
-  const companyId: string = companies[0]?.id ?? ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const { companyId } = useCurrentCompany()
   // A past day's logs list the team as it was then (people who have left since
   // still show on the days they worked), matching the admin dashboard's counts.
   const team = useTeamDashboard(date, undefined, canTeam, date < today)

@@ -12,6 +12,7 @@ import {
 } from '@/design/kit/display'
 import { Dialog, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useEmployeesByIds } from '../api/useWorkforce'
 import { PersonSearch, personName } from '../performance/PersonSearch'
 import { useAssets, useAssetActions, useAssetIssues, useResolveAssetIssue, type Asset, type AssetInput, type AssetIssue } from './api/useAssets'
@@ -31,6 +32,7 @@ const FIELDS = [
 /** Register an asset: the company that owns it, tag, category, name, serial and condition. */
 export function RegisterAssetPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const companies = useCompanies()
+  const { companyId: currentCompanyId, multi } = useCurrentCompany()
   const { create } = useAssetActions()
   const toast = useToast()
   const [form, setForm] = useState<AssetInput>({ ...EMPTY })
@@ -40,8 +42,9 @@ export function RegisterAssetPanel({ open, onClose }: { open: boolean; onClose: 
   const categories = useMemo(() => [...new Set((existing.data ?? []).map((a) => a.assetType).filter(Boolean))].sort(), [existing.data])
   useEffect(() => {
     if (!open) return
-    setForm({ ...EMPTY, companyId: companies.data?.length === 1 ? companies.data[0].id : '' }); setError('')
-  }, [open, companies.data])
+    // Starts on the company the top bar's selector is on (its only company, with one).
+    setForm({ ...EMPTY, companyId: companies.data?.length === 1 ? companies.data[0].id : multi ? currentCompanyId : '' }); setError('')
+  }, [open, companies.data, multi, currentCompanyId])
   const missing = !form.companyId ? 'Choose the company that owns this asset'
     : FIELDS.some((f) => f.required && !String(form[f.key] ?? '').trim()) ? 'Fill in the tag, category and name' : null
   const close = () => { if (!create.isPending) onClose() }

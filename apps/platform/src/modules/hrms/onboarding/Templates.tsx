@@ -10,6 +10,7 @@ import { Dialog, Input, PanelButton, Select, SidePanel, Textarea, useToast } fro
 import { useTemplates, useCreateTemplate, useDeleteTemplate } from './api/useOnboarding'
 import type { OnboardingTemplate } from './api/useOnboarding'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { usedByText } from './onboardingModel'
 import './onboarding.css'
 
@@ -24,7 +25,9 @@ export function CreateTemplatePanel({ open, onClose }: { open: boolean; onClose:
   const [companyId, setCompanyId] = useState('')
   const [error, setError] = useState('')
   useEffect(() => { if (open) { setName(''); setDescription(''); setError('') } }, [open])
-  useEffect(() => { if (!companyId && list.length) setCompanyId(list[0].id) }, [list, companyId])
+  // Starts on the company the top bar's selector is on.
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  useEffect(() => { if (!companyId && list.length) setCompanyId(list.some((c) => c.id === currentCompanyId) ? currentCompanyId : list[0].id) }, [list, companyId, currentCompanyId])
   const close = () => { if (!create.isPending) onClose() }
   const submit = async () => {
     if (!name.trim()) return

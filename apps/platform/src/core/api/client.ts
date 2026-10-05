@@ -125,7 +125,23 @@ async function refreshOnce(): Promise<boolean> {
   return inFlightRefresh
 }
 
-function authHeaders(): Record<string, string> {
+/**
+ * The HRMS company the person is working in (the top bar's company selector), sent as
+ * `X-Company-Id`. Set by CurrentCompanyProvider (modules/hrms/company) only when the server is one
+ * that knows the header: production's CORS allow-list names every header it accepts, and a
+ * cross-origin request carrying any other is refused outright — every call, not just HRMS ones.
+ */
+let companyHeader: string | null = null
+export function setCompanyHeader(companyId: string | null) { companyHeader = companyId || null }
+
+/** Calls that are not about a company: sign-in, public pages and the company list itself. */
+const NO_COMPANY_HEADER = ['/v1/canonical-auth', '/v1/auth', '/v1/public', '/v1/me/companies']
+export function companyHeaderFor(path: string): Record<string, string> {
+  if (!companyHeader || NO_COMPANY_HEADER.some((p) => path.startsWith(p))) return {}
+  return { 'X-Company-Id': companyHeader }
+}
+
+function authHeaders(path = ''): Record<string, string> {
   const token = getAccessToken()
   const tenantSubdomain = currentSubdomain()
   const tenantId = useAuthStore.getState().tenant?.id
@@ -133,6 +149,7 @@ function authHeaders(): Record<string, string> {
     ...(tenantSubdomain ? { 'X-Tenant-Subdomain': tenantSubdomain } : {}),
     ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...companyHeaderFor(path),
   }
 }
 
@@ -167,7 +184,7 @@ async function jsonRequest<T>(path: string, init: RequestInit, alreadyRetried: b
       signal: init.signal ?? controller.signal,
       headers: {
         ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-        ...authHeaders(),
+        ...authHeaders(path),
         ...(init.headers || {}),
       },
     })
@@ -216,7 +233,7 @@ async function textRequest(path: string, init: RequestInit, alreadyRetried: bool
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
+      ...authHeaders(path),
       ...(init.headers || {}),
     },
   })
@@ -257,7 +274,7 @@ async function blobRequest(path: string, init: RequestInit, alreadyRetried: bool
     ...init,
     credentials: 'include',
     headers: {
-      ...authHeaders(),
+      ...authHeaders(path),
       ...(init.headers || {}),
     },
   })

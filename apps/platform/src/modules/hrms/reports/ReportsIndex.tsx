@@ -199,7 +199,7 @@ export function ReportsIndex() {
         ) : undefined} />
       <div className="rp-filters">
         <CompanyFilter co={co} />
-        <span className="rp-note">{co.locked ? 'Your company. You can’t browse others.' : 'Reports open on this company.'}</span>
+        <span className="rp-note">{co.locked ? 'Your company. You can’t browse others.' : co.global ? `Reports open on ${co.companyName}.` : 'Reports open on this company.'}</span>
         {asOf && <span role="note" className="rp-note rp-note--brand">{`Headcount, diversity, attendance and attrition reports open on ${d(asOf)}, the date picked on the dashboard.`}</span>}
       </div>
 

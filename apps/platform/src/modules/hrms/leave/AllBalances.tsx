@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { CARD, HEAD_FONT, State, SubHeading, days } from '@/design/module/ModuleKit'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { useAllLeaveBalances, useLeaveUsage, type AllBalancesTypeBalance } from '../api/useLeave'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 
 const errMsg = (e: unknown) => (e instanceof Error && e.message ? e.message : undefined)
 
@@ -23,8 +23,7 @@ export function AllBalances() {
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(20)
   const [q, setQ] = useState('')
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id
+  const companyId = useCurrentCompany().companyId || undefined
   const year = new Date().getFullYear()
   const bal = useAllLeaveBalances({ companyId, year, q: q || undefined, page, size })
   const usage = useLeaveUsage({ companyId, year })
