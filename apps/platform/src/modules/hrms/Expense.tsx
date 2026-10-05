@@ -6,6 +6,7 @@ import {
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { useRoles } from '@/shared/hooks/useRoles'
 import {
   HrButton, HrStatusPill, TableCard, HrDrawer, HrSelect, type PillTone,
 } from '@/shared/components/hr'
@@ -60,7 +61,9 @@ export const Expense: React.FC = () => {
   const canReimburse = usePermission('hrms.expense.reimbursement')
   const canPolicyRead = usePermission('hrms.expense.policy.read')
   const canPolicyWrite = usePermission('hrms.expense.policy.write')
-  const canSelf = usePermission('hrms.expense.claim.self')
+  // Owners and admins don't get My claims / Submit a claim (the rule My work, Leave and Attendance use).
+  const { isAdmin } = useRoles()
+  const canSelf = usePermission('hrms.expense.claim.self') && !isAdmin
   const canOthers = usePermission('hrms.expense.claim.others')
   const canBatches = usePermission('hrms.reimb_batch.read')
   const approver = canApprove || canReimburse

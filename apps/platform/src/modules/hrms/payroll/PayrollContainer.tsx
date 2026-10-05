@@ -41,6 +41,7 @@ import { AdvanceDecisionActions, AdvanceDetail } from '../advance/AdvanceAdmin'
 import { AllAwardsTab, Pli } from '../Pli'
 import { Advance } from '../Advance'
 import { AskPayrollQueue, PAY_QUERY_CODES } from './my/AskPayrollAdminQueue'
+import { useRoles } from '@/shared/hooks/useRoles'
 
 type St = 'live' | 'loading' | 'error'
 const stateOf = (...qs: { isLoading: boolean; isError: boolean }[]): St => (qs.some((q) => q.isError) ? 'error' : qs.some((q) => q.isLoading) ? 'loading' : 'live')
@@ -116,8 +117,10 @@ export function PayrollContainer() {
   const canQueries = useAnyPermission(PAY_QUERY_CODES)
   // My pay › Advances (?tab=my) and "Request a salary advance" (?tab=request) are the person's own
   // advances: someone who also holds hrms.advance.read (a department manager) gets the self-service
-  // page there too, not the payroll admin's Advances & Loans.
-  const advSelf = section === 'advances' && canAdvRequest && ['my', 'request'].includes(params.get('tab') || '')
+  // page there too, not the payroll admin's Advances & Loans. Owners and admins have no own advances
+  // there (the rule My work uses): they keep Advances & Loans.
+  const { isAdmin } = useRoles()
+  const advSelf = section === 'advances' && canAdvRequest && !isAdmin && ['my', 'request'].includes(params.get('tab') || '')
   const pliAdmin = canPliRead || canPliTarget, advAdmin = canAdvRead && !advSelf
   const me = useMemo(() => { try { return jwtDecode<{ employee_id?: string; name?: string; given_name?: string }>(getAccessToken() || '') } catch { return {} as any } }, [])
 

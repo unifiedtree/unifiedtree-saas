@@ -4,6 +4,7 @@
 // or advance.disburse), Company advances (advance.read).
 import React, { useMemo, useState } from 'react'
 import { usePermission } from '@unifiedtree/sdk'
+import { useRoles } from '@/shared/hooks/useRoles'
 import { Field, Input } from '@unifiedtree/ui-kit'
 import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
@@ -20,7 +21,9 @@ const TONE: Record<AdvanceStatus, PillTone> = { REQUESTED: 'warn', APPROVED: 'ok
 
 export const Advance: React.FC = () => {
   const canRead = usePermission('hrms.advance.read')
-  const canRequest = usePermission('hrms.advance.request.self')
+  // Owners and admins don't get My advances / Request an advance (the rule My work, Leave and Attendance use).
+  const { isAdmin } = useRoles()
+  const canRequest = usePermission('hrms.advance.request.self') && !isAdmin
   const canApprove = usePermission('hrms.advance.approve')
   const canDisburse = usePermission('hrms.advance.disburse')
   const { data: companies = [] } = useCompanies()

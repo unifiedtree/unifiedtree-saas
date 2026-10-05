@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { Plus, Check, X, Banknote, Award } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
+import { useRoles } from '@/shared/hooks/useRoles'
 import { ModulePage, Views, useView, StatRow, State, Note, dmy } from '@/design/module/ModuleKit'
 import { useToast } from '@/shared/hooks/useToast'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
@@ -31,7 +32,9 @@ type Tab = 'all' | 'my' | 'targets'
 export const Pli: React.FC = () => {
   const canReadAll = usePermission('hrms.pli.read')
   const canWrite = usePermission('hrms.pli.write')
-  const canReadSelf = usePermission('hrms.pli.read.self')
+  // Owners and admins don't get My incentives (the rule My work, Leave and Attendance use).
+  const { isAdmin } = useRoles()
+  const canReadSelf = usePermission('hrms.pli.read.self') && !isAdmin
   // Admins get the designed Payroll → PLI page; this page is mostly people's own incentives.
   const tabs = [
     ...(canReadSelf ? [{ key: 'my', label: 'My incentives', icon: 'rupee' }] : []),

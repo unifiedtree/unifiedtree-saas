@@ -12,7 +12,9 @@
  *     offered the "request module" flow.
  *   - `adminRole`: the Leave page hides the personal tabs (My leave, Apply,
  *     Balances) and the Attendance page hides My Attendance from admin
- *     roles, so search must not offer them either.
+ *     roles, so search must not offer them either. My work and the other
+ *     pages' own "My …" views (My claims, My reviews, My documents, …)
+ *     follow the same rule.
  *
  * Pure functions only (no React), so the rules can be unit-tested.
  */

@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
+import { useRoles } from '@/shared/hooks/useRoles'
 import {
   Button, CalendarLegend, IconTile, KeyValueGrid, ListRow, ListRows, MonthCalendar, ProgressBar, Section, StatusPill, type StatusTone,
 } from '@/design/kit/display'
@@ -177,6 +178,8 @@ const LETTER_TYPE: Record<string, string> = { OFFER: 'Offer letter', APPOINTMENT
 
 export function SelfLetters() {
   const navigate = useNavigate()
+  // Owners and admins have no My letters view to open (the rule My work uses).
+  const { isAdmin } = useRoles()
   const toast = useToast()
   const q = useMyLetters(0)
   const rows = (q.data?.content ?? []).filter((l) => l.status !== 'VOID')
@@ -184,7 +187,7 @@ export function SelfLetters() {
     <Section title="Letters" count={q.data?.totalElements || undefined} sub="Letters HR has issued to you." variant="section" body="list"
       loading={q.isLoading} error={q.error} onRetry={() => void q.refetch()}
       empty={!q.isLoading && rows.length === 0 ? { title: 'No letters yet', hint: 'Letters HR sends you appear here.' } : undefined}
-      footerLink={{ label: 'Open My letters', onClick: () => navigate('/hrms/letters/my'), arrow: true }}>
+      footerLink={isAdmin ? undefined : { label: 'Open My letters', onClick: () => navigate('/hrms/letters/my'), arrow: true }}>
       <ListRows label="Letters" inset>
         {rows.map((l) => (
           <ListRow key={l.id} variant="hover" leading={<IconTile icon="fileText" tone="brand" size={34} />}
@@ -202,6 +205,8 @@ const REVIEW: Record<string, [string, StatusTone]> = { PENDING: ['To do', 'warni
 
 export function SelfPerformance() {
   const navigate = useNavigate()
+  // Owners and admins have no My goals / My reviews views to open (the rule My work uses).
+  const { isAdmin } = useRoles()
   const goals = useMyGoals()
   const reviews = useMyReviews()
   const skills = useMySkills()
@@ -211,7 +216,7 @@ export function SelfPerformance() {
       <div className="upf-half">
         <Section title="Goals & KPIs" sub="What you are measured on." variant="section" body="list" loading={goals.isLoading} error={goals.error} onRetry={() => void goals.refetch()}
           empty={!goals.isLoading && g.length === 0 ? { title: 'No goals yet', hint: 'Goals your manager sets appear here.' } : undefined}
-          footerLink={{ label: 'Open My goals', onClick: () => navigate('/hrms/performance?view=my-goals'), arrow: true }}>
+          footerLink={isAdmin ? undefined : { label: 'Open My goals', onClick: () => navigate('/hrms/performance?view=my-goals'), arrow: true }}>
           <ListRows label="Goals" inset>
             {g.map((x) => {
               const [label, tone] = GOAL[x.status] ?? [x.status, 'neutral' as StatusTone]
@@ -227,7 +232,7 @@ export function SelfPerformance() {
       <div className="upf-half">
         <Section title="Reviews" sub="Every review about you, newest first." variant="section" body="list" loading={reviews.isLoading} error={reviews.error} onRetry={() => void reviews.refetch()}
           empty={!reviews.isLoading && r.length === 0 ? { title: 'No reviews yet' } : undefined}
-          footerLink={{ label: 'Open My reviews', onClick: () => navigate('/hrms/performance?view=my-reviews'), arrow: true }}>
+          footerLink={isAdmin ? undefined : { label: 'Open My reviews', onClick: () => navigate('/hrms/performance?view=my-reviews'), arrow: true }}>
           <ListRows label="Reviews" inset>
             {r.map((x) => {
               const [label, tone] = REVIEW[x.status] ?? [x.status, 'neutral' as StatusTone]

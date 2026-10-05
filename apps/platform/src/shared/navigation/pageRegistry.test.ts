@@ -124,6 +124,21 @@ describe('menu and search access (permission-only)', () => {
     expect(admin.has('att-daily:team')).toBe(true)
   })
 
+  it('the other personal pages and "My …" views follow My work: not for admin roles; staff keep them', () => {
+    const PERSONAL = ['me-payslips', 'me-salary', 'me-wfh', 'me-shift', 'me-documents', 'me-letters', 'me-assets', 'me-advances', 'me-claims', 'me-reviews', 'me-goals',
+      'me-training', 'expenses:my', 'expenses:submit', 'performance:my-reviews', 'performance:my-goals', 'learning:my']
+    for (const perms of [EMPLOYEE, DEPT_MANAGER, HR_MANAGER]) {
+      const seen = ids(ctx([...perms, 'hrms.onboarding.asset.self']))
+      for (const id of PERSONAL) expect(seen.has(id), id).toBe(true)
+    }
+    const owner = ids(ctx(['*'], { adminRole: true, planAdmin: true }))
+    for (const id of PERSONAL) expect(owner.has(id), id).toBe(false)
+    // The pages themselves and their admin views stay.
+    for (const id of ['expenses', 'expenses:approvals', 'performance', 'performance:cycles', 'learning', 'learning:programs', 'documents', 'documents:all', 'pay-advances']) {
+      expect(owner.has(id), id).toBe(true)
+    }
+  })
+
   it('Face Punch is offered to whoever the Daily tracking tab bar shows it to: the face log or the review permission', () => {
     expect(ids(ctx(DEPT_MANAGER)).has('att-daily:face')).toBe(false)
     expect(ids(ctx([...DEPT_MANAGER, 'attendance.status.review'])).has('att-daily:face')).toBe(true)

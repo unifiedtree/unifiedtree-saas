@@ -30,6 +30,8 @@ const asked = (iso: string) => `${day(istToday(new Date(iso)))}, ${hhmmIst(iso)}
 export function Regularization({ perms }: { perms: DailyPerms }) {
   const toast = useToast()
   const approver = perms.approve
+  // Your own fix requests, as My Attendance: not for owners and admins (dailyTabs' rule).
+  const ownFixes = perms.self && !perms.isAdminRole
   const [view, setView] = useState<'team' | 'mine'>(approver ? 'team' : 'mine')
   const [fixOpen, setFixOpen] = useState(false)
   const [busy, setBusy] = useState<Record<string, 'approve' | 'reject' | 'undo'>>({})
@@ -78,7 +80,7 @@ export function Regularization({ perms }: { perms: DailyPerms }) {
   const decided = [...(approved.data?.content ?? []), ...(rejected.data?.content ?? [])]
     .sort((a, b) => (b.decidedAt || '').localeCompare(a.decidedAt || ''))
   const myList = mine.data?.content ?? []
-  const views = approver && perms.self
+  const views = approver && ownFixes
     ? <FilterPills label="Whose requests" semantics="tabs" value={view} onChange={(v) => setView(v as 'team' | 'mine')}
       options={[{ value: 'team', label: 'Team requests', count: waiting.length || null }, { value: 'mine', label: 'My requests', count: myList.length || null }]} />
     : null
@@ -87,7 +89,7 @@ export function Regularization({ perms }: { perms: DailyPerms }) {
     <>
       <PageHeader eyebrow="Attendance & time · Daily tracking" title="Regularization"
         sub={approver && view === 'team' ? 'When someone forgets to punch, they ask for a fix here. Read the reason, then approve or reject it.' : 'Forgot to punch in or out? Ask for a fix here and see what was decided.'}
-        actions={perms.self ? <Button variant="primary" icon="plus" onClick={() => setFixOpen(true)}>New request</Button> : undefined} />
+        actions={ownFixes ? <Button variant="primary" icon="plus" onClick={() => setFixOpen(true)}>New request</Button> : undefined} />
       {views}
       {approver && view === 'team' ? (
         <>

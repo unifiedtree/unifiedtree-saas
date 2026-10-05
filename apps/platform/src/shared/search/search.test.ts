@@ -85,6 +85,15 @@ describe('actions and recents', () => {
     expect(allowed).not.toContain('add-employee')
     expect(allowed).not.toContain('set-punch-zone')
   })
+  it('offers the actions for yourself to staff, not to admin roles (My work’s rule)', () => {
+    const SELF = ['apply-leave', 'request-wfh', 'fix-attendance', 'request-shift', 'submit-expense', 'request-advance', 'my-payslip', 'upload-document']
+    const all: AccessContext = { has: () => true, modules: ['hrms', 'payroll'], self: true, adminRole: false, planAdmin: false }
+    const staff = QUICK_ACTIONS.filter((a) => canOpen(a.access, all)).map((a) => a.id)
+    for (const id of SELF) expect(staff, id).toContain(id)
+    const owner = QUICK_ACTIONS.filter((a) => canOpen(a.access, { ...all, adminRole: true, planAdmin: true })).map((a) => a.id)
+    for (const id of SELF) expect(owner, id).not.toContain(id)
+    expect(owner).toContain('run-payroll')
+  })
   it('keeps the newest recents first without duplicates', () => {
     const a: RecentItem = { kind: 'page', id: 'a', label: 'A', path: '/a', at: 1 }
     const b: RecentItem = { kind: 'page', id: 'b', label: 'B', path: '/b', at: 2 }
