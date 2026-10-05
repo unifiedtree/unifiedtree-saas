@@ -224,6 +224,13 @@ public class CanonicalProdSecurityConfig {
                     "/v1/accounts/auth/google/callback",
                     "/v1/platform/auth/login"
                 ).permitAll()
+                // Sign-up approval is for UnifiedTree's platform operators only.
+                // The controller also checks the token is a platform one
+                // (PlatformAdminAccess); this is the outer layer. Not all of
+                // /v1/platform/**: PlatformUserController (/v1/platform/users)
+                // is a workspace-users API, though not mounted in this profile.
+                .requestMatchers("/v1/platform/tenant-requests", "/v1/platform/tenant-requests/**")
+                    .hasRole("PLATFORM_SUPER_ADMIN")
                 // Everything else requires a valid JWT
                 .anyRequest().authenticated()
             )
