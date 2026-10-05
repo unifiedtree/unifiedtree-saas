@@ -54,6 +54,8 @@ export const P = {
   PAYROLL_RUNS_MANAGE:             'payroll.runs.manage',
   PAYROLL_RUNS_LOCK:               'payroll.runs.lock',
   PAYROLL_PAYSLIP_READ_SELF:       'payroll.payslip.read.self',
+  /** V143.86: read and answer employees' payslip questions (HR), without processing payroll. */
+  PAYROLL_QUERIES_ANSWER:          'payroll.queries.answer',
   PAYROLL_PT_SLABS_READ:           'payroll.pt_slabs.read',
 
   // ── HRMS: Org ──────────────────────────────────────────────────────────────

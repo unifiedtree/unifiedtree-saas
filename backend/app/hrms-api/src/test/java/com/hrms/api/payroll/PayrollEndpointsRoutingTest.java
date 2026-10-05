@@ -159,8 +159,8 @@ class PayrollEndpointsRoutingTest {
         assertEquals(self, guard(MyPayController.class, "upcoming"));
         assertEquals(self, guard(PayslipQueryController.class, "mine"));
         assertEquals(self, guard(PayslipQueryController.class, "ask"));
-        assertEquals("@perm.check('payroll.runs.manage')", guard(PayslipQueryController.class, "list"));
-        assertEquals("@perm.check('payroll.runs.manage')", guard(PayslipQueryController.class, "answer"));
+        assertEquals("@perm.hasAny('payroll.runs.manage','payroll.queries.answer')", guard(PayslipQueryController.class, "list"));
+        assertEquals("@perm.hasAny('payroll.runs.manage','payroll.queries.answer')", guard(PayslipQueryController.class, "answer"));
         assertEquals("hasAuthority('payroll.runs.read')", guard(PayrollRunInsightsController.class, "checks"));
         assertEquals("hasAuthority('payroll.runs.read')", guard(PayrollRunInsightsController.class, "statutory"));
         assertEquals("hasAuthority('hrms.disbursement.read')", guard(PayrollRunInsightsController.class, "bankReadiness"));

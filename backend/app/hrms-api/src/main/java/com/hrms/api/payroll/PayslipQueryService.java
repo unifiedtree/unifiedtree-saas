@@ -10,13 +10,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * "Ask payroll" (BW-59): an employee asks the payroll team about one of their
- * own LOCKED or PAID payslips; someone holding payroll.runs.manage answers.
+ * own LOCKED or PAID payslips; someone holding payroll.runs.manage, or the
+ * narrower payroll.queries.answer (V143.86, HR), answers.
  *
  * <ul>
  *   <li>Own payslips only: a run that isn't the caller's, or isn't final yet,
@@ -33,8 +35,13 @@ public class PayslipQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(PayslipQueryService.class);
 
-    /** Who is told about a new question, and who may answer it. */
-    static final String ANSWER_PERMISSION = "payroll.runs.manage";
+    /**
+     * Who is told about a new question, and who may answer it (the same codes
+     * as PayslipQueryController.ANSWER_GUARD): the payroll team first, then
+     * holders of payroll.queries.answer (V143.86). Until V143.86 is applied no
+     * one holds the second, so it simply adds no one.
+     */
+    static final List<String> ANSWER_PERMISSIONS = List.of("payroll.runs.manage", "payroll.queries.answer");
     static final int MAX_MESSAGE = 1000;
     static final int MAX_ANSWER = 2000;
     /** At most this many payroll people are told about one question. */
@@ -78,7 +85,7 @@ public class PayslipQueryService {
         UUID id = store.insert(tenantId, slip, employeeId, text, userId);
         PayslipQueryStore.QueryRow row = store.find(tenantId, id)
                 .orElseThrow(() -> new IllegalStateException("Payslip question " + id + " not found after insert"));
-        List<UUID> team = store.employeesHolding(tenantId, ANSWER_PERMISSION, employeeId, MAX_RECIPIENTS);
+        List<UUID> team = answerers(tenantId, employeeId);
         notifier.raised(tenantId, team, row.employeeName(), row.period(), id, slip.runId());
         return dto(row);
     }
@@ -129,6 +136,16 @@ public class PayslipQueryService {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    /** Everyone who may answer, each once, the payroll team first, at most MAX_RECIPIENTS; never the asker. */
+    List<UUID> answerers(UUID tenantId, UUID asker) {
+        Set<UUID> people = new LinkedHashSet<>();
+        for (String permission : ANSWER_PERMISSIONS) {
+            if (people.size() >= MAX_RECIPIENTS) break;
+            people.addAll(store.employeesHolding(tenantId, permission, asker, MAX_RECIPIENTS));
+        }
+        return people.stream().limit(MAX_RECIPIENTS).toList();
+    }
 
     /** Trimmed text, or a 400 when it is empty or too long. */
     static String clean(String value, int max, String emptyCode, String emptyMessage, String longCode, String longMessage) {

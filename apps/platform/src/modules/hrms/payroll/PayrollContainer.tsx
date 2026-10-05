@@ -8,7 +8,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { jwtDecode } from 'jwt-decode'
-import { getAccessToken, usePermission, P } from '@unifiedtree/sdk'
+import { getAccessToken, useAnyPermission, usePermission, P } from '@unifiedtree/sdk'
 import { apiBlob, apiJson } from '@/core/api/client'
 import { HrDrawer } from '@/shared/components/hr'
 import { PayrollModule } from '@/design/dc/PayrollModule'
@@ -40,7 +40,7 @@ import type { PageResponse, WorkforceEmployee } from '../api/useWorkforce'
 import { AdvanceDecisionActions, AdvanceDetail } from '../advance/AdvanceAdmin'
 import { AllAwardsTab, Pli } from '../Pli'
 import { Advance } from '../Advance'
-import { AskPayrollQueue } from './my/AskPayrollAdminQueue'
+import { AskPayrollQueue, PAY_QUERY_CODES } from './my/AskPayrollAdminQueue'
 
 type St = 'live' | 'loading' | 'error'
 const stateOf = (...qs: { isLoading: boolean; isError: boolean }[]): St => (qs.some((q) => q.isError) ? 'error' : qs.some((q) => q.isLoading) ? 'loading' : 'live')
@@ -112,6 +112,8 @@ export function PayrollContainer() {
   const canPliRead = usePermission('hrms.pli.read'), canPliTarget = usePermission('hrms.pli.target.read'), canPliWrite = usePermission('hrms.pli.write'), canPliTargetWrite = usePermission('hrms.pli.target.write'), canPliSelf = usePermission('hrms.pli.read.self')
   const canAdvRead = usePermission('hrms.advance.read'), canAdvApprove = usePermission('hrms.advance.approve'), canAdvRequest = usePermission('hrms.advance.request.self'), canAdvOthers = usePermission('hrms.advance.request.others')
   const canCompliance = usePermission('hrms.compliance.read'), canEmpRead = usePermission(P.HRMS_EMPLOYEE_READ)
+  // Ask payroll's queue: the payroll team or HR (payroll.queries.answer, V143.86), the codes its API accepts.
+  const canQueries = useAnyPermission(PAY_QUERY_CODES)
   // My pay › Advances (?tab=my) and "Request a salary advance" (?tab=request) are the person's own
   // advances: someone who also holds hrms.advance.read (a department manager) gets the self-service
   // page there too, not the payroll admin's Advances & Loans.
@@ -532,6 +534,8 @@ export function PayrollContainer() {
   // People without the admin view keep their own pages (My Incentives, My Advances).
   if (section === 'pli' && !pliAdmin) return <Pli />
   if (section === 'advances' && !advAdmin) return <Advance />
+  // Someone who may answer payslip questions but not read payroll runs gets only the question queue.
+  if (section === 'dashboard' && !canRuns && canQueries) return <DesignFrame><AskPayrollQueue /></DesignFrame>
 
   const visibleSections = [
     canRuns && 'dashboard', canRuns && 'salary', canRuns && 'runs', canSettings && 'settings', (pliAdmin || canPliSelf) && 'pli', (advAdmin || canAdvRequest || canAdvApprove || canAdvOthers) && 'advances', canRuns && 'bank',
@@ -554,7 +558,7 @@ export function PayrollContainer() {
       {recoveryFor && <AdvanceDetail id={recoveryFor} onClose={() => setRecoveryFor(null)} />}
       {/* Ask payroll: the payroll team's answer queue sits on the dashboard, under the KPIs (BW-59).
           DesignFrame already gives the width and gutter, so this only keeps the cards' 16px gap. */}
-      {section === 'dashboard' && canRuns && (
+      {section === 'dashboard' && canQueries && (
         <div style={{ marginTop: 16 }}>
           <AskPayrollQueue />
         </div>
