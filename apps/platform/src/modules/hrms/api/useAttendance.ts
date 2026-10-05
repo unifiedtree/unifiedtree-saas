@@ -354,14 +354,17 @@ export function useAttendanceSources(date?: string, departmentId?: string, enabl
  * Defaults to the trailing 7 days when no range is given. The server clamps
  * anything longer than 31 days and fills gaps with zero rows, so the series is
  * always dense — the chart never has to guess at missing dates.
+ * `opts.includeSelf`: a company-wide viewer is counted too, as on the day roster (the admin dashboard);
+ * a server without it leaves them out, as before.
  */
-export function useAttendanceTrend(from?: string, to?: string, departmentId?: string, enabled: boolean = true) {
+export function useAttendanceTrend(from?: string, to?: string, departmentId?: string, enabled: boolean = true, opts: Pick<TeamDayOptions, 'includeSelf'> = {}) {
   const params = new URLSearchParams()
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (departmentId) params.set('departmentId', departmentId)
+  if (opts.includeSelf) params.set('includeSelf', 'true')
   return useQuery({
-    queryKey: ['hrms', 'attendance', 'dashboard', 'trend', from, to, departmentId],
+    queryKey: ['hrms', 'attendance', 'dashboard', 'trend', from, to, departmentId, ...(opts.includeSelf ? ['self'] : [])],
     queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?${params}`),
     staleTime: 60_000,
     enabled,
@@ -374,6 +377,11 @@ export interface TeamDayOptions {
   includeWeeklyOff?: boolean
   /** A company-wide viewer's own row (the muster roll is the same register whoever opens it). */
   includeSelf?: boolean
+  /**
+   * Read again when the person comes back to the tab (the app's default is not to). The minute's
+   * polling pauses while the tab is hidden, so a live view could show check-ins made meanwhile late.
+   */
+  refetchOnFocus?: boolean
 }
 
 /**
@@ -397,6 +405,8 @@ export function useTeamDashboard(date?: string, departmentId?: string, enabled: 
     queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?${params}`),
     staleTime: 5_000,
     refetchInterval: 60_000,
+    // Only when asked: an explicit undefined here would override the app's default (off).
+    ...(opts.refetchOnFocus ? { refetchOnWindowFocus: true } : {}),
     enabled,
   })
 }

@@ -11,6 +11,8 @@
 // Fix this day (manual entry), View history, Open full profile.
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { jwtDecode } from 'jwt-decode'
+import { getAccessToken } from '@unifiedtree/sdk'
 import {
   Button, CellPerson, PageHeader, ProgressBar, Section, StatCard, StatGrid, StatusPill, Table,
   type TableColumn, type RowKey,
@@ -84,8 +86,15 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
   // ── data ──
   const { data: companies = [] } = useCompanies()
   const companyId: string = companies[0]?.id ?? ''
-  const team = useTeamDashboard(date, undefined, perms.team, !isToday, { includeWeeklyOff: true })
-  const before = useTeamDashboard(addDays(date, -1), undefined, perms.team, true)
+  // includeSelf: a company-wide viewer is on the list like everyone else, as on the admin dashboard, so a card
+  // there opens a list with the same people and counts (a manager's team never includes the manager).
+  const team = useTeamDashboard(date, undefined, perms.team, !isToday, { includeWeeklyOff: true, includeSelf: true })
+  const before = useTeamDashboard(addDays(date, -1), undefined, perms.team, true, { includeSelf: true })
+  // The viewer's own row: the server refuses every change to your own day (status, fix, marking, leave on
+  // your behalf, a face punch by you, a reminder), so that row offers none of them.
+  const selfId = useMemo(() => {
+    try { const t = getAccessToken(); return t ? jwtDecode<{ employee_id?: string }>(t).employee_id ?? null : null } catch { return null }
+  }, [])
   const policies = useShiftPolicies(companyId)
   const assisted = useAssistedPunches(date, date, undefined, perms.team)
   const weekAgo = addDays(today, -6)
@@ -142,7 +151,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
       && (!text || `${r.name} ${r.code}`.toLowerCase().includes(text)))
   }, [rows, status, dept, shift, q])
   const pageRows = filtered.slice(page * PAGE, page * PAGE + PAGE)
-  const notMarked = rows.filter((r) => r.status === 'NOT_MARKED')
+  const notMarked = rows.filter((r) => r.status === 'NOT_MARKED' && r.id !== selfId)
   const sentIds = new Set((reminders.data ?? []).map((r) => r.employeeId))
 
   const setStatus = (k: string) => {
@@ -273,11 +282,13 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
           trigger={({ props }) => <button type="button" {...props} className="udt-more" aria-label={`More for ${r.name}`} data-row-ignore="">⋮</button>}
           items={[
             { key: 'open', label: 'See the day', icon: 'eye', onSelect: () => setOpenId(r.id) },
-            ...(perms.override ? [{ key: 'status', label: 'Change status', icon: 'pencil', onSelect: () => openStatus(r) }] : []),
-            ...(perms.approve ? [{ key: 'fix', label: 'Fix this day', icon: 'clock', onSelect: () => fixDay(r) }] : []),
-            ...(perms.assist && isToday && !r.outAt && r.status !== 'ON_LEAVE' ? [{ key: 'punch', label: r.inAt ? 'Punch out with face' : 'Punch in with face', icon: 'scanFace', onSelect: () => setAssist({ employeeId: r.id }) }] : []),
-            ...(perms.leaveOthers && !r.inAt && r.status !== 'ON_LEAVE' && !OFF_DAY.has(r.status) ? [{ key: 'leave', label: 'Mark leave', icon: 'calendarDays', onSelect: () => setLeaveFor({ id: r.id, name: r.name }) }] : []),
-            ...(isToday && r.status === 'NOT_MARKED' ? [{ key: 'remind', label: sentIds.has(r.id) ? 'Reminded today' : 'Remind to check in', icon: 'bell', disabled: sentIds.has(r.id), onSelect: () => sendReminders([r.id]) }] : []),
+            ...(r.id === selfId ? [] : [
+              ...(perms.override ? [{ key: 'status', label: 'Change status', icon: 'pencil', onSelect: () => openStatus(r) }] : []),
+              ...(perms.approve ? [{ key: 'fix', label: 'Fix this day', icon: 'clock', onSelect: () => fixDay(r) }] : []),
+              ...(perms.assist && isToday && !r.outAt && r.status !== 'ON_LEAVE' ? [{ key: 'punch', label: r.inAt ? 'Punch out with face' : 'Punch in with face', icon: 'scanFace', onSelect: () => setAssist({ employeeId: r.id }) }] : []),
+              ...(perms.leaveOthers && !r.inAt && r.status !== 'ON_LEAVE' && !OFF_DAY.has(r.status) ? [{ key: 'leave', label: 'Mark leave', icon: 'calendarDays', onSelect: () => setLeaveFor({ id: r.id, name: r.name }) }] : []),
+              ...(isToday && r.status === 'NOT_MARKED' ? [{ key: 'remind', label: sentIds.has(r.id) ? 'Reminded today' : 'Remind to check in', icon: 'bell', disabled: sentIds.has(r.id), onSelect: () => sendReminders([r.id]) }] : []),
+            ]),
             { key: 'history', label: 'View history', icon: 'calendarDays', onSelect: () => navigate(`/hrms/employees/${r.id}?tab=attendance`) },
           ]} />
       ),
@@ -403,7 +414,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
       </SidePanel>
 
       {bulkOpen && (
-        <BulkMarkPanel date={date} rows={rows} picked={selected.map(String)} onClose={() => setBulkOpen(false)}
+        <BulkMarkPanel date={date} rows={rows.filter((r) => r.id !== selfId)} picked={selected.map(String).filter((id) => id !== selfId)} onClose={() => setBulkOpen(false)}
           onDone={() => { setBulkOpen(false); setSelected([]) }} />
       )}
       <AssistedPunchDialog open={!!assist} employeeId={assist?.employeeId} onClose={() => setAssist(null)} onDone={() => void team.refetch()} />

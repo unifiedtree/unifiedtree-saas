@@ -42,7 +42,7 @@ import { endOfIstDay, monthToDate, parseDashboardDate } from './dashboardDate'
 import { useInboxCounts } from './NeedsAction'
 import { AdminDashboard, type DashboardVm } from '@/design/dc/AdminDashboard'
 import {
-  lateNote, monthSpan, payrollHint, payrollMonths, pctOf, quickActions, relTime, rollNote, rollTotal, scheduledOf, trendColumns, workingWindow,
+  lateNote, monthSpan, payrollHint, payrollMonths, pctOf, presentNote, quickActions, relTime, rollNote, rollTotal, scheduledOf, trendColumns, workingWindow,
   type DashSection, type RollStats,
 } from './dashboardModel'
 import { useMyDay } from '../attendance/webpunch/useMyDay'
@@ -143,11 +143,15 @@ export function AdminDashboardContainer() {
   const companyId = companies[0]?.id as string | undefined
   // Attendance: today's view keeps its hooks; a past day asks for the team as it was then
   // (includeLeavers: people who have left since count on the days they worked) and a trend ending on it.
-  const teamToday = useTeamDashboard(sel, undefined, canReadTeam && !isPast)
-  const teamPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'history', sel], queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?date=${sel}&includeLeavers=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
+  // includeSelf: a company-wide viewer is on the roster and the trend like everyone else, so Total employees and
+  // "scheduled" count the same people, and the viewer's own check-in from the header shows in Present and the list.
+  // (A manager's team never includes the manager; a server without the flag leaves the viewer out, as before.)
+  // Today's roster is read again when the tab comes back into view: its minute's polling pauses while it is hidden.
+  const teamToday = useTeamDashboard(sel, undefined, canReadTeam && !isPast, false, { includeSelf: true, refetchOnFocus: true })
+  const teamPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'history', sel, 'self'], queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?date=${sel}&includeLeavers=true&includeSelf=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
   const team = isPast ? teamPast : teamToday
-  const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast)
-  const trendPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'history', sel], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${addDays(sel, -30)}&to=${sel}&includeLeavers=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
+  const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast, { includeSelf: true })
+  const trendPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'history', sel, 'self'], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${addDays(sel, -30)}&to=${sel}&includeLeavers=true&includeSelf=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
   const trend = isPast ? trendPast : trendToday
   const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId, date], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}${dq}`), enabled: canReadCompany && !!companyId })
   // Total employees comes from the summary's headcount (rollTotal). Only a viewer who gets neither it nor the
@@ -300,7 +304,8 @@ export function AdminDashboardContainer() {
         total, totalLoading,
         // Who is confirmed, on probation and serving notice; a past date: the month's joiners and leavers (§5.5).
         totalNote: rollNote(st, isPast, monthToDate(sel)),
-        presentNote: sched ? `${pctOf(c.present, sched)}% of ${sched} scheduled` : isPast ? 'Nobody was scheduled' : 'Nobody scheduled today',
+        // Says why "scheduled" isn't Total employees when it isn't: people off that day, or the viewer's team only.
+        presentNote: presentNote(c.present, sched, { total: canReadEmployees ? total : null, companyWide: canShiftAdmin, isPast }),
         leaveNote: `Approved leave · ${pctOf(c.onLeave, c.total)}%`,
         lateNote: lateNote(staff, c.late),
         spark: { present: series('present'), leave: series('onLeave'), late: series('late'), half: series('halfDay'), wfh: series('wfh'), none: isPast ? null : series('notMarked'), absent: series('absent') },

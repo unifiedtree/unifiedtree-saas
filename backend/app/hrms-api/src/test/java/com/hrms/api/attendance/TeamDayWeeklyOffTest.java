@@ -111,6 +111,22 @@ class TeamDayWeeklyOffTest {
         assertFalse(names(day).contains("Zed Viewer"));
     }
 
+    /**
+     * The admin dashboard's chart counts the same people as its tiles (5 Oct): with includeSelf a
+     * company-wide viewer is on every day of the trend; without it, or for a manager, as before.
+     */
+    @Test void theTrendCountsACompanyWideViewerOnlyWithIncludeSelf() {
+        LocalDate monday = SUNDAY.plusDays(1);
+        AttendanceController.DailyAttendanceCounts plain = controller.dashboardTrend(monday, monday, null, false, null, admin()).getBody().get(0);
+        AttendanceController.DailyAttendanceCounts withSelf = controller.dashboardTrend(monday, monday, null, false, true, admin()).getBody().get(0);
+        AttendanceController.DailyAttendanceCounts team = controller.dashboardTrend(monday, monday, null, false, true, manager()).getBody().get(0);
+        // asha and bala work Mondays (chitra is off); the viewer too, once asked for.
+        assertEquals(2, plain.scheduled());
+        assertEquals(3, withSelf.scheduled());
+        assertEquals(3, withSelf.notMarked());
+        assertEquals(2, team.scheduled(), "a manager's team never includes the manager");
+    }
+
     @Test void withoutThePolicyServiceAWeeklyOffRowStillSaysWeeklyOff() {
         StaffStatusResponse bare = new StaffStatusResponse(asha.getId(), "E1", "Asha Rao", null, null, null, null, "NOT_MARKED",
                 null, null, null, null, null, false, null, false, null, null, null, null, null, null, false, false, false,
