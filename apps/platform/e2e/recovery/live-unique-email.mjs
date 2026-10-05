@@ -144,15 +144,16 @@ for (const width of [1440, 390]) {
   const { page } = s
   try {
     await page.goto(ui + '/hrms/employees?add=1')
-    const email = page.getByLabel('Work email', { exact: true })
+    // By placeholder: the labels carry the required mark ("Work email *").
+    const email = page.getByPlaceholder('name@company.com', { exact: true })
     await email.waitFor({ timeout: 30_000 })
-    await page.getByLabel('First name', { exact: true }).fill('Dup')
-    await page.getByLabel('Last name', { exact: true }).fill('Reader')
+    await page.getByPlaceholder('e.g. Ananya', { exact: true }).fill('Dup')
+    await page.getByPlaceholder('e.g. Sharma', { exact: true }).fill('Reader')
     await email.fill('READER@unifiedtree.demo ')
     const taken = page.getByText(`This email already belongs to ${NAME}.`, { exact: true })
     const shown = await taken.waitFor({ timeout: 10_000 }).then(() => true, () => false)
     check(`web ${width}: Add employee says whose the email is as you type`, shown)
-    await page.getByLabel('Mobile', { exact: true }).fill(sharedPhone)
+    await page.getByPlaceholder('+91 98xxx xxxxx', { exact: true }).fill(sharedPhone)
     const phone = page.getByText(/^Also used by /).first()
     const phoneShown = await phone.waitFor({ timeout: 10_000 }).then(() => true, () => false)
     check(`web ${width}: Mobile says who else has the number`, phoneShown)
@@ -166,7 +167,7 @@ for (const width of [1440, 390]) {
     check(`web ${width}: a free email clears it`, cleared)
     await page.keyboard.press('Escape').catch(() => {})
 
-    if (width === 1440) {
+    {
       // Import: the rows are flagged on the page.
       await page.goto(ui + '/hrms/employees/import')
       await page.getByRole('button', { name: /Download template/ }).first().waitFor({ timeout: 30_000 })
@@ -176,10 +177,12 @@ for (const width of [1440, 390]) {
       const row3 = page.getByText(/email appears more than once in this file \(also row 2\)/).first()
       const row4 = page.getByText(`email already belongs to ${NAME}: reader@unifiedtree.demo`, { exact: true })
       const flagged = await row3.waitFor({ timeout: 20_000 }).then(() => true, () => false) && await row4.isVisible().catch(() => false)
-      check('web import: both rows are flagged before anything is saved', flagged)
+      check(`web ${width} import: both rows are flagged before anything is saved`, flagged)
       const note = await page.getByText(/^phone: Also used by /).first().isVisible().catch(() => false)
-      check('web import: the shared phone shows as a note', note)
-      await page.screenshot({ path: `${SHOTS}/w23-unique-import-1440.png`, fullPage: true })
+      check(`web ${width} import: the shared phone shows as a note`, note)
+      await page.waitForTimeout(2500) // the result cards count up and fade in
+      await row3.scrollIntoViewIfNeeded().catch(() => {})
+      await page.screenshot({ path: `${SHOTS}/w23-unique-import-${width}.png` })
     }
   } catch (e) {
     check(`web ${width}: completed`, false, String(e.message || e).split('\n')[0].slice(0, 200))

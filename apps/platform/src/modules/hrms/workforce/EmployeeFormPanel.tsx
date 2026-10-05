@@ -167,7 +167,7 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
             <Input label="First name" required placeholder="e.g. Ananya" value={v.first ?? ''} error={errs.first} onChange={(e) => set('first', e.target.value)} />
             <Input label="Last name" required placeholder="e.g. Sharma" value={v.last ?? ''} error={errs.last} onChange={(e) => set('last', e.target.value)} />
             <Input label="Work email" required type="email" placeholder="name@company.com" value={v.email ?? ''} error={errs.email || emailCheck.message} onChange={(e) => set('email', e.target.value)} />
-            <Input label="Mobile" placeholder="+91 98xxx xxxxx" value={v.phone ?? ''} hint={phoneWarning} data-phone-warning={phoneWarning ? '' : undefined} onChange={(e) => set('phone', e.target.value)} />
+            <Input label="Mobile" placeholder="+91 98xxx xxxxx" value={v.phone ?? ''} hint={phoneWarning} onChange={(e) => set('phone', e.target.value)} />
           </FieldGrid>
         </section>
 
