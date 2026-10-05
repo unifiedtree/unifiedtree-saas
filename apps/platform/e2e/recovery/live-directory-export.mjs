@@ -57,7 +57,8 @@ try {
   await download.saveAs(saved)
   const uiLines = readFileSync(saved, 'utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/)
   check('browser button downloads the CSV', download.suggestedFilename().startsWith('employees-') && uiLines.length - 1 === dir.totalElements, `${download.suggestedFilename()} ${uiLines.length - 1} rows`)
-  await page.locator('.toast').filter({ hasText: /Exported \d+ employees/ }).first().waitFor({ timeout: 10_000 })
+  // The directory's messages are kit toasts (.uko-toast) since it moved to the redesign kit.
+  await page.locator('.toast, .uko-toast').filter({ hasText: /Exported \d+ employees/ }).first().waitFor({ timeout: 10_000 })
   check('success toast shows the count', true)
   check('no uncaught page errors', errs.length === 0, errs.slice(0, 2).join(' | '))
 } finally {

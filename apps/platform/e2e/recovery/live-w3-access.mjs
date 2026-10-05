@@ -84,25 +84,23 @@ async function signIn(email, viewport = { width: 1440, height: 900 }) {
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(500) }
   return { page, context, errors, failed, settle }
 }
-const drawer = (page) => page.locator('#utm-portal .drawer')
-const toastSeen = (page, re) => page.locator('.toast').filter({ hasText: re }).first().waitFor({ timeout: 30000 }).then(() => true, () => false)
+// Employee Master (the Workforce directory) is on the redesign kit: Add employee is a kit side panel,
+// its lists are kit dropdowns (each field carries data-field) and messages are kit toasts (.uko-toast).
+const drawer = (page) => page.getByRole('dialog', { name: 'Add employee' })
+const addButton = (page) => page.locator('.uk-ph__actions').getByRole('button', { name: /Add employee/ })
+const toastSeen = (page, re) => page.locator('.toast, .uko-toast').filter({ hasText: re }).first().waitFor({ timeout: 30000 }).then(() => true, () => false)
+const FIELD = { Branch: 'branch', Department: 'dept', Designation: 'desig' }
 async function pickFirst(page, label, onlyIfEmpty = false) {
   at(`pick ${label}`)
-  // The Field wrapper whose own label is exactly this (the dropdown inside it is also a .field).
-  const field = drawer(page).locator('div.field').filter({ has: page.locator('label').filter({ hasText: new RegExp(`^${label}\\*?$`) }) }).first()
-  const btn = field.locator('.ddb').first()
-  if (onlyIfEmpty && await btn.locator('.ph').count() === 0) return
-  // The design closes its popovers on any scroll or resize (and its drawers on Escape), so open
-  // it again if it closed under us, and pick the option with a plain DOM click.
-  const opt = page.locator('#utm-portal .pop .opt').first()
-  for (let i = 0; i < 4; i++) {
-    if (await opt.count() === 0) await btn.click({ timeout: 10000 })
-    try {
-      await opt.waitFor({ state: 'attached', timeout: 3000 })
-      await opt.dispatchEvent('click')
-    } catch { /* closed again */ }
+  const btn = drawer(page).locator(`[data-field="${FIELD[label]}"] .uko-dd-trigger`).first()
+  const empty = () => btn.locator('.uko-dd-value[data-empty]').count().then((n) => n > 0)
+  if (onlyIfEmpty && !(await empty())) return
+  for (let i = 0; i < 3; i++) {
+    await btn.click({ timeout: 10000 })
+    const opt = page.getByRole('listbox').getByRole('option').first()
+    try { await opt.waitFor({ timeout: 3000 }); await opt.click() } catch { /* the list closed again */ }
     await page.waitForTimeout(300)
-    if (await btn.locator('.ph').count() === 0) { if (i) console.log(`..  (${label} needed ${i + 1} tries)`); return }
+    if (!(await empty())) { if (i) console.log(`..  (${label} needed ${i + 1} tries)`); return }
   }
   throw new Error(`couldn’t pick a ${label}`)
 }
@@ -110,7 +108,7 @@ async function pickFirst(page, label, onlyIfEmpty = false) {
 async function openAddEmployee(page, settle, first, email) {
   await page.goto(base + '/hrms/employees'); await settle()
   at('open Add employee')
-  await page.locator('.utm .hero-act').getByRole('button', { name: /Add employee/ }).click()
+  await addButton(page).click()
   const d = drawer(page)
   await d.waitFor()
   // Let the Access section (when there is one) finish loading before using the dropdowns.
@@ -203,7 +201,7 @@ try {
     await box.click()
     if (await yes.count()) await yes.click()
     await group.scrollIntoViewIfNeeded(); await p.page.waitForTimeout(300)
-    const noScroll = await p.page.evaluate(() => { const el = document.querySelector('#utm-portal .drawer .dr-b'); return !!el && el.scrollWidth <= el.clientWidth + 1 })
+    const noScroll = await p.page.evaluate(() => { const el = document.querySelector('[role=dialog] .uko-panel-main'); return !!el && el.scrollWidth <= el.clientWidth + 1 })
     check('Master (390 wide): the Access section fits without sideways scrolling', noScroll)
     await p.page.screenshot({ path: `${shots}/access-master-390.png` })
     check('Master (390 wide): no page errors', !p.errors.length, p.errors[0] || '')
@@ -320,7 +318,7 @@ try {
     const m = await signIn('mgr@unifiedtree.demo')
     const { page, settle } = m
     await page.goto(base + '/hrms/employees'); await settle()
-    check('Dept manager: no Add employee / Access on Employee Master (as before)', await page.locator('[data-access-step]').count() === 0 && await page.locator('.utm .hero-act').getByRole('button', { name: /Add employee/ }).count() === 0)
+    check('Dept manager: no Add employee / Access on Employee Master (as before)', await page.locator('[data-access-step]').count() === 0 && await addButton(page).count() === 0)
     await page.goto(base + '/hrms/onboarding/instances/new'); await settle()
     check('Dept manager: no Access step in onboarding', await page.locator('[data-access-picker]').count() === 0 && await stepLabels(page).filter({ hasText: /^\d*Access$/ }).count() === 0)
     check('Dept manager: no page errors', !m.errors.length, m.errors[0] || '')

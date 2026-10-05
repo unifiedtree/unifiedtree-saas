@@ -35,9 +35,10 @@ function HostedFrame({ title, sub, cta, onClose, onSubmit, children }: FrameProp
 
 /** The control of the field a Create button sits beside: its list, its chosen option, or its input. */
 function fieldControl(button: HTMLElement | null): HTMLElement | null {
-  const field = button?.closest('.field')
+  // The design's form fields (.field), or the Workforce directory's kit form ([data-create-field]).
+  const field = button?.closest('.field, [data-create-field]')
   if (!field) return null
-  for (const sel of ['.ddb', '.seg button.on', '.seg button', 'input']) {
+  for (const sel of ['.ddb', '.seg button.on', '.seg button', '.uko-dd-trigger', '[aria-checked="true"]', '[aria-pressed="true"]', '[aria-selected="true"]', 'input']) {
     const el = field.querySelector<HTMLElement>(sel)
     if (el) return el
   }

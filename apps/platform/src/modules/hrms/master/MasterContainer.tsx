@@ -8,7 +8,7 @@
 // and shows the reason. What the backend can't store stays on screen as
 // "Coming soon" — docs/Designs/STATIC-UI-TO-BUILD.md §6.
 import '@/design/master/master.css'
-import { Suspense, lazy, useCallback, useMemo, useRef, useState, type ComponentType, type Context } from 'react'
+import { Suspense, lazy, useCallback, useMemo, useRef, useState, type ComponentType, type Context, type ReactNode } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { usePermission, P } from '@unifiedtree/sdk'
@@ -33,6 +33,7 @@ import { MasterCreateField } from './MasterCreateField'
 import type { CreateKind } from './masterCreate'
 import { useNewPersonAccessRights, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
 import { saveAndRecord } from '@/shared/export/fileExport'
+import { useToast } from '@/design/kit/overlays'
 import { isValidRange, rangeLabel, type DateRange } from '@/design/dc/milestoneRange'
 
 // The generated design module is untyped JavaScript; these are the pieces used here.
@@ -113,7 +114,29 @@ function downloadCsv(name: string, lines: string[]) {
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url)
 }
 
-export function MasterContainer() {
+/** What a page drawn outside the Master design (the Workforce directory) gets: the same data, saves and states. */
+export interface MasterPageView {
+  /** The Master app context (db, update, toast, go, route, act…); the page can also read it from Design.AppCtx. */
+  ctx: Record<string, any>
+  /** False when the viewer may not see this page. */
+  allowed: boolean
+  /** A list the page needs failed to load (show it with Try again → retry). */
+  failed: unknown
+  loading: boolean
+  retry: () => void
+  /** Changes when the page's URL filters change: the page remounts on it, as the design's pages do. */
+  pageKey: string
+}
+
+export interface MasterContainerProps {
+  /**
+   * Draws /hrms/employees with its own page (the redesign kit's Workforce directory, workforce/DirectoryRoute)
+   * instead of the design's Employee Master. Its messages then show as kit toasts.
+   */
+  directory?: (view: MasterPageView) => ReactNode
+}
+
+export function MasterContainer({ directory }: MasterContainerProps = {}) {
   const navigate = useNavigate()
   const location = useLocation()
   const [params, setParams] = useSearchParams()
@@ -166,6 +189,9 @@ export function MasterContainer() {
     archived: page === 'branches' && params.get('archived') === '1',
   }), [page, params])
   const want = (k: string) => page === 'overview' || NEEDS[page]?.includes(k)
+  // The Workforce directory drawn on the kit (DirectoryRoute): its messages are kit toasts.
+  const ownPage = page === 'employees' && !!directory
+  const kitToast = useToast()
 
   // ── data ──
   const companiesQ = useCompanies()
@@ -194,7 +220,7 @@ export function MasterContainer() {
   const shiftsL = useQueries(perCo<ShiftPolicy>(['hrms', 'shift-policies'], (c) => `/v1/shifts?companyId=${c}`, want('shifts') || want('employees')))
   const leavesL = useQueries(perCo<LeaveTypeResponse>(['hrms', 'leave', 'types'], (c) => `/v1/leave/types?companyId=${c}`, want('leaves') || want('employees')))
   const hrQs = useQueries({ queries: coIds.map((cid) => ({ queryKey: ['hrms', 'settings', 'hr-config', cid], queryFn: () => apiJson<HrConfigResponse>(`/v1/settings/hr-configuration?companyId=${cid}`), enabled: canEmpRead && (want('classes') || want('employees')), retry: false, staleTime: 60_000 })), combine: hrData })
-  const nextCodeQ = useQuery({ queryKey: ['hrms', 'settings', 'next-employee-code', defaultCo], queryFn: () => apiJson<NextEmployeeCodePreview>(`/v1/settings/employee-code/preview?companyId=${defaultCo}`), enabled: !!defaultCo && canEmpWrite && page === 'employees', retry: false, staleTime: 0 })
+  const nextCodeQ = useQuery({ queryKey: ['hrms', 'settings', 'next-employee-code', defaultCo], queryFn: () => apiJson<NextEmployeeCodePreview>(`/v1/settings/employee-code/preview?companyId=${defaultCo}`), enabled: !!defaultCo && canEmpWrite && page === 'employees' && !ownPage, retry: false, staleTime: 0 })
   const polQs = useQueries({
     queries: (['ACTIVE', 'DRAFT', 'ARCHIVED'] as const).map((st) => ({
       queryKey: ['hrms', 'policy', 'master', st], queryFn: () => apiJson<Page<Policy>>(`/v1/policy/policies?status=${st}&page=0&size=200`).then((r) => r.content),
@@ -264,10 +290,11 @@ export function MasterContainer() {
 
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const show = useCallback((msg: string, kind?: string) => {
+    if (ownPage) { if (kind === 'error') kitToast.error(msg); else if (kind === 'info') kitToast.info(msg); else kitToast.success(msg); return }
     const id = Date.now() + Math.random()
     setToasts((x) => x.slice(-2).concat([{ id, msg, kind }]))
     setTimeout(() => setToasts((x) => x.filter((y) => y.id !== id)), kind === 'error' ? 6500 : 3600)
-  }, [])
+  }, [ownPage, kitToast])
 
   const envRef = useRef<SyncEnv | null>(null)
   envRef.current = {
@@ -381,6 +408,10 @@ export function MasterContainer() {
   const allowed = page === 'overview' ? nav.length > 0 : visible[page]
   const Page = PAGES[page] || PAGES.overview
   const retry = () => { qc.invalidateQueries({ queryKey: ['hrms'] }); qc.invalidateQueries({ queryKey: ['master'] }) }
+  if (ownPage) {
+    const pageKey = `${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}`
+    return <AppCtx.Provider value={ctx}>{directory!({ ctx, allowed, failed, loading, retry, pageKey })}</AppCtx.Provider>
+  }
   const body = !allowed ? <div className="card"><Empty icon="lock" title="You don’t have access to this section" body="Ask an admin if you need it." /></div>
     : failed ? <div className="card"><Empty icon="alert-triangle" title="This page couldn’t load" body={errText(failed)} action={<button className="btn sm" onClick={retry}>Try again</button>} /></div>
       : loading ? <PageSkeleton path={location.pathname} bare />

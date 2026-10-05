@@ -1,7 +1,7 @@
 import React from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAccessToken, useAuthStore } from '@unifiedtree/sdk'
-import { API_BASE_URL } from '@/core/api/client'
+import { API_BASE_URL, apiJson } from '@/core/api/client'
 
 // ── Response shape — mirrors backend BulkImportResult record exactly ──────────
 
@@ -93,15 +93,17 @@ function uploadFile<T>(
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
-// Download the backend's XLSX column template using the current tenant identity.
+// Download the backend's column template (.xlsx; .csv with format 'csv') using the current tenant identity.
+// Pass the tenant slug (an .xlsx file), or { slug, format }.
 export function useDownloadTemplate() {
   const tenantId = useAuthStore.getState().tenant?.id
   return useMutation({
-    mutationFn: async (tenantSlug: string) => {
+    mutationFn: async (arg: string | { slug: string; format: 'xlsx' | 'csv' }) => {
+      const { slug: tenantSlug, format } = typeof arg === 'string' ? { slug: arg, format: 'xlsx' as const } : arg
       const token = getAccessToken()
-      const response = await fetch(`${API_BASE_URL}/v1/bulk-import/employees/template`, {
+      const response = await fetch(`${API_BASE_URL}/v1/bulk-import/employees/template${format === 'csv' ? '?format=csv' : ''}`, {
         headers: {
-          Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          Accept: format === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
         },
@@ -115,7 +117,7 @@ export function useDownloadTemplate() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `employees-template-${tenantSlug || 'tenant'}.xlsx`
+      a.download = `employees-template-${tenantSlug || 'tenant'}.${format}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -162,4 +164,17 @@ export function useCommitBulkImport() {
   })
 
   return { ...mutation, uploadProgress }
+}
+
+/** The template's columns as the server reads them (GET /v1/bulk-import/employees/columns, hrms.employee.import). */
+export interface ImportColumns { required: string[]; optional: string[] }
+
+export function useImportColumns(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'bulk-import', 'columns'],
+    queryFn: () => apiJson<ImportColumns>('/v1/bulk-import/employees/columns'),
+    enabled,
+    staleTime: 3_600_000,
+    retry: false,
+  })
 }

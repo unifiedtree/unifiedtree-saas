@@ -367,8 +367,10 @@ try {
     await page.waitForURL((u) => u.pathname === '/hrms/employees', { timeout: 15_000 })
     const url = new URL(page.url())
     check('UI owner View all opens the directory on the same range', url.searchParams.get('filter') === 'birthday' && url.searchParams.get('from') === yearEnd.from && url.searchParams.get('to') === yearEnd.to, url.search)
-    await page.getByText(/Milestone:/).first().waitFor({ timeout: 30_000 }).catch(() => {})
-    const filterText = await page.getByText(/Milestone:/).first().innerText().catch(() => '')
+    // The directory's Milestone filter is a kit dropdown (P-WF-PEOPLE): its trigger shows the chosen milestone and range.
+    const milestoneFilter = page.locator('.wf-filter--milestone .uko-dd-trigger').first()
+    await milestoneFilter.waitFor({ timeout: 30_000 }).catch(() => {})
+    const filterText = await milestoneFilter.innerText().catch(() => '')
     check('UI owner directory: the milestone filter names the range', filterText.includes('Birthdays') && filterText.includes('15 Dec'), filterText)
     await page.goto(base + `/hrms/employees?filter=birthday&from=${yearEnd.from}&to=${yearEnd.to}&q=${tag}`)
     await page.getByText(F.bDec.name).first().waitFor({ timeout: 30_000 }).catch(() => {})
