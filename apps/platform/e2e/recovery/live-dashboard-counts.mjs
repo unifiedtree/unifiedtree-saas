@@ -10,7 +10,9 @@
 //  2. Check in from the dashboard. hrm@ presses Check in in the header (the browser's fake camera, a
 //     location in the work area, and a stand-in face worker on :8091 that matches any photo, as
 //     live-rd-p-att-day does): without a reload Present goes up by one, Not marked down by one, Today's
-//     attendance lists them first, and the header offers Check out. The owner's dashboard counts them too.
+//     attendance lists them first, and the header offers Check out. The Present card opens Daily Logs, whose
+//     Present count and rows are the dashboard's (hrm@ among them, their own row offering no change to their
+//     own day). The owner's dashboard counts them too.
 //  3. The check-in prompt after sign-in, for a brand-new employee added the way the testers did (joined
 //     today, no shift, Employee + Dept Manager access, signed in through the invitation): it opens.
 //
@@ -315,7 +317,27 @@ try {
     check('390 wide: no sideways scroll, and Present\'s note is read whole', overflow <= 1 && await noteFits(h.page, 'Present'), `overflow ${overflow}`)
     await h.shot('hrm-after-390')
     await h.page.evaluate(() => document.getElementById('workspace-content')?.scrollTo(0, 0))
-    await h.page.setViewportSize({ width: 1440, height: 900 })
+    await h.page.setViewportSize({ width: 1440, height: 900 }); await sleep(600)
+
+    // The Present card opens Daily Logs on the same people (includeSelf there too): its Present count and its
+    // Present rows are the dashboard's, hrm@ among them.
+    await h.page.getByRole('button', { name: /^\s*Present/i }).first().click()
+    const toLogs = await h.page.waitForURL((u) => u.pathname.startsWith('/hrms/attendance') && u.search.includes('status=PRESENT'), { timeout: 15_000 }).then(() => true, () => false)
+    const logs = h.page.getByRole('table', { name: 'Check-ins' })
+    await h.page.getByText(/Showing \d+ of \d+/).first().waitFor({ timeout: 30_000 }).catch(() => {})
+    await sleep(800)
+    const dlCard = Number(((await h.page.getByRole('button', { name: /^Present \d+/ }).first().getAttribute('aria-label').catch(() => '')) || '').match(/\d+/)?.[0] ?? NaN)
+    const dlRows = await logs.locator('tbody tr').allInnerTexts().catch(() => [])
+    const dlLine = ((await h.page.getByText(/Showing \d+ of \d+/).first().textContent().catch(() => '')) || '').replace(/\s+/g, ' ').trim()
+    check('Daily Logs from the Present card: its Present count and rows are the dashboard\'s Present, hrm@ among them',
+      toLogs && dlCard === Number(present1.v) && dlRows.length === Number(present1.v) && dlRows.some((t) => t.includes('HR Manager')),
+      `dashboard ${present1.v} · Daily Logs card ${dlCard} · rows ${dlRows.length} · ${dlLine}`)
+    // Your own row: the server refuses any change to your own day, so the row offers none.
+    await logs.getByRole('button', { name: 'More for HR Manager' }).click().catch(() => {})
+    const items = (await h.page.getByRole('menuitem').allInnerTexts().catch(() => [])).map((t) => t.replace(/\s+/g, ' ').trim())
+    await h.page.keyboard.press('Escape')
+    check('Daily Logs: your own row offers no change to your own day', items.length > 0 && !items.some((t) => /Change status|Fix this day|Punch|Mark leave|Remind/.test(t)), items.join(' | '))
+    await h.shot('hrm-daily-logs-1440')
 
     // The owner's dashboard counts hrm@'s check-in, and the owner themself (on the roll, not checked in).
     const o = await session('owner@unifiedtree.demo', { promptSeen: owner.claims.sub })

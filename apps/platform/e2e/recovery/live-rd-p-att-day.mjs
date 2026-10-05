@@ -182,7 +182,8 @@ try {
     (await views.getByRole('tab').allInnerTexts()).join(' | ').replace(/\s+/g, ' '))
   check('owner: no My Attendance view for an owner', (await views.getByRole('tab', { name: /^My Attendance/ }).count()) === 0)
   check('owner: the page title is the design\'s "Today"', (await o.page.getByRole('heading', { name: 'Today', exact: true }).count()) === 1)
-  const dash = await ownerApi('GET', `/v1/attendance/dashboard?date=${today}`)
+  // The roster Daily Logs reads: people on their weekly off listed, and the viewer too (includeSelf, as the dashboard).
+  const dash = await ownerApi('GET', `/v1/attendance/dashboard?date=${today}&includeWeeklyOff=true&includeSelf=true`)
   const roster = dash.json?.staffStatuses?.length ?? -1
   const table = o.page.getByRole('table', { name: 'Check-ins' })
   const rows = await table.locator('tbody tr').count()
