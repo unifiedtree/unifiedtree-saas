@@ -1,4 +1,5 @@
 import React from 'react'
+import { isStaleChunkError } from '@/shared/routing/lazyPage'
 
 /**
  * Catches render-phase errors so ONE broken page cannot take down the whole app.
@@ -68,7 +69,8 @@ export class RouteErrorBoundary extends React.Component<Props, State> {
           </p>
           <div className="mt-6 flex justify-center gap-2">
             <button
-              onClick={() => this.setState({ error: null })}
+              // A page whose code didn't download stays failed until the app loads again (lazyPage.ts).
+              onClick={() => (isStaleChunkError(this.state.error) ? window.location.reload() : this.setState({ error: null }))}
               className="rounded-xl bg-[#059669] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#047857]"
             >
               Try again

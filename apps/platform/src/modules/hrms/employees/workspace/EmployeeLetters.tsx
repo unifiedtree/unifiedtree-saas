@@ -19,9 +19,9 @@ import { EmptyState } from '@/shared/components/EmptyState'
 import { FileText, Plus } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { apiJson } from '@/core/api/client'
-import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { fmtDate } from './profileFormat'
 
 // ── Tab: Documents ────────────────────────────────────────────────────────────
 const LETTERS_PAGE_SIZE = 10
@@ -59,7 +59,7 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
             { key: 'type', header: 'Type', render: (l) => <HrStatusPill tone="purple">{l.type}</HrStatusPill> },
             { key: 'subject', header: 'Subject', render: (l) => <span className="text-text-primary max-w-xs truncate">{l.subject}</span> },
             // Signed date once the employee has signed (BW-71), else the issue date HR chose, else when it was made.
-            { key: 'date', header: 'Date', render: (l) => l.signedAt ? `Signed ${format(new Date(l.signedAt), 'd MMM yyyy')}` : `Issued ${format(new Date(l.issueDate ? `${l.issueDate}T12:00:00` : l.createdAt), 'd MMM yyyy')}` },
+            { key: 'date', header: 'Date', render: (l) => l.signedAt ? `Signed ${fmtDate(l.signedAt)}` : `Issued ${fmtDate(l.issueDate || l.createdAt)}` },
             { key: 'status', header: 'Status', render: (l) => <HrStatusPill tone={l.status === 'VOID' ? 'red' : l.status === 'SIGNED' ? 'ok' : l.status === 'SENT' ? 'info' : 'gray'}>{l.status === 'SIGNED' ? 'Signed' : l.signatureRequested && !l.signedAt && l.status !== 'VOID' ? 'Waiting for signature' : l.status}</HrStatusPill> },
             { key: 'action', header: '', render: (l) => (
               <button

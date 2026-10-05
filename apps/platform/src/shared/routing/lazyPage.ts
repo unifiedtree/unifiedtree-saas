@@ -13,8 +13,42 @@ import { matchRoutes, type RouteObject } from 'react-router-dom'
 type Loader = () => Promise<{ default: React.ComponentType<any> }>
 type Preloadable = React.LazyExoticComponent<React.ComponentType<any>> & { preload?: Loader }
 
+/**
+ * A page's code file that the server no longer has. After a deploy, a tab that was opened before it
+ * still asks for the old build's file the first time it opens a page; the host answers with index.html,
+ * so the browser refuses it ("Failed to fetch dynamically imported module" in Chrome and Edge).
+ */
+export function isStaleChunkError(error: unknown): boolean {
+  const message = String((error as { message?: unknown } | null)?.message ?? error ?? '')
+  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(message)
+}
+
+const STALE_RELOAD_KEY = 'ut.staleChunkReloadAt'
+
+/**
+ * Loads the new build once instead of showing the error page. A second failure within a minute is a
+ * real error (the page's error boundary shows it), so this can never reload in a loop.
+ */
+function reloadForNewBuild(error: unknown): boolean {
+  if (!isStaleChunkError(error)) return false
+  // Offline, the download fails the same way: keep the app and its error screen rather than the browser's offline page.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false
+  try {
+    if (Date.now() - Number(sessionStorage.getItem(STALE_RELOAD_KEY) || 0) < 60_000) return false
+    sessionStorage.setItem(STALE_RELOAD_KEY, String(Date.now()))
+  } catch {
+    return false
+  }
+  window.location.reload()
+  return true
+}
+
 export function lazyPage(load: Loader): Preloadable {
-  const C = React.lazy(load) as Preloadable
+  // Only opening the page reloads; a background preload that fails just tries again later (preloadPath).
+  const C = React.lazy(() => load().catch((error: unknown) => {
+    if (reloadForNewBuild(error)) return new Promise<never>(() => {})  // the page's loading outline stays up
+    throw error
+  })) as Preloadable
   C.preload = load
   return C
 }

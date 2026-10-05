@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Lock } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -6,6 +6,7 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { acceptInvite } from '@/modules/hrms/employees/api/useInvitation'
 import { WorkspaceWordmark } from '@/shared/components/WorkspaceMark'
 import { usePageTitle } from '@/core/tenant/workspaceBranding'
+import { useHome } from '@/design/shell/useHome'
 
 function strengthLabel(pw: string): { label: string; color: string; width: string } {
   if (pw.length === 0) return { label: '', color: 'bg-slate-200', width: 'w-0' }
@@ -29,6 +30,14 @@ export const AcceptInvite: React.FC = () => {
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
   const [done, setDone]           = useState(false)
+  // Signed in: open the person's own Home, decided by the session just started (the dashboard for
+  // finance, HR and owners; /me for employees). Without a session the root sends them to sign in.
+  const home = useHome()
+  useEffect(() => {
+    if (!done) return
+    const t = setTimeout(() => navigate(home.ready ? home.path : '/', { replace: true }), 800)
+    return () => clearTimeout(t)
+  }, [done, home.ready, home.path, navigate])
 
   const strength = strengthLabel(password)
 
@@ -64,7 +73,6 @@ export const AcceptInvite: React.FC = () => {
         activeModules: res.activeModules,
       })
       setDone(true)
-      setTimeout(() => navigate('/me', { replace: true }), 800)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {

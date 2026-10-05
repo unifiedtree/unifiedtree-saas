@@ -61,7 +61,8 @@ export const STATUS_META: Record<string, { label: string; tone: StatusTone }> = 
   WEEKLY_OFF: { label: 'Weekly off', tone: 'muted' },
   NOT_TRACKED: { label: 'Not tracked', tone: 'muted' },
 }
-export const statusMeta = (s: string) => STATUS_META[s] || { label: s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '), tone: 'neutral' as StatusTone }
+// A day the server sends without a status gets no label instead of throwing (the profile's month calendar).
+export const statusMeta = (s: string | null | undefined) => STATUS_META[s ?? ''] || { label: s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ') : '', tone: 'neutral' as StatusTone }
 
 /** The six filter cards, in the design's order. */
 export const TILE_KEYS = ['PRESENT', 'LATE', 'WFH', 'ON_LEAVE', 'ABSENT', 'NOT_MARKED'] as const
