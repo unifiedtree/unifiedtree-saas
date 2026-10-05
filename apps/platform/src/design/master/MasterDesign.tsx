@@ -7,6 +7,8 @@ import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import { portalHost, TODAY, TODAY_ISO, NEXT_MONTH, NONE, orNone, pl } from './masterRuntime'
 import { DateField } from '@/shared/components/calendar'
+import { desigTree, reportsToOptions } from '@/modules/hrms/master/desigTree'
+import './desigTree.css'
 const ICONS={
 search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
@@ -478,31 +480,50 @@ return <RecordForm title={isEdit?'Edit '+x.name:(init.parent?'Add sub-team':'Add
 }
 function GradeBadge({g,sub}){return <div className="ic-row"><span className="lv" style={tone(g.t,{background:'var(--tb)',color:'var(--tf)'})}>{g.id}</span><div><span className="t1">{g.name}</span>{sub&&<span className="t2">{sub}</span>}</div></div>}
 function DesignationsPage(){
-const {db,d,update,toast,t}=useApp();const M=useMaps();const [q,setQ]=React.useState('');const [dept,setDept]=React.useState('');const [grade,setGrade]=React.useState('');const [sort,setSort]=React.useState({k:'grade',d:-1});const [form,setForm]=React.useState(null);
+const {db,d,update,toast,t}=useApp();const M=useMaps();const [q,setQ]=React.useState('');const [dept,setDept]=React.useState('');const [grade,setGrade]=React.useState('');const [sort,setSort]=React.useState({k:'grade',d:-1});const [form,setForm]=React.useState(null);const [view,setView]=React.useState('table');
 const ids=dept?[dept].concat(db.depts.filter(x=>x.parent===dept).map(x=>x.id)):null;const ql=q.trim().toLowerCase();
 const all=db.desigs;const rows=sortRows(all.filter(x=>(!ids||ids.includes(x.dept))&&(!grade||x.grade===grade)&&(!ql||x.name.toLowerCase().includes(ql))),sort,(x,k)=>k==='name'?x.name:k==='people'?(d.desig[x.id]||0):k==='dept'?M.dept[x.dept].name:x.grade+x.name);
 const ps=+t.pageSize||10;const P=usePaged(rows,ps,[dept,grade,ql,sort.k,sort.d]);const empty=all.filter(x=>!d.desig[x.id]).length;
 return <>
 <Hero title="Designations" sub="Job titles, the department they sit in and the grade they map to — the grade decides the pay band." actions={<button className="btn pri" onClick={()=>setForm({dept:dept||'',grade:''})}><Icon name="plus" size={17}/>Add designation</button>}/>
-<div className="card tcard"><div className="tbar"><TSearch value={q} onChange={setQ} placeholder="Search job titles…"/><Dropdown label="Department" all="All departments" value={dept} options={deptOptions(db)} onChange={setDept} search icon="layers"/><Dropdown label="Grade" all="All grades" value={grade} options={db.grades.map(g=>({v:g.id,l:g.id+' · '+g.name,t:g.t}))} onChange={setGrade}/><span className="sp"></span><span className="meta">{rows.length} titles{empty?' · '+empty+' unfilled':''}</span></div>
-{rows.length?<div className="twrap"><table className="t"><thead><tr><SortTh k="name" sort={sort} setSort={setSort}>Designation</SortTh><SortTh k="dept" sort={sort} setSort={setSort}>Department</SortTh><SortTh k="grade" sort={sort} setSort={setSort}>Grade & band</SortTh><SortTh k="people" sort={sort} setSort={setSort} className="r">People</SortTh><th>Status</th><th className="act"></th></tr></thead><tbody>
+<div className="card tcard"><div className="tbar"><TSearch value={q} onChange={setQ} placeholder="Search job titles…"/><Dropdown label="Department" all="All departments" value={dept} options={deptOptions(db)} onChange={setDept} search icon="layers"/><Dropdown label="Grade" all="All grades" value={grade} options={db.grades.map(g=>({v:g.id,l:g.id+' · '+g.name,t:g.t}))} onChange={setGrade}/><span className="sp"></span><span className="meta">{rows.length} titles{empty?' · '+empty+' unfilled':''}</span><Seg value={view} onChange={setView} options={[{v:'table',l:'Table',icon:'list'},{v:'tree',l:'Hierarchy',icon:'git-branch'}]}/></div>
+{view==='tree'?<DesigHierarchy rows={rows} all={all} onOpen={setForm}/>:rows.length?<div className="twrap"><table className="t"><thead><tr><SortTh k="name" sort={sort} setSort={setSort}>Designation</SortTh><SortTh k="dept" sort={sort} setSort={setSort}>Department</SortTh><th>Reports to</th><SortTh k="grade" sort={sort} setSort={setSort}>Grade & band</SortTh><SortTh k="people" sort={sort} setSort={setSort} className="r">People</SortTh><th>Status</th><th className="act"></th></tr></thead><tbody>
 {P.slice.map(x=>{const dp=M.dept[x.dept],g=M.grade[x.grade],n=d.desig[x.id]||0;return <tr key={x.id} className={'click'+(x.status==='Active'?'':' off')} onClick={()=>setForm(x)}>
 <td><span className="t1">{x.name}</span><span className="t2 mono" style={{fontSize:11.5}}>{x.code||''}</span></td>
 <td><div className="ic-row"><span className="tile xs" style={tone(dp.t)}><Icon name={dp.icon} size={14}/></span><div><span className="t1">{dp.name}</span>{dp.parent&&<span className="t2">in {M.dept[dp.parent].name}</span>}</div></div></td>
+<td>{(()=>{const up=x.reportsTo&&all.find(y=>y.id===x.reportsTo);return up?<span className="t1">{up.name}</span>:<span className="no">Top</span>})()}</td>
 <td>{g?<GradeBadge g={g} sub={g.min!=null?fmtL(g.min)+' – '+fmtL(g.max)+' a year':'Pay band not set'}/>:x.grade?<span className="chip">{x.grade}</span>:<span className="no">—</span>}</td>
 <td className="r">{n?<b className="num" style={{color:'var(--text-primary)'}}>{n}</b>:<span className="no">Unfilled</span>}</td><td><Pill s={x.status}/></td>
 <td className="act"><Menu items={[{icon:'pencil',label:'Edit designation',on:()=>setForm(x)},'-',x.status==='Active'?{icon:'ban',label:'Deactivate',danger:true,on:()=>{if(n){toast(n+' people hold this title — move them first','info');return}update('desigs',L=>L.map(y=>y.id===x.id?Object.assign({},y,{status:'Inactive'}):y));toast(x.name+' deactivated')}}:{icon:'check-circle',label:'Activate',on:()=>{update('desigs',L=>L.map(y=>y.id===x.id?Object.assign({},y,{status:'Active'}):y));toast(x.name+' activated')}}]}/></td></tr>})}
 </tbody></table></div>:<Empty title="No designations match" body="Try another title, department or grade." action={<button className="btn sm" onClick={()=>{setQ('');setDept('');setGrade('')}}>Clear filters</button>}/>}
-<TableFoot shown={rows.length} of={all.length} P={P} ps={ps} noun="designations"/></div>
+{view==='table'&&<TableFoot shown={rows.length} of={all.length} P={P} ps={ps} noun="designations"/>}</div>
 {form&&<DesigForm x={form.name?form:null} init={form} onClose={()=>setForm(null)}/>}
 </>
 }
 function DesigForm({x,init,onClose}){
 const {db,update,toast}=useApp();const isEdit=!!x;
-const sections=[{title:'Designation',fields:[{k:'name',label:'Job title',req:true,span2:true,placeholder:'e.g. Data Analyst'},{k:'code',label:'Code',upper:true,placeholder:'e.g. SSE',hint:'Optional short code, unique in the company',validate:c=>c&&db.desigs.some(y=>(y.code||'')===c&&(!isEdit||y.id!==x.id))?'Code already in use':null},{k:'dept',label:'Department',type:'select',req:true,search:true,options:deptOptions(db)},{k:'grade',label:'Grade',type:'select',req:true,options:db.grades.map(g=>({v:g.id,l:g.id+' · '+g.name,sub:g.min!=null?fmtL(g.min)+'–'+fmtL(g.max):undefined,t:g.t}))},{k:'active',label:'Active',type:'toggle',hint:'Inactive titles can’t be given to new hires'}]}];
+const sections=[{title:'Designation',fields:[{k:'name',label:'Job title',req:true,span2:true,placeholder:'e.g. Data Analyst'},{k:'code',label:'Code',upper:true,placeholder:'e.g. SSE',hint:'Optional short code, unique in the company',validate:c=>c&&db.desigs.some(y=>(y.code||'')===c&&(!isEdit||y.id!==x.id))?'Code already in use':null},{k:'dept',label:'Department',type:'select',req:true,search:true,options:deptOptions(db)},{k:'grade',label:'Grade',type:'select',req:true,options:db.grades.map(g=>({v:g.id,l:g.id+' · '+g.name,sub:g.min!=null?fmtL(g.min)+'–'+fmtL(g.max):undefined,t:g.t}))},{k:'reportsTo',label:'Reports to',type:'select',search:true,span2:true,hint:'The designation above this one. It builds the Hierarchy view; leave it empty for the top of the ladder.',options:v=>{const dp=db.depts.find(y=>y.id===v.dept);const co=(dp&&dp.co)||(x&&x.co);return [{v:'',l:'No one · top of the ladder'}].concat(reportsToOptions(db.desigs,isEdit?x.id:null,co).map(y=>{const yd=db.depts.find(z=>z.id===y.dept);return {v:y.id,l:y.name,sub:yd?yd.name:undefined}}))}},{k:'active',label:'Active',type:'toggle',hint:'Inactive titles can’t be given to new hires'}]}];
 const preview=v=>{const g=db.grades.find(y=>y.id===v.grade);return g&&<div className="preview"><div className="preview-h">Pay band for this title<span>From Grades & Bands</span></div><GradeBadge g={g} sub={g.min!=null?fmtL(g.min)+' – '+fmtL(g.max)+' annual CTC · midpoint '+fmtL((g.min+g.max)/2):'Pay band not set yet'}/></div>};
 const onSave=v=>{const rec=Object.assign({},x||{},v,{id:isEdit?x.id:'DS'+Date.now().toString().slice(-4),status:v.active?'Active':'Inactive'});delete rec.active;update('desigs',L=>isEdit?L.map(y=>y.id===x.id?rec:y):L.concat([rec]));toast(isEdit?'Saved '+rec.name:rec.name+' added');onClose()};
-return <RecordForm title={isEdit?'Edit '+x.name:'Add designation'} sub="Titles appear on offer letters, payslips and the org chart." icon="award" t="teal" sections={sections} initial={Object.assign({},init,{active:x?x.status==='Active':true})} onSave={onSave} onClose={onClose} preview={preview} cta={isEdit?'Save changes':'Add designation'}/>
+return <RecordForm title={isEdit?'Edit '+x.name:'Add designation'} sub="Titles appear on offer letters, payslips and the org chart." icon="award" t="teal" sections={sections} initial={Object.assign({reportsTo:''},init,{active:x?x.status==='Active':true})} onSave={onSave} onClose={onClose} preview={preview} cta={isEdit?'Save changes':'Add designation'}/>
+}
+// The designation ladder (Keka-style): who reports to whom, top to bottom, with the department, grade
+// and how many people hold each title. The filters above narrow it; a title's chain stays visible
+// (its seniors are shown faded) so the tree never breaks. Click a title to edit it.
+function DesigHierarchy({rows,all,onOpen}){
+const {db,d}=useApp();const M=useMaps();
+const keep=new Set(rows.map(x=>x.id));const byId=new Map(all.map(x=>[x.id,x]));
+for(const x of rows){let up=x.reportsTo,guard=0;while(up&&byId.has(up)&&guard++<50){keep.add(up);up=byId.get(up).reportsTo}}
+const cos=[...new Set(all.filter(x=>keep.has(x.id)).map(x=>x.co||''))];
+const many=cos.length>1;
+if(!keep.size)return <Empty title="No designations match" body="Try another title, department or grade."/>;
+return <div className="dtree" role="tree" aria-label="Designation hierarchy">{cos.map(co=>{const nodes=desigTree(all.filter(x=>keep.has(x.id)&&(x.co||'')===co));const c=db.companies.find(y=>y.id===co);return <div key={co||'none'} className="dtree-co">{many&&<div className="dtree-coh">{c?c.name:'Company'}</div>}
+{nodes.map(({d:x,depth,children})=>{const dp=M.dept[x.dept],g=M.grade[x.grade],n=d.desig[x.id]||0,hit=rows.some(r=>r.id===x.id);return <div key={x.id} role="treeitem" aria-level={depth+1} aria-label={x.name+(children?', '+pl(children,'title reports','titles report')+' to it':'')} tabIndex={0} className={'dtree-row'+(hit?'':' faded')+(x.status==='Active'?'':' off')} style={{'--depth':depth}} onClick={()=>onOpen(x)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(x)}}}>
+<span className="dtree-ind" aria-hidden="true">{depth>0&&<i/>}</span>
+<span className="tile xs" style={tone(dp.t)}><Icon name="award" size={14}/></span>
+<span className="dtree-main"><span className="t1">{x.name}</span><span className="t2">{dp.name}{x.code?' · '+x.code:''}</span></span>
+<span className="dtree-meta">{g?<span className="chip">{g.id} · {g.name}</span>:x.grade?<span className="chip">{x.grade}</span>:null}<span className="dtree-n">{n?pl(n,'person','people'):'Unfilled'}</span>{children>0&&<span className="dtree-k">{pl(children,'report','reports')}</span>}</span>
+</div>})}</div>})}</div>
 }
 function Ladder({n}){return <span className="lvl" aria-hidden="true">{[1,2,3,4,5,6,7].map(i=><span key={i} className={i<=n?'on':''} style={{height:4+i*1.7}}></span>)}</span>}
 function GradesPage(){

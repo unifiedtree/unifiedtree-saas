@@ -119,7 +119,8 @@ export function deptRec(d: Department, i: number, headName: string | null, known
 
 export function desigRec(x: Designation): Rec {
   // `grade` is the linked grade's code (the grade record's id here), or legacy text that matches no grade (shown as a chip).
-  return { _key: x.id, _raw: x, id: x.id, code: x.code || '', name: x.title, dept: x.departmentId || '', grade: x.grade || '', status: x.active === false ? 'Inactive' : 'Active', co: x.companyId }
+  // `reportsTo`: the designation this one reports to (the ladder on the Designations page), '' for the top.
+  return { _key: x.id, _raw: x, id: x.id, code: x.code || '', name: x.title, dept: x.departmentId || '', grade: x.grade || '', reportsTo: x.reportsToDesignationId || '', status: x.active === false ? 'Inactive' : 'Active', co: x.companyId }
 }
 
 const GRADE_TONES = ['slate', 'cyan', 'teal', 'green', 'blue', 'indigo', 'violet']

@@ -20,6 +20,8 @@ import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useCompanies } from '../api/useOrg'
 import { useWeekendDays, jsWeekendDays, useHolidays, type HolidayResponse } from '../api/useSettings'
 import { useLeaveCalendarFeed, type LeaveCalendarEntry } from '../api/useLeave'
+import { isSickLeave } from '../calendar/calendarEvents'
+import '../calendar/eventsCalendar.css'
 
 const WEEKDAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 const MAX_CHIPS_PER_DAY = 3
@@ -28,6 +30,9 @@ interface AwayEntry {
   id: string
   name: string
   leaveType: string
+  leaveTypeId: string
+  /** Sick leave: its own colour and legend (client, 1 and 4 Oct). */
+  sick: boolean
   start: Date
   end: Date
   totalDays: number
@@ -87,6 +92,8 @@ export function LeaveCalendar() {
         id: r.id,
         name: r.employeeName || (me && r.employeeId === me.employeeId ? myName : r.firstName || 'Employee'),
         leaveType: r.leaveTypeName || 'Leave',
+        leaveTypeId: r.leaveTypeId,
+        sick: isSickLeave(r),
         start: parseISO(r.startDate),
         end: parseISO(r.endDate),
         totalDays: r.totalDays,
@@ -94,12 +101,28 @@ export function LeaveCalendar() {
       }))
   }, [feed.data, me, myName])
 
+  // The leave types this month, for the filter ("All leave types" by default).
+  const [typeId, setTypeId] = useState('')
+  const monthTypes = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; sick: boolean; n: number }>()
+    for (const e of entries) {
+      if (!(e.start <= monthEnd && e.end >= monthStart)) continue
+      const t = m.get(e.leaveTypeId) ?? { id: e.leaveTypeId, name: e.leaveType, sick: e.sick, n: 0 }
+      t.n++
+      m.set(e.leaveTypeId, t)
+    }
+    return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, month])
+  const activeType = monthTypes.some((t) => t.id === typeId) ? typeId : ''
+
   const monthEntries = useMemo(
     () => entries
       .filter((e) => e.start <= monthEnd && e.end >= monthStart)
+      .filter((e) => !activeType || e.leaveTypeId === activeType)
       .sort((a, b) => a.start.getTime() - b.start.getTime() || a.name.localeCompare(b.name)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entries, month],
+    [entries, month, activeType],
   )
 
   const byDay = useMemo(() => {
@@ -188,6 +211,29 @@ export function LeaveCalendar() {
                 {truncatedNote}
               </p>
             )}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="ec-legend" aria-label="Legend">
+                <span><i className="ec-sw ec-sw--leave" aria-hidden="true" />Leave</span>
+                <span><i className="ec-sw ec-sw--sick" aria-hidden="true" />Sick leave</span>
+                <span><i className="ec-sw ec-sw--anniversary" aria-hidden="true" />Holiday</span>
+                <span><i className="ec-sw ec-sw--off" aria-hidden="true" />Weekend</span>
+              </div>
+              {monthTypes.length > 1 && (
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  Leave type
+                  <select
+                    className="ut-input h-8 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)]"
+                    value={activeType}
+                    onChange={(ev) => setTypeId(ev.target.value)}
+                  >
+                    <option value="">All leave types</option>
+                    {monthTypes.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}{t.sick && !/sick/i.test(t.name) ? ' (sick)' : ''} · {t.n}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
             <div className="overflow-x-auto">
               <div className="grid min-w-[640px] grid-cols-7 gap-2">
                 {WEEKDAY_LABELS.map((d) => (
@@ -224,7 +270,8 @@ export function LeaveCalendar() {
                           {away.slice(0, MAX_CHIPS_PER_DAY).map((e) => (
                             <div
                               key={e.id}
-                              className="rounded bg-[#F3E8FF] px-1.5 py-1 text-[11px] leading-tight text-[#6D28D9]"
+                              data-sick={e.sick ? '' : undefined}
+                              className={clsx('ec-lchip rounded px-1.5 py-1 text-[11px] leading-tight', e.sick ? 'ec-k--sick' : 'ec-k--leave')}
                               title={`${e.name} · ${e.leaveType} · ${spanLabel(e)}`}
                             >
                               <div className="truncate font-semibold">{e.name}</div>
@@ -268,6 +315,7 @@ export function LeaveCalendar() {
                   <HrAvatar name={e.name} sub={e.leaveType} seed={i} />
                   <div className="flex items-center gap-3 text-xs text-[var(--text-secondary)]">
                     <span className="tabular-nums">{spanLabel(e)}</span>
+                    {e.sick && <span className="ec-pill ec-k--sick">Sick</span>}
                     <HrStatusPill tone="purple">
                       {e.totalDays} {e.totalDays === 1 ? 'day' : 'days'}
                     </HrStatusPill>

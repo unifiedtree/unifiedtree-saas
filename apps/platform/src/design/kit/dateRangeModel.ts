@@ -195,6 +195,35 @@ export function datePresets(
     })
 }
 
+/** A quick pick for a calendar that only SHOWS dates (no working-day rule). */
+export interface ViewPreset {
+  key: 'today' | 'thisWeek' | 'nextWeek' | 'thisMonth' | 'nextMonth' | 'next30'
+  label: string
+  from: string
+  to: string
+  disabled?: boolean
+}
+
+/**
+ * The six quick picks of a viewing calendar (the dashboard calendar's "Dates"):
+ *   Today · This week (Mon–Sun) · Next week (Mon–Sun) · This month · Next month · Next 30 days.
+ * Leave forms keep their own picks (datePresets).
+ */
+export function viewPresets(today: string): ViewPreset[] {
+  const monday = mondayOf(today)
+  const ym = today.slice(0, 7)
+  const nextYm = shiftMonth(ym, 1)
+  const lastOf = (m: string) => shiftDay(`${shiftMonth(m, 1)}-01`, -1)
+  return [
+    { key: 'today', label: 'Today', from: today, to: today },
+    { key: 'thisWeek', label: 'This week', from: monday, to: shiftDay(monday, 6) },
+    { key: 'nextWeek', label: 'Next week', from: shiftDay(monday, 7), to: shiftDay(monday, 13) },
+    { key: 'thisMonth', label: 'This month', from: `${ym}-01`, to: lastOf(ym) },
+    { key: 'nextMonth', label: 'Next month', from: `${nextYm}-01`, to: lastOf(nextYm) },
+    { key: 'next30', label: 'Next 30 days', from: today, to: shiftDay(today, 29) },
+  ]
+}
+
 // ── month grid ──────────────────────────────────────────────────────────────
 
 /** Monday-first weeks of a month ('yyyy-MM'); days outside the month are null. */

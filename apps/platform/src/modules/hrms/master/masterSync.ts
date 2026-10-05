@@ -181,7 +181,7 @@ async function depts({ added, changed }: Diff, env: SyncEnv) {
 
 async function desigs({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    const c = await apiJson<{ id: string }>('/v1/hrms/designations', json('POST', { companyId: (r.dept && env.coOfDept(r.dept)) || env.defaultCo, title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, (r.dept && env.coOfDept(r.dept)) || env.defaultCo), grade: blank(r.grade), code: blank(r.code), departmentId: r.dept || undefined }))
+    const c = await apiJson<{ id: string }>('/v1/hrms/designations', json('POST', { companyId: (r.dept && env.coOfDept(r.dept)) || env.defaultCo, title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, (r.dept && env.coOfDept(r.dept)) || env.defaultCo), grade: blank(r.grade), code: blank(r.code), departmentId: r.dept || undefined, reportsToDesignationId: r.reportsTo || undefined }))
     env.created?.(c?.id)
   }
   await each(changed, async ([o, r]) => {
@@ -190,7 +190,7 @@ async function desigs({ added, changed }: Diff, env: SyncEnv) {
     if (r.status !== o.status) throw new Error('Deactivated designations can’t be switched back on yet')
     // A full replace: fields this page doesn't show are sent back as they were.
     // The grade goes by id; text that matches no grade (a legacy chip) is sent back as it was.
-    await apiJson(base, json('PUT', { title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, r.co || env.defaultCo) ?? null, grade: blank(r.grade), code: String(r.code || '').trim(), departmentId: r.dept || null, reportsToDesignationId: r._raw?.reportsToDesignationId ?? null, jobResponsibilities: r._raw?.jobResponsibilities ?? null }))
+    await apiJson(base, json('PUT', { title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, r.co || env.defaultCo) ?? null, grade: blank(r.grade), code: String(r.code || '').trim(), departmentId: r.dept || null, reportsToDesignationId: ('reportsTo' in r ? r.reportsTo || null : r._raw?.reportsToDesignationId ?? null), jobResponsibilities: r._raw?.jobResponsibilities ?? null }))
   }, 'designations')
   return [['hrms', 'designations']]
 }

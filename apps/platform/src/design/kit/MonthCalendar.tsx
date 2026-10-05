@@ -23,10 +23,10 @@ import type { StatusTone } from './StatusPill'
 import './display.css'
 
 /**
- * present · late · half (half day) · home (work from home) · leave · holiday · absent ·
+ * present · late · half (half day) · home (work from home) · leave · sick (sick leave) · holiday · absent ·
  * fix (a day to fix, red outline) · off (weekly off) · none (no state, e.g. future days).
  */
-export type CalendarTone = 'present' | 'late' | 'half' | 'home' | 'leave' | 'holiday' | 'absent' | 'fix' | 'off' | 'none'
+export type CalendarTone = 'present' | 'late' | 'half' | 'home' | 'leave' | 'sick' | 'holiday' | 'absent' | 'fix' | 'off' | 'none'
 
 export interface CalendarDay {
   /** yyyy-MM-dd */
@@ -85,7 +85,7 @@ export interface MonthCalendarProps {
 
 /** Default words for a day's state, for screen readers when the day has no tip. */
 const TONE_WORD: Record<CalendarTone, string> = {
-  present: 'Present', late: 'Late', half: 'Half day', home: 'Work from home', leave: 'On leave', holiday: 'Holiday',
+  present: 'Present', late: 'Late', half: 'Half day', home: 'Work from home', leave: 'On leave', sick: 'Sick leave', holiday: 'Holiday',
   absent: 'Absent', fix: 'Needs a fix', off: 'Weekly off', none: '',
 }
 

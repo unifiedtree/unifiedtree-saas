@@ -2,6 +2,8 @@
 // (the five tiles filter the roster), "Send a reminder", what is waiting for you (with Undo),
 // probation dates, the review cycle and who is out soon. Every block shows only with its
 // permission and reads its own API; a block that fails shows its error with Retry.
+// Keka pass (6 Oct): who is away comes right after what is waiting for you, and the team's month
+// (holidays, leave with sick leave apart, the team's birthdays and anniversaries) sits under the roster.
 import { useMemo, useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
@@ -11,6 +13,8 @@ import {
 import { ApprovalRow, useToast } from '@/design/kit/overlays'
 import { istToday } from '@/design/dc/dates'
 import { addDays } from '@/shared/components/calendar/dateMath'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { EventsCalendar } from '../calendar/EventsCalendar'
 import { useTeamDashboard } from '../api/useAttendance'
 import { useReviewCycles } from '../api/usePerformance'
 import type { CycleProgress } from '../api/usePerformanceAdmin'
@@ -53,6 +57,12 @@ export function TeamToday(p: TeamTodayProps) {
   const rows = useMemo(() => (team.data?.staffStatuses ?? []) as RosterRow[], [team.data])
   const tiles = useMemo(() => teamTiles(rows), [rows])
   const waiting = inbox.data?.counts.all ?? 0
+  const { data: me } = useCurrentUser()
+  // A team calendar keeps the team's own birthdays and anniversaries; a company-wide summary keeps everyone's.
+  const people = useMemo(() => {
+    const s = p.summary.data
+    return s && s.scope !== 'COMPANY' ? new Set(s.members.map((m) => m.employeeId)) : null
+  }, [p.summary.data])
   return (
     <>
       <PageHeader
@@ -77,16 +87,19 @@ export function TeamToday(p: TeamTodayProps) {
         </StatGrid>
       )}
       <div className="tm-cols">
-        {p.canTeam && (
+        {(p.canTeam || p.canTimeOff) && (
           <div className="tm-main">
-            <Roster today={today} summary={p.summary.data} team={team} rows={rows} tiles={tiles} filter={filter} onFilter={setFilter} />
+            {p.canTeam && <Roster today={today} summary={p.summary.data} team={team} rows={rows} tiles={tiles} filter={filter} onFilter={setFilter} />}
+            {p.canTimeOff && (
+              <EventsCalendar today={today} companyId={me?.companyId ?? undefined} title="Team calendar" variant="panel" level={2} people={people} />
+            )}
           </div>
         )}
         <div className="tm-side">
           {p.canInbox && <WaitingCard inbox={inbox} onSeeAll={() => p.onView('approvals')} />}
+          {p.canTimeOff && <OutSoonCard today={today} />}
           {p.canTeam && <ProbationCard canDecide={p.canDecideProbation} />}
           {p.canPerformance && <ReviewsCard />}
-          {p.canTimeOff && <OutSoonCard today={today} />}
         </div>
       </div>
     </>

@@ -1,0 +1,28 @@
+/* Designations → Hierarchy (MasterDesign.tsx DesigHierarchy): the ladder as an indented tree with
+ * elbow lines. Hand-written (not generated); master.css tokens, so dark mode follows. */
+.utm .dtree { display: flex; flex-direction: column; gap: 14px; padding: 8px 12px 16px; }
+.utm .dtree-co { display: flex; flex-direction: column; gap: 4px; }
+.utm .dtree-coh { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-tertiary); padding: 6px 4px; }
+.utm .dtree-row {
+  --step: 26px;
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px 8px calc(8px + var(--depth, 0) * var(--step));
+  border-radius: 12px; cursor: pointer; border: 1px solid transparent;
+}
+.utm .dtree-row:hover { background: var(--bg-subtle); border-color: var(--border-subtle); }
+.utm .dtree-row:focus-visible { outline: 2px solid var(--accent-solid, #0F6E56); outline-offset: 1px; }
+.utm .dtree-row.faded { opacity: .55; }
+.utm .dtree-row.off .t1 { text-decoration: line-through; }
+.utm .dtree-ind { position: relative; width: 0; align-self: stretch; }
+.utm .dtree-ind i {
+  position: absolute; right: 4px; top: -8px; width: 14px; height: 50%;
+  border-left: 1.5px solid var(--border-default); border-bottom: 1.5px solid var(--border-default); border-bottom-left-radius: 8px;
+}
+.utm .dtree-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.utm .dtree-main .t1, .utm .dtree-main .t2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.utm .dtree-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.utm .dtree-n, .utm .dtree-k { font-size: 12px; color: var(--text-tertiary); white-space: nowrap; }
+.utm .dtree-k { color: var(--accent-fg, #0F6E56); font-weight: 600; }
+@media (max-width: 640px) {
+  .utm .dtree-row { --step: 14px; flex-wrap: wrap; }
+  .utm .dtree-meta { width: 100%; justify-content: flex-start; padding-left: 38px; }
+}

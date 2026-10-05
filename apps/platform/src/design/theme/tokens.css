@@ -160,6 +160,10 @@
   --u-holiday: #8B4FE0;
   --u-holiday-text: #6B3DB8;
   --u-holiday-soft: #F1EAFB;
+  /* sick leave: told apart from other leave on the calendars */
+  --u-sick: #C93A72;
+  --u-sick-text: #A62A5C;
+  --u-sick-soft: #FBE8F0;
   --u-amber: #C27A0E;
   --u-amber-text: #9A6208;
   --u-amber-soft: #FDF3E3;
@@ -245,6 +249,8 @@
   --u-leave-soft: #2F261A;
   --u-holiday-text: #B794F0;
   --u-holiday-soft: #212331;
+  --u-sick-text: #F08DB5;
+  --u-sick-soft: #2E1822;
   --u-amber-text: #E3AE52;
   --u-amber-soft: #2A281A;
 

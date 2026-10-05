@@ -1,0 +1,122 @@
+/* The Keka-style month calendar (EventsCalendar.tsx). Tokens only (var(--u-*, light fallback)), so dark
+ * mode follows the theme. The month and the agenda sit side by side when the card is wide enough, and
+ * stack (dots instead of names in the days) when it isn't: a container query, so the same card works on
+ * the dashboard, on My team and on a phone. */
+
+.ec-wrap { container-type: inline-size; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* kind colours: holiday purple, leave orange, sick leave rose, birthday blue, anniversary brand */
+.ec-k--holiday { --ec-bg: var(--u-holiday-soft, #F1EAFB); --ec-fg: var(--u-holiday-text, #6B3DB8); --ec-solid: var(--u-holiday, #8B4FE0); }
+.ec-k--leave { --ec-bg: var(--u-leave-soft, #FDEEE4); --ec-fg: var(--u-leave-text, #A94E17); --ec-solid: var(--u-leave, #E0661B); }
+.ec-k--sick { --ec-bg: var(--u-sick-soft, #FBE8F0); --ec-fg: var(--u-sick-text, #A62A5C); --ec-solid: var(--u-sick, #C93A72); }
+.ec-k--birthday { --ec-bg: var(--u-info-soft, #E6F1FA); --ec-fg: var(--u-info-text, #1D6A9E); --ec-solid: var(--u-info, #2585C7); }
+.ec-k--anniversary { --ec-bg: var(--u-brs, #E8F3EE); --ec-fg: var(--u-brt, #0F6E56); --ec-solid: var(--u-br, #0F6E56); }
+
+/* header: ‹ October 2026 › Today */
+.ec-nav { display: inline-flex; align-items: center; gap: 4px; }
+.ec-arrow {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px;
+  border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-ink2, #4A5A54); cursor: pointer;
+}
+.ec-arrow:hover { border-color: var(--u-brl, #BFDFD1); color: var(--u-brt, #0F6E56); }
+.ec-month { min-width: 128px; text-align: center; font-size: 14px; font-weight: 600; color: var(--u-ink, #0E1B16); }
+.ec-today {
+  height: 32px; padding: 0 12px; margin-left: 4px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 500;
+  border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-brt, #0F6E56);
+}
+.ec-today:disabled { color: var(--u-ink4, #A5B2AD); cursor: default; }
+:is(.ec-arrow, .ec-today, .ec-day, .ec-clear, .ec-link):focus-visible { outline: 2px solid var(--u-brt, #0F6E56); outline-offset: 2px; }
+
+/* toolbar: the chips, then the leave type */
+.ec-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+.ec-fl { display: inline-flex; align-items: center; gap: 6px; }
+.ec-type { width: 220px; max-width: 100%; }
+.ec-note { margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; background: var(--u-warning-soft, #FBF1DE); color: var(--u-warning-text, #8A5A12); }
+.ec-link { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: inherit; text-decoration: underline; cursor: pointer; }
+
+/* body: the month beside the agenda */
+.ec-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+@container (min-width: 760px) {
+  .ec-body { grid-template-columns: minmax(0, 1fr) 280px; }
+}
+
+.ec-cal { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ec-grid { display: flex; flex-direction: column; gap: 4px; }
+.ec-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.ec-wd { text-align: center; font-size: 11.5px; font-weight: 600; color: var(--u-ink3, #6A7A73); padding: 2px 0 4px; }
+.ec-wd.is-off { color: var(--u-ink4, #A5B2AD); }
+.ec-cell { display: block; min-width: 0; }
+.ec-cell.is-blank { min-height: 44px; }
+
+.ec-day {
+  position: relative; width: 100%; min-height: 44px; padding: 4px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  border: 1px solid var(--u-ln2, #EDF1EF); border-radius: 10px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ec-day:hover { border-color: var(--u-brl, #BFDFD1); }
+.ec-day.is-off { background: var(--u-sf2, #F7F9F8); }
+.ec-day.is-holiday { background: var(--u-holiday-soft, #F1EAFB); }
+.ec-day.in-range { background: var(--u-brs, #E8F3EE); border-color: var(--u-brl, #BFDFD1); }
+.ec-day.is-sel { border-color: var(--u-brt, #0F6E56); box-shadow: 0 0 0 1px var(--u-brt, #0F6E56); }
+.ec-n { font-size: 12.5px; font-weight: 500; line-height: 20px; min-width: 22px; height: 22px; border-radius: 999px; text-align: center; }
+.ec-day.is-off .ec-n { color: var(--u-ink3, #6A7A73); }
+.ec-day.is-today .ec-n { background: var(--u-br, #0F6E56); color: var(--u-onbr, #fff); font-weight: 600; padding: 0 6px; }
+
+/* narrow: coloured dots under the number */
+.ec-chips { display: none; }
+.ec-dots { display: flex; gap: 3px; justify-content: center; min-height: 6px; }
+.ec-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ec-solid); }
+
+/* wide: the first names in the day, "+n more" */
+@container (min-width: 560px) {
+  .ec-day { min-height: 84px; align-items: stretch; padding: 6px; }
+  .ec-cell.is-blank { min-height: 84px; }
+  .ec-n { align-self: flex-end; }
+  .ec-dots { display: none; }
+  .ec-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ec-chip {
+    display: block; min-width: 0; padding: 1px 6px; border-radius: 5px; font-size: 11px; line-height: 16px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--ec-bg); color: var(--ec-fg);
+    box-shadow: inset 2px 0 0 var(--ec-solid);
+  }
+  .ec-more { font-size: 10.5px; color: var(--u-ink3, #6A7A73); padding-left: 2px; }
+}
+
+/* legend */
+.ec-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--u-ink2, #4A5A54); }
+.ec-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.ec-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.ec-sw--holiday { background: var(--u-holiday, #8B4FE0); }
+.ec-sw--leave { background: var(--u-leave, #E0661B); }
+.ec-sw--sick { background: var(--u-sick, #C93A72); }
+.ec-sw--birthday { background: var(--u-info, #2585C7); }
+.ec-sw--anniversary { background: var(--u-br, #0F6E56); }
+.ec-sw--off { background: var(--u-sf2, #F7F9F8); box-shadow: inset 0 0 0 1px var(--u-ln, #E3E9E6); }
+
+/* agenda */
+.ec-agenda {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border-radius: 14px;
+  background: var(--u-sf2, #F7F9F8); border: 1px solid var(--u-ln2, #EDF1EF); align-self: start;
+}
+.ec-agenda__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ec-agenda__t { font-size: 14px; font-weight: 600; color: var(--u-ink, #0E1B16); }
+.ec-agenda .udr-fields { gap: 6px; }
+.ec-clear {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--u-ln, #E3E9E6); background: var(--u-sf, #fff); color: var(--u-ink2, #4A5A54); font: inherit; font-size: 12px;
+}
+.ec-hint { margin: 0; font-size: 12px; color: var(--u-ink3, #6A7A73); }
+.ec-agenda__list { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; }
+.ec-empty { margin: 8px 0; font-size: 13px; color: var(--u-ink3, #6A7A73); }
+.ec-group__d { margin: 0 0 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--u-ink3, #6A7A73); text-transform: none; }
+.ec-tag { font-size: 10.5px; font-weight: 600; color: var(--u-onbr, #fff); background: var(--u-br, #0F6E56); border-radius: 999px; padding: 0 6px; line-height: 16px; }
+.ec-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ec-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln2, #EDF1EF); }
+.ec-ic { width: 30px; height: 30px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; background: var(--ec-bg); color: var(--ec-solid); }
+.ec-item__txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ec-item__t { font-size: 13px; font-weight: 500; color: var(--u-ink, #0E1B16); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-item__s { font-size: 12px; color: var(--u-ink3, #6A7A73); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-pill { flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--ec-bg); color: var(--ec-fg); }
+
+/* The Leave page's calendar chips (LeaveCalendar.tsx): leave in orange, sick leave in rose. */
+.ec-lchip { background: var(--ec-bg); color: var(--ec-fg); box-shadow: inset 2px 0 0 var(--ec-solid); }
