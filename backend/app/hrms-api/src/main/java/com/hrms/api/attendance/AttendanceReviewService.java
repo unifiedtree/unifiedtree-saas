@@ -242,7 +242,7 @@ public class AttendanceReviewService {
     /** The manual changes on one person's days, newest first. */
     @Transactional(readOnly = true)
     public List<StatusChange> history(Jwt jwt, UUID employeeId, LocalDate from, LocalDate to) {
-        assertCanRead(jwt, employeeId);
+        assertCanReadHistory(jwt, employeeId);
         LocalDate today = EffectiveDayStatusService.today();
         LocalDate f = from != null ? from : today.minusYears(1), t = to != null ? to : today;
         return jdbc.query("""
@@ -512,6 +512,27 @@ public class AttendanceReviewService {
         if (employeeId.equals(callerEmployeeId(jwt))) return;
         boolean inTeam = team(jwt).stream().anyMatch(e -> e.getId().equals(employeeId));
         if (!inTeam) throw new AccessDeniedException("You can see only your own attendance and your team's.");
+    }
+
+    /**
+     * The history also covers people who have left. The team check reads today's staff only, so a
+     * company-wide reader ({@code attendance.workforce.admin}: owner, admin, HR) is also let through
+     * for anyone in their own company, leavers included. Managers keep the My team rule.
+     */
+    private void assertCanReadHistory(Jwt jwt, UUID employeeId) {
+        if (employeeId != null && AttendanceController.isAdmin(jwt) && inCallersCompany(jwt, employeeId)) return;
+        assertCanRead(jwt, employeeId);
+    }
+
+    private boolean inCallersCompany(Jwt jwt, UUID employeeId) {
+        UUID self;
+        try {
+            self = callerEmployeeId(jwt);
+        } catch (IllegalArgumentException noEmployeeId) {
+            return false;
+        }
+        UUID company = employees.findById(self).map(Employee::getCompanyId).orElse(null);
+        return company != null && employees.findById(employeeId).map(e -> company.equals(e.getCompanyId())).orElse(false);
     }
 
     static UUID callerEmployeeId(Jwt jwt) {
