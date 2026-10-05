@@ -1,13 +1,16 @@
 // /me/celebrations: everyone to celebrate, from Home's Celebrations card ("See all"):
 // Birthdays, Work anniversaries and Welcome aboard (who joined in the last 30 days). Today first,
 // the ones that have gone by in the last week stay, faded. The app's /milestones shows the same.
-// There's no "Send wishes" button: the backend has nothing that sends one person a message.
+// "Send wishes" on today's birthdays and work anniversaries and on Welcome aboard, and "Your wishes"
+// (who wished me this week), once the server has them (V143_84; WishBlocks.tsx). A company that
+// hides birthdays (HR configuration) has no Birthdays section.
 import { useNavigate } from 'react-router-dom'
 import { Button, PageFrame, PageHeader, Section } from '@/design/kit/display'
 import { istToday } from '@/design/dc/dates'
 import { useCelebrations } from './homeApi'
 import { sectionsOf } from './peopleModel'
 import { CelebrationSectionCard } from './PeopleBlocks'
+import { WishComposer, WishesReceivedCard, useWishControls } from './WishBlocks'
 import './home.css'
 
 export function CelebrationsPage() {
@@ -15,18 +18,22 @@ export function CelebrationsPage() {
   const q = useCelebrations(30)
   const today = q.data?.today ?? istToday()
   const sections = q.data ? sectionsOf(q.data, today) : []
+  const wishes = useWishControls(today)
+  const what = q.data?.birthdaysHidden ? 'Work anniversaries and new joiners' : 'Birthdays, work anniversaries and new joiners'
   return (
     <PageFrame width="narrow" top={22} gap={16} label="Celebrations">
-      <PageHeader title="Celebrations" sub="Birthdays, work anniversaries and new joiners in your company, from last week to a month ahead."
+      <PageHeader title="Celebrations" sub={`${what} in your company, from last week to a month ahead.`}
         actions={<Button variant="secondary" size={38} icon="chevronLeft" onClick={() => navigate('/me')}>Home</Button>} />
+      {wishes.controls && <WishesReceivedCard data={wishes.controls.data} />}
       {q.isLoading || q.error || q.notAvailable ? (
         <Section variant="panel" title="Celebrations" body="list" loading={q.isLoading} error={q.error} onRetry={() => q.refetch()}
           empty={q.notAvailable ? { title: 'Not switched on yet', hint: 'Celebrations show here once your workspace has them.', icon: 'calendar' } : undefined} />
       ) : (
         <div className="uh-cel-grid">
-          {sections.map((s, i) => <CelebrationSectionCard key={s.key} section={s} today={today} index={i} />)}
+          {sections.map((s, i) => <CelebrationSectionCard key={s.key} section={s} today={today} index={i} wishes={wishes.controls} />)}
         </div>
       )}
+      <WishComposer target={wishes.target} onClose={wishes.close} />
     </PageFrame>
   )
 }

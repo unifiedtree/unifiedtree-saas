@@ -1,13 +1,16 @@
 // Home's people cards and the Celebrations page's sections: Celebrations (birthdays, work
 // anniversaries, Welcome aboard), Off this week and Upcoming holidays. The mobile app's Home and
 // /milestones show the same cards from the same reads and the same rules (peopleModel.ts).
-// They only lay out what they are given; every value is real API data.
+// They only lay out what they are given; every value is real API data. "Send wishes" (V143_84)
+// shows only where the server offers it (WishBlocks.tsx).
 import { useEffect, useState } from 'react'
+import { PartyPopper } from 'lucide-react'
 import { Avatar, DateTile, ListRow, ListRows, Section } from '@/design/kit/display'
 import {
   celebrationSub, chipOf, dateTileOf, homeRow, initialsOfName, isPast,
   type Celebration, type CelebrationSection, type HolidayLike, type OffPerson,
 } from './peopleModel'
+import { WishButton, type WishControls } from './WishBlocks'
 import './home.css'
 
 const CHIP_CLASS: Record<string, string> = { BIRTHDAY: 'uh-chip--bday', WORK_ANNIVERSARY: 'uh-chip--anniv', NEW_JOINER: 'uh-chip--new' }
@@ -42,28 +45,40 @@ function useFaceColumns() {
   return { ref: setEl, cols }
 }
 
-export function CelebrationsCard({ items, loading, error, onRetry, today, onSeeAll }: {
+export function CelebrationsCard({ items, loading, error, onRetry, today, onSeeAll, wishes = null, birthdaysHidden = false }: {
   items: readonly Celebration[]; loading: boolean; error: unknown; onRetry: () => void; today: string; onSeeAll: () => void
+  /** Send wishes and "12 people wished you"; null while the server has none. */
+  wishes?: WishControls | null
+  /** The company hides birthdays from colleagues: the words leave them out. */
+  birthdaysHidden?: boolean
 }) {
   const row = homeRow(items, today)
   const { ref, cols } = useFaceColumns()
   const fit = Math.min(HOME_FACES, row.length > cols ? cols - 1 : cols)
   const shown = row.slice(0, fit)
   const more = row.length - shown.length
+  const wishedMe = wishes?.receivedLine ?? ''
+  const what = birthdaysHidden ? 'Work anniversaries and new joiners' : 'Birthdays, work anniversaries and new joiners'
   return (
     <Section variant="panel" title="Celebrations" body="default" loading={loading} error={error} onRetry={onRetry} skeleton="text"
-      sub={row.length ? 'Birthdays, work anniversaries and new joiners' : undefined}
+      sub={row.length ? what : undefined}
       action={{ label: 'See all', onClick: onSeeAll, ariaLabel: 'See all celebrations' }}
-      empty={!row.length ? { title: 'Nothing to celebrate this week', hint: 'Birthdays, work anniversaries and new joiners show here.', icon: 'calendar' } : undefined}>
-      <ul ref={ref} className="uh-faces" aria-label="Celebrations this week">
+      empty={!row.length && !wishedMe ? { title: 'Nothing to celebrate this week', hint: `${what} show here.`, icon: 'calendar' } : undefined}>
+      {wishedMe && (
+        <button type="button" className="uh-wishedme" onClick={onSeeAll} aria-label={`${wishedMe}: see your wishes`}>
+          <PartyPopper size={15} aria-hidden="true" /><span>{wishedMe}</span><span className="uh-wishedme__see">See</span>
+        </button>
+      )}
+      {row.length > 0 && <ul ref={ref} className="uh-faces" aria-label="Celebrations this week">
         {shown.map((c) => (
-          <li key={`${c.kind}-${c.employeeId ?? c.name}-${c.date}`}>
+          <li key={`${c.kind}-${c.employeeId ?? c.name}-${c.date}`} className="uh-faces__item">
             <button type="button" className="uh-faces__btn" onClick={onSeeAll}
               aria-label={`${c.name}: ${chipOf(c) === 'New' ? 'new joiner' : chipOf(c).toLowerCase()}, ${celebrationSub(c, today)}`}>
               <PersonFace c={c} />
               <span className="uh-faces__name">{c.name.split(/\s+/)[0]}</span>
               <span className={`uh-faces__when${c.date === today ? ' uh-faces__when--today' : ''}`}>{celebrationWhen(c, today)}</span>
             </button>
+            <WishButton c={c} wishes={wishes} compact />
           </li>
         ))}
         {more > 0 && (
@@ -74,7 +89,7 @@ export function CelebrationsCard({ items, loading, error, onRetry, today, onSeeA
             </button>
           </li>
         )}
-      </ul>
+      </ul>}
     </Section>
   )
 }
@@ -88,7 +103,11 @@ function celebrationWhen(c: Celebration, today: string): string {
 
 // ── Celebrations page: one section ──────────────────────────────────────────
 
-export function CelebrationSectionCard({ section, today, index }: { section: CelebrationSection; today: string; index: number }) {
+export function CelebrationSectionCard({ section, today, index, wishes = null }: {
+  section: CelebrationSection; today: string; index: number
+  /** Send wishes on today's people (and Welcome aboard); null while the server has none. */
+  wishes?: WishControls | null
+}) {
   return (
     <Section variant="panel" title={section.title} sub={section.line} count={section.items.length || null} countTone="neutral"
       countLabel={`${section.items.length} ${section.title.toLowerCase()}`} body="list" index={index}
@@ -99,12 +118,13 @@ export function CelebrationSectionCard({ section, today, index }: { section: Cel
           const tile = dateTileOf(c.date)
           return (
             <ListRow key={`${c.kind}-${c.employeeId ?? c.name}-${c.date}`} variant="divided" density="default"
-              className={past ? 'uh-past' : undefined}
+              className={[past ? 'uh-past' : '', wishes?.canWish(c) ? 'uh-row--wish' : ''].filter(Boolean).join(' ') || undefined}
               leading={<PersonFace c={c} size={40} />}
               title={c.name} sub={celebrationSub(c, today)}
               end={c.date === today
                 ? <span className="uh-today">Today</span>
-                : <DateTile day={tile.day} month={tile.month} label={tile.label} />} />
+                : <DateTile day={tile.day} month={tile.month} label={tile.label} />}
+              actions={wishes?.canWish(c) ? <WishButton c={c} wishes={wishes} /> : undefined} />
           )
         })}
       </ListRows>
