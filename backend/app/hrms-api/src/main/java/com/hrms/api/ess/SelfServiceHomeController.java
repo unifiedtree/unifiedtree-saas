@@ -2,6 +2,7 @@ package com.hrms.api.ess;
 
 import com.hrms.api.ess.around.AroundItem;
 import com.hrms.api.ess.around.AroundMeService;
+import com.hrms.api.ess.around.CelebrationsService;
 import com.hrms.api.ess.needs.NeedsYouItem;
 import com.hrms.api.ess.needs.NeedsYouService;
 import com.hrms.api.ess.requests.MyRequest;
@@ -41,13 +42,16 @@ public class SelfServiceHomeController {
     private final MyRequestsService myRequests;
     private final AroundMeService aroundMe;
     private final NeedsYouService needsYou;
+    private final CelebrationsService celebrations;
     /** "Today" is the India business date. Tests fix it. */
     Clock clock = Clock.system(ZoneId.of("Asia/Kolkata"));
 
-    public SelfServiceHomeController(MyRequestsService myRequests, AroundMeService aroundMe, NeedsYouService needsYou) {
+    public SelfServiceHomeController(MyRequestsService myRequests, AroundMeService aroundMe, NeedsYouService needsYou,
+                                     CelebrationsService celebrations) {
         this.myRequests = myRequests;
         this.aroundMe = aroundMe;
         this.needsYou = needsYou;
+        this.celebrations = celebrations;
     }
 
     @Operation(summary = "My requests: leave, work from home, fixes, shift changes, expense claims and advances, waiting ones first")
@@ -71,6 +75,14 @@ public class SelfServiceHomeController {
     public AroundItem.Response aroundMe(@RequestParam(required = false) Integer days,
                                         @AuthenticationPrincipal Jwt jwt, Authentication auth) {
         return aroundMe.aroundMe(caller(jwt, auth), days);
+    }
+
+    @Operation(summary = "Celebrations: colleagues' birthdays and work anniversaries from a week back to `days` ahead, and who joined in the last 30 days")
+    @GetMapping("/celebrations")
+    @PreAuthorize("isAuthenticated()")
+    public CelebrationsService.Response celebrations(@RequestParam(required = false) Integer days,
+                                                     @AuthenticationPrincipal Jwt jwt, Authentication auth) {
+        return celebrations.celebrations(caller(jwt, auth), days);
     }
 
     private EssCaller caller(Jwt jwt, Authentication auth) {
