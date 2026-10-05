@@ -90,7 +90,7 @@
 }
 
 /* ── Celebrations, Off this week, Upcoming holidays (PeopleBlocks.tsx) ──── */
-.uh-faces { list-style: none; margin: 0; padding: 4px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 14px 8px; }
+.uh-faces { list-style: none; margin: 0; padding: 4px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 14px 8px; }
 .uh-faces__btn {
   width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px 6px;
   border: 0; border-radius: 12px; background: transparent; color: var(--u-ink, #0E1B16); font: inherit; cursor: pointer;

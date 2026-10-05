@@ -2,6 +2,7 @@
 // anniversaries, Welcome aboard), Off this week and Upcoming holidays. The mobile app's Home and
 // /milestones show the same cards from the same reads and the same rules (peopleModel.ts).
 // They only lay out what they are given; every value is real API data.
+import { useEffect, useState } from 'react'
 import { Avatar, DateTile, ListRow, ListRows, Section } from '@/design/kit/display'
 import {
   celebrationSub, chipOf, dateTileOf, homeRow, initialsOfName, isPast,
@@ -23,21 +24,38 @@ function PersonFace({ c, size = 52 }: { c: Celebration; size?: number }) {
 
 // ── Celebrations (Home) ─────────────────────────────────────────────────────
 
-/** How many faces the Home row shows before "+N". */
+/** Most faces the Home row shows before "+N"; fewer when the card is narrow (one row, never wrapped). */
 export const HOME_FACES = 6
+/** One face's column, gap included (.uh-faces). */
+const FACE_COL = 72
+
+/** How many columns of faces fit across the list (7 until it has been measured). The list mounts after loading, hence a callback ref. */
+function useFaceColumns() {
+  const [el, setEl] = useState<HTMLUListElement | null>(null)
+  const [cols, setCols] = useState(HOME_FACES + 1)
+  useEffect(() => {
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => setCols(Math.max(2, Math.floor((e.contentRect.width + 8) / FACE_COL))))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el])
+  return { ref: setEl, cols }
+}
 
 export function CelebrationsCard({ items, loading, error, onRetry, today, onSeeAll }: {
   items: readonly Celebration[]; loading: boolean; error: unknown; onRetry: () => void; today: string; onSeeAll: () => void
 }) {
   const row = homeRow(items, today)
-  const shown = row.slice(0, HOME_FACES)
+  const { ref, cols } = useFaceColumns()
+  const fit = Math.min(HOME_FACES, row.length > cols ? cols - 1 : cols)
+  const shown = row.slice(0, fit)
   const more = row.length - shown.length
   return (
     <Section variant="panel" title="Celebrations" body="default" loading={loading} error={error} onRetry={onRetry} skeleton="text"
       sub={row.length ? 'Birthdays, work anniversaries and new joiners' : undefined}
       action={{ label: 'See all', onClick: onSeeAll, ariaLabel: 'See all celebrations' }}
       empty={!row.length ? { title: 'Nothing to celebrate this week', hint: 'Birthdays, work anniversaries and new joiners show here.', icon: 'calendar' } : undefined}>
-      <ul className="uh-faces" aria-label="Celebrations this week">
+      <ul ref={ref} className="uh-faces" aria-label="Celebrations this week">
         {shown.map((c) => (
           <li key={`${c.kind}-${c.employeeId ?? c.name}-${c.date}`}>
             <button type="button" className="uh-faces__btn" onClick={onSeeAll}
