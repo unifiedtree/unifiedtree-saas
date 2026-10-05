@@ -1,5 +1,7 @@
 package com.hrms.app.bulk;
 
+import com.hrms.employee.service.EmployeeContactGuard.Field;
+import com.hrms.employee.service.EmployeeContactGuard.Owner;
 import com.hrms.employee.workforce.entity.WorkforceEmployee;
 import org.junit.jupiter.api.Test;
 
@@ -247,5 +249,74 @@ class EmployeeImportMapperTest {
         assertThat(mapped.get(0).request().gender()).isNull();
         assertThat(r.getWarnings()).extracting(BulkImportProblem::column).containsExactly("gender");
         assertThat(d.getProblems()).extracting(BulkImportProblem::column).containsExactly("date_of_birth");
+    }
+
+    // ── The workspace's email rule (EmployeeContactGuard), 2026-10-05 ─────────
+
+    private final Owner aisha = new Owner(UUID.randomUUID(), "Aisha Khan", "EMP-0003", false, Field.WORK);
+    private final Owner leftPerson = new Owner(UUID.randomUUID(), "Old Timer", "EMP-0001", true, Field.WORK);
+    private final Owner ravisHome = new Owner(UUID.randomUUID(), "Ravi K", "EMP-0004", false, Field.PERSONAL);
+
+    private EmployeeImportMapper.Lookups owners(boolean reveal) {
+        EmployeeImportMapper.Lookups l = lookups();
+        return new EmployeeImportMapper.Lookups(l.activeDepartments(), l.inactiveDepartments(), l.designations(), l.branches(),
+                l.managers(), Set.of("aisha@example.com", "old@example.com", "ravi.home@gmail.com"), l.codesInUse(),
+                Map.of("aisha@example.com", aisha, "old@example.com", leftPerson, "ravi.home@gmail.com", ravisHome),
+                Map.of("9845012345", List.of(aisha)), reveal);
+    }
+
+    @Test
+    void anEmailSomeoneHasNamesThemWhateverItsCaseOrSpaces() {
+        BulkImportRow r = row(2, "A", "B", "  AISHA@Example.com ");
+        BulkImportRow left = row(3, "C", "D", "old@example.com");
+        BulkImportRow personal = row(4, "E", "F", "Ravi.Home@gmail.com");
+        var mapped = EmployeeImportMapper.map(List.of(r, left, personal), company, owners(true));
+        assertThat(mapped).isEmpty();
+        assertThat(r.getProblems()).containsExactly(new BulkImportProblem(2, "email",
+                "email already belongs to Aisha Khan (EMP-0003): aisha@example.com"));
+        assertThat(left.getProblems()).extracting(BulkImportProblem::message)
+                .containsExactly("email already belongs to Old Timer (EMP-0001), who has left: old@example.com");
+        assertThat(personal.getProblems()).extracting(BulkImportProblem::message)
+                .containsExactly("email is already the personal email of Ravi K (EMP-0004): ravi.home@gmail.com");
+    }
+
+    @Test
+    void withoutTheRightToSeeThePeopleTheProblemNamesNobody() {
+        BulkImportRow r = row(2, "A", "B", "aisha@example.com");
+        EmployeeImportMapper.map(List.of(r), company, owners(false));
+        assertThat(r.getProblems()).extracting(BulkImportProblem::message)
+                .containsExactly("email already used by another employee in this workspace: aisha@example.com");
+    }
+
+    @Test
+    void theSameEmailTwiceInTheFileIsCaughtWhateverItsCaseOrSpaces() {
+        BulkImportRow first = row(2, "A", "B", "new@example.com");
+        BulkImportRow again = row(3, "C", "D", " New@Example.COM  ");
+        var mapped = EmployeeImportMapper.map(List.of(first, again), company, owners(true));
+        assertThat(mapped).extracting(EmployeeImportMapper.Mapped::row).containsExactly(2);
+        assertThat(again.getProblems()).extracting(BulkImportProblem::message)
+                .containsExactly("email appears more than once in this file (also row 2): new@example.com");
+    }
+
+    @Test
+    void emailsAreSavedTrimmedAndLowerCased() {
+        var mapped = EmployeeImportMapper.map(List.of(row(2, "A", "B", "  Fresh.Person@Example.com ")), company, owners(true));
+        assertThat(mapped.get(0).request().email()).isEqualTo("fresh.person@example.com");
+    }
+
+    @Test
+    void aSharedPhoneIsAWarningAndTheRowIsStillImported() {
+        BulkImportRow known = row(2, "A", "B", "a@example.com");
+        known.setPhone("+91 98450 12345");
+        BulkImportRow twice = row(3, "C", "D", "c@example.com");
+        twice.setPhone("98450-12345");
+        BulkImportRow fresh = row(4, "E", "F", "e@example.com");
+        fresh.setPhone("9000000001");
+        var mapped = EmployeeImportMapper.map(List.of(known, twice, fresh), company, owners(true));
+        assertThat(mapped).extracting(EmployeeImportMapper.Mapped::row).containsExactly(2, 3, 4);
+        assertThat(known.getWarnings()).extracting(BulkImportProblem::message).containsExactly("Also used by Aisha Khan (EMP-0003).");
+        assertThat(twice.getWarnings()).extracting(BulkImportProblem::message)
+                .containsExactly("Also used by Aisha Khan (EMP-0003).", "phone is also on row 2 of this file");
+        assertThat(fresh.getWarnings()).isEmpty();
     }
 }

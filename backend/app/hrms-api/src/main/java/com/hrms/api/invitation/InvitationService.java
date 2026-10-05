@@ -1,6 +1,8 @@
 package com.hrms.api.invitation;
 
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.employee.service.EmailAlreadyUsedException;
+import com.hrms.employee.service.EmployeeContactGuard;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
 import com.unifiedtree.auth.entity.UserCredentials;
 import com.unifiedtree.auth.repository.UserCredentialsRepository;
@@ -50,6 +52,8 @@ public class InvitationService {
     private final ApplicationEventPublisher eventPublisher;
     /** Uses the company's "account.invitation" / "account.password_reset" email template when one is active. */
     private final NotificationEmailComposer emailComposer;
+    /** A login email follows the employees' work-email rule (one person per address in the workspace). */
+    private final EmployeeContactGuard contactGuard;
 
     @Value("${unifiedtree.mail.invite-url-base:${unifiedtree.invitation.platform-base-url:http://localhost:3001}}")
     private String platformBaseUrl;
@@ -63,7 +67,8 @@ public class InvitationService {
                              InvitationEmailSender emailSender,
                              JdbcTemplate jdbc,
                              ApplicationEventPublisher eventPublisher,
-                             NotificationEmailComposer emailComposer) {
+                             NotificationEmailComposer emailComposer,
+                             EmployeeContactGuard contactGuard) {
         this.credRepo            = credRepo;
         this.userRoleRepo        = userRoleRepo;
         this.roleRepo            = roleRepo;
@@ -74,6 +79,7 @@ public class InvitationService {
         this.jdbc                = jdbc;
         this.eventPublisher      = eventPublisher;
         this.emailComposer       = emailComposer;
+        this.contactGuard        = contactGuard;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -91,13 +97,24 @@ public class InvitationService {
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
 
         Map<String, Object> emp = loadEmployee(employeeId, tenantId);
-        String email     = (String) emp.get("email");
+        // The login is made with the work email, trimmed and lower-cased, and only
+        // when no other employee has that address (409 EMAIL_ALREADY_USED): the
+        // credential lookup below would otherwise hand this person someone else's login.
+        String email     = EmployeeContactGuard.normalizeEmail((String) emp.get("email"));
+        if (email == null) {
+            throw new BusinessRuleException("This employee has no work email, so they can't be invited.", "EMAIL_REQUIRED");
+        }
+        contactGuard.assertEmailFree(email, employeeId);
         String firstName = (String) emp.get("first_name");
         String tenantName = loadTenantName(tenantId);
         String tenantSlug = loadTenantSlug(tenantId);
 
         // Find-or-create auth.user_credentials row (with no password yet)
-        UserCredentials creds = credRepo.findByEmailIgnoreCase(email).orElseGet(() -> {
+        java.util.Optional<UserCredentials> found = credRepo.findByEmailIgnoreCase(email);
+        if (found.isPresent() && found.get().getEmployeeId() != null && !found.get().getEmployeeId().equals(employeeId)) {
+            throw new EmailAlreadyUsedException(EmployeeContactGuard.GENERIC_EMAIL_MESSAGE);
+        }
+        UserCredentials creds = found.orElseGet(() -> {
             UserCredentials c = new UserCredentials();
             // Do NOT set id — BaseEntity uses @GeneratedValue(UUID). Assigning it
             // manually makes Hibernate treat the row as a detached entity with a

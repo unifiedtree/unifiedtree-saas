@@ -3,6 +3,8 @@ package com.hrms.employee.workforce.service;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
+import com.hrms.employee.service.EmailAlreadyUsedException;
+import com.hrms.employee.service.EmployeeContactGuard;
 import com.hrms.employee.quota.SeatQuotaEnforcer;
 import com.hrms.employee.workforce.dto.EmployeeSearchDtos.EmployeeSearchHit;
 import com.hrms.employee.workforce.dto.EmployeeSearchDtos.EmployeeSearchResponse;
@@ -17,6 +19,8 @@ import com.hrms.employee.workforce.repository.WorkforceEmployeeRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -52,16 +56,29 @@ public class WorkforceEmployeeService {
     private final JdbcTemplate jdbc;
     private final NamedParameterJdbcTemplate namedJdbc;
     private final SeatQuotaEnforcer seatQuotaEnforcer;
+    /** The workspace's email rule (one work email per employee, case and spaces ignored). */
+    private final EmployeeContactGuard contactGuard;
 
+    @Autowired
     public WorkforceEmployeeService(WorkforceEmployeeRepository repository,
                                     WorkforceDepartmentRepository departmentRepository,
                                     JdbcTemplate jdbc,
-                                    SeatQuotaEnforcer seatQuotaEnforcer) {
+                                    SeatQuotaEnforcer seatQuotaEnforcer,
+                                    EmployeeContactGuard contactGuard) {
         this.repository = repository;
         this.departmentRepository = departmentRepository;
         this.jdbc = jdbc;
         this.namedJdbc = new NamedParameterJdbcTemplate(jdbc);
         this.seatQuotaEnforcer = seatQuotaEnforcer;
+        this.contactGuard = contactGuard;
+    }
+
+    /** The same, with the email rule read through {@code jdbc} (tests that build the service by hand). */
+    public WorkforceEmployeeService(WorkforceEmployeeRepository repository,
+                                    WorkforceDepartmentRepository departmentRepository,
+                                    JdbcTemplate jdbc,
+                                    SeatQuotaEnforcer seatQuotaEnforcer) {
+        this(repository, departmentRepository, jdbc, seatQuotaEnforcer, new EmployeeContactGuard(jdbc));
     }
 
     // -- Directory query ----------------------------------------------------
@@ -438,10 +455,12 @@ public class WorkforceEmployeeService {
         if (repository.existsByCompanyIdAndEmployeeCode(req.companyId(), code)) {
             throw new BusinessRuleException("Employee code '" + code + "' already in use", "DUPLICATE_EMPLOYEE_CODE");
         }
-        if (req.email() != null && !req.email().isBlank()
-                && repository.existsByCompanyIdAndEmailIgnoreCase(req.companyId(), req.email())) {
-            throw new BusinessRuleException("Email '" + req.email() + "' already in use", "DUPLICATE_EMPLOYEE_EMAIL");
-        }
+        // One work email per employee across the whole workspace, ignoring case and
+        // spaces; people who left count too (409 EMAIL_ALREADY_USED). It used to be
+        // checked within the company only, so the same address could be added again
+        // in another company, or as "Ravi@x.com" next to "ravi@x.com".
+        String email = EmployeeContactGuard.normalizeEmail(req.email());
+        if (email != null) contactGuard.assertEmailFree(email, null);
 
         WorkforceEmployee e = new WorkforceEmployee();
         e.setCompanyId(req.companyId());
@@ -449,7 +468,7 @@ public class WorkforceEmployeeService {
         e.setFirstName(req.firstName());
         e.setMiddleName(req.middleName());
         e.setLastName(req.lastName());
-        e.setEmail(req.email());
+        e.setEmail(email);
         e.setPhone(req.phone());
         e.setDateOfBirth(req.dateOfBirth());
         e.setGender(req.gender());
@@ -536,9 +555,21 @@ public class WorkforceEmployeeService {
         e.setActive(true);
         // Flush now: callers in the same transaction (the Users & access invite)
         // read the new row with plain JDBC, which never triggers a JPA flush.
-        WorkforceEmployee saved = repository.saveAndFlush(e);
+        WorkforceEmployee saved = saveCheckingEmail(e);
         syncJobTitle(saved.getId());
         return toResponse(saved);
+    }
+
+    /** Save and flush; someone saving the same email between the check and here gets the 409, not a 500. */
+    private WorkforceEmployee saveCheckingEmail(WorkforceEmployee e) {
+        try {
+            return repository.saveAndFlush(e);
+        } catch (DataIntegrityViolationException ex) {
+            if (EmployeeContactGuard.isEmailIndexViolation(ex)) {
+                throw new EmailAlreadyUsedException(EmployeeContactGuard.GENERIC_EMAIL_MESSAGE);
+            }
+            throw ex;
+        }
     }
 
     // -- Update -------------------------------------------------------------
@@ -549,7 +580,16 @@ public class WorkforceEmployeeService {
         if (req.firstName()        != null) e.setFirstName(req.firstName());
         if (req.middleName()       != null) e.setMiddleName(req.middleName());
         if (req.lastName()         != null) e.setLastName(req.lastName());
-        if (req.email()            != null) e.setEmail(req.email());
+        if (req.email()            != null) {
+            // Same rule as create(), checked only when the address really changes
+            // (a new case or spaces alone is the same address, saved normalised).
+            String email = EmployeeContactGuard.normalizeEmail(req.email());
+            if (email == null) e.setEmail(req.email());
+            else {
+                if (!email.equals(EmployeeContactGuard.normalizeEmail(e.getEmail()))) contactGuard.assertEmailFree(email, id);
+                e.setEmail(email);
+            }
+        }
         if (req.phone()            != null) e.setPhone(req.phone());
         if (req.dateOfBirth()      != null) e.setDateOfBirth(req.dateOfBirth());
         if (req.gender()           != null) e.setGender(req.gender());
@@ -595,7 +635,7 @@ public class WorkforceEmployeeService {
         if (req.salaryFrequency()  != null) e.setSalaryFrequency(req.salaryFrequency());
         if (req.weeklyOffDays()    != null) e.setWeeklyOffDays(req.weeklyOffDays().trim());
 
-        WorkforceEmployee saved = repository.saveAndFlush(e);
+        WorkforceEmployee saved = saveCheckingEmail(e);
         if (req.designationId() != null) syncJobTitle(saved.getId());
         return toResponse(saved);
     }

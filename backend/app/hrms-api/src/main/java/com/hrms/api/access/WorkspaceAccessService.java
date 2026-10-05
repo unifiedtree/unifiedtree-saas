@@ -2,6 +2,8 @@ package com.hrms.api.access;
 
 import com.hrms.api.invitation.InvitationService;
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.employee.service.EmailAlreadyUsedException;
+import com.hrms.employee.service.EmployeeContactGuard;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
 import com.hrms.employee.workforce.service.WorkforceEmployeeService;
@@ -58,6 +60,8 @@ public class WorkspaceAccessService {
     private final JdbcTemplate jdbc;
     private final AccessGuard guard;
     private final AccessAudit audit;
+    /** A new login's email follows the employees' work-email rule. */
+    private final EmployeeContactGuard contactGuard;
 
     public WorkspaceAccessService(UserCredentialsRepository credRepo,
                                   UserRoleRepository userRoleRepo,
@@ -66,7 +70,8 @@ public class WorkspaceAccessService {
                                   WorkforceEmployeeService workforceService,
                                   JdbcTemplate jdbc,
                                   AccessGuard guard,
-                                  AccessAudit audit) {
+                                  AccessAudit audit,
+                                  EmployeeContactGuard contactGuard) {
         this.credRepo = credRepo;
         this.userRoleRepo = userRoleRepo;
         this.roleRepo = roleRepo;
@@ -75,6 +80,7 @@ public class WorkspaceAccessService {
         this.jdbc = jdbc;
         this.guard = guard;
         this.audit = audit;
+        this.contactGuard = contactGuard;
     }
 
     // ── DTOs ────────────────────────────────────────────────────────────────
@@ -247,6 +253,9 @@ public class WorkspaceAccessService {
         if (req.email() == null || req.email().isBlank()) {
             throw new BusinessRuleException("Email is required", "EMAIL_REQUIRED");
         }
+        // Trimmed and lower-cased, as every employee and login email is saved
+        // (EmployeeContactGuard); the lookups below are by this exact address.
+        String email = EmployeeContactGuard.normalizeEmail(req.email());
         boolean createEmp = req.createEmployee() == null || req.createEmployee();
 
         // Resolve + module-gate all requested roles up front (fail fast), and
@@ -267,8 +276,8 @@ public class WorkspaceAccessService {
         }
         if (!roles.isEmpty()) {
             audit.record(actorId, AccessAudit.PERMISSION_CHANGE, "USER", null,
-                "Invited " + req.email() + " with the roles " + roles.stream().map(Role::getDisplayName).toList(),
-                Map.of("user", req.email(), "rolesGiven", roles.stream().map(Role::getCode).toList()));
+                "Invited " + email + " with the roles " + roles.stream().map(Role::getDisplayName).toList(),
+                Map.of("user", email, "rolesGiven", roles.stream().map(Role::getCode).toList()));
         }
 
         if (createEmp) {
@@ -276,7 +285,7 @@ public class WorkspaceAccessService {
                 throw new BusinessRuleException("A company is required to create an employee", "COMPANY_REQUIRED");
             }
             String first = (req.firstName() == null || req.firstName().isBlank())
-                ? req.email().split("@")[0] : req.firstName();
+                ? email.split("@")[0] : req.firstName();
             // Everything past name/email is unset for a workspace-invite-created
             // employee — server-side defaults fill in weeklyOffDays (Sat+Sun),
             // employmentType (FULL_TIME) and roleCode (EMPLOYEE).
@@ -287,24 +296,30 @@ public class WorkspaceAccessService {
             // factory that lives next to the component list instead, so a new
             // field is a one-line change there and never touches this file.
             CreateWorkforceEmployeeRequest cr = CreateWorkforceEmployeeRequest.minimal(
-                req.companyId(), first, req.lastName(), req.email());
+                req.companyId(), first, req.lastName(), email);
             WorkforceEmployeeResponse emp = workforceService.create(cr);
 
             InvitationService.InvitationResult result =
                 invitationService.sendInvitation(emp.id(), tenantId, actorId);
 
             bindTenant(tenantId); // re-bind after invitation flow
-            UUID userId = credRepo.findByEmailIgnoreCase(req.email()).orElseThrow().getId();
+            UUID userId = credRepo.findByEmailIgnoreCase(email).orElseThrow().getId();
             for (Role role : roles) {
                 if (!"EMPLOYEE".equals(role.getCode())) grantIfAbsent(tenantId, userId, role.getId(), actorId);
             }
             return result;
         } else {
-            UserCredentials creds = credRepo.findByEmailIgnoreCase(req.email()).orElseGet(() -> {
+            UserCredentials creds = credRepo.findByEmailIgnoreCase(email).orElseGet(() -> {
+                // A new sign-in may not take an employee's work or personal email: that
+                // person is invited from their profile, so they keep one login (409).
+                contactGuard.emailOwner(tenantId, email, null).ifPresent(o -> {
+                    throw new EmailAlreadyUsedException(
+                        EmployeeContactGuard.conflictMessage(o, EmployeeContactGuard.callerMaySeeOwners()));
+                });
                 UserCredentials c = new UserCredentials();
                 // Do NOT setId — @GeneratedValue (same fix as InvitationService).
                 c.setTenantId(tenantId);
-                c.setEmail(req.email());
+                c.setEmail(email);
                 c.setActive(false);
                 return credRepo.save(c);
             });

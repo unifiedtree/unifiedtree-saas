@@ -1,5 +1,7 @@
 package com.hrms.app.bulk;
 
+import com.hrms.employee.service.EmployeeContactGuard;
+import com.hrms.employee.service.EmployeeContactGuard.Owner;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.entity.WorkforceEmployee;
 
@@ -41,6 +43,12 @@ import java.util.regex.Pattern;
  *   <li>PAN, UAN, ESI, bank account and IFSC use the Add-employee form's
  *       formats. A future joining date is allowed.</li>
  *   <li>The same email or code twice in one file is a problem.</li>
+ *   <li>Emails are compared trimmed and lower-cased (EmployeeContactGuard) and
+ *       saved that way. One that is already someone's work, personal or login
+ *       email in the workspace names that person (to callers who may see them),
+ *       people who left included.</li>
+ *   <li>A phone number someone already has, or that is on another row of the
+ *       file, is a warning, never a problem.</li>
  * </ul>
  */
 public final class EmployeeImportMapper {
@@ -67,14 +75,28 @@ public final class EmployeeImportMapper {
     /** A person a row may report to. */
     public record Manager(UUID id, String code, String email) {}
 
-    /** What the rows are checked against; names, titles, codes and emails as stored. */
+    /**
+     * What the rows are checked against; names, titles, codes and emails as stored.
+     * {@code emailOwners}: whose each email in the workspace is (normalised email →
+     * person); {@code phoneOwners}: who has each number ({@link EmployeeContactGuard#phoneKey});
+     * {@code revealOwners}: whether the caller may see those people's names.
+     */
     public record Lookups(Map<String, UUID> activeDepartments,
                           Set<String> inactiveDepartments,
                           Map<String, UUID> designations,
                           List<Branch> branches,
                           List<Manager> managers,
                           Set<String> emailsInUse,
-                          Set<String> codesInUse) {}
+                          Set<String> codesInUse,
+                          Map<String, Owner> emailOwners,
+                          Map<String, List<Owner>> phoneOwners,
+                          boolean revealOwners) {
+        public Lookups(Map<String, UUID> activeDepartments, Set<String> inactiveDepartments, Map<String, UUID> designations,
+                       List<Branch> branches, List<Manager> managers, Set<String> emailsInUse, Set<String> codesInUse) {
+            this(activeDepartments, inactiveDepartments, designations, branches, managers, emailsInUse, codesInUse,
+                    Map.of(), Map.of(), false);
+        }
+    }
 
     public record Branch(UUID id, String name, String code) {}
 
@@ -108,13 +130,34 @@ public final class EmployeeImportMapper {
         List<Mapped> out = new ArrayList<>();
         Map<String, Integer> emailsInFile = new HashMap<>();
         Map<String, Integer> codesInFile = new HashMap<>();
+        Map<String, Integer> phonesInFile = new HashMap<>();
         Set<String> emailsInUse = lower(l.emailsInUse());
         Set<String> codesInUse = lower(l.codesInUse());
         for (BulkImportRow row : rows) {
             Mapped m = mapRow(row, companyId, l, emailsInUse, codesInUse, emailsInFile, codesInFile);
+            phoneWarnings(row, l, phonesInFile);
             if (m != null && !row.hasErrors()) out.add(m);
         }
         return out;
+    }
+
+    /** "email already belongs to Aisha Khan (EMP-0003): aisha@x.com" — the person only when the caller may see them. */
+    static String emailInUse(Owner o, boolean reveal, String email) {
+        if (!reveal || o.id() == null) return "email already used by another employee in this workspace: " + email;
+        String who = o.label() + (o.left() ? ", who has left" : "");
+        return (o.field() == EmployeeContactGuard.Field.PERSONAL
+                ? "email is already the personal email of " + who : "email already belongs to " + who) + ": " + email;
+    }
+
+    /** A number someone already has, or that is on an earlier row: a warning (people do share numbers). */
+    private static void phoneWarnings(BulkImportRow row, Lookups l, Map<String, Integer> phonesInFile) {
+        String k = EmployeeContactGuard.phoneKey(row.getPhone());
+        if (k == null) return;
+        String others = EmployeeContactGuard.phoneWarning(
+                l.phoneOwners() == null ? null : l.phoneOwners().get(k), l.revealOwners());
+        if (others != null) row.addWarning("phone", others);
+        Integer earlier = phonesInFile.putIfAbsent(k, row.getRowNumber());
+        if (earlier != null) row.addWarning("phone", "phone is also on row " + earlier + " of this file");
     }
 
     private static Set<String> lower(Set<String> values) {
@@ -131,14 +174,17 @@ public final class EmployeeImportMapper {
         if (blank(row.getLastName())) row.addProblem("last_name", "last_name is required");
         else if (row.getLastName().trim().length() > 100) row.addProblem("last_name", "last_name is longer than 100 characters");
 
-        String email = trimmed(row.getEmail());
+        String email = EmployeeContactGuard.normalizeEmail(row.getEmail());
         if (email == null || !email.contains("@")) {
             row.addProblem("email", "email is invalid or missing");
         } else if (email.length() > 255) {
             row.addProblem("email", "email is longer than 255 characters");
         } else {
-            String k = email.toLowerCase(Locale.ROOT);
-            if (emailsInUse.contains(k)) {
+            String k = email;
+            Owner owner = l.emailOwners() == null ? null : l.emailOwners().get(k);
+            if (owner != null) {
+                row.addProblem("email", emailInUse(owner, l.revealOwners(), email));
+            } else if (emailsInUse.contains(k)) {
                 row.addProblem("email", "email already exists: " + email);
             } else if (emailsInFile.containsKey(k)) {
                 row.addProblem("email", "email appears more than once in this file (also row " + emailsInFile.get(k) + "): " + email);

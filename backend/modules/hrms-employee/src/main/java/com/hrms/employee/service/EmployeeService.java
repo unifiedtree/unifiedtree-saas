@@ -54,6 +54,8 @@ public class EmployeeService {
     private final OnboardingService onboardingService;
     private final JdbcTemplate jdbc;
     private final SeatQuotaEnforcer seatQuotaEnforcer;
+    /** The workspace's email rule, shared with the directory create (WorkforceEmployeeService). */
+    private final EmployeeContactGuard contactGuard;
     private final boolean kafkaEnabled;
 
     public EmployeeService(
@@ -67,6 +69,7 @@ public class EmployeeService {
             OnboardingService onboardingService,
             JdbcTemplate jdbc,
             SeatQuotaEnforcer seatQuotaEnforcer,
+            EmployeeContactGuard contactGuard,
             @Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
         this.employeeRepository = employeeRepository;
         this.emergencyContactRepository = emergencyContactRepository;
@@ -78,6 +81,7 @@ public class EmployeeService {
         this.onboardingService = onboardingService;
         this.jdbc = jdbc;
         this.seatQuotaEnforcer = seatQuotaEnforcer;
+        this.contactGuard = contactGuard;
         this.kafkaEnabled = kafkaEnabled;
     }
 
@@ -94,13 +98,18 @@ public class EmployeeService {
         // lookup rejects the create rather than letting it through.
         seatQuotaEnforcer.assertCapacity();
 
-        boolean emailExists = employeeRepository.findByEmail(request.email()).isPresent();
-        if (emailExists) {
-            throw new BusinessRuleException(
-                    "An employee with email '" + request.email() + "' already exists in this tenant.");
-        }
+        // The workspace's email rule (EmployeeContactGuard): the work email and the
+        // personal email may not be another employee's work, personal or login email,
+        // ignoring case and spaces (409 EMAIL_ALREADY_USED). This was an exact,
+        // case-sensitive lookup, so "Ravi@x.com" passed next to "ravi@x.com".
+        String email = EmployeeContactGuard.normalizeEmail(request.email());
+        String personalEmail = EmployeeContactGuard.normalizeEmail(request.personalEmail());
+        if (email != null) contactGuard.assertEmailFree(email, null);
+        if (personalEmail != null && !personalEmail.equals(email)) contactGuard.assertEmailFree(personalEmail, null);
 
         Employee employee = employeeMapper.toEntity(request);
+        if (email != null) employee.setEmail(email);
+        employee.setPersonalEmail(personalEmail);
         employee.setTenantId(tenantId);
         employee.setEmployeeCode(employeeCodeGenerator.generate());
         employee.setEmploymentStatus(EmploymentStatus.ACTIVE);

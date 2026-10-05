@@ -4,6 +4,7 @@ import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.HrmsException;
 import com.hrms.core.tenant.TenantContext;
 import com.hrms.employee.quota.SeatQuotaEnforcer;
+import com.hrms.employee.service.EmployeeContactGuard;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
 import com.hrms.employee.workforce.service.WorkforceEmployeeService;
 import org.apache.poi.ooxml.POIXMLException;
@@ -72,14 +73,25 @@ public class EmployeeBulkImportService {
      * this service — production always has it wired.
      */
     private final SeatQuotaEnforcer seatQuotaEnforcer;
+    /** Whose each email and number already is (the workspace's email rule, shared with Add employee). */
+    private final EmployeeContactGuard contactGuard;
 
     @Autowired
     public EmployeeBulkImportService(WorkforceEmployeeService workforce,
                                      JdbcTemplate jdbc,
-                                     org.springframework.beans.factory.ObjectProvider<SeatQuotaEnforcer> seatQuotaEnforcerProvider) {
+                                     org.springframework.beans.factory.ObjectProvider<SeatQuotaEnforcer> seatQuotaEnforcerProvider,
+                                     EmployeeContactGuard contactGuard) {
         this.workforce = workforce;
         this.jdbc = jdbc;
         this.seatQuotaEnforcer = seatQuotaEnforcerProvider.getIfAvailable();
+        this.contactGuard = contactGuard;
+    }
+
+    /** The same, with the email rule read through {@code jdbc} (tests that build the service by hand). */
+    public EmployeeBulkImportService(WorkforceEmployeeService workforce,
+                                     JdbcTemplate jdbc,
+                                     org.springframework.beans.factory.ObjectProvider<SeatQuotaEnforcer> seatQuotaEnforcerProvider) {
+        this(workforce, jdbc, seatQuotaEnforcerProvider, new EmployeeContactGuard(jdbc));
     }
 
     public Columns columns() {
@@ -177,13 +189,16 @@ public class EmployeeBulkImportService {
                  WHERE tenant_id = ? AND is_active = TRUE AND employment_status NOT IN ('EXITED', 'TERMINATED')
                 """, (rs, i) -> new EmployeeImportMapper.Manager(rs.getObject("id", UUID.class),
                         rs.getString("employee_code"), rs.getString("email")), tenant);
-        // Emails: anywhere in the workspace, as imports always checked. Codes: in this company, as Add employee checks.
-        Set<String> emails = new HashSet<>(jdbc.queryForList(
-                "SELECT lower(email) FROM hrms.employees WHERE tenant_id = ? AND email IS NOT NULL", String.class, tenant));
+        // Emails: anywhere in the workspace (work, personal and login emails, trimmed and
+        // lower-cased, people who left included), with whose each one is, so a row names
+        // the person. Codes: in this company, as Add employee checks.
+        Map<String, EmployeeContactGuard.Owner> emailOwners = contactGuard.allEmailOwners(tenant);
+        Set<String> emails = new HashSet<>(emailOwners.keySet());
         Set<String> codes = new HashSet<>(jdbc.queryForList(
                 "SELECT lower(employee_code) FROM hrms.employees WHERE tenant_id = ? AND company_id = ?", String.class, tenant, companyId));
         return new EmployeeImportMapper.Lookups(EmployeeImportMapper.index(active), inactive,
-                EmployeeImportMapper.index(titles), branches, managers, emails, codes);
+                EmployeeImportMapper.index(titles), branches, managers, emails, codes,
+                emailOwners, contactGuard.allPhoneOwners(tenant), EmployeeContactGuard.callerMaySeeOwners());
     }
 
     // ── Template ─────────────────────────────────────────────────────────────

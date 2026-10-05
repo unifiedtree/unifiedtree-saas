@@ -59,7 +59,7 @@ class PasswordResetTest {
     void setUp() {
         service = new InvitationService(credRepo, mock(UserRoleRepository.class), mock(RoleRepository.class),
                 tokenRepo, passwords, auth, mock(InvitationEmailSender.class), jdbc,
-                mock(ApplicationEventPublisher.class), composer);
+                mock(ApplicationEventPublisher.class), composer, mock(com.hrms.employee.service.EmployeeContactGuard.class));
         ReflectionTestUtils.setField(service, "platformBaseUrl", "https://unifiedtree.com");
         when(composer.compose(any(), any(), anyString(), anyMap(), anyString(), anyString()))
                 .thenReturn(new NotificationEmailComposer.ComposedEmail("Reset", "<p>reset</p>", false));
