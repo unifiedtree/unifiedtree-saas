@@ -317,7 +317,7 @@ public class AssistedPunchService {
     }
 
     /** Face enrolment per employee (through their app login): the best of their logins. */
-    private Map<UUID, String> faceStatuses(UUID tenantId, List<UUID> employeeIds) {
+    Map<UUID, String> faceStatuses(UUID tenantId, List<UUID> employeeIds) {
         Map<UUID, String> out = new HashMap<>();
         if (employeeIds.isEmpty()) return out;
         String in = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
@@ -500,14 +500,14 @@ public class AssistedPunchService {
      * (as AttendanceService.checkOut does, with the same 20-hour window, so a
      * refusal comes before the face scan rather than after it).
      */
-    private boolean openSinceYesterday(UUID employeeId) {
+    boolean openSinceYesterday(UUID employeeId) {
         Instant now = Instant.now();
         return attendanceService.getRecordsForEmployeesOnDate(List.of(employeeId), LocalDate.now(IST).minusDays(1)).stream()
                 .anyMatch(r -> openOvernight(r, now));
     }
 
     /** The target's app login whose face enrolment to check: an active enrolment first. Null when they have no login. */
-    private UUID faceLoginOf(UUID tenantId, UUID employeeId) {
+    UUID faceLoginOf(UUID tenantId, UUID employeeId) {
         List<UUID> ids = jdbc.queryForList("""
                 SELECT uc.id
                   FROM auth.user_credentials uc
@@ -521,7 +521,7 @@ public class AssistedPunchService {
     }
 
     /** The company's "Require geofencing on mobile" rule; true (enforce) when it can't be read, as for a self punch. */
-    private boolean companyRequiresGeofence(UUID companyId) {
+    boolean companyRequiresGeofence(UUID companyId) {
         if (hrConfiguration == null || companyId == null) return true;
         try {
             return hrConfiguration.getOrDefault(companyId).enforceGeofencingForMobile();
@@ -574,7 +574,7 @@ public class AssistedPunchService {
         return space > 0 ? name.substring(0, space) : name;
     }
 
-    private static String clock(String iso) {
+    static String clock(String iso) {
         try {
             return CLOCK.format(Instant.parse(iso));
         } catch (RuntimeException e) {

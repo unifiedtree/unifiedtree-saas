@@ -121,6 +121,30 @@ public class JwtService {
         return new IssuedToken(token, exp, accessTokenTtl);
     }
 
+    /**
+     * The sign-in of a face station (V143.95): a shared device at one branch that
+     * may only punch people in and out. Not a person: no email, no employee id,
+     * one pseudo-permission no role can hold, and {@code token_type=station}, which
+     * StationScopeFilter keeps to the station endpoints.
+     */
+    public IssuedToken issueStationToken(UUID stationId, UUID tenantId, Duration ttl) {
+        Instant now = Instant.now();
+        Instant exp = now.plus(ttl);
+        String token = Jwts.builder()
+            .issuer(issuer)
+            .subject(stationId.toString())
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(exp))
+            .claim("token_type", "station")
+            .claim("station_id", stationId.toString())
+            .claim("tenant_id", tenantId.toString())
+            .claim("roles", List.of("FACE_STATION"))
+            .claim("permissions", List.of("attendance.station.punch"))
+            .signWith(signingKey, Jwts.SIG.HS256)
+            .compact();
+        return new IssuedToken(token, exp, ttl);
+    }
+
     /** Refresh tokens are opaque UUIDs in our scheme, not JWTs -- safer and shorter. */
     public Duration refreshTokenTtl() {
         return refreshTokenTtl;
