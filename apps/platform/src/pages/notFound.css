@@ -1,0 +1,25 @@
+/* Page not found (the catch-all route), inside the shell. Tokens only, as /no-access. */
+.ut-notfound {
+  box-sizing: border-box; width: 100%; min-height: calc(100vh - 160px); min-height: calc(100dvh - 160px);
+  padding: 32px 16px; display: flex; align-items: center; justify-content: center;
+  color: var(--u-ink, #0E1B16); font-family: var(--u-font, 'Inter', system-ui, sans-serif);
+}
+.ut-notfound__card {
+  width: 100%; max-width: 460px; box-sizing: border-box; padding: 32px 28px 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;
+  background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); border-radius: 20px; box-shadow: var(--u-shc, 0 1px 2px rgba(14, 27, 22, .05));
+}
+.ut-notfound__icon {
+  width: 56px; height: 56px; margin-bottom: 4px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+}
+.ut-notfound__title { margin: 0; font-size: 22px; line-height: 28px; font-weight: 500; letter-spacing: -.02em; }
+.ut-notfound__text { margin: 0; max-width: 340px; font-size: 14px; line-height: 1.5; color: var(--u-ink2, #4A5A54); }
+.ut-notfound__path {
+  max-width: 100%; box-sizing: border-box; padding: 4px 10px; border-radius: 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+  color: var(--u-ink2, #4A5A54); background: var(--u-hv, #F0F4F2);
+}
+.ut-notfound__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
