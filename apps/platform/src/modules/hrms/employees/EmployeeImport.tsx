@@ -1,180 +1,45 @@
-import React, { useEffect, useRef, useState } from 'react'
+// /hrms/employees/import — Import employees on the redesign kit (prototype PgEmpImport). Three
+// steps, as before: download the template → upload & validate (into a chosen company) → confirm.
+// Nothing is created until every row passes; the server checks the file again on commit.
+//   - Template: .xlsx, or .csv (GET /v1/bulk-import/employees/template?format=csv). The column
+//     chips come from GET …/columns (today's list when the server doesn't answer).
+//   - Upload: .csv / .xlsx up to 10 MB; a file of 0 rows or more than 1,000 rows is refused.
+//   - Results: rows, ready, problems; the problems in a filterable table (first 100).
+//   - Leaving the page with a validated file asks first (beforeunload), as before.
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { clsx } from 'clsx'
+import { CheckCircle2, CircleAlert, Users } from 'lucide-react'
+import { useAuthStore } from '@unifiedtree/sdk'
 import {
-  AlertCircle,
-  ArrowLeft,
-  Check,
-  CheckCircle,
-  ChevronRight,
-  Download,
-  FileUp,
-  Loader2,
-  Upload,
-  Users,
-} from 'lucide-react'
-import { useToast } from '@/shared/hooks/useToast'
-import { Skeleton } from '@unifiedtree/ui-kit'
-import { ModulePage, StatRow, State } from '@/design/module/ModuleKit'
-import { HrButton, TableCard } from '@/shared/components/hr'
+  Button, Callout, ErrorState, PageFrame, PageHeader, ProgressBar, Section, StatCard, StatGrid, StepTrack, Table, type StepItem, type TableColumn,
+} from '@/design/kit/display'
+import { UploadDrop, UploadFile } from '@/design/kit/data'
+import { Dropdown, FormField, Input, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
 import {
-  countValidRows,
-  parseErrors,
-  useCommitBulkImport,
-  useDownloadTemplate,
-  useValidateBulkImport,
+  countValidRows, parseErrors, useCommitBulkImport, useDownloadTemplate, useImportColumns, useValidateBulkImport, type ParsedError,
 } from '../api/useBulkImport'
-import { useAuthStore } from '@unifiedtree/sdk'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
+import '../workforce/directory.css'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
-
-function validateFile(f: File): string | null {
-  if (f.size > MAX_FILE_SIZE) {
-    return `File is ${(f.size / 1024 / 1024).toFixed(1)} MB — exceeds the 10 MB limit.`
-  }
-  const ext = f.name.toLowerCase().split('.').pop()
-  if (!['csv', 'xlsx'].includes(ext ?? '')) {
-    return `Only .csv and .xlsx files are accepted. Received: .${ext}`
-  }
-  return null
-}
-
-// ── Step indicator ────────────────────────────────────────────────────────────
+const MAX_ROWS = 1000
+const SHOWN_ERRORS = 100
+/** The template's columns when the server can't list them (today's template). */
+const REQUIRED = ['first_name', 'last_name', 'email', 'employment_type', 'date_of_joining']
+const OPTIONAL = ['phone', 'department', 'designation', 'job_title', 'gender', 'date_of_birth']
 
 type WizardStep = 1 | 2 | 3 | 'done'
+const STEPS = ['Download template', 'Upload & validate', 'Confirm import']
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-const STEPS = [
-  { n: 1, label: 'Download template' },
-  { n: 2, label: 'Upload & validate' },
-  { n: 3, label: 'Confirm import' },
-]
-
-function Stepper({ current }: { current: WizardStep }) {
-  const active = current === 'done' ? 3 : current
-  return (
-    <div className="flex items-center gap-0 mb-6">
-      {STEPS.map((s, i) => (
-        <React.Fragment key={s.n}>
-          <div className="flex items-center gap-2">
-            <div
-              className={clsx(
-                'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border transition-colors',
-                s.n < active || current === 'done'
-                  ? 'bg-[#15803D] border-[#15803D] text-white'
-                  : s.n === active
-                  ? 'bg-[#059669] border-[#059669] text-white'
-                  : 'bg-white border-border-default text-text-tertiary',
-              )}
-            >
-              {s.n < active || current === 'done' ? <Check size={12} /> : s.n}
-            </div>
-            <span
-              className={clsx(
-                'text-sm font-medium hidden sm:block',
-                s.n === active ? 'text-text-primary' : s.n < active ? 'text-[#15803D]' : 'text-text-tertiary',
-              )}
-            >
-              {s.label}
-            </span>
-          </div>
-          {i < STEPS.length - 1 && (
-            <div
-              className={clsx(
-                'flex-1 h-px mx-3',
-                s.n < active ? 'bg-[#6EE7B7]' : 'bg-border-default',
-              )}
-            />
-          )}
-        </React.Fragment>
-      ))}
-    </div>
-  )
-}
-
-// ── Drop zone ─────────────────────────────────────────────────────────────────
-
-interface DropZoneProps {
-  file: File | null
-  disabled: boolean
-  onFile: (f: File) => void
-}
-
-function DropZone({ file, disabled, onFile }: DropZoneProps) {
-  const [isDragging, setIsDragging] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    if (disabled) return
-    const dropped = e.dataTransfer.files[0]
-    if (dropped) onFile(dropped)
-  }
-
-  return (
-    <label
-      className={clsx(
-        'block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors',
-        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
-        isDragging
-          ? 'border-[#059669] bg-[#ECFDF5]'
-          : file
-          ? 'border-[#15803D]/50 bg-[#DCFCE7]/40'
-          : 'border-border-default hover:border-[#6EE7B7] bg-bg-base',
-      )}
-      onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsDragging(true) }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={handleDrop}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv,.xlsx"
-        className="sr-only"
-        disabled={disabled}
-        onChange={(e) => {
-          const picked = e.target.files?.[0]
-          if (picked) onFile(picked)
-          e.target.value = ''
-        }}
-      />
-      {file ? (
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 bg-[#DCFCE7] rounded-xl flex items-center justify-center">
-            <FileUp size={20} className="text-[#15803D]" />
-          </div>
-          <p className="text-text-primary font-medium text-sm">{file.name}</p>
-          <p className="text-text-secondary text-xs">{(file.size / 1024).toFixed(0)} KB</p>
-          {!disabled && (
-            <p className="text-text-secondary text-xs mt-1">Click to change file</p>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 bg-bg-base rounded-xl flex items-center justify-center">
-            <Upload size={20} className="text-text-secondary" />
-          </div>
-          <p className="text-text-primary text-sm font-medium">
-            Drag & drop your file here, or click to browse
-          </p>
-          <p className="text-text-secondary text-xs">Accepts .csv or .xlsx · Max 10 MB</p>
-        </div>
-      )}
-    </label>
-  )
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
-
-export const EmployeeImport: React.FC = () => {
+export function EmployeeImport() {
   const navigate = useNavigate()
-  const { toast } = useToast()
-
+  const toast = useToast()
   const { data: companies = [] } = useCompanies()
   const tenantName = useAuthStore((s) => s.tenant?.displayName ?? 'your organisation')
+  const columnsQ = useImportColumns()
+  const required = columnsQ.data?.required?.length ? columnsQ.data.required : REQUIRED
+  const optional = columnsQ.data?.optional?.length ? columnsQ.data.optional : OPTIONAL
 
   const validateMutation = useValidateBulkImport()
   const commitMutation = useCommitBulkImport()
@@ -185,12 +50,12 @@ export const EmployeeImport: React.FC = () => {
   const [companyId, setCompanyId] = useState('')
   const [errorFilter, setErrorFilter] = useState('')
 
-  // Auto-select first company
+  // The first company until one is chosen.
   useEffect(() => {
     if (!companyId && companies.length > 0) setCompanyId(companies[0].id)
   }, [companies, companyId])
 
-  // beforeunload guard — only when user has validated data and is about to commit
+  // Leaving with a validated file about to be imported asks first.
   useEffect(() => {
     if (step !== 3 || !validateMutation.data) return
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
@@ -198,28 +63,19 @@ export const EmployeeImport: React.FC = () => {
     return () => window.removeEventListener('beforeunload', handler)
   }, [step, validateMutation.data])
 
-  // ── Derived values ──────────────────────────────────────────────────────────
   const validationResult = validateMutation.data ?? null
   const validRows = validationResult ? countValidRows(validationResult) : 0
-  const parsedErrors = validationResult ? parseErrors(validationResult.errors) : []
+  const parsedErrors = useMemo(() => (validationResult ? parseErrors(validationResult.errors) : []), [validationResult])
   const filteredErrors = errorFilter
-    ? parsedErrors.filter(
-        (e) =>
-          e.message.toLowerCase().includes(errorFilter.toLowerCase()) ||
-          String(e.rowNumber).includes(errorFilter),
-      )
+    ? parsedErrors.filter((e) => e.message.toLowerCase().includes(errorFilter.toLowerCase()) || String(e.rowNumber).includes(errorFilter))
     : parsedErrors
-  const displayedErrors = filteredErrors.slice(0, 100)
+  const displayedErrors = filteredErrors.slice(0, SHOWN_ERRORS)
   const hiddenCount = filteredErrors.length - displayedErrors.length
-
   const commitResult = commitMutation.data ?? null
   const selectedCompany = companies.find((c) => c.id === companyId) ?? companies[0]
+  const companyName = selectedCompany?.name ?? tenantName
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
-
-  const handleFileSelect = (f: File) => {
-    const err = validateFile(f)
-    if (err) { toast(err, 'error'); return }
+  const pickFile = (f: File) => {
     setFile(f)
     validateMutation.reset()
     setErrorFilter('')
@@ -229,30 +85,17 @@ export const EmployeeImport: React.FC = () => {
     if (!file || !companyId) return
     try {
       const result = await validateMutation.mutateAsync({ file, companyId })
-      if (result.totalRows === 0) {
-        toast('File appears to be empty. Check the template structure.', 'warning')
-        return
-      }
-      if (result.totalRows > 1000) {
-        toast(
-          `File has ${result.totalRows} rows — maximum is 1,000 rows per import. Split the file and try again.`,
-          'error',
-        )
-        return
-      }
+      if (result.totalRows === 0) { toast.info('File appears to be empty. Check the template structure.'); return }
+      if (result.totalRows > MAX_ROWS) toast.error(`File has ${result.totalRows} rows — maximum is 1,000 rows per import. Split the file and try again.`)
     } catch {
-      // error already in validateMutation.error
+      // shown from validateMutation.error
     }
   }
 
   const handleCommit = async () => {
     if (!file || !companyId) return
-    try {
-      await commitMutation.mutateAsync({ file, companyId })
-      setStep('done')
-    } catch {
-      setStep('done')
-    }
+    try { await commitMutation.mutateAsync({ file, companyId }) } catch { /* shown below */ }
+    setStep('done')
   }
 
   const reset = () => {
@@ -263,388 +106,195 @@ export const EmployeeImport: React.FC = () => {
     setStep(1)
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const download = (format: 'xlsx' | 'csv') => downloadMutation.mutate(
+    { slug: useAuthStore.getState().tenant?.slug ?? 'tenant', format },
+    { onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not download the template. Please try again.') },
+  )
+
+  const at = step === 'done' ? 3 : step
+  const steps: StepItem[] = STEPS.map((label, i) => ({
+    key: label, label, state: step === 'done' || i + 1 < at ? 'done' : i + 1 === at ? 'current' : 'todo',
+  }))
+
+  const errorColumns: TableColumn<ParsedError>[] = [
+    { key: 'row', header: 'Row', width: 90, render: (e) => <span className="wf-mono">{e.rowNumber || '?'}</span> },
+    { key: 'msg', header: 'Problem', render: (e) => <span className="wf-err">{e.message}</span>, className: 'wf-wrap' },
+  ]
 
   return (
-    <ModulePage
-        crumb="Employees · Import"
+    <PageFrame label="Import employees">
+      <PageHeader
+        eyebrow={<span className="wf-crumbs"><button type="button" onClick={() => navigate('/hrms/employees')}>Workforce directory</button><span aria-hidden="true">/</span>Import</span>}
         title="Import employees"
-        subtitle="Upload a CSV or XLSX file to add many employees at once. Nothing is created until every row passes."
-        actions={
-          <HrButton variant="ghost" onClick={() => navigate('/hrms/employees')}>
-            <ArrowLeft size={15} /> Back to employees
-          </HrButton>
-        }
-      >
-      <div className="space-y-6" style={{ maxWidth: 860, minWidth: 0 }}>
+        sub="Add many people at once from a spreadsheet. Nothing is created until every row passes."
+        actions={<Button size={40} icon="chevronLeft" onClick={() => navigate('/hrms/employees')}>Back to employees</Button>} />
+      <div className="wf-import">
+        <StepTrack steps={steps} label="Import steps" />
 
-      <Stepper current={step} />
-
-      {/* ── Step 1: Download template ────────────────────────────────────── */}
-      {step === 1 && (
-        <div className="ut-card p-6 space-y-5">
-          <div>
-            <h3 className="text-text-primary font-semibold text-base mb-1">Download the template</h3>
-            <p className="text-text-secondary text-sm leading-relaxed">
-              Use an Excel or CSV file matching the required column headers. Fill in employee rows
-              and come back to upload.
-            </p>
-          </div>
-
-          {/* Column reference */}
-          <div className="bg-bg-base rounded-xl p-4 space-y-2.5">
-            <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Required columns</p>
-            <div className="flex flex-wrap gap-1.5">
-              {['first_name', 'last_name', 'email', 'employment_type', 'date_of_joining'].map((col) => (
-                <code key={col} className="px-2 py-0.5 bg-[#ECFDF5] rounded text-xs text-[#047857]">{col}</code>
-              ))}
+        {step === 1 && (
+          <>
+            <div className="wf-import__grid">
+              <Section title="Download the template" sub="Fill one row per person. Keep the column names as they are.">
+                <div className="wf-row">
+                  <Button variant="primary" size={40} icon="download" loading={downloadMutation.isPending} onClick={() => download('xlsx')}>
+                    {downloadMutation.isPending ? 'Downloading…' : 'Download template'}
+                  </Button>
+                  <Button size={40} disabled={downloadMutation.isPending} onClick={() => download('csv')} aria-label="Download the template as .csv">.csv</Button>
+                </div>
+                <ul className="wf-notes">
+                  <li>employment_type values: FULL_TIME, PART_TIME, CONTRACT, INTERN, CONSULTANT</li>
+                  <li>date_of_joining format: yyyy-MM-dd (e.g. 2025-01-15)</li>
+                  <li>Max 1,000 rows per import · Max file size: 10 MB</li>
+                  <li>Accepted formats: .csv, .xlsx</li>
+                </ul>
+              </Section>
+              <Section title="Columns" sub="The file’s first row names these columns.">
+                <p className="wf-eyebrow wf-eyebrow--brand">Required columns</p>
+                <div className="wf-cols">{required.map((c) => <code key={c}>{c}</code>)}</div>
+                <p className="wf-eyebrow" style={{ marginTop: 14 }}>Optional columns</p>
+                <div className="wf-cols wf-cols--opt">{optional.map((c) => <code key={c}>{c}</code>)}</div>
+              </Section>
             </div>
-            <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mt-2">Optional columns</p>
-            <div className="flex flex-wrap gap-1.5">
-              {['phone', 'department', 'designation', 'job_title', 'gender', 'date_of_birth'].map((col) => (
-                <code key={col} className="px-2 py-0.5 bg-white border border-border-default rounded text-xs text-text-secondary">{col}</code>
-              ))}
+            <div className="wf-row wf-row--end">
+              <Button variant="primary" size={40} trailingIcon="arrowRight" onClick={() => setStep(2)}>I have a file ready</Button>
             </div>
-            <ul className="mt-3 space-y-1 text-xs text-text-secondary">
-              <li>• employment_type values: FULL_TIME, PART_TIME, CONTRACT, INTERN, CONSULTANT</li>
-              <li>• date_of_joining format: yyyy-MM-dd (e.g. 2025-01-15)</li>
-              <li>• Max 1,000 rows per import · Max file size: 10 MB</li>
-              <li>• Accepted formats: .csv, .xlsx</li>
-            </ul>
-          </div>
+          </>
+        )}
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <HrButton
-              onClick={() => downloadMutation.mutate(useAuthStore.getState().tenant?.slug ?? 'tenant')}
-              disabled={downloadMutation.isPending}
-            >
-              <Download size={15} />
-              {downloadMutation.isPending ? 'Downloading…' : 'Download template'}
-            </HrButton>
-
-            <button
-              onClick={() => setStep(2)}
-              className="px-4 py-2 text-[#047857] hover:text-[#059669] text-sm font-medium transition-colors"
-            >
-              I have a file ready → Go to upload
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Step 2: Upload & validate ────────────────────────────────────── */}
-      {step === 2 && (
-        <div className="space-y-4">
-          {/* Company selector */}
-          {companies.length > 1 && (
-            <div className="ut-card p-4">
-              <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                Import into company
-              </label>
-              <select
-                value={companyId}
-                onChange={(e) => {
-                  setCompanyId(e.target.value)
-                  validateMutation.reset()
-                }}
-                disabled={validateMutation.isPending}
-                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-colors"
-              >
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Drop zone */}
-          <div className="ut-card p-6 space-y-4">
-            <DropZone
-              file={file}
-              disabled={validateMutation.isPending}
-              onFile={handleFileSelect}
-            />
-
-            {file && !validateMutation.isPending && !validateMutation.data && (
-              <HrButton onClick={handleValidate} disabled={!companyId}>
-                <Check size={15} /> Validate file
-              </HrButton>
-            )}
-
-            {validateMutation.isPending && (
-              <div className="flex items-center gap-3 text-text-secondary text-sm">
-                <Loader2 size={16} className="animate-spin text-[#059669]" />
-                Validating {file?.name}…
-                {validateMutation.uploadProgress > 0 && validateMutation.uploadProgress < 100 && (
-                  <span className="text-xs text-text-secondary">{validateMutation.uploadProgress}%</span>
+        {step === 2 && (
+          <>
+            <Section title="Upload & validate" sub="The file is checked first; nothing is saved at this step.">
+              <div className="wf-form">
+                {companies.length > 1 && (
+                  <FormField label="Import into company">
+                    <Dropdown label="Import into company" options={companies.map((c) => ({ value: c.id, label: c.name }))} value={companyId}
+                      disabled={validateMutation.isPending} onChange={(x) => { setCompanyId(x); validateMutation.reset() }} />
+                  </FormField>
+                )}
+                {file ? (
+                  <UploadFile name={file.name} size={file.size}
+                    progress={validateMutation.isPending ? validateMutation.uploadProgress : null}
+                    onRemove={validateMutation.isPending ? undefined : () => { setFile(null); validateMutation.reset() }} removeLabel="Choose another file" />
+                ) : (
+                  <UploadDrop variant="zone" accept=".csv,.xlsx" maxSize={MAX_FILE_SIZE} disabled={validateMutation.isPending}
+                    hint="Accepts .csv or .xlsx · Max 10 MB" ariaLabel="Choose the employee file"
+                    onFiles={(fs) => fs[0] && pickFile(fs[0])} onReject={(r) => r[0] && toast.error(r[0].message)} />
+                )}
+                {file && !validateMutation.isPending && !validateMutation.data && (
+                  <div className="wf-row"><Button variant="primary" size={40} icon="check" disabled={!companyId} onClick={handleValidate}>Validate file</Button></div>
+                )}
+                {validateMutation.isPending && <p className="wf-muted" role="status">Validating {file?.name}…</p>}
+                {validateMutation.isError && (
+                  <Callout tone="danger" icon="alertTriangle"><b>Validation request failed</b> — {(validateMutation.error as Error)?.message}</Callout>
                 )}
               </div>
-            )}
-          </div>
+            </Section>
 
-          {/* Validation error */}
-          {validateMutation.isError && (
-            <div className="bg-[#FEE2E2] border border-[#FECACA] rounded-2xl p-4 flex items-start gap-3">
-              <AlertCircle size={16} className="text-[#B91C1C] flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[#B91C1C] text-sm font-medium">Validation request failed</p>
-                <p className="text-[#DC2626] text-xs mt-0.5">{(validateMutation.error as Error)?.message}</p>
-              </div>
-            </div>
-          )}
+            {validationResult && !validateMutation.isPending && (
+              <>
+                <StatGrid min={200} label="Validation result">
+                  <StatCard variant="stat" index={0} icon="users" tone="gray" label="Rows in the file" value={validationResult.totalRows} note="Employees to add" />
+                  <StatCard variant="stat" index={1} icon="checkCircle" tone="brand" label="Ready" value={validRows} note="Passed every check" />
+                  <StatCard variant="stat" index={2} icon={validationResult.errorCount > 0 ? 'circleX' : 'checkCircle'} tone={validationResult.errorCount > 0 ? 'red' : 'brand'}
+                    label="Problems" value={validationResult.errorCount} note={validationResult.errorCount > 0 ? 'Fix them and upload again' : 'None'} />
+                </StatGrid>
 
-          {/* Validation result */}
-          {validationResult && !validateMutation.isPending && (
-            <div className="space-y-4">
-              {/* Summary stat cards */}
-              <StatRow min={180} tiles={[
-                { icon: 'users', color: 'blue', label: 'Rows in the file', value: String(validationResult.totalRows), sub: 'Employees to add' },
-                { icon: 'checkCircle', color: 'green', label: 'Ready', value: String(validRows), sub: 'Passed every check' },
-                { icon: validationResult.errorCount > 0 ? 'circleX' : 'checkCircle', color: validationResult.errorCount > 0 ? 'red' : 'green', label: 'Problems', value: String(validationResult.errorCount), sub: validationResult.errorCount > 0 ? 'Fix them and upload again' : 'None' },
-              ]} />
-
-              {/* Error table */}
-              {validationResult.errorCount > 0 && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-text-primary">
-                    {parsedErrors.length} validation error{parsedErrors.length !== 1 ? 's' : ''}
-                  </p>
-
-                  <TableCard
-                    search={{
-                      value: errorFilter,
-                      onChange: setErrorFilter,
-                      placeholder: 'Filter errors…',
-                    }}
-                    footer={
-                      hiddenCount > 0 ? (
-                        <p className="text-xs text-text-secondary text-center">
-                          … and {hiddenCount} more error{hiddenCount !== 1 ? 's' : ''} not shown.
-                          Fix the file and re-validate to see all.
-                        </p>
-                      ) : undefined
-                    }
-                  >
-                    <table className="hr-table">
-                      <thead>
-                        <tr>
-                          <th className="w-20">Row #</th>
-                          <th>Error</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayedErrors.length === 0 ? (
-                          <tr>
-                            <td colSpan={2} className="text-center text-text-tertiary">
-                              No errors match the filter
-                            </td>
-                          </tr>
-                        ) : (
-                          displayedErrors.map((row) => (
-                            <tr key={row.id}>
-                              <td><span className="hr-mono text-xs text-text-secondary">{row.rowNumber || '?'}</span></td>
-                              <td><span className="text-[#B91C1C] text-xs">{row.message}</span></td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </TableCard>
-                </div>
-              )}
-
-              {/* Skeleton shown if loading next operation */}
-              {validateMutation.isPending && (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-10 w-full rounded-lg" />
-                  ))}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="flex items-center gap-3 flex-wrap pt-1">
-                <HrButton variant="ghost" onClick={reset}>
-                  Upload a different file
-                </HrButton>
-                {validationResult.errorCount === 0 && validRows > 0 && (
-                  <HrButton onClick={() => setStep(3)}>
-                    Continue with {validRows} valid {validRows === 1 ? 'row' : 'rows'}
-                    <ChevronRight size={15} />
-                  </HrButton>
-                )}
                 {validationResult.errorCount > 0 && (
-                  <p className="text-text-secondary text-xs">
-                    Fix {validationResult.errorCount} error{validationResult.errorCount !== 1 ? 's' : ''} above and re-upload —
-                    the backend requires all rows to be valid before any are committed.
-                  </p>
+                  <Section title={plural(parsedErrors.length, 'validation error', 'validation errors')} body="flush"
+                    actions={<Input size="md" leading="search" placeholder="Filter errors…" aria-label="Filter errors" value={errorFilter} onChange={(e) => setErrorFilter(e.target.value)} />}
+                    footer={hiddenCount > 0 ? <p className="wf-muted" style={{ margin: 0, textAlign: 'center' }}>… and {plural(hiddenCount, 'more error', 'more errors')} not shown. Fix the file and re-validate to see all.</p> : undefined}>
+                    <Table<ParsedError> label="Validation errors" columns={errorColumns} rows={displayedErrors} rowKey={(e) => e.id} minWidth={420}
+                      className="wf-errors" stickyHeader empty="No errors match the filter" />
+                  </Section>
                 )}
-                {validationResult.errorCount === 0 && validRows === 0 && (
-                  <p className="text-text-secondary text-xs">
-                    File is empty — add some rows and re-upload.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* ── Step 3: Confirm & commit ─────────────────────────────────────── */}
-      {step === 3 && !commitMutation.isPending && !commitMutation.isError && !commitMutation.isSuccess && (
-        <div className="ut-card p-6 space-y-5">
-          <div>
-            <h3 className="text-text-primary font-semibold text-base mb-1">Confirm import</h3>
-            <p className="text-text-secondary text-sm leading-relaxed">
-              You are about to create{' '}
-              <strong className="text-text-primary">{validRows}</strong>{' '}
-              new {validRows === 1 ? 'employee' : 'employees'} in{' '}
-              <strong className="text-text-primary">{selectedCompany?.name ?? tenantName}</strong>.
-              This cannot be undone — but individual employees can be deleted afterward.
-            </p>
-          </div>
-
-          {/* Preview collapsible */}
-          {validationResult && (
-            <details className="group">
-              <summary className="cursor-pointer text-sm text-text-secondary hover:text-text-primary select-none transition-colors">
-                Preview the {validRows} {validRows === 1 ? 'employee' : 'employees'} being imported
-              </summary>
-              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border-default divide-y divide-border-default">
-                {/* NOTE: the backend validate response does not return parsed row data — only error strings.
-                    The preview shows the file rows that had no errors. We can only show the row numbers. */}
-                <div className="px-4 py-3 text-xs text-text-secondary bg-bg-base">
-                  {validRows} row{validRows !== 1 ? 's' : ''} from {file?.name} will be created.
+                <div className="wf-row">
+                  <Button size={40} variant="ghost" onClick={reset}>Upload a different file</Button>
+                  {validationResult.errorCount === 0 && validRows > 0 && (
+                    <Button variant="primary" size={40} trailingIcon="arrowRight" onClick={() => setStep(3)}>
+                      Continue with {validRows} valid {validRows === 1 ? 'row' : 'rows'}
+                    </Button>
+                  )}
+                  {validationResult.errorCount > 0 && (
+                    <span className="wf-muted">
+                      Fix {plural(validationResult.errorCount, 'error', 'errors')} above and re-upload — every row must be valid before any are created.
+                    </span>
+                  )}
+                  {validationResult.errorCount === 0 && validRows === 0 && <span className="wf-muted">File is empty — add some rows and re-upload.</span>}
                 </div>
-                {/* NOTE[backend]: validate endpoint does not return parsed row data.
-                    Full row preview requires the backend to include parsed employee objects in BulkImportResult.
-                    Until then, we show a concise summary. */}
-                <div className="px-4 py-6 text-center text-text-secondary text-xs">
-                  <Users size={20} className="mx-auto mb-2 opacity-40" />
-                  Detailed row preview requires a backend change to return parsed employee data
-                  alongside the validation result. Contact your backend team if this is needed.
-                </div>
-              </div>
-            </details>
-          )}
+              </>
+            )}
+          </>
+        )}
 
-          <div className="flex items-center gap-3">
-            <HrButton variant="ghost" onClick={() => setStep(2)}>
-              <ArrowLeft size={15} /> Back
-            </HrButton>
-            <HrButton onClick={handleCommit}>
-              Confirm — create {validRows} {validRows === 1 ? 'employee' : 'employees'}
-            </HrButton>
-          </div>
-        </div>
-      )}
-
-      {/* Committing in progress */}
-      {step === 3 && commitMutation.isPending && (
-        <div className="ut-card p-8 flex flex-col items-center gap-4">
-          <Loader2 size={32} className="animate-spin text-[#059669]" />
-          <p className="text-text-primary font-medium">Creating employees…</p>
-          {commitMutation.uploadProgress > 0 && commitMutation.uploadProgress < 100 && (
-            <div className="w-full max-w-xs">
-              <div className="h-1.5 bg-bg-base rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#059669] transition-all duration-300"
-                  style={{ width: `${commitMutation.uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-text-secondary mt-1 text-center">{commitMutation.uploadProgress}%</p>
-            </div>
-          )}
-          <p className="text-text-secondary text-xs">Do not close this page.</p>
-        </div>
-      )}
-
-      {/* ── Step 'done': Commit result ───────────────────────────────────── */}
-      {step === 'done' && commitResult?.committed && (
-        <div className="ut-card p-6 space-y-4">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-[#DCFCE7] rounded-xl flex items-center justify-center flex-shrink-0">
-              <CheckCircle size={22} className="text-[#15803D]" />
-            </div>
-            <div>
-              <h3 className="text-text-primary font-semibold text-base mb-1">Imported successfully</h3>
-              <p className="text-text-secondary text-sm">
-                <strong className="text-[#15803D]">{commitResult.successCount}</strong>{' '}
-                {commitResult.successCount === 1 ? 'employee was' : 'employees were'} created in{' '}
-                {selectedCompany?.name ?? tenantName}.
+        {step === 3 && !commitMutation.isPending && !commitMutation.isError && !commitMutation.isSuccess && (
+          <Section title="Confirm import">
+            <div className="wf-form">
+              <p className="wf-lead">
+                You are about to create <b>{validRows}</b> new {validRows === 1 ? 'employee' : 'employees'} in <b>{companyName}</b>. This can’t be undone, but each person can be removed afterwards.
               </p>
+              <Callout tone="info" icon={<Users size={16} aria-hidden="true" />}>{plural(validRows, 'row', 'rows')} from {file?.name} will be created.</Callout>
+              <div className="wf-row">
+                <Button size={40} icon="chevronLeft" onClick={() => setStep(2)}>Back</Button>
+                <Button variant="primary" size={40} onClick={handleCommit}>Confirm — create {validRows} {validRows === 1 ? 'employee' : 'employees'}</Button>
+              </div>
             </div>
-          </div>
+          </Section>
+        )}
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <HrButton onClick={() => navigate('/hrms/employees')}>
-              View employees <ChevronRight size={15} />
-            </HrButton>
-            <button
-              onClick={reset}
-              className="px-4 py-2 text-[#047857] hover:text-[#059669] text-sm font-medium transition-colors"
-            >
-              Import more
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 'done' && commitResult && !commitResult.committed && (
-        <div className="ut-card p-6 space-y-4">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-[#FEF3C7] rounded-xl flex items-center justify-center flex-shrink-0">
-              <AlertCircle size={22} className="text-[#B45309]" />
+        {step === 3 && commitMutation.isPending && (
+          <Section title="Creating employees…">
+            <div className="wf-form" role="status">
+              {commitMutation.uploadProgress > 0 && commitMutation.uploadProgress < 100 && (
+                <ProgressBar className="wf-progress" value={commitMutation.uploadProgress} label="Upload progress" valueText={`${commitMutation.uploadProgress}%`} />
+              )}
+              <p className="wf-muted" style={{ margin: 0 }}>Do not close this page.</p>
             </div>
-            <div>
-              <h3 className="text-text-primary font-semibold text-base mb-1">Import blocked by validation errors</h3>
-              <p className="text-text-secondary text-sm">
-                The commit was rejected because {commitResult.errorCount}{' '}
-                {commitResult.errorCount === 1 ? 'error was' : 'errors were'} found during the write phase.
-                No employees were created. This can happen if an email was registered by another user between
-                your validate and commit steps.
-              </p>
+          </Section>
+        )}
+
+        {step === 'done' && commitResult?.committed && (
+          <Section title="Imported successfully">
+            <div className="wf-form">
+              <div className="wf-done">
+                <span className="wf-done__icon wf-done__icon--ok" aria-hidden="true"><CheckCircle2 size={22} /></span>
+                <p><b>{commitResult.successCount}</b> {commitResult.successCount === 1 ? 'employee was' : 'employees were'} created in {companyName}.</p>
+              </div>
+              <div className="wf-row">
+                <Button variant="primary" size={40} trailingIcon="arrowRight" onClick={() => navigate('/hrms/employees')}>View employees</Button>
+                <Button size={40} variant="ghost" onClick={reset}>Import more</Button>
+              </div>
             </div>
-          </div>
-          {commitResult.errors.length > 0 && (
-            <details>
-              <summary className="cursor-pointer text-sm text-text-secondary hover:text-text-primary select-none">
-                View {commitResult.errors.length} error{commitResult.errors.length !== 1 ? 's' : ''}
-              </summary>
-              <ul className="mt-2 space-y-1">
-                {commitResult.errors.slice(0, 20).map((e, i) => (
-                  <li key={i} className="hr-mono text-xs text-[#B91C1C] bg-[#FEE2E2] px-3 py-1.5 rounded-lg">{e}</li>
-                ))}
-              </ul>
-            </details>
-          )}
-          <div className="flex items-center gap-3">
-            <HrButton variant="ghost" onClick={() => setStep(2)}>
-              Back to validate
-            </HrButton>
-          </div>
-        </div>
-      )}
+          </Section>
+        )}
 
-      {/* Network / 5xx error during commit */}
-      {step === 'done' && commitMutation.isError && (
-        <State
-          kind="error"
-          title="The import didn’t finish"
-          description={`${(commitMutation.error as Error)?.message ?? 'Something went wrong.'} Trying again is safe: the file is checked again first, and anyone whose email already exists is reported instead of being added twice.`}
-          onRetry={handleCommit}
-        />
-      )}
+        {step === 'done' && commitResult && !commitResult.committed && (
+          <Section title="Import blocked by validation errors">
+            <div className="wf-form">
+              <div className="wf-done">
+                <span className="wf-done__icon wf-done__icon--warn" aria-hidden="true"><CircleAlert size={22} /></span>
+                <p>
+                  The commit was rejected because {plural(commitResult.errorCount, 'error was', 'errors were')} found during the write phase.
+                  No employees were created. This can happen if an email was registered by another user between your validate and commit steps.
+                </p>
+              </div>
+              {commitResult.errors.length > 0 && (
+                <details>
+                  <summary className="wf-link" style={{ textDecoration: 'none' }}>View {plural(commitResult.errors.length, 'error', 'errors')}</summary>
+                  <ul className="wf-notes">{commitResult.errors.slice(0, 20).map((e, i) => <li key={i} className="wf-err">{e}</li>)}</ul>
+                </details>
+              )}
+              <div className="wf-row"><Button size={40} icon="chevronLeft" onClick={() => setStep(2)}>Back to validate</Button></div>
+            </div>
+          </Section>
+        )}
 
-      {/* Skeletons shown while data is loading on initial mount */}
-      {step === 2 && !file && companies.length === 0 && (
-        <div className="space-y-3">
-          {[...Array(2)].map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-xl" />
-          ))}
-        </div>
-      )}
+        {step === 'done' && commitMutation.isError && (
+          <ErrorState title="The import didn’t finish"
+            message={`${(commitMutation.error as Error)?.message ?? 'Something went wrong.'} Trying again is safe: the file is checked again first, and anyone whose email already exists is reported instead of being added twice.`}
+            onRetry={handleCommit} />
+        )}
       </div>
-    </ModulePage>
+    </PageFrame>
   )
 }

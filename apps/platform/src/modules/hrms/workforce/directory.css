@@ -89,3 +89,6 @@
 .wf-done p { margin: 0; font-size: 13.5px; line-height: 20px; color: var(--u-ink2, #4A5A54); }
 .wf-progress { width: 100%; max-width: 320px; }
 .wf-card .wf-td-act { overflow: visible; text-overflow: clip; }
+.wf-lead { margin: 0; font-size: 14px; line-height: 21px; color: var(--u-ink2, #4A5A54); }
+.wf-lead b { color: var(--u-ink, #0E1B16); font-weight: 600; }
+.wf-errors .wf-wrap { white-space: normal; }
