@@ -339,7 +339,9 @@ public class CanonicalProdSecurityConfig {
             "ngrok-skip-browser-warning",
             "X-Request-Id",
             "X-Tenant-ID",
-            "X-Tenant-Subdomain"));
+            "X-Tenant-Subdomain",
+            // The current HRMS company (CompanyAccessFilter, docs/redesign/COMPANY_ACCESS.md).
+            "X-Company-Id"));
         cfg.setExposedHeaders(List.of("Location", "X-Request-Id"));
         cfg.setAllowCredentials(allowCredentials);
         cfg.setMaxAge(600L);  // 10-minute preflight cache

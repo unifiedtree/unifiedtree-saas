@@ -2,6 +2,7 @@ package com.hrms.api.attendance;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
+import com.unifiedtree.security.tenant.CompanyContext;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -43,8 +44,10 @@ public class TeamEmployeeScope {
         List<Employee> employees;
         boolean companyWide = AttendanceController.isAdmin(jwt);
         if (companyWide) {
-            // Admin + HR: organisation-wide, every active employee.
-            employees = withFormer(employeeRepository.findActiveByCompany(current.getCompanyId()), formerStaff, current.getCompanyId());
+            // Admin + HR: organisation-wide, every active employee of the current
+            // company (the X-Company-Id the client selected, else their own).
+            UUID companyId = currentCompany(current);
+            employees = withFormer(employeeRepository.findActiveByCompany(companyId), formerStaff, companyId);
         } else {
             employees = teamOf(current, formerStaff);
         }
@@ -92,6 +95,11 @@ public class TeamEmployeeScope {
     /** {@link #teamOf(Employee)}, with the people who have since left (see {@link #resolve(Jwt, UUID, java.util.function.Function)}). */
     List<Employee> teamOf(Employee manager, java.util.function.Function<UUID, List<Employee>> formerStaff) {
         UUID managerId = manager.getId();
+        // With a current company chosen (X-Company-Id), the team is the part of
+        // it in that company: department heads see their departments' people
+        // there, others their direct reports there. Without one: as before.
+        UUID selected = CompanyContext.getCompanyId();
+        UUID companyId = selected != null ? selected : manager.getCompanyId();
         // DEPT_MANAGER: everyone in the department(s) they head — not just
         // direct reports whose reporting_manager_id points at them. A
         // department head "owns" the whole department, so their dashboard
@@ -104,17 +112,26 @@ public class TeamEmployeeScope {
         List<Employee> employees;
         if (!ledDepartmentIds.isEmpty()) {
             List<Employee> companyEmployees =
-                    withFormer(employeeRepository.findActiveByCompany(manager.getCompanyId()), formerStaff, manager.getCompanyId());
+                    withFormer(employeeRepository.findActiveByCompany(companyId), formerStaff, companyId);
             employees = companyEmployees.stream()
                     .filter(e -> e.getDepartmentId() != null
                             && ledDepartmentIds.contains(e.getDepartmentId()))
                     .toList();
         } else {
             employees = employeeRepository.findByManagerId(managerId);
+            if (selected != null) {
+                employees = employees.stream().filter(e -> selected.equals(e.getCompanyId())).toList();
+            }
         }
         return employees.stream()
                 .filter(employee -> !employee.getId().equals(managerId))
                 .toList();
+    }
+
+    /** The current company: the one the client selected (X-Company-Id, access already checked), else the caller's own. */
+    private static UUID currentCompany(Employee caller) {
+        UUID selected = CompanyContext.getCompanyId();
+        return selected != null ? selected : caller.getCompanyId();
     }
 
 }
