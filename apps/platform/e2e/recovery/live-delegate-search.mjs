@@ -51,7 +51,8 @@ const candidates = (call, q, limit) => call(`${PATH}?q=${encodeURIComponent(q)}$
 const ids = (res) => (res.json?.employees || []).map((e) => e.id)
 
 async function signIn(page, email) {
-  await page.goto(base + '/login')
+  // The dev server compiles the app on the first visit, which can take a while on a busy machine.
+  await page.goto(base + '/login', { waitUntil: 'domcontentloaded', timeout: 180_000 })
   await page.locator('input[type=email]').fill(email)
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
@@ -136,11 +137,19 @@ try {
   for (const [w, h, tag] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h } })
     const page = await ctx.newPage()
+    page.setDefaultTimeout(45_000)
+    page.setDefaultNavigationTimeout(120_000)
     const wt = watch(page, `mgr ${tag}`)
     watched.push(wt)
     page.on('dialog', (d) => d.accept())
+    // The check-in prompt after sign-in (not part of this test) is put aside whenever it opens.
+    await page.addLocatorHandler(page.getByRole('dialog', { name: 'Check in with your face' }), async (dlg) => {
+      const skip = dlg.getByRole('button', { name: 'Continue without checking in' })
+      if (await skip.isVisible().catch(() => false)) await skip.click()
+      else await page.keyboard.press('Escape')
+    })
     await signIn(page, 'mgr@unifiedtree.demo')
-    await page.goto(base + '/profile#st-delegation')
+    await page.goto(base + '/profile#st-delegation', { waitUntil: 'domcontentloaded' })
     const add = page.getByRole('button', { name: '+ Add delegation' })
     check(`browser ${tag}: Preferences shows Approval delegation with Add`, await add.waitFor({ timeout: 30_000 }).then(() => true, () => false))
     await add.click()
@@ -150,11 +159,12 @@ try {
     const found = await pick.waitFor({ timeout: 20_000 }).then(() => true, () => false)
     check(`browser ${tag}: typing a name lists the colleague`, found)
     check(`browser ${tag}: no "no permission" message`, !(await page.getByText('You don\'t have permission to look up colleagues').isVisible().catch(() => false)))
-    await box.scrollIntoViewIfNeeded().catch(() => {})
+    await box.click() // an action, so a check-in prompt that opened meanwhile is put aside first
+    await pick.waitFor({ timeout: 10_000 }).catch(() => {})
     await page.screenshot({ path: `${SHOTS}/w21-delegate-picker-${tag}.png`, fullPage: false })
     if (!found) { await ctx.close(); continue }
     await pick.click()
-    check(`browser ${tag}: the chosen colleague is shown with Change`, await page.getByRole('button', { name: 'Change' }).isVisible())
+    check(`browser ${tag}: the chosen colleague is shown with Change`, await page.getByRole('button', { name: 'Change', exact: true }).isVisible())
     const posted = page.waitForResponse((r) => r.url().endsWith('/v1/me/delegation') && r.request().method() === 'POST', { timeout: 20_000 }).catch(() => null)
     await page.getByRole('button', { name: 'Save delegation' }).click()
     const res = await posted
