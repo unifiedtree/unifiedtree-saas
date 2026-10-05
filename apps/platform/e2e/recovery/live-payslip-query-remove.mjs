@@ -20,7 +20,7 @@ const db = process.env.RECOVERY_DB || 'ut_w3_dev'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const otherTenant = 'bbbbbbbb-0000-4000-8000-00000000f0f0'
-const shots = '/c/REACT/ut-wt/_results/shots'
+const shots = 'C:/REACT/ut-wt/_results/shots'
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe',
   ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atc', q],
   { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
@@ -81,7 +81,7 @@ try {
 
   foreignId = sql(`insert into payroll.payslip_queries (tenant_id, run_id, employee_id, message, status, answer, answered_at)
     values ('${otherTenant}', '${slip.runId}', '${readerId}', 'Live remove check ${stamp}: another workspace', 'ANSWERED', 'Planted', now())
-    returning id`).split('\n')[0]
+    returning id`).split(/\r?\n/)[0].trim()
   const foreign = await hrm.call(`/v1/payroll/queries/${foreignId}`, 'DELETE')
   const foreignAfter = sql(`select status from payroll.payslip_queries where id='${foreignId}'`)
   check('another workspace\u2019s question is "not found" (404) and stays as it was', foreign.status === 404 && foreign.json?.errorCode === 'QUERY_NOT_FOUND' && foreignAfter === 'ANSWERED',
@@ -131,11 +131,21 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 }).catch(() => {})
   await page.goto(base + '/hrms/payroll-dashboard')
+  await page.waitForLoadState('networkidle').catch(() => {})
+  await page.waitForTimeout(800)
+  mkdirSync(shots, { recursive: true })
+  // A dialog that opens on its own after sign-in (not part of this check) is noted and closed.
+  for (let i = 0; i < 3 && await page.locator('.uko-backdrop').count(); i++) {
+    const text = (await page.locator('[role=dialog]').last().innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160)
+    console.log(`info: a dialog was open on the dashboard, closed with Escape: "${text}"`)
+    if (i === 0) await page.screenshot({ path: `${shots}/w18-payq-dialog-1440.png` })
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
+  }
   const views = page.getByRole('group', { name: 'Payslip question views' })
   await views.getByRole('button', { name: 'Answered', exact: true }).click({ timeout: 30_000 })
   const card = page.locator('article').filter({ hasText: question2 })
   await card.waitFor({ timeout: 30_000 })
-  mkdirSync(shots, { recursive: true })
   await card.scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${shots}/w18-payq-before-1440.png` })
   const button = card.getByRole('button', { name: 'Remove' })
