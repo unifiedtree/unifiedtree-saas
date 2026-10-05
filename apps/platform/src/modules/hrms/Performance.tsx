@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { Button, EmptyState, PageFrame, PageHeader, PillTabs } from '@/design/kit/display'
 import { CyclesView } from './performance/CyclesView'
 import { ReviewsView } from './performance/ReviewsView'
@@ -31,9 +31,9 @@ const SUBS: Record<View, string> = {
 }
 
 export const Performance = () => {
-  // Owners and admins don't get My reviews / My goals (the rule My work, Leave and Attendance use).
-  const { isAdmin } = useRoles()
-  const canSelf = usePermission('hrms.performance.review.self') && !isAdmin
+  // My reviews / My goals: by default not for owners and admins (the personal pages rule, usePersonalPages: the owner sets it per role).
+  const personal = usePersonalPages()
+  const canSelf = usePermission('hrms.performance.review.self') && personal
   const canRead = usePermission('hrms.performance.read')
   const canWrite = usePermission('hrms.performance.write')
   const canManageKpi = usePermission('hrms.kpi.manage')

@@ -62,8 +62,21 @@ public final class AuthDtos {
             String firstName,
             String lastName,
             List<String> roles,
-            List<String> permissions
+            List<String> permissions,
+            /**
+             * Whether this person sees the personal pages (My work, My leave,
+             * My claims, ...): PersonalPagesService's rule. Null when it was not
+             * worked out; clients then keep their own role rule.
+             */
+            Boolean personalPages
     ) {
+        /** Backward-compatible: without the personal pages answer (null). */
+        public LoginResponse(String accessToken, String refreshToken, Instant accessTokenExpiresAt,
+                             UUID userId, UUID employeeId, UUID tenantId, String email,
+                             String firstName, String lastName, List<String> roles, List<String> permissions) {
+            this(accessToken, refreshToken, accessTokenExpiresAt, userId, employeeId, tenantId, email,
+                    firstName, lastName, roles, permissions, null);
+        }
         @Override public String toString() { return "LoginResponse[tokens=REDACTED]"; }
     }
 
@@ -81,12 +94,20 @@ public final class AuthDtos {
             String lastName,
             List<String> roles,
             List<String> permissions,
-            List<String> activeModules
+            List<String> activeModules,
+            /** As {@link LoginResponse#personalPages()}: null when it was not worked out. */
+            Boolean personalPages
     ) {
         /** Backward-compatible: callers that don't carry modules get an empty list. */
         public MeResponse(UUID userId, UUID tenantId, String email, String firstName, String lastName,
                           List<String> roles, List<String> permissions) {
             this(userId, tenantId, email, firstName, lastName, roles, permissions, List.of());
+        }
+
+        /** Backward-compatible: without the personal pages answer (null). */
+        public MeResponse(UUID userId, UUID tenantId, String email, String firstName, String lastName,
+                          List<String> roles, List<String> permissions, List<String> activeModules) {
+            this(userId, tenantId, email, firstName, lastName, roles, permissions, activeModules, null);
         }
     }
 }

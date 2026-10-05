@@ -417,6 +417,7 @@ public class CanonicalAuthController {
         m.put("lastName", out.lastName());
         m.put("roles", out.roles());
         m.put("permissions", out.permissions());
+        m.put("personalPages", out.personalPages());
         m.put("recoveryCodeUsed", usedRecovery);
         if (recoveryCodes != null) m.put("recoveryCodes", recoveryCodes);
         return m;

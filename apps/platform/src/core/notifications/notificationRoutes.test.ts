@@ -28,7 +28,7 @@ const CATALOG: Record<string, string> = {
   POLICY_PUBLISHED: 'Policies', POLICY_REMINDER: 'Policies', INTERVIEW_SCHEDULED: 'Hiring', INTERVIEW_RESCHEDULED: 'Hiring', INTERVIEW_CANCELLED: 'Hiring',
   SKILL_ASSESSMENT_SUBMITTED: 'Learning', SKILL_ASSESSMENT_APPROVED: 'Learning', SKILL_ASSESSMENT_REJECTED: 'Learning',
   PERFORMANCE_REVIEW_REMINDER: 'Performance', TEAM_MESSAGE: 'Team', WELCOME: 'People', RETIREMENT_DUE: 'People', PROBATION_TEAM_DECISION: 'People',
-  PUNCH_IN_ALERT: 'Attendance',
+  PUNCH_IN_ALERT: 'Attendance', CELEBRATION_WISH: 'People',
   LETTER_SIGNATURE_REQUESTED: 'Letters', SUBSCRIPTION_HALTED: 'Billing', BILLING_OVER_CAP: 'Billing', TRIAL_ENDING_SOON: 'Billing', TRIAL_EXPIRED: 'Billing',
   GENERAL: 'Other',
 }
@@ -103,6 +103,13 @@ describe('notification routes', () => {
     })
     expect(row).toMatchObject({ kind: 'PUNCH_IN_ALERT', group: 'Attendance', icon: 'clock', mapUrl: 'https://www.google.com/maps?q=17.385040,78.486670' })
     expect(row.link).toBe(livePath('/hrms/attendance?tab=team', '/hrms/attendance'))
+    // A colleague's wishes open Celebrations, whatever app route came with them.
+    expect(webRouteFor('CELEBRATION_WISH', { route: '/milestones', wishId: 'w1', occasion: 'BIRTHDAY' })).toBe('/me/celebrations')
+    expect(webRouteFor('CELEBRATION_WISH', null)).toBe('/me/celebrations')
+    expect(toDisplay({
+      id: 'n3', type: 'CELEBRATION_WISH', title: 'Priya Rao wished you a happy birthday', body: 'Happy birthday, Kavya! 🎂',
+      data: { route: '/milestones' }, readAt: null, createdAt: '2026-10-05T04:12:05Z',
+    })).toMatchObject({ kind: 'CELEBRATION_WISH', group: 'People', icon: 'userCheck', link: '/me/celebrations' })
     expect(toDisplay({ id: 'n2', type: 'LEAVE_SUBMITTED', title: 'New leave request', body: '', data: { route: '/requests-tab' }, readAt: null, createdAt: '2026-10-05T04:12:05Z' }).mapUrl).toBeNull()
   })
   it('keeps the cancelled fan-out per recipient', () => {

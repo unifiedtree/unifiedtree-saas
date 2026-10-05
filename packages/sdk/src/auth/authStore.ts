@@ -78,6 +78,8 @@ interface CanonicalMeResponse {
   // is only used as a backward-compat fallback when this is absent.
   activeModules?: string[];
   scopes?: ScopeContext;
+  // Whether the personal pages (My work, My leave, …) are shown: the server's answer (V143.90).
+  personalPages?: boolean | null;
 }
 
 // /me carries no module list, but the app gates module pages (e.g. HRMS) on the
@@ -146,6 +148,7 @@ function meToAuthState(data: CanonicalMeResponse) {
     permissions: buildPermissionMap(grants),
     modules,
     scopes: data.scopes ?? EMPTY_SCOPES,
+    personalPages: typeof data.personalPages === 'boolean' ? data.personalPages : null,
   };
 }
 
@@ -156,6 +159,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   permissions: new Map(),
   modules: [],
   scopes: EMPTY_SCOPES,
+  personalPages: null,
 
   hydrate: async () => {
     // Stay in 'loading' for the whole attempt. RouteGuard renders nothing
@@ -172,7 +176,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     if (!getAccessToken()) {
       const restored = await tryRestoreSession();
       if (!restored) {
-        set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
+        set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES, personalPages: null });
         return;
       }
     }
@@ -180,11 +184,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
       const res = await apiClient.get<CanonicalMeResponse>('/v1/canonical-auth/me');
       set(meToAuthState(res.data));
     } catch {
-      set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
+      set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES, personalPages: null });
     }
   },
 
-  loginWithCredentials: ({ token, userId, email, firstName, lastName, roles, permissions, tenantId, tenantSlug, tenantName, activeModules }: LoginWithCredentialsParams) => {
+  loginWithCredentials: ({ token, userId, email, firstName, lastName, roles, permissions, tenantId, tenantSlug, tenantName, activeModules, personalPages }: LoginWithCredentialsParams) => {
     setAccessToken(token);
 
     // Never synthesize a firstName from the email local-part — a fake name
@@ -228,6 +232,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       permissions: buildPermissionMap(grants),
       modules: mods,
       scopes: EMPTY_SCOPES,
+      personalPages: typeof personalPages === 'boolean' ? personalPages : null,
     });
   },
 
@@ -256,12 +261,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
       // best-effort
     }
     clearAccessToken();
-    set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
+    set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES, personalPages: null });
   },
 
   reset: () => {
     clearAccessToken();
-    set({ status: 'idle', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
+    set({ status: 'idle', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES, personalPages: null });
   },
 }));
 

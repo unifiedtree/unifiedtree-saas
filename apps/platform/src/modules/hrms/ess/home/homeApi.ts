@@ -6,10 +6,14 @@
 //   GET  /v1/attendance/assisted-punch/eligible   who a manager may punch for (V143.40)
 // The lists answer "not available" (404, or 503 FEATURE_NOT_READY) before their
 // backend is live; each block then hides instead of erroring (DECISIONS 18).
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
-import { asAvailable, defaultApi, useAvailableQuery, type ApiFetch, type SharedQueryOptions } from '../../api/shared/available'
+import {
+  asAvailable, defaultApi, useAvailableMutation, useAvailableQuery,
+  type ApiFetch, type Availability, type SharedMutationOptions, type SharedQueryOptions,
+} from '../../api/shared/available'
 import { fromAroundMe, fromCelebrations, type CelebrationsData } from './peopleModel'
+import { fromWishes, type WishOccasion, type WishesData } from './wishModel'
 
 /** Query-key prefixes for Home's own lists. */
 export const HOME_KEYS = {
@@ -18,6 +22,7 @@ export const HOME_KEYS = {
   needsYou: ['ess', 'needs-you'],
   aroundMe: ['ess', 'around-me'],
   celebrations: ['ess', 'celebrations'],
+  wishes: ['ess', 'celebration-wishes'],
   eligible: ['attendance', 'assisted-punch', 'eligible'],
 } as const
 
@@ -189,4 +194,54 @@ export function celebrationsQuery(days: number, api: ApiFetch = defaultApi): Sha
 
 export function useCelebrations(days = 30, enabled = true) {
   return useAvailableQuery<CelebrationsData>({ ...celebrationsQuery(days), enabled, staleTime: 5 * 60_000 })
+}
+
+// ── Send wishes (V143_84) ───────────────────────────────────────────────────
+//   GET  /v1/ess/celebrations/wishes   what I received this week and what I sent (wishModel.ts)
+//   POST /v1/ess/celebrations/wishes   { toEmployeeId, occasion, message } → { wish, created }
+// Anyone who sees Celebrations. Not available (404, or 503 before the migration): no button.
+
+export const WISHES_PATH = '/v1/ess/celebrations/wishes'
+
+export function celebrationWishesQuery(api: ApiFetch = defaultApi): SharedQueryOptions<WishesData> {
+  return {
+    queryKey: HOME_KEYS.wishes,
+    queryFn: async () => {
+      const got = await asAvailable(() => api<Parameters<typeof fromWishes>[0]>(WISHES_PATH))
+      return got.available ? { available: true, value: fromWishes(got.value) } : got
+    },
+  }
+}
+
+export function useCelebrationWishes(enabled = true) {
+  return useAvailableQuery<WishesData>({ ...celebrationWishesQuery(), enabled, staleTime: 60_000 })
+}
+
+export interface SendWishRequest { toEmployeeId: string; occasion: WishOccasion; message: string }
+
+export interface SendWishResult {
+  wish: { id: string; toEmployeeId: string; occasion: string; occasionDate: string; message: string; createdAt: string }
+  /** False: the same wish was sent before, so nobody was told again. */
+  created: boolean
+}
+
+/** Sends a wish; the button reads "Wished" straight away, then the list is read again. */
+export function sendWishMutation(qc: QueryClient, api: ApiFetch = defaultApi): SharedMutationOptions<SendWishResult, SendWishRequest> {
+  return {
+    mutationFn: (body) => asAvailable(() => api<SendWishResult>(WISHES_PATH, { method: 'POST', body: JSON.stringify(body) })),
+    onSuccess: (result) => {
+      if (result.available) {
+        const w = result.value.wish
+        qc.setQueryData<Availability<WishesData>>(HOME_KEYS.wishes, (cur) => (cur && cur.available
+          ? { available: true, value: { ...cur.value, sent: [{ toEmployeeId: w.toEmployeeId, occasion: w.occasion, occasionDate: String(w.occasionDate).slice(0, 10) }, ...cur.value.sent] } }
+          : cur))
+      }
+      return qc.invalidateQueries({ queryKey: HOME_KEYS.wishes })
+    },
+  }
+}
+
+export function useSendWish() {
+  const qc = useQueryClient()
+  return useAvailableMutation(sendWishMutation(qc))
 }

@@ -1,6 +1,7 @@
 package com.hrms.api.rbac;
 
 import com.hrms.api.access.RoleAdminService;
+import com.hrms.api.access.RolePersonalPagesService;
 import com.hrms.api.access.RoleReviewService;
 import com.unifiedtree.rbac.entity.Role;
 import com.unifiedtree.rbac.service.RbacService;
@@ -26,16 +27,20 @@ public class RbacController {
     private final RbacService rbac;
     private final RoleAdminService roles;
     private final RoleReviewService review;
+    private final RolePersonalPagesService personalPages;
 
-    public RbacController(RbacService rbac, RoleAdminService roles, RoleReviewService review) {
+    public RbacController(RbacService rbac, RoleAdminService roles, RoleReviewService review,
+                          RolePersonalPagesService personalPages) {
         this.rbac = rbac;
         this.roles = roles;
         this.review = review;
+        this.personalPages = personalPages;
     }
 
     public record CreateRoleRequest(String code, String displayName, String description, UUID cloneFromRoleId) {}
     public record UpdateRoleRequest(String displayName, String description) {}
     public record DuplicateRoleRequest(String displayName, String code, String description) {}
+    public record PersonalPagesRequest(Boolean enabled) {}
 
     @GetMapping("/roles")
     @PreAuthorize("hasAuthority('rbac.role.write') or hasAuthority('platform.admin')")
@@ -96,6 +101,28 @@ public class RbacController {
     @PreAuthorize("hasAuthority('rbac.role.write')")
     public Map<String, Object> markPermissionsReviewed(@PathVariable UUID roleId) {
         return Map.of("roleId", roleId, "reviewedAt", review.markReviewed(roleId));
+    }
+
+    /**
+     * Personal pages per role (V143.90): every role's switch for My work and the
+     * other "My …" pages, with its default and whether the owner changed it, plus
+     * whether the caller may change them (the owner only). Same access as the
+     * roles list. Before the migration is applied every role reads its default
+     * and {@code ready} is false.
+     */
+    @GetMapping("/personal-pages")
+    @PreAuthorize("hasAuthority('rbac.role.write') or hasAuthority('platform.admin')")
+    public RolePersonalPagesService.Settings personalPages(@AuthenticationPrincipal Jwt jwt) {
+        return personalPages.list(actor(jwt));
+    }
+
+    /** Turn personal pages on or off for one role, built-in ones too. The workspace owner only. */
+    @PutMapping("/personal-pages/{roleId}")
+    @PreAuthorize("hasAuthority('rbac.role.write')")
+    public RolePersonalPagesService.RoleSetting setPersonalPages(@PathVariable UUID roleId,
+                                                                  @RequestBody PersonalPagesRequest req,
+                                                                  @AuthenticationPrincipal Jwt jwt) {
+        return personalPages.set(roleId, req == null ? null : req.enabled(), actor(jwt));
     }
 
     /** The catalogue, with each permission's description, risk level and warning. */

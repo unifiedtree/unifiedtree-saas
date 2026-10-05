@@ -30,8 +30,8 @@ const asked = (iso: string) => `${day(istToday(new Date(iso)))}, ${hhmmIst(iso)}
 export function Regularization({ perms }: { perms: DailyPerms }) {
   const toast = useToast()
   const approver = perms.approve
-  // Your own fix requests, as My Attendance: not for owners and admins (dailyTabs' rule).
-  const ownFixes = perms.self && !perms.isAdminRole
+  // Your own fix requests, as My Attendance: the personal pages rule (by default not for owners and admins).
+  const ownFixes = perms.self && perms.personalPages
   const [view, setView] = useState<'team' | 'mine'>(approver ? 'team' : 'mine')
   const [fixOpen, setFixOpen] = useState(false)
   const [busy, setBusy] = useState<Record<string, 'approve' | 'reject' | 'undo'>>({})

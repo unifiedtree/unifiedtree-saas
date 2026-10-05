@@ -177,6 +177,28 @@ class NotificationEventCatalogTest {
                         "coordinatesText", " Location: 17.385040, 78.486670 (±15 m).")));
     }
 
+    /**
+     * Wishes from Celebrations (V143.84): their own People entry, in the app and on
+     * the phone only, following the person's choices, saying who sent it and what
+     * they wrote.
+     */
+    @Test
+    void celebrationWishesArePeopleEventsInTheAppAndOnThePhone() {
+        assertTrue(NotificationEventCatalog.covers(AppNotificationType.CELEBRATION_WISH));
+        EventDef d = NotificationEventCatalog.forType(AppNotificationType.CELEBRATION_WISH);
+        assertEquals("people.celebration_wish", d.key());
+        assertEquals("People", d.group());
+        assertEquals("Employee", d.audience());
+        assertSame(d, NotificationEventCatalog.byKey("CELEBRATION_WISH").orElseThrow());
+        assertEquals(EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH), d.channels());
+        assertFalse(d.essential(), "people can switch it off for themselves");
+        assertFalse(d.external());
+        assertTrue(d.templatable(DeliveryChannel.IN_APP));
+        assertEquals("Priya Rao wished you a happy birthday", TemplateRenderer.render(d.defaultTitle(),
+                Map.of("senderName", "Priya Rao", "occasionText", "wished you a happy birthday")));
+        assertEquals("Happy birthday, Kavya!", TemplateRenderer.render(d.defaultBody(), Map.of("message", "Happy birthday, Kavya!")));
+    }
+
     /** A reminder a person sends by hand and a team message never go by email (DECISIONS 15). */
     @Test
     void checkInRemindersAndTeamMessagesAreAppAndPhoneOnly() {

@@ -4,6 +4,7 @@ import com.hrms.api.ess.EssCaller;
 import com.hrms.api.ess.EssSourceRunner;
 import com.hrms.api.ess.around.CelebrationsService.Celebration;
 import com.hrms.api.saasguard.TenantModuleLookup;
+import com.hrms.api.settings.CelebrationSettingService;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -107,6 +108,31 @@ class CelebrationsServiceTest {
         CelebrationsService.Response r = new CelebrationsService(List.of(b, j), runner, employees).celebrations(caller(), null);
         assertEquals(1, r.items().size());
         assertEquals(List.of("NEW_JOINER"), r.unavailable());
+    }
+
+    @Test void aCompanyThatHidesBirthdaysGetsNoneAndIsToldSo() {
+        Fake b = new Fake("BIRTHDAY", List.of(c("BIRTHDAY", TODAY, "Kavya")));
+        Fake a = new Fake("WORK_ANNIVERSARY", List.of(c("WORK_ANNIVERSARY", TODAY, "Asha")));
+        Fake j = new Fake("NEW_JOINER", List.of(c("NEW_JOINER", TODAY.minusDays(2), "Ravi")));
+        CelebrationSettingService settings = mock(CelebrationSettingService.class);
+        when(settings.showBirthdays(TENANT, COMPANY)).thenReturn(false);
+        CelebrationsService.Response r = new CelebrationsService(List.of(b, a, j), runner, employees, settings).celebrations(caller(), null);
+        assertTrue(r.birthdaysHidden());
+        assertNull(b.from, "birthdays are not read at all");
+        assertEquals(List.of("Ravi", "Asha"), r.items().stream().map(Celebration::name).toList());
+        assertEquals(List.of("NEW_JOINER", "WORK_ANNIVERSARY"), r.included());
+    }
+
+    @Test void birthdaysShowByDefault() {
+        Fake b = new Fake("BIRTHDAY", List.of(c("BIRTHDAY", TODAY, "Kavya")));
+        CelebrationSettingService settings = mock(CelebrationSettingService.class);
+        when(settings.showBirthdays(TENANT, COMPANY)).thenReturn(true);
+        CelebrationsService.Response r = new CelebrationsService(List.of(b), runner, employees, settings).celebrations(caller(), null);
+        assertFalse(r.birthdaysHidden());
+        assertEquals(List.of("Kavya"), r.items().stream().map(Celebration::name).toList());
+        CelebrationsService.Response old = new CelebrationsService(List.of(b), runner, employees).celebrations(caller(), null);
+        assertFalse(old.birthdaysHidden(), "no setting service: as today");
+        assertEquals(1, old.items().size());
     }
 
     @Test void aLoginWithoutAnEmployeeRecordReadsNothing() {

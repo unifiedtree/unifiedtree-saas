@@ -4,6 +4,7 @@ import com.hrms.api.ess.EssCaller;
 import com.hrms.api.ess.EssSource;
 import com.hrms.api.ess.EssSourceRunner;
 import com.hrms.api.ess.EssSourceRunner.Collected;
+import com.hrms.api.settings.CelebrationSettingService;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,9 @@ import java.util.UUID;
  *
  * <p>Birthdays carry no year and no age, as on Around you. Reaching back a
  * week, never further, keeps that true: a list that reached a year back would
- * tell who was born when.
+ * tell who was born when. A company can hide birthdays from colleagues
+ * altogether (HR configuration, {@link CelebrationSettingService}): birthdays
+ * are then not read at all, and {@code birthdaysHidden} says so.
  */
 @Service
 public class CelebrationsService {
@@ -61,9 +64,12 @@ public class CelebrationsService {
      * @param from       first day of the birthday and anniversary window (a week before today)
      * @param to         last day of that window
      * @param joinedFrom first joining date counted as new ({@value #JOINED_DAYS} days before today)
+     * @param birthdaysHidden the caller's company hides birthdays from colleagues (V143.89): there are none in
+     *                   {@code items} and BIRTHDAY is not in {@code included}
      */
     public record Response(LocalDate today, LocalDate from, LocalDate to, LocalDate joinedFrom,
-                           List<Celebration> items, List<String> included, List<String> unavailable) {}
+                           List<Celebration> items, List<String> included, List<String> unavailable,
+                           boolean birthdaysHidden) {}
 
     /** One kind of celebration, read on its own by {@link EssSourceRunner}. */
     interface Source extends EssSource {
@@ -73,18 +79,27 @@ public class CelebrationsService {
     private final List<Source> sources;
     private final EssSourceRunner runner;
     private final EmployeeRepository employees;
+    /** Null in tests that don't care: birthdays then always show. */
+    private final CelebrationSettingService settings;
 
-    // Two constructors (the second is for tests), so Spring must be told which
-    // one to use, or the app fails to start.
+    // More than one constructor (the others are for tests), so Spring must be
+    // told which one to use, or the app fails to start.
     @Autowired
-    public CelebrationsService(JdbcTemplate jdbc, EssSourceRunner runner, EmployeeRepository employees) {
-        this(List.of(new Birthdays(jdbc), new Anniversaries(jdbc), new Joiners(jdbc)), runner, employees);
+    public CelebrationsService(JdbcTemplate jdbc, EssSourceRunner runner, EmployeeRepository employees,
+                               CelebrationSettingService settings) {
+        this(List.of(new Birthdays(jdbc), new Anniversaries(jdbc), new Joiners(jdbc)), runner, employees, settings);
     }
 
     CelebrationsService(List<Source> sources, EssSourceRunner runner, EmployeeRepository employees) {
+        this(sources, runner, employees, null);
+    }
+
+    CelebrationsService(List<Source> sources, EssSourceRunner runner, EmployeeRepository employees,
+                        CelebrationSettingService settings) {
         this.sources = List.copyOf(sources);
         this.runner = runner;
         this.employees = employees;
+        this.settings = settings;
     }
 
     public Response celebrations(EssCaller caller, Integer days) {
@@ -92,10 +107,13 @@ public class CelebrationsService {
         int d = days == null ? DEFAULT_DAYS : Math.max(1, Math.min(days, MAX_DAYS));
         LocalDate from = today.minusDays(PAST_DAYS), to = today.plusDays(d), joinedFrom = today.minusDays(JOINED_DAYS);
         Employee me = caller.hasEmployee() ? employees.findById(caller.employeeId()).orElse(null) : null;
-        if (me == null) return new Response(today, from, to, joinedFrom, List.of(), List.of(), List.of());
-        Collected<Celebration> got = runner.collect(caller, sources, true, s -> s.load(caller, me, from, to, joinedFrom));
+        if (me == null) return new Response(today, from, to, joinedFrom, List.of(), List.of(), List.of(), false);
+        // Read before the kinds run (outside their transactions); it never fails.
+        boolean hideBirthdays = settings != null && !settings.showBirthdays(caller.tenantId(), me.getCompanyId());
+        List<Source> run = hideBirthdays ? sources.stream().filter(s -> !"BIRTHDAY".equals(s.key())).toList() : sources;
+        Collected<Celebration> got = runner.collect(caller, run, true, s -> s.load(caller, me, from, to, joinedFrom));
         List<Celebration> items = got.items().stream().sorted(ORDER).limit(MAX_ITEMS).toList();
-        return new Response(today, from, to, joinedFrom, items, got.included(), got.unavailable());
+        return new Response(today, from, to, joinedFrom, items, got.included(), got.unavailable(), hideBirthdays);
     }
 
     static final Comparator<Celebration> ORDER = Comparator

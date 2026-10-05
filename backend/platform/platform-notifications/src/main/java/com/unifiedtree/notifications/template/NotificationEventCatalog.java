@@ -445,6 +445,14 @@ public final class NotificationEventCatalog {
                 "{{employeeName}} completes {{yearsText}}", "Work anniversary today{{departmentText}}.",
                 EMPLOYEE_NAME, ph("years", "Completed years, for example 3"), ph("yearsText", "\"1 year\" or \"3 years\""),
                 DEPARTMENT, DEPARTMENT_TEXT));
+        // In the app and on the phone only (V143.84): one person's short message to another, like a team message.
+        add(appOnly("people.celebration_wish", AppNotificationType.CELEBRATION_WISH, "People", "Wishes from a colleague", "Employee",
+                "Sent to an employee when a colleague sends them wishes from Celebrations: on their birthday, their work anniversary, or to welcome them aboard. Shows who sent it and their message.",
+                "{{senderName}} {{occasionText}}", "{{message}}",
+                ph("senderName", "Who sent the wishes, for example Priya Rao"),
+                ph("occasionText", "\"wished you a happy birthday\", \"wished you a happy work anniversary\" or \"welcomed you aboard\""),
+                ph("occasion", "birthday, work anniversary or welcome"),
+                ph("message", "What they wrote, up to 280 characters")));
         add(inApp("people.retirement_due", AppNotificationType.RETIREMENT_DUE, "People", "Retirement coming up", "HR",
                 "Sent to people who get retirement alerts 90 days and again 30 days before someone reaches the company's retirement age.",
                 "{{retirementTitle}}", "Reaches the retirement age of {{retirementAge}} on {{retirementDate}}{{departmentText}}. Plan the handover and the final settlement.",

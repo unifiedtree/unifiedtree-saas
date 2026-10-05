@@ -133,7 +133,7 @@ class AroundMeServiceTest {
     @Test void birthdaysAndAnniversariesAreReadForTheCallersCompanyOnly() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.query(anyString(), any(RowMapper.class), any(), any())).thenReturn(List.of());
-        new BirthdaysSource(jdbc).load(caller(), me, TODAY, TODAY.plusDays(14));
+        new BirthdaysSource(jdbc, null).load(caller(), me, TODAY, TODAY.plusDays(14));
         new WorkAnniversariesSource(jdbc).load(caller(), me, TODAY, TODAY.plusDays(14));
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(jdbc, times(2)).query(sql.capture(), any(RowMapper.class), eq(TENANT), eq(COMPANY));
@@ -141,6 +141,18 @@ class AroundMeServiceTest {
         assertTrue(sql.getAllValues().get(1).contains("e.date_of_joining"));
         for (String q : sql.getAllValues()) assertTrue(q.contains("e.tenant_id = ? AND e.company_id = ? AND e.is_active"), q);
         assertThrows(IllegalArgumentException.class, () -> YearlyDates.people(jdbc, "salary", TENANT, COMPANY));
+    }
+
+    @Test void aCompanyThatHidesBirthdaysHasNoneAroundYou() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        com.hrms.api.settings.CelebrationSettingService settings = mock(com.hrms.api.settings.CelebrationSettingService.class);
+        when(settings.showBirthdays(TENANT, COMPANY)).thenReturn(false);
+        assertTrue(new BirthdaysSource(jdbc, settings).load(caller(), me, TODAY, TODAY.plusDays(14)).isEmpty());
+        verify(jdbc, never()).query(anyString(), any(RowMapper.class), any(), any());
+        when(settings.showBirthdays(TENANT, COMPANY)).thenReturn(true);
+        when(jdbc.query(anyString(), any(RowMapper.class), any(), any()))
+                .thenReturn(List.of(new YearlyDates.Person(UUID.randomUUID(), "Kavya", null, TODAY.minusYears(30))));
+        assertEquals(1, new BirthdaysSource(jdbc, settings).load(caller(), me, TODAY, TODAY.plusDays(14)).size());
     }
 
     // ── holidays, payday, notices ────────────────────────────────────────────

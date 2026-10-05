@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermission } from '@unifiedtree/sdk'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { Button, EmptyState, PageFrame, PageHeader, PillTabs } from '@/design/kit/display'
 import { LetterTemplatesList } from './LetterTemplates'
 import { GeneratedLettersList, signaturesReadyFrom } from './GeneratedLetters'
@@ -37,12 +37,12 @@ export function LettersHub() {
   const qc = useQueryClient()
   const { view: requested } = useParams()
   const [params, setParams] = useSearchParams()
-  // Owners and admins don't get My letters (the rule My work, Leave and Attendance use).
-  const { isAdmin } = useRoles()
+  // My letters: by default not for owners and admins (the personal pages rule, usePersonalPages: the owner sets it per role).
+  const personal = usePersonalPages()
   const access: LetterAccess = {
     templates: usePermission('hrms.letters.template.read'),
     readAll: usePermission('hrms.letters.read'),
-    readSelf: usePermission('hrms.letters.read.self') && !isAdmin,
+    readSelf: usePermission('hrms.letters.read.self') && personal,
     distribute: usePermission('hrms.letters.distribute'),
   }
   const canCreateTemplate = usePermission('hrms.letters.template.create')

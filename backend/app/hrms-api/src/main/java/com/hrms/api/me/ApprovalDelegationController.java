@@ -143,7 +143,7 @@ public class ApprovalDelegationController {
         if (n == 0) throw new BusinessRuleException("Delegation not found.", "DELEGATION_NOT_FOUND");
     }
 
-    private static UUID actorEmployeeId(Jwt jwt) {
+    static UUID actorEmployeeId(Jwt jwt) {
         String empId = jwt.getClaimAsString("employee_id");
         return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());
     }

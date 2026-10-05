@@ -20,7 +20,7 @@ import { Modal } from '@unifiedtree/ui-kit'
 import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit/DateRangePicker'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { dashIcon } from '@/design/dc/icons'
 import {
@@ -610,11 +610,13 @@ void _unusedApproval
 
 // ── Page ────────────────────────────────────────────────────────────────────
 export function Leave() {
-  const { isAdmin } = useRoles()
+  // My leave, Apply, Balances and your own encashment: by default not for owners and admins (the
+  // personal pages rule, usePersonalPages: the owner sets it per role).
+  const personal = usePersonalPages()
   const canApprove = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canEditHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
   const canWfhApprove = usePermission(P.WFH_APPROVE)
-  const canEncashSelf = usePermission('leave.request.self') && !isAdmin
+  const canEncashSelf = usePermission('leave.request.self') && personal
   const canEncashApprove = usePermission('hrms.leave.encash.approve')
   const canYearEnd = usePermission('hrms.leave.yearend.run')
   const canEmpRead = usePermission('hrms.leave.employee.read')
@@ -635,9 +637,9 @@ export function Leave() {
   // pkg: 'P-LEAVE', so the launcher/deep-link only shows it once READY_PAGES
   // includes P-LEAVE — see the report).
   const views = [
-    !isAdmin && { key: 'my', label: 'My leave', icon: 'calendarDays' },
-    !isAdmin && { key: 'apply', label: 'Apply', icon: 'plus' },
-    !isAdmin && { key: 'balances', label: 'Balances', icon: 'chart' },
+    personal && { key: 'my', label: 'My leave', icon: 'calendarDays' },
+    personal && { key: 'apply', label: 'Apply', icon: 'plus' },
+    personal && { key: 'balances', label: 'Balances', icon: 'chart' },
     canApprove && { key: 'approvals', label: 'Approvals', icon: 'inbox', count: waiting || undefined, urgent: waiting > 0 },
     canApprove && { key: 'history', label: 'Decided', icon: 'checkCircle' },
     canAllBalances && { key: 'all-balances', label: 'All balances', icon: 'users' },
@@ -648,13 +650,13 @@ export function Leave() {
     { key: 'holidays', label: 'Holidays', icon: 'sun' },
   ].filter(Boolean) as { key: string; label: string; icon: string; count?: number; urgent?: boolean }[]
   const [view, setView] = useView(views.map((v) => v.key), 'tab')
-  const subtitle = isAdmin
+  const subtitle = !personal
     ? 'Approve requests, see every balance, and manage leave types and holidays.'
     : canApprove ? 'Apply for leave, track your balance, and decide your team’s requests.' : 'Apply for leave and track your balance.'
 
   const actions = (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      {!isAdmin && view !== 'apply' && <HrButton variant="ghost" onClick={() => setView('apply')}>{dashIcon('plus', 15)} Apply for leave</HrButton>}
+      {personal && view !== 'apply' && <HrButton variant="ghost" onClick={() => setView('apply')}>{dashIcon('plus', 15)} Apply for leave</HrButton>}
       {canApplyOnBehalf && <HrButton onClick={() => setOnBehalf(true)}>{dashIcon('plus', 15)} Apply on behalf</HrButton>}
     </div>
   )

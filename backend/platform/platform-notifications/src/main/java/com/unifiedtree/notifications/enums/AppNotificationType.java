@@ -133,5 +133,12 @@ public enum AppNotificationType {
      */
     PUNCH_IN_ALERT,
 
+    /**
+     * A colleague sent the employee wishes from Celebrations (V143.84): on their
+     * birthday, their work anniversary, or to welcome them aboard, with a short
+     * message. Sent only to that person.
+     */
+    CELEBRATION_WISH,
+
     GENERAL
 }

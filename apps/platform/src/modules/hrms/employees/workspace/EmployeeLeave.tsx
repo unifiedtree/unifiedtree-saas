@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, Plane } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
-import { useRoles } from '@/shared/hooks/useRoles'
+import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import { Button } from '@/design/kit/display'
 import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
@@ -41,9 +41,9 @@ export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: 
   // Apply on behalf (BW-43): never for yourself (that is your own request, from Leave).
   const canOthers = usePermission(P.HRMS_LEAVE_APPLY_OTHERS) && !self && !!companyId
   const [onBehalf, setOnBehalf] = useState(false)
-  // Your own leave opens My leave, which owners and admins don't have (the Leave page's rule).
-  const { isAdmin } = useRoles()
-  const canApplySelf = usePermission('leave.request.self') && !isAdmin
+  // Your own leave opens My leave, which by default owners and admins don't have (the personal pages rule, usePersonalPages: the owner sets it per role).
+  const personal = usePersonalPages()
+  const canApplySelf = usePermission('leave.request.self') && personal
   const year = Number(istToday().slice(0, 4))
   const [page, setPage] = useState(0)
   const balances = useEmployeeLeaveBalances(employeeId, year)

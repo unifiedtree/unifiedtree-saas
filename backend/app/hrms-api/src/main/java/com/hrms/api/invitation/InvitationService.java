@@ -326,7 +326,7 @@ public class InvitationService {
             loginResp.accessTokenExpiresAt() != null ? loginResp.accessTokenExpiresAt().toString() : null,
             creds.getId(), creds.getEmployeeId(), tenantId, creds.getEmail(),
             loginResp.roles(), loginResp.permissions(),
-            tenantSlug, tenantName, activeModules
+            tenantSlug, tenantName, activeModules, loginResp.personalPages()
         );
     }
 
@@ -727,6 +727,8 @@ public class InvitationService {
         List<String> permissions,
         String tenantSlug,
         String tenantName,
-        List<String> activeModules
+        List<String> activeModules,
+        /** As the sign-in answer's personalPages (null when it was not worked out). */
+        Boolean personalPages
     ) {}
 }
