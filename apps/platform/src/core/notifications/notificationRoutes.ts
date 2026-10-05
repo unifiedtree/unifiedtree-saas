@@ -37,6 +37,8 @@ export const NOTIFICATION_TYPES = [
   'TIMESHEET_SUBMITTED', 'TIMESHEET_DECIDED', 'LETTER_SIGNATURE_REQUESTED', 'PROBATION_TEAM_DECISION',
   // Punch-in alerts (V143_72): when, how and where someone punched in, with a map link.
   'PUNCH_IN_ALERT',
+  // Wishes a colleague sent from Celebrations (V143_84): who, and their message.
+  'CELEBRATION_WISH',
   'GENERAL',
 ] as const
 
@@ -59,7 +61,7 @@ export function groupFor(type: string): string {
   if (type.startsWith('SKILL_ASSESSMENT_')) return 'Learning'
   if (type === 'PERFORMANCE_REVIEW_REMINDER') return 'Performance'
   if (type === 'TEAM_MESSAGE') return 'Team'
-  if (type === 'WELCOME' || type === 'RETIREMENT_DUE' || type === 'PROBATION_TEAM_DECISION') return 'People'
+  if (type === 'WELCOME' || type === 'RETIREMENT_DUE' || type === 'PROBATION_TEAM_DECISION' || type === 'CELEBRATION_WISH') return 'People'
   if (type === 'LETTER_SIGNATURE_REQUESTED') return 'Letters'
   if (type.startsWith('TRIAL_') || type === 'SUBSCRIPTION_HALTED' || type === 'BILLING_OVER_CAP') return 'Billing'
   return 'Other'
@@ -207,6 +209,8 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
       return `/hrms/employees/${who}`
     }
     case 'RETIREMENT_DUE': return typeof data?.employeeId === 'string' ? `/hrms/employees/${data.employeeId}` : '/dashboard'
+    // A colleague wished you: the Celebrations page, with "Your wishes" (the route sent is the app's).
+    case 'CELEBRATION_WISH': return '/me/celebrations'
     // Billing: the plan page explains each case.
     case 'TRIAL_ENDING_SOON': case 'TRIAL_EXPIRED': case 'SUBSCRIPTION_HALTED': case 'BILLING_OVER_CAP': return '/plan'
     case 'WELCOME': return '/'

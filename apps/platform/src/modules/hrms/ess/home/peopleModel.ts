@@ -74,6 +74,8 @@ export interface CelebrationsData {
   items: Celebration[]
   /** False while the server can't say who joined (an older server, or that part failed). */
   joinersKnown: boolean
+  /** The company hides birthdays from colleagues (HR configuration): there are none, and no Birthdays section. */
+  birthdaysHidden?: boolean
 }
 
 /** One around-me row, the fields the fallback reads. */
@@ -92,7 +94,7 @@ export function nameFromTitle(title: string): string {
 }
 
 /** /v1/ess/celebrations as it comes from the server. */
-export function fromCelebrations(raw: { today?: string | null; items?: unknown; included?: unknown; unavailable?: unknown } | null | undefined): CelebrationsData {
+export function fromCelebrations(raw: { today?: string | null; items?: unknown; included?: unknown; unavailable?: unknown; birthdaysHidden?: unknown } | null | undefined): CelebrationsData {
   const list = Array.isArray(raw?.items) ? (raw!.items as Record<string, unknown>[]) : []
   const included = Array.isArray(raw?.included) ? (raw!.included as string[]) : []
   return {
@@ -108,6 +110,7 @@ export function fromCelebrations(raw: { today?: string | null; items?: unknown; 
       }))
       .filter((c) => !!c.date),
     joinersKnown: included.includes('NEW_JOINER'),
+    birthdaysHidden: raw?.birthdaysHidden === true,
   }
 }
 
@@ -198,9 +201,10 @@ export const SECTION_WORDS: Record<CelebrationKind, Omit<CelebrationSection, 'ke
   },
 }
 
-/** The page's three sections, each in its own order (new joiners: newest first). */
+/** The page's three sections, each in its own order (new joiners: newest first); no Birthdays where they're hidden. */
 export function sectionsOf(data: CelebrationsData, today: string): CelebrationSection[] {
-  const kinds: CelebrationKind[] = data.joinersKnown ? ['BIRTHDAY', 'WORK_ANNIVERSARY', 'NEW_JOINER'] : ['BIRTHDAY', 'WORK_ANNIVERSARY']
+  const all: CelebrationKind[] = data.joinersKnown ? ['BIRTHDAY', 'WORK_ANNIVERSARY', 'NEW_JOINER'] : ['BIRTHDAY', 'WORK_ANNIVERSARY']
+  const kinds = data.birthdaysHidden ? all.filter((k) => k !== 'BIRTHDAY') : all
   return kinds.map((key) => {
     const mine = data.items.filter((c) => c.kind === key)
     const items = key === 'NEW_JOINER'

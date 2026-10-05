@@ -41,6 +41,7 @@ import {
 } from './HomeBlocks'
 import { AssistedPunchPanel, MessageTeamDialog, TeamPunchEntry, TodaysTeam, WaitingForYou } from './TeamBlocks'
 import { CelebrationsCard, OffThisWeekCard, UpcomingHolidaysCard } from './PeopleBlocks'
+import { WishComposer, useWishControls } from './WishBlocks'
 import { nextHolidays, offFromColleagues, offFromTeam, weekOf } from './peopleModel'
 import {
   calendarDays, calendarSub, greetingWord, hm, lateDaysNote, lateSeries, latestPayslip, leaveDays, leaveNote, liveActiveMinutes, longWeekendTip,
@@ -129,6 +130,7 @@ export function HomePage() {
   const trend = useAttendanceTrend(addDays(today, -30), today, undefined, team && canTeamToday)
   const summary = useTeamSummary({ enabled: team && canMessage })
   const celebrations = useCelebrations(30)
+  const wishes = useWishControls(today)
   const week = useMemo(() => weekOf(today), [today])
   const teamOff = useTeamTimeOff(week.from, week.to, { enabled: canTeamOff })
   const colleaguesOff = useColleaguesOff(week.from, week.to, !canTeamOff && canColleaguesOff)
@@ -339,8 +341,10 @@ export function HomePage() {
           )}
           {!celebrations.notAvailable && (
             <CelebrationsCard items={celebrations.data?.items ?? []} loading={celebrations.isLoading} error={celebrations.error}
-              onRetry={() => celebrations.refetch()} today={today} onSeeAll={() => go('/me/celebrations')} />
+              onRetry={() => celebrations.refetch()} today={today} onSeeAll={() => go('/me/celebrations')}
+              wishes={wishes.controls} birthdaysHidden={celebrations.data?.birthdaysHidden} />
           )}
+          <WishComposer target={wishes.target} onClose={wishes.close} />
         </div>
         <div className="uh-col">
           {team && canTeamToday && (

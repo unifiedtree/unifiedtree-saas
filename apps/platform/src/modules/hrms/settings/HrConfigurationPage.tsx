@@ -8,6 +8,7 @@
 // (/v1/attendance/policy, attendance.policy.manage, V143.10) and the geofence /
 // work-from-home rules the server now applies.
 // The fiscal year is read from and saved to the company record (one source).
+// Celebrations: whether colleagues see each other's birthdays (V143_89, settings.hrconfig.write).
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
@@ -24,6 +25,7 @@ import { useSaveWebPunchSetting, useWebPunchSetting } from '../api/shared/useWeb
 import type { WebPunchSetting } from '../api/shared/contracts'
 import { usePunchAlertOptions, usePunchAlertSetting, useSavePunchAlertSetting, type PunchAlertSetting } from '../api/shared/usePunchAlertSetting'
 import { PunchAlertsSection, type PunchAlertsForm } from './PunchAlertsSection'
+import { useCelebrationSetting, useSaveCelebrationSetting, type CelebrationSetting } from '../api/shared/useCelebrationSetting'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']] as const
 const DAY_NAME: Record<number, string> = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' }
@@ -41,6 +43,8 @@ interface Form {
   webPunch: boolean | null
   /** Punch-in alerts (V143.72); null while the server doesn't offer them. */
   alerts: PunchAlertsForm | null
+  /** "Show birthdays to colleagues" (V143.89, on by default); null while the server doesn't offer it. */
+  showBirthdays: boolean | null
   fiscal: string
 }
 const num = (v: string) => (v === '' ? NaN : Number(v))
@@ -63,7 +67,7 @@ function alertsOf(s: PunchAlertSetting | undefined): PunchAlertsForm | null {
   }
 }
 
-function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined, w?: WebPunchSetting, pa?: PunchAlertSetting): Form {
+function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined, w?: WebPunchSetting, pa?: PunchAlertSetting, cs?: CelebrationSetting): Form {
   const pad = c?.employeeCodePadding ?? 4
   return {
     prefix: c?.employeeCodePrefix ?? 'EMP', next: String(c?.employeeCodeNextNumber ?? 1).padStart(pad, '0'),
@@ -77,6 +81,7 @@ function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number
     fullDayHours: a?.fullDayMinHours != null ? String(a.fullDayMinHours) : '', halfDayHours: a?.halfDayMinHours != null ? String(a.halfDayMinHours) : '',
     earlyLeave: String(a?.earlyLeaveMinutes ?? 0),
     alerts: alertsOf(pa),
+    showBirthdays: cs ? cs.showBirthdays : null,
     fiscal: (c?.fiscalYearStart || 'APRIL').toUpperCase(),
   }
 }
@@ -102,18 +107,24 @@ export function HrConfigurationPage() {
   const alertsQ = usePunchAlertSetting(co || undefined, { enabled: canAlertsRead })
   const alertOptionsQ = usePunchAlertOptions(co || undefined, { enabled: canAlertsWrite && !!alertsQ.data })
   const saveAlerts = useSavePunchAlertSetting(co)
+  // Celebrations (V143_89): read with HR configuration's read permissions, changed with settings.hrconfig.write.
+  const canCelRead = canHrWrite || canSettingsRead || canPolicy
+  const celQ = useCelebrationSetting(co || undefined, { enabled: canCelRead })
+  const saveCel = useSaveCelebrationSetting(co)
   const saveHr = useUpdateHrConfig(), saveProb = useUpdateProbationConfig(), savePolicy = useSaveAttendancePolicy()
   const { toast, show, dismiss } = useSettingsToast()
 
-  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data, webQ.data, alertsQ.data), [hrQ.data, probQ.data, policyQ.data, webQ.data, alertsQ.data])
+  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data, webQ.data, alertsQ.data, celQ.data), [hrQ.data, probQ.data, policyQ.data, webQ.data, alertsQ.data, celQ.data])
   const [edit, setEdit] = useState<Form | null>(null)
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
   useEffect(() => { setEdit(null); setTried(false) }, [co])
   const hrEdit = canHrWrite, probEdit = canProbWrite, polEdit = canPolicy && !!policyQ.data, webEdit = (canHrWrite || canPolicy) && !!webQ.data
   const alertEdit = canAlertsWrite && !!alertsQ.data
-  // Alerts that arrive after editing began aren't a change.
-  const f = edit ? (edit.alerts === null && saved.alerts !== null ? { ...edit, alerts: saved.alerts } : edit) : saved
+  const celEdit = canHrWrite && !!celQ.data
+  // Alerts (and the birthdays switch) that arrive after editing began aren't a change.
+  const late = edit ? (edit.alerts === null && saved.alerts !== null ? { ...edit, alerts: saved.alerts } : edit) : saved
+  const f = edit && late.showBirthdays === null && saved.showBirthdays !== null ? { ...late, showBirthdays: saved.showBirthdays } : late
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setEdit((cur) => ({ ...(cur || saved), [k]: v }))
 
   // Validation (only fields the person can change)
@@ -184,13 +195,17 @@ export function HrConfigurationPage() {
       if (webEdit && changed.includes('webPunch') && f.webPunch != null) {
         await saveWeb.mutateAsync({ allowWebPunch: f.webPunch })
       }
+      if (celEdit && changed.includes('showBirthdays') && f.showBirthdays != null) {
+        const r = await saveCel.mutateAsync({ showBirthdays: f.showBirthdays })
+        if (!r.available) throw new Error('The birthdays setting isn’t switched on yet, so it wasn’t saved.')
+      }
       if (alertEdit && changed.includes('alerts') && f.alerts) {
         const r = await saveAlerts.mutateAsync({
           notifyManager: f.alerts.manager, employeeIds: f.alerts.people.map((p) => p.id), roleIds: f.alerts.roles.map((x) => x.id), alertOn: f.alerts.on,
         })
         if (!r.available) throw new Error('Punch-in alerts aren’t switched on yet, so they weren’t saved.')
       }
-      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch(), webQ.refetch(), ...(canAlertsRead ? [alertsQ.refetch()] : [])])
+      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch(), webQ.refetch(), ...(canAlertsRead ? [alertsQ.refetch()] : []), ...(canCelRead ? [celQ.refetch()] : [])])
       setEdit(null); setTried(false); show('ok', 'HR settings saved')
     } catch (e) {
       show('error', 'Couldn’t save HR settings', `${e instanceof Error && e.message ? 'Server: “' + e.message + '” ' : ''}Your changes are still here.`)
@@ -198,7 +213,7 @@ export function HrConfigurationPage() {
   }
 
   const readableHr = canHrWrite || canSettingsRead || !!hrQ.data
-  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit || webEdit || alertEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
+  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit || webEdit || alertEdit || celEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
   const status: 'loading' | 'error' | 'live' = (co && (hrQ.isLoading || policyQ.isLoading)) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
   const preview = !E.prefix && !E.next ? `${f.prefix.toUpperCase()}-${f.next}` : '—'
   const weekendText = f.weekend.length ? f.weekend.map((d) => DAY_NAME[d]).join(' & ') : 'None'
@@ -206,6 +221,7 @@ export function HrConfigurationPage() {
     { key: 'ids', label: 'Employee IDs', state: 'on', errors: secErr('ids') },
     { key: 'probation', label: 'Probation', state: 'on', errors: secErr('probation') },
     { key: 'notice', label: 'Notice & exit', state: 'on', errors: secErr('notice') },
+    ...(canCelRead && co ? [{ key: 'celebrations', label: 'Celebrations', state: celQ.data ? 'on' : celQ.notAvailable ? 'soon' : 'none' } satisfies SettingsNavItem] : []),
     { key: 'week', label: 'Work week', state: 'on', errors: secErr('week') },
     { key: 'late', label: 'Late arrival', state: 'on', errors: secErr('late') },
     { key: 'attendance', label: 'Attendance rules', state: 'on', errors: secErr('attendance') },
@@ -286,6 +302,19 @@ export function HrConfigurationPage() {
           </SettingsGrid>
           <SettingsNote>The notice period is the suggested last working day when you start someone’s exit in Employee Master. Retirement is counted from each person’s date of birth: the dashboard lists who retires in the next six months, and people with the “Get retirement alerts” permission are alerted 90 and 30 days before.</SettingsNote>
         </SettingsSection>
+
+        {canCelRead && !!co && (
+          <SettingsSection id="celebrations" icon="cake" title="Celebrations" readOnly={!celEdit}
+            summary={f.showBirthdays == null ? 'Birthdays, work anniversaries and new joiners on Home' : f.showBirthdays ? 'Colleagues see each other’s birthdays' : 'Birthdays hidden from colleagues'}>
+            {f.showBirthdays == null
+              ? <SettingsNote>{celQ.isLoading ? 'Loading…' : celQ.notAvailable ? 'This setting isn’t switched on yet. Colleagues see each other’s birthdays, as today.' : 'This setting didn’t load. Reload the page to try again.'}</SettingsNote>
+              : <SettingsToggleRow label="Show birthdays to colleagues"
+                  detail="Birthdays show on Home and the Celebrations page for everyone in this company, without the year, and people can send birthday wishes. When off, only work anniversaries and new joiners show."
+                  on={f.showBirthdays} onToggle={() => set('showBirthdays', !f.showBirthdays)} readOnly={!celEdit} />}
+            {f.showBirthdays === false && <SettingsNote>People still get their own birthday greeting, and their manager and HR still get a heads-up on the day.</SettingsNote>}
+            {celQ.data?.updatedAt && <SettingsNote>Last changed {new Date(celQ.data.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{celQ.data.updatedByName ? ` by ${celQ.data.updatedByName}` : ''}.</SettingsNote>}
+          </SettingsSection>
+        )}
 
         <SettingsSection id="week" icon="calendarDays" title="Work week" summary={`Starts ${DAY_NAME[Number(f.weekStart)]} · ${weekendText} off`}>
           <SettingsGrid>
