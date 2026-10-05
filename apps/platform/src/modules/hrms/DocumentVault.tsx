@@ -11,6 +11,7 @@
 import React, { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermission } from '@unifiedtree/sdk'
+import { useRoles } from '@/shared/hooks/useRoles'
 import {
   Button, Callout, CellActions, CellStack, EmptyState, KeyValueGrid, MiniStat, MiniStatGrid, PageFrame, PageHeader, PillTabs,
   Section, StatusPill, Table, type TableColumn,
@@ -47,7 +48,9 @@ const SUB: Record<Tab, string> = {
 
 export const DocumentVault: React.FC = () => {
   const canReadTemplates = usePermission('hrms.letters.template.read')
-  const canReadSelf = usePermission('hrms.document.read.self')
+  // Owners and admins don't get My documents (the rule My work, Leave and Attendance use).
+  const { isAdmin } = useRoles()
+  const canReadSelf = usePermission('hrms.document.read.self') && !isAdmin
   const canRead = usePermission('hrms.document.read')
   const canWrite = usePermission('hrms.document.write')
   const [adding, setAdding] = useState(false)

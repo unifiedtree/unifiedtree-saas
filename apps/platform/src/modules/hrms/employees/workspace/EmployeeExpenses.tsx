@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ChevronDown, ChevronRight, Receipt } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
+import { useRoles } from '@/shared/hooks/useRoles'
 import { Button } from '@/design/kit/display'
 import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
@@ -32,7 +33,9 @@ export function EmployeeExpenses({ employeeId, firstName, self, name }: { employ
   // New claim on behalf (BW-61): never for yourself (that is your own claim, from Expenses).
   const canOthers = usePermission(P.HRMS_EXPENSE_CLAIM_OTHERS) && !self
   const [onBehalf, setOnBehalf] = useState(false)
-  const canClaimSelf = usePermission('hrms.expense.claim.self')
+  // Your own new claim opens My claims, which owners and admins don't have (the rule My work uses).
+  const { isAdmin } = useRoles()
+  const canClaimSelf = usePermission('hrms.expense.claim.self') && !isAdmin
   const [page, setPage] = useState(0)
   const [open, setOpen] = useState<string | null>(null)
   const claims = useEmployeeClaims(employeeId, page, PAGE_SIZE)
