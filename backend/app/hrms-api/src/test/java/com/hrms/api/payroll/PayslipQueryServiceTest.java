@@ -74,6 +74,41 @@ class PayslipQueryServiceTest {
     }
 
     @Test
+    void hrWhoMayAnswerIsToldTooOnceEachAfterThePayrollTeam() {
+        UUID hr = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        PayslipQueryStore.OwnPayslip slip = new PayslipQueryStore.OwnPayslip(RUN, COMPANY, 9, 2026);
+        when(store.ownPayslip(TENANT, READER, RUN)).thenReturn(Optional.of(slip));
+        when(store.insert(TENANT, slip, READER, QUESTION, READER_USER)).thenReturn(QUERY);
+        when(store.find(TENANT, QUERY)).thenReturn(Optional.of(row("OPEN", null, null)));
+        when(store.employeesHolding(TENANT, "payroll.runs.manage", READER, PayslipQueryService.MAX_RECIPIENTS))
+                .thenReturn(List.of(FIN));
+        // FIN holds both (Finance Lead is given payroll.queries.answer as well): told once.
+        when(store.employeesHolding(TENANT, "payroll.queries.answer", READER, PayslipQueryService.MAX_RECIPIENTS))
+                .thenReturn(List.of(hr, FIN));
+
+        service.raise(TENANT, READER_USER, READER, RUN, QUESTION);
+
+        verify(notifier).raised(TENANT, List.of(FIN, hr), "Reader User", "Sep 2026", QUERY, RUN);
+    }
+
+    @Test
+    void beforeV143_86NoOneHoldsTheAnsweringPermissionSoOnlyThePayrollTeamIsTold() {
+        // The store finds no holder of a code that isn't in rbac.permissions yet (mock default: empty list).
+        when(store.employeesHolding(TENANT, "payroll.runs.manage", READER, PayslipQueryService.MAX_RECIPIENTS))
+                .thenReturn(List.of(FIN));
+        assertEquals(List.of(FIN), service.answerers(TENANT, READER));
+    }
+
+    @Test
+    void atMostMaxRecipientsAreTold() {
+        List<UUID> payroll = java.util.stream.Stream.generate(UUID::randomUUID).limit(PayslipQueryService.MAX_RECIPIENTS).toList();
+        when(store.employeesHolding(TENANT, "payroll.runs.manage", READER, PayslipQueryService.MAX_RECIPIENTS)).thenReturn(payroll);
+        assertEquals(payroll, service.answerers(TENANT, READER));
+        // Already full: the HR lookup is skipped.
+        verify(store, never()).employeesHolding(TENANT, "payroll.queries.answer", READER, PayslipQueryService.MAX_RECIPIENTS);
+    }
+
+    @Test
     void someoneElsesRunOrADraftIsNoPayslipForThisPeriod() {
         when(store.ownPayslip(TENANT, READER, RUN)).thenReturn(Optional.empty());
         HrmsException e = assertThrows(HrmsException.class, () -> service.raise(TENANT, READER_USER, READER, RUN, QUESTION));

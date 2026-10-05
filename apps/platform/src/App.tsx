@@ -501,11 +501,10 @@ const ROUTE_TREE = (
         <Route
           path="/hrms/payroll-dashboard"
           element={
-            <RequirePermission code={P.PAYROLL_RUNS_READ}>
-              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
-              </RouteGuard>
-            </RequirePermission>
+            // Also opens for whoever may answer payslip questions (V143.86): they see only that queue.
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ, P.PAYROLL_RUNS_MANAGE, P.PAYROLL_QUERIES_ANSWER]}>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
+            </RouteGuard>
           }
         />
         <Route

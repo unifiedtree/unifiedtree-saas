@@ -1,12 +1,13 @@
-// Admin: Ask payroll — the payroll team's queue of open and answered payslip
-// questions. A FIN user clicks "Answer", writes a reply inside the side panel,
-// and the employee is notified without the answer's text. HR without
-// payroll.runs.manage can read the queue but Answer stays disabled (the API
-// refuses it with 403). An answered question can be removed by the asker.
+// Admin: Ask payroll — the queue of open and answered payslip questions. The
+// payroll team (payroll.runs.manage) or HR (payroll.queries.answer, V143.86,
+// which opens only this queue, never a payroll run) clicks "Answer", writes a
+// reply inside the side panel, and the employee is notified without the
+// answer's text. Anyone else is refused by the API (403), so Answer stays
+// disabled for them. An answered question can be removed by the asker.
 // Source: GET /v1/payroll/queries, POST /v1/payroll/queries/{id}/answer,
 // DELETE /v1/payroll/queries/{id} (BW-59).
 import { useState } from 'react'
-import { usePermission, P } from '@unifiedtree/sdk'
+import { useAnyPermission, P } from '@unifiedtree/sdk'
 import { Button, Section, StatusPill, Skeleton, errorText } from '@/design/kit/display'
 import { SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { fmtShort } from '@/design/dc/dates'
@@ -14,8 +15,11 @@ import { useAnswerPayQuery, useDeletePayQuery, usePayQueries, type PayslipQuery 
 
 type Scope = 'OPEN' | 'ANSWERED' | 'ALL'
 
+/** Who reads and answers the queue: the same codes GET /v1/payroll/queries and its answer accept. */
+export const PAY_QUERY_CODES = [P.PAYROLL_RUNS_MANAGE, P.PAYROLL_QUERIES_ANSWER]
+
 export function AskPayrollQueue() {
-  const canAnswer = usePermission(P.PAYROLL_RUNS_MANAGE)
+  const canAnswer = useAnyPermission(PAY_QUERY_CODES)
   const [scope, setScope] = useState<Scope>('OPEN')
   const q = usePayQueries(scope)
   const [sel, setSel] = useState<PayslipQuery | null>(null)
@@ -101,7 +105,7 @@ export function AskPayrollQueue() {
               )}
               <footer style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {r.status === 'OPEN'
-                  ? <Button size={32} onClick={() => openPanel(r)} disabled={!canAnswer} aria-label={canAnswer ? 'Answer this question' : 'Only the payroll team can answer'}>Answer</Button>
+                  ? <Button size={32} onClick={() => openPanel(r)} disabled={!canAnswer} aria-label={canAnswer ? 'Answer this question' : 'Only the payroll team or HR can answer'}>Answer</Button>
                   : <Button size={32} variant="ghost" onClick={async () => {
                     try { await remove.mutateAsync(r.id); toast.success('Question removed') } catch (err) { toast.error(errorText(err)) }
                   }}>Remove</Button>}

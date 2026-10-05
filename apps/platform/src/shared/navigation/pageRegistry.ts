@@ -217,7 +217,8 @@ page('letters-generated', 'Generated letters', '/hrms/letters/generated', 'Recru
 page('letters-distributions', 'Letter distributions', '/hrms/letters/distributions', 'Recruitment & Onboarding', 'letters/distributions', [{ ...any('hrms.letters.distribute', 'hrms.letters.read'), module: HR }], { aliases: ['letters/bulk'], keywords: ['bulk letters', 'send letters'] })
 
 // ── Payroll ────────────────────────────────────────────────────────────────
-page('pay-dashboard', 'Payroll dashboard', '/hrms/payroll-dashboard', 'Payroll', 'payroll/dashboard', [{ ...any('payroll.runs.read'), module: PAY }], { keywords: ['payroll cost', 'this month', 'dues'] })
+// Also opens for whoever may answer payslip questions (payroll.queries.answer, V143.86): they see only the Ask payroll queue there.
+page('pay-dashboard', 'Payroll dashboard', '/hrms/payroll-dashboard', 'Payroll', 'payroll/dashboard', [{ ...any('payroll.runs.read', 'payroll.runs.manage', 'payroll.queries.answer'), module: PAY }], { keywords: ['payroll cost', 'this month', 'dues', 'payslip questions', 'ask payroll'] })
 page('pay-salary', 'Salary structure', '/hrms/salary-structure', 'Payroll', 'payroll/salary-structure', [{ ...any('payroll.runs.read'), module: PAY }], { aliases: ['payroll/salary', 'payroll/ctc', 'payroll/structures'], keywords: ['ctc', 'revision', 'salary'] })
 page('pay-runs', 'Processing & Payslips', '/hrms/payroll/runs', 'Payroll', 'payroll/runs', [{ ...any('payroll.runs.read'), module: PAY }], { aliases: ['payroll/processing', 'payroll/payslips', 'payroll/run'], keywords: ['payroll run', 'process', 'payslips', 'lock'] })
 page('pay-settings', 'Payroll settings', '/hrms/payroll/settings', 'Payroll', 'payroll/settings', [{ ...any('payroll.settings.read'), module: PAY }], { keywords: ['pf', 'esi', 'pt', 'cycle'] })
