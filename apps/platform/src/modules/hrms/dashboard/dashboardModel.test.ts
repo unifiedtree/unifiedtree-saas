@@ -158,13 +158,13 @@ describe('Present: scheduled against Total employees', () => {
     expect(presentNote(0, 0, wide(13, true))).toBe('Nobody was scheduled')
   })
   it('a viewer whose attendance cards cover their team says so, beside the company’s Total employees', () => {
-    expect(presentNote(1, 4, { total: 13, companyWide: false, isPast: false })).toBe('25% of 4 in your team')
-    expect(presentNote(0, 0, { total: 13, companyWide: false, isPast: false })).toBe('No team members today')
-    expect(presentNote(0, 0, { total: 13, companyWide: false, isPast: true })).toBe('No team members that day')
+    expect(presentNote(1, 4, { total: 13, companyWide: false, isPast: false })).toBe('Your team: 25% of 4')
+    expect(presentNote(0, 0, { total: 13, companyWide: false, isPast: false })).toBe('Your team: nobody')
+    expect(presentNote(0, 0, { total: 13, companyWide: false, isPast: true })).toBe('Your team: nobody')
   })
-  it('every wording fits the card’s one line', () => {
-    for (const n of [presentNote(2, 312, wide(1500)), presentNote(9, 99, wide(99)), presentNote(1, 40, { total: 900, companyWide: false, isPast: false }), presentNote(0, 0, { total: 9, companyWide: false, isPast: true })]) {
-      expect(n.length).toBeLessThanOrEqual(24)
+  it('each wording is about as short as the design’s "59% of 241 scheduled", so the card shows it whole', () => {
+    for (const n of [presentNote(2, 12, wide(13)), presentNote(9, 99, wide(99)), presentNote(1, 40, { total: 900, companyWide: false, isPast: false }), presentNote(0, 0, wide(9))]) {
+      expect(n.length).toBeLessThanOrEqual(22)
     }
   })
 })

@@ -1,4 +1,4 @@
-/* global process, console, fetch, Buffer, document, window, localStorage, sessionStorage, setTimeout */
+/* global process, console, fetch, Buffer, document, window, localStorage, sessionStorage, setTimeout, getComputedStyle */
 // Live check of the admin dashboard's numbers and its Check in (testers, 5 Oct 2026):
 //
 //  1. Totals agree. HR (hrm@, company-wide) and the owner see Total employees = the summary's headcount,
@@ -98,14 +98,18 @@ function buckets(rows) {
 const pct = (n, whole) => (whole > 0 ? Math.round((n / whole) * 100) : 0)
 // dashboardModel.presentNote: a company-wide viewer (scheduled + off = Total employees), or a viewer who sees their team.
 const presentNote = (present, sched, total, team = false) => {
-  if (team) return sched ? `${pct(present, sched)}% of ${sched} in your team` : 'No team members today'
+  if (team) return sched ? `Your team: ${pct(present, sched)}% of ${sched}` : 'Your team: nobody'
   if (!sched) return 'Nobody scheduled today'
   const off = total - sched
   return off > 0 ? `${sched} scheduled · ${off} off` : `${pct(present, sched)}% of ${sched} scheduled`
 }
-// The note is one line with an ellipsis: it must be read whole.
+// The note is one line with an ellipsis: it must be read whole (its text, in its font, no wider than its box).
 const noteFits = (page, label) => page.getByRole('button', { name: new RegExp('^\\s*' + label, 'i') }).first().locator('.uk-stat__note')
-  .evaluate((el) => el.scrollWidth <= el.clientWidth + 1).catch(() => false)
+  .evaluate((el) => {
+    const c = document.createElement('canvas').getContext('2d')
+    c.font = getComputedStyle(el).font
+    return c.measureText(el.textContent || '').width <= el.getBoundingClientRect().width + 1
+  }).catch(() => false)
 
 // ── fixtures and what was there before ───────────────────────────────────────
 const start = sql(`select now()`)

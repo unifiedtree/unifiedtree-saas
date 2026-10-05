@@ -36,11 +36,8 @@ export const scheduledOf = (c: Pick<DayBuckets, 'total' | 'other'>) => Math.max(
  * card that also holds a sparkline, so each wording stays short enough to be read whole.
  */
 export function presentNote(present: number, sched: number, o: { total: number | null; companyWide: boolean; isPast: boolean }): string {
-  if (!sched) {
-    if (!o.companyWide) return o.isPast ? 'No team members that day' : 'No team members today'
-    return o.isPast ? 'Nobody was scheduled' : 'Nobody scheduled today'
-  }
-  if (!o.companyWide) return `${pctOf(present, sched)}% of ${sched} in your team`
+  if (!o.companyWide) return sched ? `Your team: ${pctOf(present, sched)}% of ${sched}` : 'Your team: nobody'
+  if (!sched) return o.isPast ? 'Nobody was scheduled' : 'Nobody scheduled today'
   // Scheduled and off add up to Total employees.
   const off = o.total != null ? o.total - sched : 0
   return off > 0 ? `${sched} scheduled · ${off} off` : `${pctOf(present, sched)}% of ${sched} scheduled`
