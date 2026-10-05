@@ -53,6 +53,24 @@ export function pickLine(days: readonly string[]): string {
   return `${sorted.length} ${sorted.length === 1 ? 'day' : 'days'}: ${words.join(', ')}`
 }
 
+/**
+ * The days a range from "Select dates" adds to the picked chips: each day from `from` to `to`
+ * that isn't a weekly off and has nothing on it (blockOf), kept with the days already picked,
+ * sorted, and at most `max` in all (the earliest first).
+ */
+export function addRange(
+  picked: readonly string[], from: string, to: string, off: ReadonlySet<number>,
+  ctx: Parameters<typeof blockOf>[1], max: number,
+): string[] {
+  const out = new Set(picked)
+  for (let d = from, i = 0; d <= to && i < 366; d = addDays(d, 1), i++) {
+    if (out.size >= max) break
+    if (off.has(dt(d).getDay()) || blockOf(d, ctx)) continue
+    out.add(d)
+  }
+  return [...out].sort()
+}
+
 /** Calendar days a request covers. */
 export function spanDays(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00Z`), b = Date.parse(`${to}T00:00:00Z`)

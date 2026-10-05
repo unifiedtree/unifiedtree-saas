@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
-import { DateField } from '@/shared/components/calendar'
+import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit/DateRangePicker'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { useRoles } from '@/shared/hooks/useRoles'
@@ -37,7 +37,7 @@ import {
 } from './api/useLeave'
 import { usePendingWfhApprovals, useWfhDecision } from './api/useWfh'
 import { useCompanies } from './api/useOrg'
-import { useWeekendDays, jsWeekendDays } from './api/useSettings'
+import { useWeekendDays, jsWeekendDays, useHolidays } from './api/useSettings'
 import { useRecentDecisions } from './api/shared/useRecentDecisions'
 import { useDecisionUndo } from './api/shared/useDecisionUndo'
 import { useApprovers } from './api/shared/useApprovers'
@@ -133,6 +133,16 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
   const apply = useApplyLeave()
   const off = useMemo(() => jsWeekendDays(wk.data?.weekendDays), [wk.data])
   const today = todayIso()
+  // "Select dates": the company's weekly offs (above) and holidays, as the server counts leave.
+  const holYear = Number(today.slice(0, 4))
+  const hols = useHolidays(companyId, holYear)
+  const holsNext = useHolidays(companyId, holYear + 1)
+  const cal = useMemo(() => ({
+    off,
+    holidays: new Map([...(hols.data ?? []), ...(holsNext.data ?? [])].filter((h) => h.active !== false).map((h) => [h.holidayDate.slice(0, 10), h.holidayName] as const)),
+  }), [off, hols.data, holsNext.data])
+  const [picking, setPicking] = useState(false)
+  const [draft, setDraft] = useState<PickedDates | null>(null)
   const [f, setF] = useState({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY' as LeaveDuration, reason: '' })
   const half = f.duration !== 'FULL_DAY'
   const end = half ? f.startDate : f.endDate
@@ -149,6 +159,9 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
     return n
   }, [f.startDate, end, half, off])
   const count = preview.data?.workingDays ?? localCount
+  // The server's count for the dates being picked, live in the dialog's footer.
+  const draftDuration: LeaveDuration = draft?.halfDay ? (f.duration === 'HALF_DAY_AFTERNOON' ? 'HALF_DAY_AFTERNOON' : 'HALF_DAY_MORNING') : 'FULL_DAY'
+  const draftPreview = useLeavePreview({ leaveTypeId: f.leaveTypeId, startDate: draft?.from, endDate: draft?.to, duration: draftDuration, companyId }, picking)
   const overlap = !!f.startDate && !!end && (mine.data?.content ?? []).some((l) => ['PENDING', 'PENDING_L2', 'APPROVED'].includes(l.status) && l.startDate <= end && l.endDate >= f.startDate)
   const approverName = preview.data?.approverName ?? approverPreview.data?.approver?.name ?? null
 
@@ -195,24 +208,15 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
             <HrSelect value={f.leaveTypeId} onChange={(v) => setF({ ...f, leaveTypeId: v })} placeholder={types.isLoading ? 'Loading…' : 'Choose a leave type'}
               options={active.map((t) => { const x = (bal.data ?? []).find((y) => y.leaveTypeId === t.id); return { value: t.id, label: `${t.name}${x ? ` · ${days(x.available)} left` : ` · ${t.annualEntitlement} days a year`}` } })} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
-            {/* The shared calendar (DateField) is the one date UI across the app now (see
-                live tests, "Live tests pick dates through the shared calendar"); raw
-                <input type="date"> opens the browser's own picker, which breaks consistency
-                and the test selectors. */}
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--u-ink2,#4A5A54)' }}>From *</span>
-              <DateField min={today} value={f.startDate} aria-label="From *"
-                onChange={(e) => setF({ ...f, startDate: e.target.value })}
-                style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 10, background: 'var(--u-sf,#fff)', color: 'inherit' }} />
-            </label>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--u-ink2,#4A5A54)' }}>To *</span>
-              <DateField min={f.startDate || today} value={end} disabled={half} aria-label="To *"
-                onChange={(e) => setF({ ...f, endDate: e.target.value })}
-                style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid var(--u-ln,#E3E9E6)', borderRadius: 10, background: half ? 'var(--u-hv,#F0F4F2)' : 'var(--u-sf,#fff)', color: 'inherit' }} />
-            </label>
-          </div>
+          {/* "Select dates": one dialog picks both ends (presets, weekly offs and holidays marked,
+              the working days counted as the server counts them). */}
+          <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" endDisabled={half} onOpen={() => setPicking(true)} />
+          <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} min={today} calendar={cal}
+            halfDay={half} noun="leave" onDraftChange={setDraft} serverDays={draftPreview.data?.workingDays ?? null}
+            onDone={(r) => {
+              setF({ ...f, startDate: r.from, endDate: r.to, duration: r.halfDay ? (half ? f.duration : 'HALF_DAY_MORNING') : 'FULL_DAY' })
+              setPicking(false)
+            }} />
           <div style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--u-ink2,#4A5A54)' }}>Duration</span>
             <HrSelect value={f.duration} onChange={(v) => setF({ ...f, duration: v as LeaveDuration })} options={[{ value: 'FULL_DAY', label: 'Full days' }, { value: 'HALF_DAY_MORNING', label: 'Half day · morning' }, { value: 'HALF_DAY_AFTERNOON', label: 'Half day · afternoon' }]} />
