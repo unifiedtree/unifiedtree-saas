@@ -23,7 +23,9 @@ import java.util.UUID;
 
 /**
  * UnifiedTree platform admin endpoints. Login is unauthenticated; everything
- * else gates on the platform.tenant.* permission codes seeded in V019.
+ * else needs a platform admin token ({@link com.unifiedtree.saas.security.PlatformAdminAccess})
+ * AND the platform.tenant.* permission code seeded in V019. A workspace token
+ * is refused even if it carries the code (SUPER_ADMIN did until V143_92).
  */
 @RestController
 @RequestMapping("/v1/platform")
@@ -41,13 +43,13 @@ public class PlatformSaasController {
     }
 
     @GetMapping("/tenant-requests")
-    @PreAuthorize("hasAuthority('platform.tenant.read')")
+    @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.tenant.read')")
     public List<TenantRequestSummary> tenantRequests(@RequestParam(required = false) String status) {
         return saas.listTenantRequests(status);
     }
 
     @PostMapping("/tenant-requests/{tenantId}/approve")
-    @PreAuthorize("hasAuthority('platform.tenant.approve')")
+    @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.tenant.approve')")
     public TenantRequestSummary approve(@PathVariable UUID tenantId,
                                         @Valid @RequestBody ApprovalRequest req,
                                         @AuthenticationPrincipal Jwt jwt) {
@@ -55,7 +57,7 @@ public class PlatformSaasController {
     }
 
     @PostMapping("/tenant-requests/{tenantId}/reject")
-    @PreAuthorize("hasAuthority('platform.tenant.reject')")
+    @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.tenant.reject')")
     public TenantRequestSummary reject(@PathVariable UUID tenantId,
                                        @Valid @RequestBody RejectionRequest req,
                                        @AuthenticationPrincipal Jwt jwt) {
