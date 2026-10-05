@@ -197,7 +197,7 @@ try {
   await page.goto(base + '/dashboard')
   await page.waitForLoadState('networkidle')
   const todayTile = await tileValue('Total employees')
-  check('today: Active employees (the Total employees note) shows the database count', todayTile.n.startsWith(`${todayActive} active`), todayTile.n.slice(0, 80))
+  check('today: Active employees (the Total employees note) shows the database count', todayTile.n.startsWith(`${todayActive} confirmed`), todayTile.n.slice(0, 80))
   check('today: no past-date banner', (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0)
   check('today: no "As of today" label', (await page.getByText('As of today', { exact: false }).count()) === 0)
   const dated = calls.filter((c) => c.includes('includeLeavers') || (/^\/v1\/(admin\/dashboard|hrms\/projects|probation\/upcoming|audit\/events|reports\/headcount)/.test(c) && /[?&](date|asOf|to)=/.test(c)))

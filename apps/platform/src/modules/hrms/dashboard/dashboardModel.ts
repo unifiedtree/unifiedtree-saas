@@ -28,6 +28,24 @@ export const pctOf = (n: number, whole: number) => (whole > 0 ? Math.round((n / 
 /** People scheduled on the day: the roster less holidays, weekly offs and people not tracked. */
 export const scheduledOf = (c: Pick<DayBuckets, 'total' | 'other'>) => Math.max(0, c.total - (c.other || 0))
 
+/**
+ * The Present card's note: the share of the people scheduled on the day, and, when that isn't the
+ * Total employees figure beside it, why. A company-wide viewer's cards cover everyone on the roll (the
+ * viewer too), so the gap is the people off that day (weekly off, holiday); anyone else's attendance
+ * cards cover their team only, while Total employees is the whole company. The note is one line on a
+ * card that also holds a sparkline, so each wording stays short enough to be read whole.
+ */
+export function presentNote(present: number, sched: number, o: { total: number | null; companyWide: boolean; isPast: boolean }): string {
+  if (!sched) {
+    if (!o.companyWide) return o.isPast ? 'No team members that day' : 'No team members today'
+    return o.isPast ? 'Nobody was scheduled' : 'Nobody scheduled today'
+  }
+  if (!o.companyWide) return `${pctOf(present, sched)}% of ${sched} in your team`
+  // Scheduled and off add up to Total employees.
+  const off = o.total != null ? o.total - sched : 0
+  return off > 0 ? `${sched} scheduled · ${off} off` : `${pctOf(present, sched)}% of ${sched} scheduled`
+}
+
 /** ₹ in lakh with one decimal ("₹62.5L"), as the design's payroll figures. */
 export const lakh = (n: number) => '₹' + (n / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + 'L'
 export const inr = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
@@ -67,15 +85,16 @@ export function rollTotal(st: RollStats | undefined, report: readonly { total?: 
 }
 
 /**
- * The Total employees note. Today: who is confirmed, on probation and serving notice ("1 active · 10 on
+ * The Total employees note. Today: who is confirmed, on probation and serving notice ("1 confirmed · 10 on
  * probation"), so the figure adds up; a past day: that month's joiners and leavers up to it (`range`).
+ * People on probation are active employees too, so the confirmed ones are "confirmed", never "active".
  */
 export function rollNote(st: RollStats | undefined, isPast: boolean, range: string): string {
   if (isPast && st?.joinedInMonth != null) return `${st.joinedInMonth} joined · ${st.leftInMonth ?? 0} left, ${range}`
   // A server without the split sends the confirmed count alone, which reads as if the rest had left.
   if (st?.probation == null || st.activeEmployees == null) return 'Everyone on the roll'
   const parts = [
-    st.activeEmployees ? `${st.activeEmployees} active` : '',
+    st.activeEmployees ? `${st.activeEmployees} confirmed` : '',
     st.probation ? `${st.probation} on probation` : '',
     st.onNotice ? `${st.onNotice} on notice` : '',
   ].filter(Boolean)

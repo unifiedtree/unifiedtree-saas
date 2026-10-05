@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { StaffStatusResponse } from '../api/useAttendance'
 import { dayBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import {
-  attendanceExceptions, attRows, dayRange, lateNote, monthSpan, niceScale, payrollHint, payrollMonths, pctOf, quickActions, rollNote, rollTotal,
+  attendanceExceptions, attRows, dayRange, lateNote, monthSpan, niceScale, payrollHint, payrollMonths, pctOf, presentNote, quickActions, rollNote, rollTotal,
   scheduledOf, sectionPills, trendColumns, workingWindow,
 } from './dashboardModel'
 
@@ -129,13 +129,43 @@ describe('Total employees', () => {
     expect(rollTotal({ headcount: 0 }, undefined, undefined)).toBe(0)
   })
   it('the note adds up to the figure: confirmed, on probation and serving notice', () => {
-    expect(rollNote({ headcount: 11, activeEmployees: 1, probation: 10, onNotice: 0 }, false, '1–4 Oct')).toBe('1 active · 10 on probation')
-    expect(rollNote({ headcount: 12, activeEmployees: 1, probation: 10, onNotice: 1 }, false, '')).toBe('1 active · 10 on probation · 1 on notice')
+    // People on probation are active employees too: the others are "confirmed", never "active" (testers, 5 Oct).
+    expect(rollNote({ headcount: 11, activeEmployees: 1, probation: 10, onNotice: 0 }, false, '1–4 Oct')).toBe('1 confirmed · 10 on probation')
+    expect(rollNote({ headcount: 12, activeEmployees: 1, probation: 10, onNotice: 1 }, false, '')).toBe('1 confirmed · 10 on probation · 1 on notice')
+    expect(rollNote({ headcount: 13, activeEmployees: 1, probation: 12, onNotice: 0 }, false, '')).not.toMatch(/active/)
     expect(rollNote({ headcount: 0, activeEmployees: 0, probation: 0, onNotice: 0 }, false, '')).toBe('No one on the roll yet')
     // An older server sends the confirmed count alone: no split that reads as if the rest had left.
     expect(rollNote({ activeEmployees: 1 }, false, '')).toBe('Everyone on the roll')
     // A past day: that month's joiners and leavers.
     expect(rollNote({ headcount: 11, activeEmployees: 1, probation: 10, joinedInMonth: 2, leftInMonth: 1 }, true, '1–4 Oct')).toBe('2 joined · 1 left, 1–4 Oct')
+  })
+})
+
+describe('Present: scheduled against Total employees', () => {
+  const wide = (total: number | null, isPast = false) => ({ total, companyWide: true, isPast })
+  it('a company-wide viewer: everyone scheduled is the whole roll, so nothing more is said', () => {
+    expect(presentNote(2, 13, wide(13))).toBe('15% of 13 scheduled')
+    expect(presentNote(2, 13, wide(null))).toBe('15% of 13 scheduled')
+  })
+  it('says how many on the roll are off that day instead of silently differing (scheduled + off = Total employees)', () => {
+    expect(presentNote(2, 12, wide(13))).toBe('12 scheduled · 1 off')
+    expect(presentNote(3, 10, wide(13, true))).toBe('10 scheduled · 3 off')
+    // More scheduled than the headcount (someone without a joining date): no negative count.
+    expect(presentNote(2, 14, wide(13))).toBe('14% of 14 scheduled')
+  })
+  it('nobody scheduled', () => {
+    expect(presentNote(0, 0, wide(13))).toBe('Nobody scheduled today')
+    expect(presentNote(0, 0, wide(13, true))).toBe('Nobody was scheduled')
+  })
+  it('a viewer whose attendance cards cover their team says so, beside the company’s Total employees', () => {
+    expect(presentNote(1, 4, { total: 13, companyWide: false, isPast: false })).toBe('25% of 4 in your team')
+    expect(presentNote(0, 0, { total: 13, companyWide: false, isPast: false })).toBe('No team members today')
+    expect(presentNote(0, 0, { total: 13, companyWide: false, isPast: true })).toBe('No team members that day')
+  })
+  it('every wording fits the card’s one line', () => {
+    for (const n of [presentNote(2, 312, wide(1500)), presentNote(9, 99, wide(99)), presentNote(1, 40, { total: 900, companyWide: false, isPast: false }), presentNote(0, 0, { total: 9, companyWide: false, isPast: true })]) {
+      expect(n.length).toBeLessThanOrEqual(24)
+    }
   })
 })
 

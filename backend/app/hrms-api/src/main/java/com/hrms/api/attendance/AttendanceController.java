@@ -765,6 +765,11 @@ public class AttendanceController {
      * <p>Days with no records still appear, as zero rows, so the chart keeps an
      * unbroken x-axis over weekends and holidays instead of silently dropping
      * them.
+     *
+     * <p>{@code includeSelf}: a company-wide caller is counted too, as on the
+     * day roster with the same flag, so the admin dashboard's chart and its
+     * tiles count the same people. Off by default (the caller left out, as
+     * before).
      */
     @Operation(summary = "Per-day attendance counts for a date range (trend chart)")
     @GetMapping("/dashboard/trend")
@@ -774,6 +779,7 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate to,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean includeLeavers,
+            @RequestParam(required = false) Boolean includeSelf,
             @AuthenticationPrincipal Jwt jwt) {
         LocalDate end   = to != null ? to : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         LocalDate start = from != null ? from : end.minusDays(6);
@@ -789,7 +795,8 @@ public class AttendanceController {
         // includeLeavers: as on the dashboard, people who have left since count
         // on the days they still worked (the admin dashboard's history view).
         boolean history = Boolean.TRUE.equals(includeLeavers) && dashboardHistory != null;
-        List<Employee> employees = history ? scopedEmployeesOn(jwt, departmentId, start, end) : scopedEmployees(jwt, departmentId);
+        boolean self = Boolean.TRUE.equals(includeSelf);
+        List<Employee> employees = history ? scopedEmployeesOn(jwt, departmentId, start, end, self) : scopedEmployees(jwt, departmentId, self);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         // Per-day roster: exclude employees who joined after the day, or whose
         // weekly off falls on that day and who did not punch. Same rule the KPI
