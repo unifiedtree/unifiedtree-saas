@@ -65,6 +65,7 @@ const Leave = lazyPage(() => import('@/modules/hrms/Leave').then(m => ({ default
 const Companies = lazyPage(() => import('@/modules/hrms/organization/CompaniesPageContainer').then(m => ({ default: m.CompaniesPageContainer })))
 const EmployeeDetail = lazyPage(() => import('@/modules/hrms/employees/EmployeeDetail').then(m => ({ default: m.EmployeeDetail })))
 const EssDashboard = lazyPage(() => import('@/modules/hrms/ess/EssDashboard').then(m => ({ default: m.EssDashboard })))
+const CelebrationsPage = lazyPage(() => import('@/modules/hrms/ess/home/CelebrationsPage').then(m => ({ default: m.CelebrationsPage })))
 const ShiftChangeRequest = lazyPage(() => import('@/modules/hrms/shifts/ShiftChangeRequest').then(m => ({ default: m.ShiftChangeRequest })))
 const TeamDashboard = lazyPage(() => import('@/modules/hrms/team/TeamDashboard').then(m => ({ default: m.TeamDashboard })))
 const OrgChartPage = lazyPage(() => import('@/modules/hrms/orgchart/OrgChartPage').then(m => ({ default: m.OrgChartPage })))
@@ -284,6 +285,15 @@ const ROUTE_TREE = (
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
               <ModuleGate moduleKey="hrms"><EssDashboard /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Celebrations (Home's "See all"): birthdays, work anniversaries and new joiners; Home's own guard. */}
+        <Route
+          path="/me/celebrations"
+          element={
+            <RouteGuard anyOf={[P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
+              <ModuleGate moduleKey="hrms"><CelebrationsPage /></ModuleGate>
             </RouteGuard>
           }
         />
