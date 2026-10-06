@@ -93,7 +93,10 @@ public class ReportPdfService {
         h.table("Departments", List.of("Department", "Total", "Active", "On notice", "Probation", "Share %"),
                 depts.stream().map(d -> List.<Object>of(d.name(), num(d.total()), num(d.active()), num(d.notice()), num(d.probation()), pctOf(d.total(), t.total()))).toList(),
                 List.of("Total", num(t.total()), num(t.active()), num(t.notice()), num(t.probation()), 100), Set.of(1, 2, 3, 4, 5));
-        h.note("Status on " + day(asOf) + ": someone still to leave counts as on notice. People who have left by that date are not counted.");
+        h.note("Status on " + day(asOf) + ": someone still to leave counts as on notice. "
+                + (ReportService.isPast(asOf)
+                        ? "Someone who left counts through their last working day."
+                        : "People who have left by that date are not counted."));
         return new Rendered(h.pdf(), "headcount-" + slug(company) + "-" + asOf + ".pdf", depts.size(), company);
     }
 

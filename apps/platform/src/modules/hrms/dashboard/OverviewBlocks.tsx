@@ -1,41 +1,74 @@
-// Overview pieces of the admin dashboard (PgDashboard "overview"): the date chip on the shared dashboard
-// calendar, the past-date banner, the seats strip, and "Today’s attendance".
-import { useState, type CSSProperties } from 'react'
+// Overview pieces of the admin dashboard (PgDashboard "overview"): the date chip and its start / end
+// picker, the past-date and period banners, the seats strip, and "Today’s attendance".
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Avatar, Button, EmptyState, Section, SegmentedControl, StatusPill, type StatusTone } from '@/design/kit/display'
 import { dashIcon } from '@/design/dc/icons'
-import { DashCalendar } from '@/design/dc/DashCalendar'
+import { DateRangeBody } from '@/design/kit/DateRangePicker'
+import { spanDays, type ViewPreset, type WorkCalendar } from '@/design/kit/dateRangeModel'
 import { fmtLong, fmtShort, fmtWd, dt, MON } from '@/design/dc/dates'
-import type { DayBuckets } from '../attendance/attendanceBuckets'
+import { offWeekdays, type DayBuckets } from '../attendance/attendanceBuckets'
 import type { StaffStatusResponse } from '../api/useAttendance'
 import { attRows, pctOf, type AttFilter, type PillTone } from './dashboardModel'
+import { MAX_RANGE_DAYS, chipRangeLabel, dashboardPresets, dayCount, periodLabel } from './dashboardRange'
 
-// ── Date chip + the dashboard calendar ───────────────────────────────────────
-export function DateChipButton({ sel, today, daily, holidays, onApply, onOpenTracking }: {
-  sel: string; today: string; daily: Record<string, DayBuckets>; holidays: { date: string; name: string }[]
-  onApply: (iso: string | null) => void; onOpenTracking: (iso: string) => void
+// ── Date chip + the dashboard's start / end picker ──────────────────────────
+// Owner decision (6 Oct 2026): a plain calendar where you pick a start and an end date (one click is a single
+// day), the quick picks of dashboardPresets, and Apply / Cancel. No numbers inside the picker: the cards show them.
+export function DateChipButton({ sel, from, today, daily, holidays, onApply }: {
+  /** The day shown (a range's last day). */
+  sel: string
+  /** A range's first day; null for one day. */
+  from: string | null
+  today: string; daily: Record<string, DayBuckets>; holidays: { date: string; name: string }[]
+  onApply: (picked: { from: string; to: string }) => void
 }) {
   const [open, setOpen] = useState(false)
-  const isToday = sel === today
+  const chipRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLSpanElement>(null)
+  const isToday = !from && sel === today
+  const calendar = useMemo<WorkCalendar>(() => ({
+    off: new Set(offWeekdays(daily)), holidays: new Map(holidays.map((h) => [h.date, h.name])),
+  }), [daily, holidays])
+  const presets = useMemo(() => dashboardPresets(today), [today])
+  useEffect(() => { if (open) popRef.current?.focus({ preventScroll: true }) }, [open])
+  const close = () => { setOpen(false); chipRef.current?.focus({ preventScroll: true }) }
+  const tag = from ? 'Period' : isToday ? 'Today' : 'Viewing'
+  const text = from ? chipRangeLabel(from, sel) : fmtLong(sel)
   return (
     <span className="ud-cal-wrap">
-      <button type="button" className="ud-date" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        aria-label={isToday ? `Today, ${fmtLong(sel)} · change the dashboard date` : `Viewing ${fmtWd(sel)} · change the dashboard date`}>
+      <button ref={chipRef} type="button" className="ud-date" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+        aria-label={from ? `Viewing ${periodLabel(from, sel)} · change the dashboard dates` : isToday ? `Today, ${fmtLong(sel)} · change the dashboard date` : `Viewing ${fmtWd(sel)} · change the dashboard date`}>
         <span className="ud-date__ic" aria-hidden="true">{dashIcon('calendar', 15)}</span>
-        <span className="ud-date__txt" aria-hidden="true"><span className="ud-date__tag">{isToday ? 'Today' : 'Viewing'}</span><span>{fmtLong(sel)}</span></span>
+        <span className="ud-date__txt" aria-hidden="true"><span className="ud-date__tag">{tag}</span><span>{text}</span></span>
         <span className="ud-date__chev" aria-hidden="true">{dashIcon('chevronDown', 14)}</span>
       </button>
       {open && (
         <>
-          <span className="ud-cal-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
-          <span className="ud-cal-pop">
-            <DashCalendar selected={sel} today={today} daily={daily} holidays={holidays} palette="emerald"
-              onApply={(iso: string) => { setOpen(false); onApply(iso === today ? null : iso) }}
-              onClose={() => setOpen(false)}
-              onOpenTracking={(iso: string) => { setOpen(false); onOpenTracking(iso) }} />
+          <span className="ud-cal-scrim" onClick={close} aria-hidden="true" />
+          <span ref={popRef} className="ud-cal-pop ud-range-pop" role="dialog" aria-modal="true" aria-label="Choose dashboard date" tabIndex={-1}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close() } }}>
+            <DashRangeBody sel={sel} from={from} today={today} calendar={calendar} presets={presets}
+              onApply={(r) => { close(); onApply(r) }} onCancel={close} />
           </span>
         </>
       )}
     </span>
+  )
+}
+
+/** The picker's content (exported for tests: it renders without a document). */
+export function DashRangeBody({ sel, from, today, calendar, presets, onApply, onCancel }: {
+  sel: string; from: string | null; today: string; calendar: WorkCalendar; presets: ViewPreset[]
+  onApply: (picked: { from: string; to: string }) => void; onCancel: () => void
+}) {
+  return (
+    <>
+      <p className="ud-range-pop__t">Dashboard dates</p>
+      <DateRangeBody from={from ?? sel} to={sel} max={today} today={today} calendar={calendar} presets={presets}
+        legend={false} maxSpan={MAX_RANGE_DAYS} doneLabel="Apply" onCancel={onCancel}
+        footerText={(r) => (r ? `${dayCount(spanDays(r.from, r.to))} · ${periodLabel(r.from, r.to)}` : 'Pick a start, then an end date')}
+        onDone={(p) => onApply({ from: p.from, to: p.to })} />
+    </>
   )
 }
 
@@ -46,6 +79,20 @@ export function PastBanner({ sel, onBack }: { sel: string; onBack: () => void })
       <span className="ud-past__ic" aria-hidden="true">{dashIcon('calendarDays', 18)}</span>
       <span className="ud-past__txt">
         Viewing <strong>{fmtWd(sel)}</strong>. Every card shows that day as it was, except the holidays, birthdays, anniversaries and retirements in Upcoming events, which count from today. Anything marked “As of today” keeps no history, so it shows today.
+      </span>
+      <Button variant="secondary" size={32} onClick={onBack}>Back to today</Button>
+    </div>
+  )
+}
+
+// ── Period banner (a date range) ─────────────────────────────────────────────
+export function RangeBanner({ from, to, today, onBack }: { from: string; to: string; today: string; onBack: () => void }) {
+  const end = to === today ? 'today' : fmtWd(to)
+  return (
+    <div role="status" className="ud-past">
+      <span className="ud-past__ic" aria-hidden="true">{dashIcon('calendarDays', 18)}</span>
+      <span className="ud-past__txt">
+        Viewing <strong>{periodLabel(from, to)}</strong> ({dayCount(spanDays(from, to))}). The cards at the top add up the period; Total employees is the headcount on {end}, with the period’s joiners and leavers. The rest of the page shows {end}.
       </span>
       <Button variant="secondary" size={32} onClick={onBack}>Back to today</Button>
     </div>

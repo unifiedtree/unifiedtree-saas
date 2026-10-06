@@ -3,7 +3,7 @@
 // and every answer is the same whatever the machine's time zone.
 import { describe, expect, it } from 'vitest'
 import {
-  countWorkingDays, datePresets, ddmmyyyy, monthWeeks, offDaysFromIso, settled, shiftDay, shiftMonth, tapDay, weekdayOf,
+  countWorkingDays, datePresets, ddmmyyyy, inReach, monthWeeks, offDaysFromIso, settled, shiftDay, shiftMonth, tapDay, weekdayOf,
   workingDaysLabel, type WorkCalendar,
 } from './dateRangeModel'
 import { istToday } from '@/design/dc/dates'
@@ -118,5 +118,16 @@ describe('month grid', () => {
     expect(shiftMonth('2027-01', -1)).toBe('2026-12')
     expect(ddmmyyyy('2026-10-05')).toBe('05/10/2026')
     expect(ddmmyyyy('')).toBe('DD/MM/YYYY')
+  })
+})
+
+describe('the longest range', () => {
+  it('limits the end once only the start is tapped', () => {
+    const start = { from: '2026-09-10', to: null }
+    expect(inReach('2026-10-10', start, 31)).toBe(true) // the 31st day
+    expect(inReach('2026-10-11', start, 31)).toBe(false)
+    expect(inReach('2026-09-01', start, 31)).toBe(true) // before the start: starts again
+    expect(inReach('2026-12-01', { from: '2026-09-10', to: '2026-09-12' }, 31)).toBe(true) // settled: a new range
+    expect(inReach('2027-12-01', start)).toBe(true) // no limit
   })
 })

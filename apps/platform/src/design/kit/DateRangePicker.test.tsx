@@ -79,6 +79,26 @@ describe('DateRangeBody', () => {
   })
 })
 
+describe('DateRangeBody for a calendar that only shows dates', () => {
+  it('no legend, Cancel beside the renamed Done', () => {
+    const s = html(<DateRangeBody from="2026-11-02" to="2026-11-05" calendar={CAL} today={TODAY} legend={false} doneLabel="Apply" onCancel={noop} onDone={noop} />)
+    expect(s).not.toContain('udr-legend')
+    expect(s).toMatch(/>Cancel<\/span>|>Cancel</)
+    expect(s).toContain('Apply')
+    expect(s).not.toContain('>Done<')
+  })
+  it('keeps the legend and Done by default', () => {
+    const s = html(<DateRangeBody from="" calendar={CAL} today={TODAY} onDone={noop} />)
+    expect(s).toContain('udr-legend')
+    expect(s).not.toContain('Cancel')
+  })
+  it('maxSpan leaves the days in reach of a settled range alone', () => {
+    // Both ends picked: the next tap starts a new range, so nothing is limited.
+    const s = html(<DateRangeBody from="2026-11-02" to="2026-11-03" calendar={CAL} today={TODAY} maxSpan={3} onDone={noop} />)
+    expect(dayButton(s, '2026-11-30')).not.toContain('disabled=""')
+  })
+})
+
 describe('DateRangeButton', () => {
   it('shows both ends as DD/MM/YYYY with their labels', () => {
     const s = html(<DateRangeButton from="2026-11-06" to="2026-11-10" startLabel="From *" endLabel="To *" onOpen={noop} />)

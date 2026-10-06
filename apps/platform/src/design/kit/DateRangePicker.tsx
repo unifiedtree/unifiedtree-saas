@@ -17,7 +17,7 @@ import { Dialog } from './Dialog'
 import { PanelButton } from './PanelButton'
 import { istToday } from '@/design/dc/dates'
 import {
-  WEEK_HEADS, allowed, countWorkingDays, datePresets, ddmmyyyy, isWeeklyOff, monthTitle, monthWeeks,
+  WEEK_HEADS, allowed, countWorkingDays, datePresets, ddmmyyyy, inReach, isWeeklyOff, monthTitle, monthWeeks,
   settled, shiftDay, shiftMonth, spanDays, tapDay, weekdayDdmmyyyy, workingDaysLabel,
   type DraftRange, type ViewPreset, type WorkCalendar,
 } from './dateRangeModel'
@@ -56,6 +56,14 @@ export interface DateRangeDialogProps {
   presets?: readonly ViewPreset[]
   /** A calendar that only shows dates: the footer line instead of "Your request is for N working days". */
   footerText?: (range: { from: string; to: string } | null) => string
+  /** The holiday / weekly off / today key under the month (on by default). */
+  legend?: boolean
+  /** The longest range, in calendar days: once a start is tapped, days past it are disabled. */
+  maxSpan?: number
+  /** A Cancel button beside Done (a picker that isn't a dialog with its own close). */
+  onCancel?: () => void
+  /** Done's label ("Apply"). */
+  doneLabel?: string
 }
 
 export function DateRangeDialog(props: DateRangeDialogProps) {
@@ -70,7 +78,7 @@ export function DateRangeDialog(props: DateRangeDialogProps) {
 /** The dialog's content (exported for tests: it renders without a document). */
 export function DateRangeBody({
   mode = 'range', from, to, min, max, calendar, halfDay, onDone, onDraftChange, serverDays, noun = 'request', today: todayProp,
-  presets: ownPresets, footerText,
+  presets: ownPresets, footerText, legend = true, maxSpan, onCancel, doneLabel = 'Done',
 }: Omit<DateRangeDialogProps, 'open' | 'onClose' | 'title'>) {
   const uid = useId()
   const today = todayProp ?? istToday()
@@ -86,6 +94,8 @@ export function DateRangeBody({
   const focusCursor = useRef(false)
   const gridRef = useRef<HTMLDivElement>(null)
 
+  // While the end is being picked, a day further than maxSpan from the start can't be.
+  const can = (day: string) => allowed(day, min, max) && inReach(day, draft, maxSpan)
   const range = settled(draft)
   const effective = range && half ? { from: range.from, to: range.from } : range
   const localDays = effective ? countWorkingDays(effective.from, effective.to, calendar, half) : 0
@@ -125,7 +135,7 @@ export function DateRangeBody({
     setNote(null)
   }
   const pick = (day: string) => {
-    if (!allowed(day, min, max)) return
+    if (!can(day)) return
     setDraft(tapDay(draft, day, single || half))
     setCursor(day)
     setNote(describe(day))
@@ -213,7 +223,7 @@ export function DateRangeBody({
           <div role="row" className="udr-row" key={wi}>
             {week.map((day, di) => {
               if (!day) return <span key={`b${di}`} role="gridcell" className="udr-cell is-blank" />
-              const ok = allowed(day, min, max)
+              const ok = can(day)
               const hol = calendar.holidays.get(day)
               const off = isWeeklyOff(day, calendar)
               const inBand = !!effective && day >= effective.from && day <= effective.to
@@ -247,15 +257,18 @@ export function DateRangeBody({
         ))}
       </div>
 
-      <div className="udr-legend" aria-hidden="true">
-        <span><i className="udr-dot is-static" />Holiday (hover for its name)</span>
-        <span><b className="udr-off-sample">15</b>Weekly off</span>
-        <span><i className="udr-today-sample" />Today</span>
-      </div>
+      {legend && (
+        <div className="udr-legend" aria-hidden="true">
+          <span><i className="udr-dot is-static" />Holiday (hover for its name)</span>
+          <span><b className="udr-off-sample">15</b>Weekly off</span>
+          <span><i className="udr-today-sample" />Today</span>
+        </div>
+      )}
       {note && <p className="udr-note">{note}</p>}
       <div className="udr-footrow">
         <span className={`udr-foot${allOff ? ' is-warn' : ''}`} aria-live="polite">{footer}</span>
-        <PanelButton variant="primary" onClick={done} disabled={!effective}>Done</PanelButton>
+        {onCancel && <PanelButton variant="secondary" onClick={onCancel}>Cancel</PanelButton>}
+        <PanelButton variant="primary" onClick={done} disabled={!effective}>{doneLabel}</PanelButton>
       </div>
     </div>
   )

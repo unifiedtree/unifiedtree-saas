@@ -37,16 +37,7 @@ public class DashboardHistory {
 
     /** {@link #headcount(UUID, UUID, LocalDate)}; {@code throughLastDay}: see {@link DashboardAsOf#headcount(List, Map, LocalDate, boolean)}. */
     public DashboardAsOf.Headcount headcount(UUID tenant, UUID companyId, LocalDate date, boolean throughLastDay) {
-        // A past day: someone without a joining date counts from the day their record was created, as that
-        // day's attendance roster counts them (leftOnOrAfter, ReportService.ON_ROLL_DURING).
-        List<DashboardAsOf.Person> people = jdbc.query("""
-                SELECT id, date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date AS created_on,
-                       employment_status, last_working_day, date_of_termination
-                  FROM hrms.employees WHERE tenant_id = ? AND company_id = ?
-                """, (rs, i) -> new DashboardAsOf.Person(rs.getObject("id", UUID.class),
-                joinedOrCreated(day(rs.getDate("date_of_joining")), day(rs.getDate("created_on")), throughLastDay),
-                rs.getString("employment_status"), day(rs.getDate("last_working_day")), day(rs.getDate("date_of_termination"))),
-                tenant, companyId);
+        List<DashboardAsOf.Person> people = people(tenant, companyId, throughLastDay);
         Map<UUID, List<DashboardAsOf.Change>> history = jdbc.query("""
                 SELECT h.employee_id, h.status, h.effective_on, h.recorded_at
                   FROM hrms.employee_status_history h
@@ -56,6 +47,28 @@ public class DashboardHistory {
                 rs.getDate("effective_on").toLocalDate(), instant(rs.getTimestamp("recorded_at"))),
                 tenant, companyId).stream().collect(Collectors.groupingBy(DashboardAsOf.Change::employeeId));
         return DashboardAsOf.headcount(people, history, date, throughLastDay);
+    }
+
+    /**
+     * The joiners and leavers of one company from {@code from} to {@code to}
+     * (the dashboard's date range), by {@link DashboardAsOf#moves}; joining
+     * dates as {@link #headcount(UUID, UUID, LocalDate, boolean)} reads them.
+     */
+    public DashboardAsOf.Moves moves(UUID tenant, UUID companyId, LocalDate from, LocalDate to, boolean throughLastDay) {
+        return DashboardAsOf.moves(people(tenant, companyId, throughLastDay), from, to);
+    }
+
+    private List<DashboardAsOf.Person> people(UUID tenant, UUID companyId, boolean throughLastDay) {
+        // A past day: someone without a joining date counts from the day their record was created, as that
+        // day's attendance roster counts them (leftOnOrAfter, ReportService.ON_ROLL_DURING).
+        return jdbc.query("""
+                SELECT id, date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date AS created_on,
+                       employment_status, last_working_day, date_of_termination
+                  FROM hrms.employees WHERE tenant_id = ? AND company_id = ?
+                """, (rs, i) -> new DashboardAsOf.Person(rs.getObject("id", UUID.class),
+                joinedOrCreated(day(rs.getDate("date_of_joining")), day(rs.getDate("created_on")), throughLastDay),
+                rs.getString("employment_status"), day(rs.getDate("last_working_day")), day(rs.getDate("date_of_termination"))),
+                tenant, companyId);
     }
 
     /**

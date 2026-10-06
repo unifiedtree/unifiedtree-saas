@@ -153,6 +153,28 @@ class DashboardAsOfTest {
         assertEquals(2, whole.left());
     }
 
+    @Test void joinersAndLeaversOfAPeriodCountBothEnds() {
+        // The dashboard's date range 26 Feb – 3 Mar 2025, across a month end.
+        LocalDate from = LocalDate.of(2025, 2, 26), to = LocalDate.of(2025, 3, 3);
+        var before = person(LocalDate.of(2025, 2, 25), "ACTIVE", null);            // the day before: no
+        var firstDay = person(from, "ACTIVE", null);                                // counts
+        var lastDay = person(to, "PROBATION", null);                                // counts
+        var after = person(LocalDate.of(2025, 3, 4), "ACTIVE", null);              // no
+        var noDate = person(null, "ACTIVE", null);                                  // no joining date: no
+        var leftOnFirst = person(LocalDate.of(2020, 1, 1), "EXITED", from);         // counts
+        var leftOnLast = person(LocalDate.of(2020, 1, 1), "TERMINATED", to);        // counts
+        var leftBefore = person(LocalDate.of(2020, 1, 1), "RESIGNED", LocalDate.of(2025, 2, 25));
+        var onNotice = person(LocalDate.of(2020, 1, 1), "NOTICE_PERIOD", LocalDate.of(2025, 3, 1)); // not left yet
+        var terminatedOnly = new DashboardAsOf.Person(UUID.randomUUID(), LocalDate.of(2020, 1, 1), "TERMINATED", null, LocalDate.of(2025, 3, 2));
+        var m = DashboardAsOf.moves(List.of(before, firstDay, lastDay, after, noDate, leftOnFirst, leftOnLast, leftBefore, onNotice, terminatedOnly), from, to);
+        assertEquals(2, m.joined());
+        assertEquals(3, m.left());
+        // One day is that day's joiners and leavers.
+        var one = DashboardAsOf.moves(List.of(firstDay, leftOnFirst, lastDay), from, from);
+        assertEquals(1, one.joined());
+        assertEquals(1, one.left());
+    }
+
     @Test void endOfADayIsMidnightIndiaTime() {
         assertEquals(Instant.parse("2025-03-14T18:30:00Z"), DashboardAsOf.endOf(MAR_14_2025));
         // Year boundary.
