@@ -35,6 +35,8 @@ import { DelegationCard } from './DelegationCard'
 import { MyDocumentsCard } from './MyDocumentsCard'
 import { NotificationChoiceSections, useNotificationChoices } from './NotificationChoices'
 import { MyFaceEnrollmentSection, useCanSelfEnrollFace } from '@/modules/hrms/attendance/face/FaceEnrollment'
+import { AdminOverview, useAdminRoleLine } from './AdminProfile'
+import { SecuritySettings } from './SettingsSecurity'
 
 /**
  * My profile (/profile) — redesign (DECISIONS 17, option A): the prototype's PgProfile (self=true)
@@ -51,6 +53,11 @@ import { MyFaceEnrollmentSection, useCanSelfEnrollFace } from '@/modules/hrms/at
  * #st-inapp, #st-push) and the "keep in view while sections above load" behaviour (SettingsPage).
  * #st-face (Overview) and #st-documents (Documents) open their tab too.
  * An account with no employee record keeps today's empty state.
+ *
+ * Without the personal pages (an admin role by default, usePersonalPages) the profile is an
+ * administrator's (AdminProfile.tsx): Overview shows their role, companies, the business and their
+ * recent activity, plus Sign-in & security and Preferences; no leave, attendance, pay or "My …" tabs,
+ * and none of those reads are made.
  */
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024 // 5 MB
 // Must stay in step with UserAvatarController.ImageFormat on the backend. A blank File.type (some
@@ -86,6 +93,8 @@ const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full time', PART_TIME: 
 const HASH_TAB: Record<string, string> = {
   me: 'overview', face: 'overview', employment: 'overview', details: 'overview',
   documents: 'documents', delegation: 'preferences', notifications: 'preferences', email: 'preferences', inapp: 'preferences', push: 'preferences',
+  // The administrator's profile only (no such tab on the personal one: it opens Overview).
+  password: 'security', twofa: 'security', sessions: 'security',
 }
 const PHONE_RX = /^\+?[\d\s()-]{7,20}$/
 
@@ -172,6 +181,9 @@ export const Profile: React.FC = () => {
   // The client's rule: by default an admin's own profile has no Attendance (as My Attendance; the
   // personal pages rule, usePersonalPages: the owner sets it per role).
   const showAttendance = canCheckin && personal
+  // An administrator's profile (no personal pages): none of the employee's own reads below.
+  const admin = !personal
+  const adminRoleLine = useAdminRoleLine()
 
   // ── data: the login, the employee row, the work record (BW-98), own sections (BW-99) ──
   const linked = !!user?.employeeId
@@ -185,18 +197,18 @@ export const Profile: React.FC = () => {
   const selfId = emp?.id ?? user?.employeeId ?? ''
   const record = useMyEmployeeRecord({ enabled: linked })
   const rec = record.data
-  const addresses = useEmployeeAddresses(linked ? selfId : '')
-  const contacts = useEmergencyContacts(linked ? selfId : '')
+  const addresses = useEmployeeAddresses(linked && !admin ? selfId : '')
+  const contacts = useEmergencyContacts(linked && !admin ? selfId : '')
   const invitation = useInvitationStatus(selfId, linked)
   const year = Number(today.slice(0, 4)), month = Number(today.slice(5, 7))
   const week = useMyWeekIf(linked && showAttendance)
   const monthQ = useMyMonthIf(year, month, linked && showAttendance)
-  const balances = useMyLeaveBalancesIf(year, linked && canLeave)
-  const docs = useMyDocumentsIf(linked && canDocs)
-  const docSummary = useMyDocumentSummary(linked && canDocs)
-  const missing = useMyMissingDocumentsIf(linked && canDocs)
-  const goals = useMyGoalsIf(linked && canPerf)
-  const reviews = useMyReviewsIf(linked && canPerf)
+  const balances = useMyLeaveBalancesIf(year, linked && canLeave && !admin)
+  const docs = useMyDocumentsIf(linked && canDocs && !admin)
+  const docSummary = useMyDocumentSummary(linked && canDocs && !admin)
+  const missing = useMyMissingDocumentsIf(linked && canDocs && !admin)
+  const goals = useMyGoalsIf(linked && canPerf && !admin)
+  const reviews = useMyReviewsIf(linked && canPerf && !admin)
   const notif = useNotificationChoices(!!user)
   const { toast: prefToast, show: showPref, dismiss: dismissPref } = useSettingsToast()
 
@@ -243,8 +255,12 @@ export const Profile: React.FC = () => {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // ── tabs (by the person's own permissions) ──
-  const tabs = linked ? [
+  // ── tabs (by the person's own permissions; an administrator's: Overview, Sign-in & security, Preferences) ──
+  const tabs = admin ? [
+    { key: 'overview', label: 'Overview' },
+    { key: 'security', label: 'Sign-in & security' },
+    { key: 'preferences', label: 'Preferences' },
+  ] : linked ? [
     { key: 'overview', label: 'Overview' },
     { key: 'personal', label: 'Personal' },
     { key: 'job', label: 'Job' },
@@ -271,7 +287,7 @@ export const Profile: React.FC = () => {
     window.addEventListener('hashchange', go)
     return () => window.removeEventListener('hashchange', go)
   }, [params, setParams])
-  useKeepAnchor(active !== 'preferences' && !!user, rootRef)
+  useKeepAnchor(active !== 'preferences' && active !== 'security' && !!user, rootRef)
 
   if (isLoading && !user) {
     return (
@@ -300,7 +316,7 @@ export const Profile: React.FC = () => {
     { key: 'display', label: 'Display name', icon: 'user', edit: { value: d.displayName, onChange: (v) => setDraft({ ...d, displayName: v }), placeholder: 'How your name appears', error: nameError, maxLength: 120 } },
     { key: 'email', label: 'Email', icon: 'mail', value: user.email, verified: activated, verifiedLabel: 'Your sign-in email' },
     { key: 'mobile', label: 'Mobile', icon: 'phone', edit: { value: d.phone, onChange: (v) => setDraft({ ...d, phone: v }), placeholder: '+91 98xxxxxxxx', error: phoneError, maxLength: 20, inputMode: 'tel' } },
-    ...(linked ? [
+    ...(linked && !admin ? [
       { key: 'city', label: 'Current city', icon: 'pin' as const, value: city || '' },
       { key: 'contact', label: 'Emergency contact', icon: 'heart' as const, value: contact ? `${contact.name}${contact.relationship ? ` (${contact.relationship.toLowerCase()})` : ''}${contact.phone ? ` · ${contact.phone}` : ''}` : 'None on record' },
     ] : []),
@@ -308,7 +324,7 @@ export const Profile: React.FC = () => {
   const footer = (
     <>
       <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} hidden onChange={(e) => onFilePicked(e.target.files?.[0])} />
-      <p className="upf-note">Mobile is used for account recovery. Your name, city and emergency contacts are kept by HR; ask them to change these.</p>
+      <p className="upf-note">{admin ? 'Mobile is used for account recovery. Your first and last name come from your employee record.' : 'Mobile is used for account recovery. Your name, city and emergency contacts are kept by HR; ask them to change these.'}</p>
       {changed && (
         <div role="region" aria-label="Unsaved changes" className="upf-unsaved">
           <span aria-hidden="true" className="upf-unsaved__dot" />
@@ -442,7 +458,7 @@ export const Profile: React.FC = () => {
         : active === 'pay' ? <SelfPay />
           : active === 'leave' && selfId ? <EmployeeLeave employeeId={selfId} firstName={callName} self />
             : active === 'expenses' && selfId ? <EmployeeExpenses employeeId={selfId} firstName={callName} self />
-              : active === 'documents' ? (
+              : active === 'documents' && !admin ? (
                 <SettingsSection id="documents" icon="fileText" title="My documents" summary="Upload your government IDs and other documents. HR verifies each one.">
                   <MyDocumentsCard bare />
                 </SettingsSection>
@@ -450,7 +466,9 @@ export const Profile: React.FC = () => {
                 : active === 'letters' ? <SelfLetters />
                   : active === 'performance' ? <SelfPerformance />
                     : active === 'preferences' ? preferences
-                      : overview
+                      : active === 'security' ? <SecuritySettings personal crumb="My profile" title="Sign-in & security" subtitle="Your password, two-factor sign-in and the devices you’re signed in on." />
+                        : admin ? <AdminOverview userId={user.id} homeCompanyId={user.companyId} employeeId={linked ? selfId : null} onSecurity={() => setTab('security')} />
+                          : overview
 
   return (
     <div ref={rootRef}>
@@ -464,8 +482,8 @@ export const Profile: React.FC = () => {
         screenLabel="My profile"
         avatar={{ name: fullName, src: user.avatarUrl, checkedIn: !!w?.days?.find((x) => x.date === today && x.checkInTime && !x.checkOutTime) }}
         name={fullName}
-        status={stLabel ? { label: stLabel, tone: stTone } : null}
-        roleLine={[rec?.designationName || emp?.jobTitle, rec?.departmentName].filter(Boolean).join(' · ')}
+        status={admin ? (adminRoleLine ? { label: adminRoleLine, tone: 'brand' } : null) : stLabel ? { label: stLabel, tone: stTone } : null}
+        roleLine={admin ? [rec?.designationName || emp?.jobTitle, user.companyName].filter(Boolean).join(' · ') : [rec?.designationName || emp?.jobTitle, rec?.departmentName].filter(Boolean).join(' · ')}
         email={user.email}
         fields={fields}
         footer={footer}
@@ -473,7 +491,7 @@ export const Profile: React.FC = () => {
         active={active}
         onTab={setTab}
       >
-        {employee.isError && linked && active !== 'preferences' ? (
+        {employee.isError && linked && !admin && active !== 'preferences' ? (
           <Section title="Your employee record" variant="section"><ErrorState title="Couldn’t load your employment details" error={employee.error} onRetry={() => void employee.refetch()} /></Section>
         ) : content}
       </ProfileFrame>
