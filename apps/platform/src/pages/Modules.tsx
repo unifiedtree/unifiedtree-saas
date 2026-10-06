@@ -2,13 +2,14 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
-import { Lock, Users, type LucideIcon } from 'lucide-react'
+import { Building2, CreditCard, History, Lock, Palette, ShieldCheck, Users, UserCog, type LucideIcon } from 'lucide-react'
 import { Button, EmptyState, ErrorState, PageFrame, PageHeader } from '@/design/kit/display'
 import { Input } from '@/design/kit/overlays'
 import '@/design/shell/shell.css'
 import { APPS } from '@/layouts/appConfig'
 import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
+import { useVisibleEntries } from '@/shared/navigation/useAccess'
 
 type Status = 'active' | 'coming-soon' | 'locked'
 
@@ -106,6 +107,22 @@ function tileColor(key: string, index: number) {
   return TILE_COLORS[key] ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length]
 }
 
+/** Who may open Business details (/settings): the same codes as the Workspace settings route. */
+const BUSINESS_DETAILS_CODES = ['settings.read', 'settings.hrconfig.write', 'settings.holidays.write', 'hrms.probation.config.read']
+
+/**
+ * Business settings on the launcher (master context §11, owner 6 Oct 2026): the business's own
+ * settings sit here, next to its apps, not inside a module. Registry ids, so each card shows
+ * exactly when its page would open for this person.
+ */
+const BUSINESS_SETTINGS: { id: string; label: string; desc: string; icon: LucideIcon }[] = [
+  { id: 's-branding', label: 'Branding', desc: 'Logo and sign-in picture', icon: Palette },
+  { id: 'users', label: 'Users & access', desc: 'Who can sign in, and to what', icon: Users },
+  { id: 'roles', label: 'Roles & permissions', desc: 'What each role can do', icon: ShieldCheck },
+  { id: 's-billing', label: 'Billing & plan', desc: 'Subscription, seats and invoices', icon: CreditCard },
+  { id: 'audit', label: 'Audit logs', desc: 'Who changed what, and when', icon: History },
+]
+
 export const Modules: React.FC = () => {
   const navigate = useNavigate()
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
@@ -119,6 +136,19 @@ export const Modules: React.FC = () => {
   const { data: plans = [], isLoading: plansLoading, isError: plansError, isFetching: plansFetching, refetch: reloadPlans } = useModulePlans()
 
   const [query, setQuery] = useState('')
+  const { ctx, entries } = useVisibleEntries()
+  const settingsCards = useMemo(() => {
+    const byId = new Map(entries.map(e => [e.id, e]))
+    const cards: { key: string; label: string; desc: string; icon: LucideIcon; path: string }[] = []
+    if (BUSINESS_DETAILS_CODES.some(c => ctx.has(c))) {
+      cards.push({ key: 'details', label: 'Business details', desc: 'Name, address and tax details', icon: Building2, path: '/settings' })
+    }
+    for (const s of BUSINESS_SETTINGS) {
+      const e = byId.get(s.id)
+      if (e && e.state !== 'locked') cards.push({ key: s.id, label: s.label, desc: s.desc, icon: s.icon, path: e.path })
+    }
+    return cards
+  }, [entries, ctx])
 
   /** Open the IN-WORKSPACE plan configurator. Client-decision 2026-08-07:
    *  Manage Plan must stay inside the workspace — the old external redirect
@@ -254,6 +284,27 @@ export const Modules: React.FC = () => {
       {/* Locked hint for admins, quiet, under the grid */}
       {isAdmin && tiles.some(t => t.status === 'locked') && (
         <p className="ut-apps__hint">Locked apps open the plan configurator — add them any time.</p>
+      )}
+
+      {/* The business's own settings: not an app tile (client: tiles are real apps only). */}
+      {settingsCards.length > 0 && !query.trim() && (
+        <section className="ut-apps__settings" aria-labelledby="ut-business-settings">
+          <h2 id="ut-business-settings" className="ut-apps__section"><UserCog size={16} aria-hidden="true" /> Business settings</h2>
+          <div className="ut-apps__setgrid">
+            {settingsCards.map(c => {
+              const Icon = c.icon
+              return (
+                <button key={c.key} type="button" className="ut-set" onClick={() => navigate(c.path)}>
+                  <span className="ut-set__icon"><Icon size={18} aria-hidden="true" /></span>
+                  <span className="ut-set__text">
+                    <span className="ut-set__label">{c.label}</span>
+                    <span className="ut-set__desc">{c.desc}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
       )}
     </PageFrame>
   )
