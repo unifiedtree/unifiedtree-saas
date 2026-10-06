@@ -157,7 +157,11 @@ try {
   await drawer(page).getByPlaceholder('e.g. Marriage Leave').fill(`${tag} Leave`)
   await drawer(page).getByPlaceholder('e.g. MRL').fill(tag)
   await save(page, /Add leave type/)
-  check('leave type is created (12 days, paid)', await toastSeen(page, new RegExp(`${tag} Leave added`)) && sql(`select annual_entitlement||'/'||is_paid_leave::int from leave_mgmt.leave_types where code='${tag}'`) === '12/1')
+  // The form pre-fills 0 days a year and Paid since 5 Oct (owner decision: new leave types start at 0 days).
+  check('leave type: "added" toast shows', await toastSeen(page, new RegExp(`${tag} Leave added`)))
+  await page.waitForLoadState('networkidle').catch(() => {})
+  const leaveRow = sql(`select annual_entitlement||'/'||is_paid_leave::int from leave_mgmt.leave_types where code='${tag}'`)
+  check('leave type is saved with the form defaults (0 days, paid)', leaveRow === '0/1', leaveRow || 'no row')
 
   // ── Shift ──
   await page.goto(base + '/hrms/master/shift-rules'); await settle()

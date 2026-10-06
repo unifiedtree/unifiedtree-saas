@@ -129,6 +129,10 @@ try {
 
     await page.goto(base + '/hrms/settings')
     await page.getByRole('heading', { name: 'Work week', exact: true }).waitFor({ timeout: 30_000 })
+    // The sections render once before the company list arrives, then reload for the company (HrConfigurationPage
+    // status), so count after the page has settled rather than on the first paint.
+    await page.waitForLoadState('networkidle').catch(() => {})
+    await page.getByRole('heading', { name: 'Work week', exact: true }).waitFor({ timeout: 30_000 })
     check('/hrms/settings shows the Work week section to the owner', (await page.getByRole('heading', { name: 'Work week', exact: true }).count()) === 1)
     assertClean('/hrms/settings')
     await page.goto(base + '/hrms/settings/work-time')

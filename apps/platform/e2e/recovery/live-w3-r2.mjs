@@ -241,7 +241,8 @@ try {
   if (holidayLeft) {
     page.once('dialog', (d) => d.accept())
     const hdel = page.waitForResponse((r) => r.url().includes('/v1/settings/holidays/') && r.request().method() === 'DELETE', { timeout: 15000 }).catch(() => null)
-    await hrow.getByRole('button').click()
+    // The card has Edit and Remove buttons (HolidayCalendar); pick Remove by its name.
+    await hrow.getByRole('button', { name: `Remove ${holidayName}`, exact: true }).click()
     const hdr = await hdel
     holidayLeft = !(hdr && hdr.ok())
     check('holiday: the test holiday is removed', !holidayLeft && await hrow.waitFor({ state: 'detached', timeout: 10000 }).then(() => true).catch(() => false))
@@ -343,7 +344,7 @@ try {
       await page.goto(base + '/hrms/leave?tab=holidays')
       await page.locator('select').filter({ has: page.locator(`option[value="${cy + 1}"]`) }).first().selectOption(String(cy + 1))
       page.once('dialog', (d) => d.accept())
-      await page.locator('.ut-card-sm', { hasText: holidayName }).getByRole('button').click()
+      await page.locator('.ut-card-sm', { hasText: holidayName }).getByRole('button', { name: `Remove ${holidayName}`, exact: true }).click()
       await page.waitForTimeout(1500)
       console.log('cleanup: removed the leftover holiday')
     }

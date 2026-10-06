@@ -1,6 +1,6 @@
 /* global process, console */
 // Live check of the redesigned Learning page (/hrms/learning):
-//  - owner: Programs, My training, Skill matrix, Certifications; creates a
+//  - owner: Programs, Skill matrix, Certifications, Skill approvals; creates a
 //    QA program and opens its roster
 //  - employee: can now reach Learning from the sidebar (it was HR-only before,
 //    though employees can enroll); sees Programs and My training only; enrolls,
@@ -39,8 +39,9 @@ try {
   const o = await session('owner@unifiedtree.demo')
   await o.page.goto(base + '/hrms/learning'); await settle(o.page)
   const ov = await viewNames(o.page)
-  // Skill approvals (V143.21) is the owner's fifth view; the redesign keeps the names and order.
-  check('owner: five views', JSON.stringify(ov) === JSON.stringify(['Programs', 'My training', 'Skill matrix', 'Certifications', 'Skill approvals']), ov.join(' | '))
+  // Skill approvals (V143.21) is an owner view; the redesign keeps the names and order. My training is a personal
+  // page, off for owners and admins by default since 5 Oct (usePersonalPages).
+  check('owner: four views (no My training)', JSON.stringify(ov) === JSON.stringify(['Programs', 'Skill matrix', 'Certifications', 'Skill approvals']), ov.join(' | '))
   await o.page.getByRole('button', { name: /New program/ }).click()
   await o.page.locator('#lp-title').fill(title)
   await o.page.locator('#lp-cap').fill('5')

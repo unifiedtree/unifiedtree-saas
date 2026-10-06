@@ -222,8 +222,10 @@ try {
   check(`${PAST}: the banner names the day`, (await page.getByRole('status').filter({ hasText: `Viewing Fri, ${PAST_LABEL}` }).count()) > 0)
   await page.waitForTimeout(1500)
   const pastTile = await tileValue('Total employees')
-  // The Total employees note reads "<active> active · <joined> joined · <left> left, 1–14 Mar 2025".
-  check(`${PAST}: Active employees (the Total employees note) shows that day's count (${pastActive})`, pastTile.n.startsWith(`${pastActive} active · ${statsPast.body.joinedInMonth} joined · ${statsPast.body.leftInMonth} left`), pastTile.n.slice(0, 90))
+  // Since 5 Oct (48013665, dashboardModel.rollTotal / rollNote) Total employees is the day's headcount and a past day's
+  // note reads "<joined> joined · <left> left, 1–14 Mar 2025" (no active count).
+  check(`${PAST}: Total employees shows that day's headcount (${pastTotal}) and the month's joiners and leavers`,
+    pastTile.v === String(pastTotal) && pastTile.n === `${statsPast.body.joinedInMonth} joined · ${statsPast.body.leftInMonth} left, 1–14 Mar 2025`, `${pastTile.v} · ${pastTile.n.slice(0, 90)}`)
   check(`${PAST}: the tile tells the month's joiners and leavers`, /joined · \d+ left, 1–14 Mar 2025/.test(pastTile.n), pastTile.n.slice(0, 120))
   // The finalized payroll figure is now the payroll card's headline.
   const payTile = await page.getByRole('region', { name: 'Monthly payroll expense' }).textContent().catch(() => '')
@@ -275,16 +277,27 @@ try {
   // A past working day with punches, and a working day in the previous year: the tiles show the records.
   const norm = (t) => (t || '').replace(/\s+/g, '')
   const tileText = async (label) => { const t = await tileValue(label).catch(() => ({ v: '', n: '' })); return { v: t.v, n: norm(t.n) } }
+  // Since 5 Oct the tiles are: Total employees = the day's headcount (stats, the headcount report's rule, activeOn) with
+  // the month's joiners and leavers in the note; Present / On leave / Late count the roster with the viewer in it
+  // (includeSelf=true for a company-wide viewer, AdminDashboardContainer), so the records are counted with the owner.
+  const MONS3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const monthToDate = (iso) => { const d = Number(iso.slice(8, 10)), m = `${MONS3[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`; return d === 1 ? `1 ${m}` : `1–${d} ${m}` }
   for (const day of [WORKDAY, YEAR_AGO]) {
-    const w = dayWant[day]
-    const active = (await get(owner, `/v1/admin/dashboard/stats?companyId=${company}&date=${day}`)).body?.activeEmployees
+    const st = (await get(owner, `/v1/admin/dashboard/stats?companyId=${company}&date=${day}`)).body || {}
+    const [, headcount] = activeOn(day)
+    const [present, late] = sql(`SELECT count(*) FILTER (WHERE r.check_in_at IS NOT NULL) || '|' || count(*) FILTER (WHERE r.attendance_status = 'LATE')
+      FROM attendance.records r JOIN hrms.employees e ON e.id = r.employee_id WHERE r.tenant_id='${tenant}' AND e.company_id='${company}' AND r.attendance_date = DATE '${day}'`).split('|').map(Number)
+    const onLeave = Number(sql(`SELECT count(DISTINCT l.employee_id) FROM leave_mgmt.leave_requests l JOIN hrms.employees e ON e.id = l.employee_id
+      WHERE l.tenant_id='${tenant}' AND e.company_id='${company}' AND l.status = 'APPROVED' AND DATE '${day}' BETWEEN l.start_date AND l.end_date`))
+    const w = { total: headcount, present, late, onLeave }
     await page.goto(`${base}/dashboard?date=${day}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(1500)
     const t = { total: await tileText('Total employees'), present: await tileText('Present'), onLeave: await tileText('On leave'), late: await tileText('Late arrivals') }
-    const ok = t.total.v === String(w.total) && t.total.n.startsWith(norm(`${active} active`)) && t.present.v === String(w.present) && /(scheduled|Nobody)/.test(t.present.n)
+    const ok = st.headcount === headcount && t.total.v === String(w.total) && t.total.n === norm(`${st.joinedInMonth} joined · ${st.leftInMonth} left, ${monthToDate(day)}`)
+      && t.present.v === String(w.present) && /(scheduled|Nobody)/.test(t.present.n)
       && t.onLeave.v === String(w.onLeave) && t.onLeave.n.startsWith('Approvedleave') && t.late.v === String(w.late) && /^(Noonelate|After)/.test(t.late.n)
-    check(`${day}: the Live Overview tiles show that day's records`, ok, JSON.stringify(t).slice(0, 240))
+    check(`${day}: the Live Overview tiles show that day's records`, ok, `want ${JSON.stringify(w)} (stats headcount ${st.headcount}); got ${JSON.stringify(t).slice(0, 240)}`)
     if (day === WORKDAY) {
       check(`${day}: the tiles name the day`, (await page.getByText(`Attendance on Tue, ${WORKDAY_LABEL.slice(0, 6)}`, { exact: false }).count()) > 0)
       await screens(page, 'dashboard-workday-1440')
