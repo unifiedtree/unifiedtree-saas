@@ -21,9 +21,16 @@ describe('asModulePaused', () => {
       canPay: true, message: BODY.message,
     })
   })
-  it('ignores the old lapsed answer, the seat limit and other statuses', () => {
-    expect(asModulePaused(402, { error: 'subscription_lapsed', status: 'HALTED' })).toBeNull()
+  it('reads the older lapsed answer (no code) as a paused HRMS, without canPay', () => {
+    expect(asModulePaused(402, { error: 'subscription_lapsed', status: 'HALTED', graceExpiredAt: null, message: ' Renew your mandate. ' })).toEqual({
+      code: 'MODULE_PAUSED', moduleKey: 'hrms', companyId: null, dueAmountInr: null, dueSince: null, graceEndedOn: null,
+      canPay: false, message: 'Renew your mandate.', legacy: true,
+    })
+    expect(asModulePaused(403, { error: 'subscription_lapsed' })).toBeNull()
+  })
+  it('ignores the seat limit, other errors and other statuses', () => {
     expect(asModulePaused(402, { code: 'SEAT_LIMIT_EXCEEDED' })).toBeNull()
+    expect(asModulePaused(402, { error: 'something_else' })).toBeNull()
     expect(asModulePaused(403, BODY)).toBeNull()
     expect(asModulePaused(402, null)).toBeNull()
   })
@@ -48,14 +55,15 @@ describe('the screen', () => {
   it('a payer gets Pay now, the amount and the dates', () => {
     const html = screen(true)
     expect(html).toContain('Payment needed')
+    expect(html).toContain('HRMS is paused')
     expect(html).toContain(BODY.message)
     expect(html).toContain('Amount due: ₹12,000 · Due since 6 Nov 2026 · Grace period ended 13 Nov 2026')
     expect(html).toContain('Pay now')
-    expect(html).not.toContain('Ask your workspace owner')
+    expect(html).not.toContain('Ask your business owner')
   })
   it('anyone else is asked to tell their owner, with no Pay button', () => {
     const html = screen(false)
-    expect(html).toContain('Ask your workspace owner to pay.')
+    expect(html).toContain('Ask your business owner to pay.')
     expect(html).not.toContain('Pay now')
     expect(html).toContain('Try again')
   })
@@ -70,5 +78,14 @@ describe('the screen', () => {
     expect(paused).not.toContain('the page')
     expect(gate('/plan')).toContain('the page')
     expect(gate('/settings/billing')).toContain('the page')
+  })
+  it('the older lapsed answer shows the screen too; without the billing permission there is no Pay button', () => {
+    reportModulePaused(asModulePaused(402, { error: 'subscription_lapsed', status: 'HALTED', message: 'Renew your mandate.' })!)
+    const html = gate('/hrms/employees')
+    expect(html).toContain('HRMS is paused')
+    expect(html).toContain('Renew your mandate.')
+    expect(html).toContain('Ask your business owner to pay.')
+    expect(html).not.toContain('Pay now')
+    expect(gate('/login')).toContain('the page')
   })
 })

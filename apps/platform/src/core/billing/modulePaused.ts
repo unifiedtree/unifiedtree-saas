@@ -3,7 +3,8 @@
 // dueSince, graceEndedOn, canPay, message }. The API client reports it here; the shell then shows the
 // payment-needed screen in place of the page (ModulePausedScreen), except on the pages that stay open while
 // paused: sign-in, the plan and billing pages, notifications.
-// A server without the change answers as before (no MODULE_PAUSED code), so nothing here shows.
+// A server without the change locks the whole business with the older 402 { error: 'subscription_lapsed',
+// status, message }: read as a paused HRMS too (legacy), with "may pay" taken from the person's own permission.
 import { useSyncExternalStore } from 'react'
 
 export interface ModulePaused {
@@ -17,12 +18,20 @@ export interface ModulePaused {
   /** The person may pay (the billing permission); others are asked to tell their owner. */
   canPay?: boolean
   message?: string | null
+  /** The older 402 body (no code): it doesn't say canPay, so the screen checks the billing permission itself. */
+  legacy?: boolean
 }
 
-/** The body of a 402 when it is MODULE_PAUSED, else null. */
+/** The body of a 402 when it is MODULE_PAUSED (or the older subscription_lapsed), else null. */
 export function asModulePaused(status: number, body: unknown): ModulePaused | null {
   if (status !== 402 || !body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>
+  if (b.code === undefined && b.error === 'subscription_lapsed') {
+    return {
+      code: 'MODULE_PAUSED', moduleKey: 'hrms', companyId: null, dueAmountInr: null, dueSince: null, graceEndedOn: null,
+      canPay: false, message: typeof b.message === 'string' && b.message.trim() ? b.message.trim() : null, legacy: true,
+    }
+  }
   if (b.code !== 'MODULE_PAUSED') return null
   return {
     code: 'MODULE_PAUSED',
