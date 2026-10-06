@@ -83,9 +83,9 @@ export function FaceStationsPage() {
       </Panel>
 
       {list.isLoading ? <State kind="loading" />
-        : isFeatureNotReady(list.error) ? <State kind="empty" icon="tablet" title="Face stations aren’t switched on yet" description="They will appear here once your workspace is updated." />
+        : isFeatureNotReady(list.error) ? <State kind="empty" icon="scanFace" title="Face stations aren’t switched on yet" description="They will appear here once your workspace is updated." />
           : list.isError ? <State kind="error" title="Couldn’t load the stations" description={said(list.error, '')} onRetry={() => void list.refetch()} />
-            : stations.length === 0 ? <State kind="empty" icon="tablet" title="No stations yet" description="Add one for a branch, then start it on the device at that branch." />
+            : stations.length === 0 ? <State kind="empty" icon="scanFace" title="No stations yet" description="Add one for a branch, then start it on the device at that branch." />
               : (
                 <RowList>
                   {stations.map((st) => {
@@ -163,7 +163,7 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog open onClose={onClose} busy={create.isPending} icon="tablet" title="New face station"
+    <Dialog open onClose={onClose} busy={create.isPending} icon="scanFace" title="New face station"
       sub="One station per device. People of the branch you pick can punch on it."
       footer={
         <>

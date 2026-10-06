@@ -4,6 +4,7 @@ import com.hrms.core.exception.FeatureNotReady;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -16,7 +17,9 @@ import java.util.UUID;
  * Face stations and their punches (V143.95), read and written with JDBC only: no
  * JPA entity maps attendance.face_stations or attendance.station_punches. Row-level
  * security keeps every query to the caller's (or the station's) workspace.
- * Every call answers FEATURE_NOT_READY while the tables are missing.
+ * Every call answers FEATURE_NOT_READY while the tables are missing. Writes run in a
+ * transaction: a tenant-bound connection is not auto-committing (TenantAwareDataSource),
+ * so a write outside one would be rolled back when the connection is returned.
  */
 @Component
 public class FaceStations {
@@ -98,6 +101,7 @@ public class FaceStations {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    @Transactional
     public UUID create(UUID tenantId, UUID companyId, UUID branchId, String name, UUID byUserId, String byName) {
         requireReady();
         UUID id = UUID.randomUUID();
@@ -109,6 +113,7 @@ public class FaceStations {
     }
 
     /** Revokes an active station; false when it was already revoked (or isn't there). */
+    @Transactional
     public boolean revoke(UUID id, UUID byUserId, String byName) {
         requireReady();
         return jdbc.update("""
@@ -126,21 +131,25 @@ public class FaceStations {
     }
 
     /** Deletes a station that never punched anyone. */
+    @Transactional
     public boolean delete(UUID id) {
         requireReady();
         return jdbc.update("DELETE FROM attendance.face_stations s WHERE s.id = ? "
                 + "AND NOT EXISTS (SELECT 1 FROM attendance.station_punches p WHERE p.station_id = s.id)", id) > 0;
     }
 
+    @Transactional
     public void markStarted(UUID id, String byName) {
         jdbc.update("UPDATE attendance.face_stations SET last_started_at = now(), last_started_by_name = ? WHERE id = ?", byName, id);
     }
 
+    @Transactional
     public void markUsed(UUID id) {
         jdbc.update("UPDATE attendance.face_stations SET last_used_at = now() WHERE id = ?", id);
     }
 
     /** The station's own record of a punch it made (in the punch's transaction). */
+    @Transactional
     public void recordPunch(UUID tenantId, UUID stationId, UUID attendanceRecordId, UUID employeeId, LocalDate date,
                             String punchType, Instant punchedAt, UUID faceEventId, String scoreBucket, boolean needsApproval) {
         jdbc.update("""

@@ -10,7 +10,7 @@
 .ufs-name { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--u-ink, #0E1B16); }
 .ufs-name svg { color: var(--u-br, #0F6E56); }
 .ufs-branch { margin: 2px 0 0; font-size: 13px; color: var(--u-ink3, #6A7A73); }
-.ufs-clock { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+.ufs-clock { margin: 0; white-space: nowrap; font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
 .ufs-card {
   width: 100%; max-width: 880px; box-sizing: border-box; padding: 28px; display: grid; gap: 16px;
   background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); border-radius: 18px;

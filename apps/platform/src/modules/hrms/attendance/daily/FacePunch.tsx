@@ -170,7 +170,7 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
     <>
       <PageHeader eyebrow="Attendance & time · Daily tracking" title="Face Punch"
         sub="Every check-in made with a face. When the camera isn’t sure it’s the right person, it asks you to take a look."
-        actions={canStations ? <Button icon="tablet" onClick={() => navigate('/hrms/attendance/stations')}>Face stations</Button> : undefined} />
+        actions={canStations ? <Button icon="scanFace" onClick={() => navigate('/hrms/attendance/stations')}>Face stations</Button> : undefined} />
 
       {(recent.isLoading || toCheck.length > 0 || recent.isError) && (
         <Section title="To check" count={toCheck.length || null} countTone="gold" variant="section" body="flush"

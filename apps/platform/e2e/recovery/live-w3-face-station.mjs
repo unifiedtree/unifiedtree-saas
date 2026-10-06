@@ -71,6 +71,16 @@ function watch(page, label) {
   })
   return { errors, failed }
 }
+/** Closes whatever opened by itself over the page (a punch reminder, a welcome card). */
+async function dismissPopups(page, label) {
+  for (let i = 0; i < 3; i++) {
+    await page.waitForTimeout(1200)
+    const layer = page.locator('.uko-layer')
+    if (!(await layer.count()) || !(await layer.first().isVisible().catch(() => false))) return
+    if (i === 0) await page.screenshot({ path: `${SHOTS}/w35-kiosk-popup-${label}.png` }).catch(() => {})
+    await page.keyboard.press('Escape').catch(() => {})
+  }
+}
 const visible = (locator, timeout = 20_000) => locator.waitFor({ timeout }).then(() => true, () => false)
 
 const stamp = Date.now()
@@ -102,6 +112,7 @@ try {
   await page.goto(base + '/hrms/attendance/stations')
   check('web: the Face stations page opens for the owner', await visible(page.getByRole('heading', { name: 'Face stations' })))
   const name = `QA station ${stamp}`
+  await dismissPopups(page, 'setup')
   await page.getByRole('button', { name: 'New station' }).click()
   await page.getByLabel('Name').fill(name)
   await page.getByLabel('Branch').selectOption({ label: branch.name })
@@ -194,6 +205,7 @@ try {
   if (two.json?.id) created.push(two.json.id)
   check('api: the owner sets up a second station', two.status === 200 && two.json?.status === 'ACTIVE', `status=${two.status}`)
   await page.reload()
+  await dismissPopups(page, 'reload')
   const row2 = page.locator('.umk-row', { hasText: `QA station B ${stamp}` })
   await row2.getByRole('button', { name: 'Open on this computer' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Sign out and open' }).click()
