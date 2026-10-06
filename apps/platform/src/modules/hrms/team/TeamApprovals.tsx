@@ -1,8 +1,11 @@
 // Approvals (/team?view=approvals&tab=…; prototype TeamApprovals.dc.html): every request waiting
 // for you in one list (GET /v1/team/approvals), with the tabs All · Leave · Attendance · Requests ·
 // Expenses, each only with its permission. Approve and Reject go through each kind's own decide
-// endpoint; a decision stays on the page with Undo while it can still be taken back.
-import { useState } from 'react'
+// endpoint; a decision stays on the page with Undo while it can still be taken back. As in the phone
+// app, the list also carries leave waiting for HR (includeL2, hrms.leave.approve.l2; never one you
+// approved yourself at the first level) and, read from their own pages' lists, salary advances,
+// overtime and skill levels (useExtraApprovals), each only with its approve permission.
+import { useMemo, useState } from 'react'
 import { Button, Callout, EmptyState, FilterPills, PageHeader, SkeletonList, ErrorState, errorText } from '@/design/kit/display'
 import { ApprovalRow, Dialog, PanelButton, useToast } from '@/design/kit/overlays'
 import { Pager } from '@/design/kit/data'
@@ -11,6 +14,8 @@ import { useRecentDecisions } from '../api/shared/useRecentDecisions'
 import type { InboxRow, InboxTab, RecentDecision } from '../api/shared/contracts'
 import { RejectReasonDialog } from './TeamDialogs'
 import { useTeamDecisions } from './useTeamDecisions'
+import { useExtraApprovals } from './useExtraApprovals'
+import { countsWithExtras, extraRowsInTab, newestFirst } from './extraApprovals'
 import {
   INBOX_TAB_LABEL, INBOX_TABS, KIND_LABEL, approvalsSub, decisionWord, decisionsInTab, easyRows, firstName, inboxWhat, relTime,
 } from './teamModel'
@@ -20,12 +25,19 @@ type Busy = Record<string, 'approve' | 'reject' | 'undo'>
 
 const UNAVAILABLE_WORD: Record<string, string> = {
   LEAVE: 'leave', WFH: 'work from home', CORRECTION: 'attendance fixes', SHIFT_CHANGE: 'shift changes', EXPENSE: 'expense claims', TIMESHEET: 'timesheets',
+  LEAVE_L2: 'leave waiting for HR', ADVANCE: 'salary advances', OVERTIME: 'overtime', OVERTIME_REQUEST: 'overtime requests', SKILL: 'skill levels',
+}
+
+/** What the reject-with-a-reason dialog names, for the kinds whose rejection needs a reason. */
+const REJECT_WHAT: Partial<Record<string, string>> = {
+  WFH: 'work from home', OVERTIME: 'overtime', OVERTIME_REQUEST: 'overtime request', SKILL: 'skill level',
 }
 
 export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxTab) => void }) {
   const toast = useToast()
   const [page, setPage] = useState(0)
-  const inbox = useApprovalsInbox({ tab, page, size: PAGE_SIZE })
+  const inbox = useApprovalsInbox({ tab, page, size: PAGE_SIZE, includeL2: true })
+  const extra = useExtraApprovals()
   const recent = useRecentDecisions()
   const { decide, approveAll, undo } = useTeamDecisions()
   const [busy, setBusy] = useState<Busy>({})
@@ -35,13 +47,19 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
   const mark = (id: string, v?: Busy[string]) => setBusy((b) => { const n = { ...b }; if (v) n[id] = v; else delete n[id]; return n })
 
   const data = inbox.data
-  const rows = data?.rows ?? []
+  // The extra rows sit on the first page, merged newest first with the server's.
+  const rows = useMemo(() => {
+    const server = data?.rows ?? []
+    return page === 0 ? newestFirst([...server, ...extraRowsInTab(extra.rows, tab, data?.tabs)]) : server
+  }, [data, extra.rows, tab, page])
+  const counts = countsWithExtras(data?.counts, extra.rows, data?.tabs)
   const decided = decisionsInTab(recent.data, tab)
   const pending = rows.filter((r) => !decided.some((d) => d.requestId === r.requestId))
   const easy = easyRows(pending)
-  const waiting = data?.counts[tab] ?? 0
+  const waiting = counts[tab] ?? 0
   const warned = pending.filter((r) => r.warnings.length > 0).length
   const tabs = (data?.tabs ?? []).filter((t) => (INBOX_TABS as readonly string[]).includes(t))
+  const unavailable = [...(data?.unavailable ?? []), ...extra.unavailable]
 
   const switchTab = (t: InboxTab) => { setPage(0); onTab(t) }
 
@@ -103,12 +121,12 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
       {header}
       {tabs.length > 1 && (
         <FilterPills label="Approval kinds" size="sm" value={tab} onChange={(v) => switchTab(v as InboxTab)}
-          options={tabs.map((t) => ({ value: t, label: INBOX_TAB_LABEL[t], count: data?.counts[t] || null }))} />
+          options={tabs.map((t) => ({ value: t, label: INBOX_TAB_LABEL[t], count: counts[t] || null }))} />
       )}
-      {data && data.unavailable.length > 0 && (
+      {data && unavailable.length > 0 && (
         <Callout tone="warning" icon="alertTriangle">
-          {`Couldn’t load ${data.unavailable.map((k) => UNAVAILABLE_WORD[k] ?? k.toLowerCase()).join(', ')} just now; the rest is here.`}
-          {' '}<Button variant="ghost" size={30} onClick={() => inbox.refetch()}>Try again</Button>
+          {`Couldn’t load ${unavailable.map((k) => UNAVAILABLE_WORD[k] ?? k.toLowerCase()).join(', ')} just now; the rest is here.`}
+          {' '}<Button variant="ghost" size={30} onClick={() => { void inbox.refetch(); void extra.refetch() }}>Try again</Button>
         </Callout>
       )}
       <section aria-label="Requests" className="tm-requests">
@@ -125,7 +143,7 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
                     busy={busy[d.requestId] === 'undo' ? 'undo' : false} onUndo={() => takeBack(d)} undoUntil={d.undoUntil} />
                 ))}
                 {pending.map((r) => (
-                  <ApprovalRow key={r.requestId} variant="card" name={r.employeeName} kind={KIND_LABEL[r.kind]}
+                  <ApprovalRow key={`${r.kind}-${r.requestId}`} variant="card" name={r.employeeName} kind={KIND_LABEL[r.kind]}
                     meta={r.canDecide ? relTime(r.createdAt) : `${relTime(r.createdAt)} · not yours to decide`}
                     title={inboxWhat(r)} reason={r.reason || undefined}
                     facts={r.facts.map((f) => ({ label: f.label, value: f.value }))}
@@ -141,6 +159,7 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
         <Pager page={page} pageSize={PAGE_SIZE} total={data.totalElements} onPageChange={setPage} noun="requests" />
       )}
       <RejectReasonDialog open={!!rejecting} name={rejecting?.employeeName ?? ''} busy={!!rejecting && busy[rejecting.requestId] === 'reject'}
+        what={rejecting ? REJECT_WHAT[rejecting.kind] ?? 'request' : undefined}
         onClose={() => setRejecting(null)} onReject={(reason) => rejecting && run(rejecting, false, reason)} />
       <Dialog open={confirmAll} onClose={() => setConfirmAll(false)} busy={bulkBusy} icon="checkCircle"
         title={`Approve ${easy.length} requests?`}

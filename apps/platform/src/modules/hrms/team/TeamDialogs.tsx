@@ -11,16 +11,19 @@ import { useConfirmTeamProbation, useExtendTeamProbation } from '../api/shared/u
 import { TEAM_MESSAGE_MAX_LENGTH, usePostTeamMessage } from '../api/shared/useTeamMessages'
 import { dayShort, extendedEnd, firstName } from './teamModel'
 
-/** Work from home can't be rejected without a reason (WFH_REJECT_REASON_REQUIRED). */
-export function RejectReasonDialog({ name, open, busy, onClose, onReject }: {
-  name: string; open: boolean; busy: boolean; onClose: () => void; onReject: (reason: string) => void
+/**
+ * Work from home can't be rejected without a reason (WFH_REJECT_REASON_REQUIRED); nor can overtime or a skill
+ * level (`what` names the request; default work from home).
+ */
+export function RejectReasonDialog({ name, open, busy, onClose, onReject, what = 'work from home' }: {
+  name: string; open: boolean; busy: boolean; onClose: () => void; onReject: (reason: string) => void; what?: string
 }) {
   const [reason, setReason] = useState('')
   const [tried, setTried] = useState(false)
   useEffect(() => { if (open) { setReason(''); setTried(false) } }, [open])
   const empty = !reason.trim()
   return (
-    <Dialog open={open} onClose={onClose} busy={busy} title={`Reject ${firstName(name)}’s work from home?`}
+    <Dialog open={open} onClose={onClose} busy={busy} title={`Reject ${firstName(name)}’s ${what}?`}
       sub="Say why. They see this reason with the decision." icon="x" tone="danger" initialFocus="first"
       footer={(
         <>

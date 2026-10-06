@@ -186,8 +186,12 @@ export interface TeamTimeOffEntry {
 // ── BW-09 · Approvals inbox (owner P-TEAM) ──────────────────────────────────
 // GET /v1/team/approvals?kind=&page=&size=
 
-/** A row's own kind. TIMESHEET appears under Requests once BW-36 is in. */
-export type ApprovalKind = DecisionKind | 'TIMESHEET'
+/**
+ * A row's own kind. TIMESHEET appears under Requests once BW-36 is in. LEAVE_L2 (leave waiting for HR) comes
+ * only when the client asks for it (includeL2). ADVANCE, OVERTIME, OVERTIME_REQUEST and SKILL are not listed
+ * by the server's inbox: the Approvals page reads them from their own lists (team/useExtraApprovals.ts).
+ */
+export type ApprovalKind = DecisionKind | 'TIMESHEET' | 'LEAVE_L2' | 'ADVANCE' | 'OVERTIME' | 'OVERTIME_REQUEST' | 'SKILL'
 
 /** The inbox tabs (the design's: All · Leave · Attendance · Requests · Expenses); the `kind` query parameter takes these. */
 export type InboxTab = 'all' | 'leave' | 'attendance' | 'requests' | 'expenses'

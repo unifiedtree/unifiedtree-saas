@@ -2,7 +2,10 @@
 // every guard, validation and refresh stays), Undo through the shared useDecisionUndo, and
 // "Approve N with no warnings" through the leave bulk endpoint plus one call per other request.
 import { useQueryClient } from '@tanstack/react-query'
-import { useLeaveDecision, useBulkLeaveDecision, LEAVE_BULK_MAX } from '../api/useLeave'
+import { useLeaveDecision, useBulkLeaveDecision, useLeaveL2Decision, LEAVE_BULK_MAX } from '../api/useLeave'
+import { useAdvanceDecision } from '../api/useAdvance'
+import { useDecideOvertime, useDecideOvertimeRequest } from '../api/useOvertime'
+import { useDecideSkillAssessment } from '../api/useLearning'
 import { useWfhDecision } from '../api/useWfh'
 import { useDecideCorrection } from '../api/useAttendance'
 import { useDecideShiftRequest } from '../api/useShiftRequests'
@@ -28,6 +31,11 @@ export function useTeamDecisions() {
   const shift = useDecideShiftRequest()
   const expense = useExpenseDecision()
   const timesheet = useTimesheetDecision()
+  const leaveL2 = useLeaveL2Decision()
+  const advance = useAdvanceDecision()
+  const overtime = useDecideOvertime()
+  const overtimeAsk = useDecideOvertimeRequest()
+  const skill = useDecideSkillAssessment()
   const undoer = useDecisionUndo()
 
   // Team today's "Out soon" and the schedule's waiting cells read the team's time off.
@@ -48,11 +56,20 @@ export function useTeamDecisions() {
         if (!r.available) throw new Error('Timesheet approvals aren’t switched on for this workspace yet.')
         break
       }
+      // Kinds decided on their own pages (the same hooks); their lists sit under the inbox key, read again below.
+      case 'LEAVE_L2': await leaveL2.mutateAsync({ requestId: id, status, comment }); break
+      case 'ADVANCE': await advance.mutateAsync({ id, approved: approve, comment }); break
+      case 'OVERTIME': await overtime.mutateAsync({ id, approve, note: note.trim() }); break
+      case 'OVERTIME_REQUEST': await overtimeAsk.mutateAsync({ id, approve, note: note.trim() }); break
+      case 'SKILL': await skill.mutateAsync({ id, decision: status, note: comment }); break
+    }
+    if (kind === 'ADVANCE' || kind === 'OVERTIME' || kind === 'OVERTIME_REQUEST' || kind === 'SKILL') {
+      void qc.invalidateQueries({ queryKey: SHARED_KEYS.approvalsInbox })
     }
     void refreshTeam()
   }
 
-  /** Approves every row: leave in bulk (one result per request), the rest one by one. */
+  /** Approves every row: leave in bulk (one result per request), the rest (leave waiting for HR too) one by one. */
   async function approveAll(rows: readonly InboxRow[]): Promise<BulkReport> {
     const report: BulkReport = { approved: 0, failed: [] }
     const leaveRows = rows.filter((r) => r.kind === 'LEAVE')

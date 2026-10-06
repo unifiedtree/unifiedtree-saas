@@ -27,6 +27,8 @@ export interface InboxParams {
   page?: number
   /** Default 20. */
   size?: number
+  /** Also list leave a manager approved that waits for HR (kind LEAVE_L2, for hrms.leave.approve.l2). Default false. */
+  includeL2?: boolean
 }
 
 export function approvalsInboxQuery(params: InboxParams = {}, api: ApiFetch = defaultApi): SharedQueryOptions<ApprovalsInbox> {
@@ -34,8 +36,9 @@ export function approvalsInboxQuery(params: InboxParams = {}, api: ApiFetch = de
   const page = params.page ?? 0
   const size = params.size ?? 20
   const qs = new URLSearchParams({ kind: tab, page: String(page), size: String(size) })
+  if (params.includeL2) qs.set('includeL2', 'true')
   return {
-    queryKey: [...SHARED_KEYS.approvalsInbox, tab, page, size],
+    queryKey: params.includeL2 ? [...SHARED_KEYS.approvalsInbox, tab, page, size, 'l2'] : [...SHARED_KEYS.approvalsInbox, tab, page, size],
     queryFn: () => asAvailable(() => api<ApprovalsInbox>(`${APPROVALS_INBOX_PATH}?${qs}`)),
   }
 }

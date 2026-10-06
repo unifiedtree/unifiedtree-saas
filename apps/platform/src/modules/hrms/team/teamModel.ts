@@ -279,13 +279,14 @@ export function extendedEnd(end: string): string {
 
 export const KIND_LABEL: Record<ApprovalKind, string> = {
   LEAVE: 'Leave', WFH: 'Work from home', CORRECTION: 'Attendance fix', SHIFT_CHANGE: 'Shift change', EXPENSE: 'Expense', TIMESHEET: 'Timesheet',
+  LEAVE_L2: 'Leave · HR approval', ADVANCE: 'Salary advance', OVERTIME: 'Overtime', OVERTIME_REQUEST: 'Overtime request', SKILL: 'Skill level',
 }
 
 /** Which tab a kind is counted under (BW-09). */
 export function tabOfKind(kind: ApprovalKind): Exclude<InboxTab, 'all'> {
   switch (kind) {
-    case 'LEAVE': return 'leave'
-    case 'CORRECTION': return 'attendance'
+    case 'LEAVE': case 'LEAVE_L2': return 'leave'
+    case 'CORRECTION': case 'OVERTIME': case 'OVERTIME_REQUEST': return 'attendance'
     case 'EXPENSE': return 'expenses'
     default: return 'requests'
   }
@@ -294,11 +295,13 @@ export function tabOfKind(kind: ApprovalKind): Exclude<InboxTab, 'all'> {
 /** The request in a line: "Casual leave · Mon 28 – Tue 29 Sep · 2 days". */
 export function inboxWhat(r: InboxRow): string {
   switch (r.kind) {
-    case 'LEAVE': return [r.title, rangeShort(r.fromDate, r.toDate), daysText(r.days)].filter(Boolean).join(' · ')
+    case 'LEAVE': case 'LEAVE_L2': return [r.title, rangeShort(r.fromDate, r.toDate), daysText(r.days)].filter(Boolean).join(' · ')
     case 'WFH': return ['Work from home', rangeShort(r.fromDate, r.toDate), daysText(r.days)].filter(Boolean).join(' · ')
     case 'CORRECTION': return [r.title, r.fromDate ? dayShort(r.fromDate) : ''].filter(Boolean).join(' · ')
     case 'SHIFT_CHANGE': return `${r.title} · ${r.fromDate ? `From ${dayShort(r.fromDate)}` : 'from the day it’s approved'}`
-    case 'EXPENSE': return [r.title, money(r.amount, r.currency)].filter(Boolean).join(' · ')
+    case 'EXPENSE': case 'ADVANCE': return [r.title, money(r.amount, r.currency)].filter(Boolean).join(' · ')
+    case 'OVERTIME': case 'OVERTIME_REQUEST':
+      return [r.title, r.fromDate ? dayShort(r.fromDate) : '', r.facts.find((f) => f.key === 'extra')?.value ?? ''].filter(Boolean).join(' · ')
     case 'TIMESHEET': return [r.title || 'Timesheet', rangeShort(r.fromDate, r.toDate)].filter(Boolean).join(' · ')
     default: return r.title
   }
