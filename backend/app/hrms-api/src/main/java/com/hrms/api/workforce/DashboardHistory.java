@@ -32,6 +32,11 @@ public class DashboardHistory {
 
     /** One company's headcount on {@code date}, with the joiners and leavers of that month up to it. */
     public DashboardAsOf.Headcount headcount(UUID tenant, UUID companyId, LocalDate date) {
+        return headcount(tenant, companyId, date, false);
+    }
+
+    /** {@link #headcount(UUID, UUID, LocalDate)}; {@code throughLastDay}: see {@link DashboardAsOf#headcount(List, Map, LocalDate, boolean)}. */
+    public DashboardAsOf.Headcount headcount(UUID tenant, UUID companyId, LocalDate date, boolean throughLastDay) {
         List<DashboardAsOf.Person> people = jdbc.query("""
                 SELECT id, date_of_joining, employment_status, last_working_day, date_of_termination
                   FROM hrms.employees WHERE tenant_id = ? AND company_id = ?
@@ -46,7 +51,7 @@ public class DashboardHistory {
                 """, (rs, i) -> new DashboardAsOf.Change(rs.getObject("employee_id", UUID.class), rs.getString("status"),
                 rs.getDate("effective_on").toLocalDate(), instant(rs.getTimestamp("recorded_at"))),
                 tenant, companyId).stream().collect(Collectors.groupingBy(DashboardAsOf.Change::employeeId));
-        return DashboardAsOf.headcount(people, history, date);
+        return DashboardAsOf.headcount(people, history, date, throughLastDay);
     }
 
     /**

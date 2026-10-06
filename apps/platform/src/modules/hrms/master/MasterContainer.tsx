@@ -94,11 +94,12 @@ async function loadMilestone(kind: string, range: DateRange | null) {
   return ids
 }
 
-/** Every employee in the directory (pages of 200). */
-async function loadDirectory() {
+/** Every employee in the directory (pages of 200); of one company when it is given. */
+async function loadDirectory(companyId?: string) {
   const all: WorkforceEmployee[] = []
+  const co = companyId ? `companyId=${encodeURIComponent(companyId)}&` : ''
   for (let page = 0; page < 25; page++) {
-    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?page=${page}&pageSize=200`)
+    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?${co}page=${page}&pageSize=200`)
     all.push(...r.content)
     if (page + 1 >= r.totalPages) break
   }
@@ -204,9 +205,9 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
   const companies = useMemo(() => companiesQ.data ?? [], [companiesQ.data])
   const coIds = useMemo(() => companies.map((c) => c.id), [companies])
   const defaultCo = (globalCo && coIds.includes(globalCo) ? globalCo : coIds[0]) || ''
-  // The companies whose setup records load: the current one on the setup pages; every company for the
-  // people pages and Companies (people are listed, and added, across companies there).
-  const scoped = !!globalCo && coIds.includes(globalCo) && page !== 'employees' && page !== 'companies'
+  // The companies whose setup records load: the current one on the setup pages and the Workforce directory
+  // (it lists the chosen company's people only, owner decision 6 Oct); every company for Companies.
+  const scoped = !!globalCo && coIds.includes(globalCo) && page !== 'companies'
   const scopeIds = useMemo(() => (scoped ? [globalCo] : coIds), [scoped, globalCo, coIds])
   const opt = { staleTime: 300_000 }
   // Deactivated branches only on the Branches page's "Include inactive" filter, so they never reach a picker.
@@ -214,7 +215,9 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     queryKey: ['hrms', 'branches', 'all', route.archived ? 'with-archived' : 'active'],
     queryFn: () => apiJson<Branch[]>(route.archived ? '/v1/hrms/branches?includeArchived=true' : '/v1/hrms/branches'), enabled: canCoRead && want('branches'), ...opt,
   })
-  const empQ = useQuery({ queryKey: ['hrms', 'employees', 'master-all'], queryFn: loadDirectory, enabled: canEmpRead && (want('employees') || want('depts')), staleTime: 120_000 })
+  // The directory (and its Export) is the chosen company's people; the other pages count people across companies.
+  const empCo = page === 'employees' && scoped ? globalCo : ''
+  const empQ = useQuery({ queryKey: ['hrms', 'employees', 'master-all', ...(empCo ? [empCo] : [])], queryFn: () => loadDirectory(empCo || undefined), enabled: canEmpRead && (want('employees') || want('depts')), staleTime: 120_000 })
   // includeSelf: the viewer's own shift too (company-wide viewers), so Shift Rules' People matches Shift Schedules.
   const schedQ = useQuery({ queryKey: ['master', 'schedule', TODAY_ISO, 'self'], queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${TODAY_ISO}&to=${TODAY_ISO}&includeSelf=true`), enabled: canTeam && (want('employees') || want('shifts')), ...opt })
   const perCo = <T,>(key: string[], url: (cid: string) => string, on: boolean) => ({

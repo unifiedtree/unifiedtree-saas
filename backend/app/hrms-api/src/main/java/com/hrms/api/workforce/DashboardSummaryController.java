@@ -68,7 +68,8 @@ public class DashboardSummaryController {
   UUID tenant=TenantContext.requireTenantId();java.sql.Timestamp end=java.sql.Timestamp.from(DashboardAsOf.endOf(date));
   Map<String,Object> result=new LinkedHashMap<>();
   if(allowed(auth,"hrms.employee.read")){
-   DashboardAsOf.Headcount h=history.headcount(tenant,companyId,date);
+   // A past day: leavers count on their last working day, as on that day's attendance roster (Total = scheduled + off).
+   DashboardAsOf.Headcount h=history.headcount(tenant,companyId,date,true);
    putHeadcount(result,h);result.put("joinedInMonth",(long)h.joined());result.put("leftInMonth",(long)h.left());
   }
   if(allowed(auth,"hrms.hiring.read"))result.put("openRoles",jdbc.queryForObject("SELECT count(*) FROM hiring_mgmt.job_requisitions WHERE tenant_id=? AND company_id=? AND created_at<? AND (status='OPEN' OR (status IN ('CLOSED','ON_HOLD') AND updated_at>=?))",Long.class,tenant,companyId,end,end));

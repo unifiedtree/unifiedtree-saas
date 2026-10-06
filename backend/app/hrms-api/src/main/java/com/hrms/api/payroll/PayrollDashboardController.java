@@ -8,13 +8,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Payroll dashboard reads — powers the Payroll landing page (KPI tiles + cost
  * trend chart). Wave 1 (2026-08-11).
  *
  * <ul>
- *   <li>{@code GET /v1/payroll/dashboard/kpis}  — current-period KPIs</li>
+ *   <li>{@code GET /v1/payroll/dashboard/kpis?companyId=}  — current-period KPIs
+ *       (companyId optional: one company's runs; without it every company)</li>
  *   <li>{@code GET /v1/payroll/dashboard/trend?months=6} — 6-month cost trend</li>
  * </ul>
  *
@@ -33,8 +35,9 @@ public class PayrollDashboardController {
 
     @GetMapping("/kpis")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
-    public PayrollDashboardService.KpisDto kpis() {
-        return service.kpis(TenantContext.getTenantId());
+    public PayrollDashboardService.KpisDto kpis(@RequestParam(required = false) UUID companyId) {
+        // companyId (optional): that company's runs only; without it every company, as before.
+        return service.kpis(TenantContext.getTenantId(), companyId);
     }
 
     @GetMapping("/trend")

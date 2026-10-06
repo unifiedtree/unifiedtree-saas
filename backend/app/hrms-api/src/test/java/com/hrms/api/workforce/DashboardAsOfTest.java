@@ -57,6 +57,36 @@ class DashboardAsOfTest {
         assertTrue(DashboardAsOf.workedOn(null, LocalDate.of(2030, 1, 1)), "people who haven't left always count");
     }
 
+    @Test void onAPastDayALeaverIsOnTheRollThroughTheirLastWorkingDay() {
+        // Regression 6 Oct (22 Sep 2026: Total employees 23, "of 35 scheduled"): the attendance roster
+        // counts a leaver on their last working day, so the past day's headcount does too.
+        var p = person(LocalDate.of(2024, 1, 1), "EXITED", MAR_14_2025);
+        assertTrue(DashboardAsOf.employedThrough(p, MAR_14_2025), "their last working day counts");
+        assertEquals(DashboardAsOf.workedOn(MAR_14_2025, MAR_14_2025), DashboardAsOf.employedThrough(p, MAR_14_2025));
+        assertTrue(DashboardAsOf.employedThrough(p, LocalDate.of(2025, 3, 13)));
+        assertFalse(DashboardAsOf.employedThrough(p, LocalDate.of(2025, 3, 15)), "the day after, they are gone");
+        var terminated = new DashboardAsOf.Person(UUID.randomUUID(), LocalDate.of(2024, 1, 1), "TERMINATED", null, MAR_14_2025);
+        assertTrue(DashboardAsOf.employedThrough(terminated, MAR_14_2025), "the termination date stands in for a missing last working day");
+        var noDates = new DashboardAsOf.Person(UUID.randomUUID(), LocalDate.of(2024, 1, 1), "EXITED", null, null);
+        assertFalse(DashboardAsOf.employedThrough(noDates, MAR_14_2025));
+        assertFalse(DashboardAsOf.employedThrough(person(LocalDate.of(2025, 3, 15), "ACTIVE", null), MAR_14_2025), "not joined yet");
+        assertFalse(DashboardAsOf.employedThrough(person(null, "ACTIVE", null), MAR_14_2025));
+
+        var staying = person(LocalDate.of(2023, 3, 1), "ACTIVE", null);
+        var lastDay = person(LocalDate.of(2023, 3, 1), "EXITED", MAR_14_2025);
+        var leftBefore = person(LocalDate.of(2023, 3, 1), "RESIGNED", LocalDate.of(2025, 3, 13));
+        List<DashboardAsOf.Person> people = List.of(staying, lastDay, leftBefore);
+        // Through the last day: the person on their last day is on the roll (and, by their status, on notice).
+        var past = DashboardAsOf.headcount(people, Map.of(), MAR_14_2025, true);
+        assertEquals(2, past.total());
+        assertEquals(1, past.active());
+        assertEquals(1, past.onNotice());
+        assertEquals(2, past.left(), "both still count as this month's leavers");
+        // Today's rule is unchanged: the last working day counts as gone.
+        assertEquals(1, DashboardAsOf.headcount(people, Map.of(), MAR_14_2025).total());
+        assertEquals(1, DashboardAsOf.headcount(people, Map.of(), MAR_14_2025, false).total());
+    }
+
     @Test void aLeaverWithNoRecordedDatesCountsAsGone() {
         var p = new DashboardAsOf.Person(UUID.randomUUID(), LocalDate.of(2024, 1, 1), "EXITED", null, null);
         assertFalse(DashboardAsOf.onRoll(p, MAR_14_2025));

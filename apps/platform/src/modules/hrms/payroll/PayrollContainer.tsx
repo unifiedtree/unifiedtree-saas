@@ -24,7 +24,8 @@ import type { ApiPayrollSettings } from '@/design/dc/PaySettings'
 import type { PliRow } from '@/design/dc/PayPli'
 import type { AdvRow, AdvPlanRow } from '@/design/dc/PayAdvances'
 import type { BankData, BankBatch } from '@/design/dc/PayBank'
-import { useCompanies, type Department } from '../api/useOrg'
+import { type Department } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   useRuns, useRun, useRunEmployees, useRunSkipped, useEligibleEmployees, useRunPayslip, useCreateRun, useProcessRun, useLockRun, useReopenRun,
   downloadPayslipPdf, type PayrollRun, type EligibleEmployee, type ComponentTotal, type StatutoryDue,
@@ -59,11 +60,12 @@ const stamp = (iso?: string | null) => {
 }
 const dayOf = (iso?: string | null) => (iso ? fmtShort(istToday(new Date(iso))) : '')
 const periodText = (r: PayrollRun) => `${fmtShort(r.periodStart)} – ${fmtShort(r.periodEnd)}`.replace(/ (\d{4}) – (\d+ \w+) \1$/, ' – $2 $1')
-/** Every employee in the directory (pages of 200). */
-async function loadDirectory() {
+/** Every employee in the directory (pages of 200); of one company when it is given. */
+async function loadDirectory(companyId?: string) {
   const all: WorkforceEmployee[] = []
+  const co = companyId ? `companyId=${encodeURIComponent(companyId)}&` : ''
   for (let page = 0; page < 20; page++) {
-    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?page=${page}&pageSize=200`)
+    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?${co}page=${page}&pageSize=200`)
     all.push(...r.content)
     if (page + 1 >= r.totalPages) break
   }
@@ -125,15 +127,19 @@ export function PayrollContainer() {
   const me = useMemo(() => { try { return jwtDecode<{ employee_id?: string; name?: string; given_name?: string }>(getAccessToken() || '') } catch { return {} as any } }, [])
 
   // ── shared data ──
-  const { data: companies = [] } = useCompanies()
-  const companyName = companies.length === 1 ? companies[0].name : companies.length ? 'All companies' : ''
-  const runsQ = useRuns({}, { enabled: canRuns && ['dashboard', 'runs', 'salary', 'bank'].includes(section) })
+  // Payroll follows the company chosen at the top of the page (owner, 6 Oct): its runs, the new-run
+  // dialog, the dashboard's figures and dues, and the people. One-company workspaces: that company.
+  const { companyId: co, company, multi, isLoading: coLoading } = useCurrentCompany()
+  const coReady = !!co || !coLoading
+  const companies = useMemo(() => (company ? [{ id: company.id, name: company.name }] : []), [company])
+  const companyName = company?.name || ''
+  const runsQ = useRuns(co ? { companyId: co } : {}, { enabled: coReady && canRuns && ['dashboard', 'runs', 'salary', 'bank'].includes(section) })
   const runs = useMemo(() => runsQ.data ?? [], [runsQ.data])
   const byPeriod = (r: PayrollRun) => r.periodYear * 100 + r.periodMonth
   const sorted = useMemo(() => runs.slice().sort((a, b) => byPeriod(b) - byPeriod(a)), [runs])
   /** The run for this month (the dashboard's "this month's run"). */
   const thisMonthRun = sorted.find((r) => r.periodYear === y && r.periodMonth === m && r.status !== 'CANCELLED') || null
-  const directoryQ = useQuery({ queryKey: ['hrms', 'employees', 'all-for-payroll'], queryFn: loadDirectory, enabled: canEmpRead && (['salary', 'pli', 'runs'].includes(section) || (section === 'advances' && canAdvOthers)), staleTime: 300_000 })
+  const directoryQ = useQuery({ queryKey: ['hrms', 'employees', 'all-for-payroll', co || 'all'], queryFn: () => loadDirectory(co || undefined), enabled: coReady && canEmpRead && (['salary', 'pli', 'runs'].includes(section) || (section === 'advances' && canAdvOthers)), staleTime: 300_000 })
   const directory = useMemo(() => directoryQ.data ?? [], [directoryQ.data])
   const deptIds = useMemo(() => [...new Set(companies.map((c) => c.id))], [companies])
   const deptQs = useQueries({ queries: deptIds.map((cid) => ({ queryKey: ['hrms', 'departments', cid], queryFn: () => apiJson<Department[]>(`/v1/hrms/departments?companyId=${cid}`), enabled: ['salary', 'pli', 'runs'].includes(section), staleTime: 300_000 })) })
@@ -142,7 +148,8 @@ export function PayrollContainer() {
   const nameOfEmp = (e?: WorkforceEmployee) => (e ? [e.firstName, e.lastName].filter(Boolean).join(' ') : '')
 
   // ── Dashboard ──
-  const kpisQ = useQuery({ queryKey: ['hrms', 'payroll', 'dashboard', 'kpis'], queryFn: () => apiJson<PayrollDashboardKpis>('/v1/payroll/dashboard/kpis'), enabled: canRuns && section === 'dashboard', staleTime: 60_000 })
+  // companyId: the chosen company's figures (a server without the parameter answers for every company, as before).
+  const kpisQ = useQuery({ queryKey: ['hrms', 'payroll', 'dashboard', 'kpis', co || 'all'], queryFn: () => apiJson<PayrollDashboardKpis>(`/v1/payroll/dashboard/kpis${co ? `?companyId=${encodeURIComponent(co)}` : ''}`), enabled: coReady && canRuns && section === 'dashboard', staleTime: 60_000 })
   const allBatchesQ = useQuery({ queryKey: ['hrms', 'payroll', 'disbursement-batches', 'list', {}], queryFn: () => apiJson<DisbursementBatch[]>('/v1/payroll/disbursement/batches'), enabled: canDisbRead && ['dashboard', 'bank'].includes(section), staleTime: 15_000 })
   const filingsQ = useQuery({ queryKey: ['hrms', 'compliance', 'filings', undefined, 0, 50], queryFn: () => apiJson<Page<StatutoryFiling>>('/v1/compliance/filings?page=0&size=50'), enabled: canCompliance && section === 'dashboard', staleTime: 30_000 })
   // PF / ESI / PT / LWF owed, added up from locked and paid runs (the filings ledger stays the filing record).
@@ -263,17 +270,18 @@ export function PayrollContainer() {
     // unless the Compliance filings ledger already records them as filed. Other
     // filings (TDS, gratuity…) still come from the ledger.
     const monthOf = (p: string) => `${MON[Number(p.slice(5, 7)) - 1]} ${p.slice(0, 4)}`
-    const computedDues = (duesQ.data ?? []).filter((d) => d.filingStatus !== 'FILED' && d.filingStatus !== 'LATE').map((d) => {
+    const ofCompany = (id?: string | null) => !co || !id || id === co
+    const computedDues = (duesQ.data ?? []).filter((d) => ofCompany(d.companyId) && d.filingStatus !== 'FILED' && d.filingStatus !== 'LATE').map((d) => {
       const due = d.filingDueDate || d.dueDate || ''
       return {
         sort: due || '9999-12-31', what: LBL[d.scheme] || d.scheme, when: due ? fmtShort(due) : 'as your state requires', amount: num(d.total),
-        note: [monthOf(d.period), companies.length > 1 ? d.companyName || '' : '', due && due < today ? 'overdue' : ''].filter(Boolean).join(' · '),
+        note: [monthOf(d.period), due && due < today ? 'overdue' : ''].filter(Boolean).join(' · '),
       }
     })
     // Ledger entries a computed due already stands for are not listed twice; any
     // other open entry (TDS, gratuity, or a PF/ESI/PT month payroll didn't run) still shows.
     const matched = new Set((duesQ.data ?? []).map((d) => d.filingId).filter(Boolean))
-    const ledgerDues = (filingsQ.data?.content ?? []).filter((f) => f.status === 'DUE' && !matched.has(f.id))
+    const ledgerDues = (filingsQ.data?.content ?? []).filter((f) => ofCompany(f.companyId) && f.status === 'DUE' && !matched.has(f.id))
       .map((f) => ({ sort: f.dueDate, what: LBL[f.filingType] || f.filingType, when: fmtShort(f.dueDate), amount: f.amount ? num(f.amount) : null, note: [f.period, f.dueDate < today ? 'overdue' : ''].filter(Boolean).join(' · ') }))
     const data: PayDashData = {
       companyName, monthLabel: `${MON[m - 1]} ${y}`, monthShort: MON[m - 1],
@@ -286,13 +294,14 @@ export function PayrollContainer() {
       recent: sorted.filter((r) => r.status === 'PAID' && r.id !== cur?.id).slice(0, 3).map((r) => ({ id: r.id, label: runLabel(r), employees: r.employeeCount, paidOn: dayOf(paidAt.get(r.id)), net: num(r.totalNet) })),
       hasRuns: runs.length > 0,
     }
-    px.PayDashboard = { state: stateOf(runsQ), data, onRetry: () => { runsQ.refetch(); kpisQ.refetch(); duesQ.refetch() } }
+    px.PayDashboard = { state: coReady ? stateOf(runsQ) : 'loading', data, onRetry: () => { runsQ.refetch(); kpisQ.refetch(); duesQ.refetch() } }
   }
   if (section === 'runs' && !runId) {
     px.PayRuns = {
       // ?month=YYYY-MM (the dashboard's payroll chart) opens the list on that month.
       month: params.get('month') || '',
-      state: stateOf(runsQ), runs: runs.map(toRun), companies: companies.map((c) => ({ id: c.id, name: c.name })), canManage, onRetry: () => runsQ.refetch(),
+      state: coReady ? stateOf(runsQ) : 'loading', runs: runs.map(toRun), companies, canManage, onRetry: () => runsQ.refetch(),
+      companyNote: multi ? 'The company chosen at the top of the page. Switch company there to run another company’s payroll.' : undefined,
       onCreate: (q: { companyId: string; year: number; month: number }) => createRun.mutateAsync({ companyId: q.companyId, periodMonth: q.month, periodYear: q.year })
         .then((r) => { toast.success('Payroll run created'); navigate(`/hrms/payroll/runs/${r.id}`); return true }, failed('Could not create the run')),
     }
@@ -415,7 +424,7 @@ export function PayrollContainer() {
     const bands: Record<string, PayBand> = Object.fromEntries((bandsQ.data ?? []).filter((b) => b.minCtcAnnual != null && b.maxCtcAnnual != null)
       .map((b) => [b.employeeId, { code: b.gradeCode, name: b.gradeName, min: num(b.minCtcAnnual), max: num(b.maxCtcAnnual) }]))
     px.PaySalary = {
-      state: stateOf(directoryQ), employees, structures, calc, missing, newIds, canEdit: canStructManage, focus: params.get('employee') || '', bands,
+      state: coReady ? stateOf(directoryQ) : 'loading', employees, structures, calc, missing, newIds, canEdit: canStructManage, focus: params.get('employee') || '', bands,
       monthStart, nextMonthStart, runId: salaryRun?.id || '', runLabel: salaryRun ? runLabel(salaryRun) : '',
       onVisible: (ids: string[]) => setVisible((cur) => (cur.join(',') === ids.join(',') ? cur : ids)), onRetry: () => directoryQ.refetch(),
       canExport: canStruct,
@@ -519,11 +528,12 @@ export function PayrollContainer() {
     const data: BankData = {
       run: bankRun ? { id: bankRun.id, label: runLabel(bankRun), status: STATUS[bankRun.status] || 'draft', net: num(bankRun.totalNet), employees: bankRun.employeeCount } : null,
       batch: rb ? toBatch(rb) : null, profile: bankRun ? profileOf(profiles, bankRun.companyId)?.profileName || null : null,
-      history: bankBatches.filter((b) => b.status === 'PAID' && b.runId !== bankRun?.id).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || '')).map(toBatch),
+      // Only the chosen company's runs (the runs list is that company's).
+      history: bankBatches.filter((b) => b.status === 'PAID' && b.runId !== bankRun?.id && (!co || runs.some((r) => r.id === b.runId))).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || '')).map(toBatch),
       people: lines ? lines.map((l) => ({ name: l.beneficiaryName, code: empById.get(l.employeeId)?.employeeCode || '', acct: `•••• ${l.accountNoLast4}`, net: num(l.amount) })) : null,
     }
     px.PayBank = {
-      state: stateOf(runsQ), data, canBuild, canPost, onRetry: () => { runsQ.refetch(); allBatchesQ.refetch() },
+      state: coReady ? stateOf(runsQ) : 'loading', data, canBuild, canPost, onRetry: () => { runsQ.refetch(); allBatchesQ.refetch() },
       onView: (id: string) => setBankView(id), onProfiles: () => navigate('/hrms/bank-disbursement/setup'),
       onDownload: (b: BankBatch) => downloadBatchFile(b.id, `${b.reference}.csv`).then(() => { qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'disbursement-batches'] }); toast.success('Bank file downloaded · upload it to your bank') }, failed('Could not download the file')),
       onConfirm: (b: BankBatch, utr: string) => markPaid.mutateAsync({ batch: b, utr }).then(() => done(`${b.bank} transfer confirmed · ${bankRun ? runLabel(bankRun) : 'run'} marked as paid`), failed('Could not confirm the transfer')),

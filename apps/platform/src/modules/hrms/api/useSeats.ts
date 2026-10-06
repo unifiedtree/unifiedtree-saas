@@ -27,6 +27,51 @@ export interface SeatsUsage {
   /** @deprecated same value as `current` — read `current` instead. */
   currentExcludingAdmin?: number
   remaining: number
+  // Soft seat limit (contract 1, _results/chakri/CONTRACTS-PROPOSAL.md): a server with it also sends these,
+  // and no longer refuses an employee over the bought seats (no 402 SEAT_LIMIT_EXCEEDED). Absent: old server.
+  seatsBought?: number
+  seatsUsed?: number
+  /** max(0, seatsUsed − seatsBought). */
+  overBy?: number
+  /** The extra people are billed at the end of the billing cycle. */
+  extraBilledAtCycleEnd?: boolean
+  /** When the cycle ends (yyyy-MM-dd); null without a paid subscription. */
+  cycleEndsOn?: string | null
+  companyId?: string | null
+}
+
+/** What the seat line shows, from either server (seatsView). */
+export interface SeatsView {
+  used: number
+  total: number
+  /** The server allows going over the seats (the new fields are present). */
+  soft: boolean
+  /** People over the bought seats (0 when within them, or on an old server). */
+  overBy: number
+  billedAtCycleEnd: boolean
+  cycleEndsOn: string | null
+}
+
+/** The seat numbers, the new fields when the server sends them, else the old ones. */
+export function seatsView(u: SeatsUsage | null | undefined): SeatsView | null {
+  if (!u) return null
+  const soft = typeof u.overBy === 'number'
+  const used = typeof u.seatsUsed === 'number' ? u.seatsUsed : u.current
+  const total = typeof u.seatsBought === 'number' ? u.seatsBought : u.purchased
+  return {
+    used, total, soft,
+    overBy: soft ? Math.max(0, u.overBy as number) : 0,
+    billedAtCycleEnd: soft && u.extraBilledAtCycleEnd !== false,
+    cycleEndsOn: soft && u.cycleEndsOn ? u.cycleEndsOn : null,
+  }
+}
+
+/** "2 extra users will be billed at the end of the cycle (on 6 Nov 2026)" — `fmt` formats the date. */
+export function overageText(v: SeatsView, fmt: (iso: string) => string): string {
+  const n = v.overBy
+  const who = `${n} extra ${n === 1 ? 'user' : 'users'}`
+  if (!v.billedAtCycleEnd) return `${who} over your ${v.total} seats`
+  return `${who} will be billed at the end of the cycle${v.cycleEndsOn ? ` (on ${fmt(v.cycleEndsOn)})` : ''}`
 }
 
 /** Refresh cadence: seats change on employee create/terminate + plan upgrade.

@@ -57,12 +57,15 @@ export function AsOfToday({ title = 'This keeps no history, so it shows today' }
 }
 
 // ── Seats (workspace.billing.manage). The strip warns at ≥ 90 % used; billing managers always see the line. ──
-export function SeatsStrip({ used, total, isPast, onAdd }: { used: number; total: number; isPast: boolean; onAdd: () => void }) {
+// soft (a server with the soft seat limit): adding over the seats is allowed and billed at the cycle's end, so a
+// full workspace isn't "blocked"; overNote says how many extra users will be billed.
+export function SeatsStrip({ used, total, isPast, onAdd, soft = false, overNote = null }: { used: number; total: number; isPast: boolean; onAdd: () => void; soft?: boolean; overNote?: string | null }) {
   const left = Math.max(0, total - used), pct = total ? Math.min(100, Math.round((used / total) * 100)) : 0
   const full = total > 0 && used >= total, warn = !full && total > 0 && used / total >= 0.9
-  const tone = full ? 'full' : warn ? 'warn' : 'ok'
+  const blocked = full && !soft
+  const tone = blocked ? 'full' : warn || (full && soft) ? 'warn' : 'ok'
   return (
-    <div role={full ? 'alert' : 'status'} className={`ud-seats ud-seats--${tone} ufx-rise`}>
+    <div role={blocked ? 'alert' : 'status'} className={`ud-seats ud-seats--${tone} ufx-rise`}>
       <div className="ud-seats__lead">
         <span className="ud-seats__ic" aria-hidden="true">{dashIcon('armchair', 17)}</span>
         <span className="ud-seats__eyebrow">Seats used</span>
@@ -70,14 +73,18 @@ export function SeatsStrip({ used, total, isPast, onAdd }: { used: number; total
       </div>
       <span className="ud-seats__bar" aria-hidden="true"><span style={{ width: `${pct}%` }} /></span>
       <div className="ud-seats__msg">
-        {full
+        {overNote
+          ? <><b>{overNote}.</b> Add seats to cover them.</>
+          : full && soft
+          ? <><b>All {total} seats are in use.</b> You can still add employees; extra users are billed at the end of the cycle.</>
+          : full
           ? <><b>All {total} seats are in use.</b> Adding employees is blocked until you add seats.</>
           : warn
             ? <><b>{left} {left === 1 ? 'seat' : 'seats'} left.</b> Add seats before the next batch of joiners.</>
             : <><b>{left} {left === 1 ? 'seat' : 'seats'} left</b> of {total}.</>}
         {isPast && <> <AsOfToday title="Seats keep no history, so this is today’s count" /></>}
       </div>
-      <Button variant={full ? 'danger' : 'secondary'} size={32} onClick={onAdd}>{full ? 'Upgrade to add more employees' : 'Add seats'}</Button>
+      <Button variant={blocked ? 'danger' : 'secondary'} size={32} onClick={onAdd}>{blocked ? 'Upgrade to add more employees' : 'Add seats'}</Button>
     </div>
   )
 }

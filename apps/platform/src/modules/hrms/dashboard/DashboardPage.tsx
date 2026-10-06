@@ -47,7 +47,8 @@ export interface DashboardVm {
     spark: { present: Series; leave: Series; late: Series; half: Series; wfh: Series; none: Series; absent: Series }; sparkDot?: number
   }
   quick: { key: string; label: string; path: string; hint: string; kind?: QuickIconKind }[]
-  seats: { used: number; total: number } | null
+  /** soft: the server allows going over the seats; overNote: "N extra users will be billed…" when over. */
+  seats: { used: number; total: number; soft?: boolean; overNote?: string | null } | null
   addEmployee: { disabledReason: string | null } | null
   canExport: boolean; exporting: boolean; exportName: string
   /** Today's web punch for the viewer ("Your day" says they may punch from the web): check in, check out, or none. */
@@ -187,7 +188,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
           )}
           {/* Quick actions, with Customise (G-59): the person's own picks, saved per person. */}
           <QuickActionsSection surface="dashboard" tiles={vm.quick.map((q) => ({ ...q, onClick: () => go(q.path) }))} />
-          {vm.seats && <SeatsStrip used={vm.seats.used} total={vm.seats.total} isPast={isPast} onAdd={() => go('/settings/billing')} />}
+          {vm.seats && <SeatsStrip used={vm.seats.used} total={vm.seats.total} soft={vm.seats.soft} overNote={vm.seats.overNote} isPast={isPast} onAdd={() => go('/settings/billing')} />}
           {(showInbox || vm.canAtt) && (
             <div className="ud-row">
               {showInbox && (

@@ -50,13 +50,17 @@ export function DirectoryPage({ allowed, failed, loading, retry }: DirectoryPage
   const canWrite = usePermission(P.HRMS_EMPLOYEE_WRITE)
   const canImport = usePermission(P.HRMS_EMPLOYEE_IMPORT)
   const canRead = usePermission(P.HRMS_EMPLOYEE_READ)
-  const stats = useEmployeeStats(null, { enabled: canRead && allowed })
+  // With two or more companies the directory is the chosen company's (act.globalCo), and so are its figures.
+  const stats = useEmployeeStats(act.globalCo || null, { enabled: canRead && allowed })
+  const coName = act.globalCo ? (db.companies || []).find((c) => c.id === act.globalCo)?.name as string | undefined : undefined
 
   const tabs = (group?.items || []).map((i) => ({ key: i.id, label: i.l, href: MASTER_ROUTES[i.id] }))
   const ready = allowed && !failed && !loading
   const people = db.employees || []
   const sub = ready
-    ? `${pl(people.filter((e) => e.status !== 'Exited').length, 'person', 'people')} across ${pl(db.companies.length, 'company', 'companies')} and ${pl(db.branches.length, 'branch', 'branches')}. Select a row to open their profile.`
+    ? coName
+      ? `${pl(people.filter((e) => e.status !== 'Exited').length, 'person', 'people')} in ${coName}, across ${pl((db.branches || []).filter((b) => b.co === act.globalCo).length, 'branch', 'branches')}. Select a row to open their profile.`
+      : `${pl(people.filter((e) => e.status !== 'Exited').length, 'person', 'people')} across ${pl(db.companies.length, 'company', 'companies')} and ${pl(db.branches.length, 'branch', 'branches')}. Select a row to open their profile.`
     : 'Everyone on the roster, with their role, branch and status.'
 
   const [form, setForm] = useState<{ emp?: Rec } | null>(null)

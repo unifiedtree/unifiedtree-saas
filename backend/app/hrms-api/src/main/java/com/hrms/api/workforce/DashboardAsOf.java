@@ -25,6 +25,12 @@ import java.util.UUID;
  *       means "on notice"; no history falls back to the current status.</li>
  * </ul>
  * Joiners and leavers count from the first of the date's month up to the date.
+ *
+ * <p>A past day (owner decision, 6 Oct 2026): a leaver is on the roll through
+ * their last working day ({@link #employedThrough}), as on that day's
+ * attendance roster ({@link #workedOn}), so Total employees and "N scheduled"
+ * count the same people. Today's view keeps {@link #onRoll}: by then the exit
+ * is already recorded and today's roster has left them out too.
  */
 public final class DashboardAsOf {
 
@@ -63,6 +69,20 @@ public final class DashboardAsOf {
         return true;
     }
 
+    /**
+     * On the roll on a past {@code date}: had joined, and was still employed that
+     * day — a leaver works their last working day (else termination date), as
+     * {@link #workedOn}. A leaver with neither date counts as gone, as in {@link #onRoll}.
+     */
+    static boolean employedThrough(Person p, LocalDate date) {
+        if (p.joined() == null || p.joined().isAfter(date)) return false;
+        if (p.status() != null && EXIT_STATUSES.contains(p.status())) {
+            LocalDate left = p.lastWorkingDay() != null ? p.lastWorkingDay() : p.terminated();
+            return left != null && !left.isBefore(date);
+        }
+        return true;
+    }
+
     /** The person's status on {@code date}: see the class comment. */
     static String statusOn(Person p, List<Change> history, LocalDate date) {
         List<Change> rows = history == null ? List.of() : history;
@@ -80,13 +100,21 @@ public final class DashboardAsOf {
 
     /** Headcount on {@code date}, and joiners / leavers from the first of its month up to it. */
     public static Headcount headcount(List<Person> people, Map<UUID, List<Change>> history, LocalDate date) {
+        return headcount(people, history, date, false);
+    }
+
+    /**
+     * {@link #headcount(List, Map, LocalDate)}; with {@code throughLastDay} (a past
+     * day) leavers count on their last working day ({@link #employedThrough}).
+     */
+    public static Headcount headcount(List<Person> people, Map<UUID, List<Change>> history, LocalDate date, boolean throughLastDay) {
         LocalDate monthStart = date.withDayOfMonth(1);
         int total = 0, active = 0, probation = 0, notice = 0, joined = 0, left = 0;
         for (Person p : people) {
             if (p.joined() != null && !p.joined().isBefore(monthStart) && !p.joined().isAfter(date)) joined++;
             LocalDate l = leftOn(p);
             if (l != null && !l.isBefore(monthStart) && !l.isAfter(date)) left++;
-            if (!onRoll(p, date)) continue;
+            if (!(throughLastDay ? employedThrough(p, date) : onRoll(p, date))) continue;
             total++;
             String s = statusOn(p, history.get(p.id()), date);
             if ("ACTIVE".equals(s)) active++;

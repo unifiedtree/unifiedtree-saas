@@ -33,6 +33,7 @@ import {
 } from '@/design/shell/navModel'
 import { mayPunchFromWeb } from '@/modules/hrms/attendance/webpunch/punchPromptRules'
 import { primaryRole, roleLabel } from '@/shared/navigation/roleLabels'
+import { ModulePausedGate } from '@/core/billing/ModulePausedScreen'
 
 // The check-in prompt after sign-in (DECISIONS 21, the NextWave reference; rules in punchPromptRules.ts).
 // Its code loads only for people who may check in from the web; if it can't load, nothing shows.
@@ -331,7 +332,7 @@ export function PlatformShell() {
             {/* The shell stays put between pages: a broken page is contained here, and a page whose
                 code is still arriving shows its own outline instead of blanking the app. */}
             <RouteErrorBoundary resetKey={pathname} routeLabel={pathname}>
-              <React.Suspense fallback={<PageSkeleton path={pathname} />}><Outlet key={`${outletKey}:${companyVersion}`} /></React.Suspense>
+              <ModulePausedGate><React.Suspense fallback={<PageSkeleton path={pathname} />}><Outlet key={`${outletKey}:${companyVersion}`} /></React.Suspense></ModulePausedGate>
             </RouteErrorBoundary>
           </div>
         </main>
