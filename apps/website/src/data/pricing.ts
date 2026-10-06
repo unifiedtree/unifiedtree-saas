@@ -81,7 +81,7 @@ export const presetPlans = [
 export const faqItems = [
   {
     q: 'How is HRMS priced?',
-    a: 'Per user, per company. HRMS is one package — HR, Attendance, Leave and Payroll — and each company has its own subscription and invoice. Pay monthly or yearly through autopay.',
+    a: 'Per user, per company. HRMS is one package — HR, Attendance, Leave and Payroll — with one subscription and autopay for your business and a breakdown of the amount by company. Pay monthly or yearly through autopay.',
   },
   {
     q: 'Is there a free trial?',

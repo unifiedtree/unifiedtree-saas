@@ -13,7 +13,7 @@ export function RefundPolicyPage() {
       <p>Every new subscription starts with a 7-day free trial. You set up autopay through Razorpay to start it, and nothing is charged during the 7 days. If you cancel before the trial ends, you are not charged at all.</p>
 
       <h2>2. When billing starts</h2>
-      <p>Billing starts on day 8. After that each cycle runs from date to date (for example, 6 October to 6 November for a monthly plan) and is charged in advance through autopay, in Indian Rupees. Each company in your business has its own subscription and invoice.</p>
+      <p>Billing starts on day 8. After that each cycle runs from date to date (for example, 6 October to 6 November for a monthly plan) and is charged in advance through autopay, in Indian Rupees. Your business has one subscription and one invoice per cycle, with a breakdown of the amount by company.</p>
 
       <h2>3. Cancelling</h2>
       <p>You can cancel any time from your business settings. Your subscription keeps working until the end of the cycle you have already paid for, and you will not be charged again.</p>
