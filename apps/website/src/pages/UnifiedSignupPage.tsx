@@ -602,7 +602,7 @@ export function UnifiedSignupPage() {
   if (alreadyHasBusiness) {
     return (
       <div className="min-h-screen bg-bg">
-        <Navbar />
+        <Navbar tone="light" />
         <section className="pt-32 pb-24 max-w-2xl mx-auto px-4 text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-6">
             <Building size={22} className="text-primary" />
@@ -807,7 +807,7 @@ export function UnifiedSignupPage() {
               </div>
 
               <div className="absolute inset-x-0 bottom-0 z-10 p-6 lg:p-8">
-                <Eyebrow>{mode === 'trial' ? 'Free workspace' : 'Paid workspace'}</Eyebrow>
+                <Eyebrow>{mode === 'trial' ? '7-day free trial' : 'Paid plan'}</Eyebrow>
 
                 {/* opsz tracks the rendered size — Bricolage is an optical-size
                     variable font and .font-heading otherwise pins it at 96. */}

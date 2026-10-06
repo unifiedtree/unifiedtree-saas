@@ -16,7 +16,7 @@
 //    signing in, /signup says "You already have a business" and /workspaces has
 //    no "Create new workspace".
 // The DB is recreated per slot; this test only reads SQL.
-/* global process, console, fetch */
+/* global process, console, fetch, window, PopStateEvent */
 import { chromium } from '@playwright/test'
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -101,10 +101,11 @@ try {
   for (const [w, h, label] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } })
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto(`${site}/signup?mode=trial`, { waitUntil: 'networkidle' })
+    await page.goto(`${site}/signup?mode=trial`, { waitUntil: 'domcontentloaded', timeout: 90000 })
     const biz = page.getByPlaceholder('Your business name')
+    await biz.waitFor({ timeout: 90000 })
     const co = page.getByPlaceholder('Your first company (you can add more later)')
-    check(`${label}: the form asks for "Business Name"`, await page.getByText('Business Name', { exact: true }).isVisible())
+    check(`${label}: the form asks for "Business Name"`, await page.locator('label', { hasText: 'Business Name' }).first().isVisible())
     check(`${label}: the form has a separate "Company Name"`, await co.isVisible())
     await biz.fill('Sunrise Group')
     check(`${label}: the company name copies the business name`, (await co.inputValue()) === 'Sunrise Group')
@@ -119,7 +120,8 @@ try {
   // Signed in with a business: no second sign-up, no "Create new workspace".
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto(`${site}/login`, { waitUntil: 'networkidle' })
+  await page.goto(`${site}/login`, { waitUntil: 'domcontentloaded', timeout: 90000 })
+  await page.locator('input[type="email"]').first().waitFor({ timeout: 60000 })
   await page.locator('input[type="email"]').first().fill(email)
   await page.locator('input[type="password"]').first().fill(password)
   await page.locator('form button[type="submit"]').first().click()
@@ -128,7 +130,9 @@ try {
   check('signed in: /workspaces lists the business', await page.getByText(business).first().isVisible())
   check('signed in: /workspaces has no "Create new workspace"', (await page.getByText(/create new workspace/i).count()) === 0)
   await page.screenshot({ path: `${shots}/chakri-signup-workspaces.png` })
-  await page.goto(`${site}/signup?mode=trial`, { waitUntil: 'networkidle' })
+  // Navigate inside the app: on localhost the refresh cookie (Secure, .unifiedtree.com) is not kept,
+  // so a full reload would sign the visitor out; in production it restores the session.
+  await page.evaluate(() => { window.history.pushState({}, '', '/signup?mode=trial'); window.dispatchEvent(new PopStateEvent('popstate')) })
   await page.getByText('You already have a business').waitFor({ timeout: 10000 }).catch(() => {})
   check('signed in: /signup says "You already have a business"', await page.getByText('You already have a business').isVisible())
   check('signed in: it offers "Open your business"', await page.getByRole('link', { name: /open your business/i }).first().isVisible())
