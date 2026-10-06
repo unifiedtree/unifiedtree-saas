@@ -175,6 +175,18 @@ public class PayrollRunController {
         return pdfResponse(pdf, "payslip-" + empId + ".pdf");
     }
 
+    /**
+     * The payslip template with example figures and the workspace's letterhead (Settings → Branding
+     * shows it beside the letterhead upload). Payroll readers and whoever may change the branding.
+     */
+    @GetMapping("/payslips/template-preview")
+    @PreAuthorize("hasAnyAuthority('payroll.runs.read','settings.branding.write')")
+    public PayslipTemplatePreview payslipTemplatePreview(@RequestParam(required = false) UUID companyId) {
+        return new PayslipTemplatePreview(service.payslipTemplatePreview(TenantContext.getTenantId(), companyId));
+    }
+
+    public record PayslipTemplatePreview(String html) {}
+
     // ── Self-service payslips ────────────────────────────────────────────────────
 
     @GetMapping("/payslips/me")

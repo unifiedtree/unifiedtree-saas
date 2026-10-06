@@ -19,7 +19,7 @@ import { istToday } from '@/design/dc/dates'
 import {
   WEEK_HEADS, allowed, countWorkingDays, datePresets, ddmmyyyy, isWeeklyOff, monthTitle, monthWeeks,
   settled, shiftDay, shiftMonth, spanDays, tapDay, weekdayDdmmyyyy, workingDaysLabel,
-  type DraftRange, type WorkCalendar,
+  type DraftRange, type ViewPreset, type WorkCalendar,
 } from './dateRangeModel'
 import './dateRange.css'
 
@@ -52,6 +52,10 @@ export interface DateRangeDialogProps {
   noun?: string
   /** Override "today"; India's business day by default. */
   today?: string
+  /** A calendar that only shows dates: its own quick picks (viewPresets) instead of the leave-form ones. */
+  presets?: readonly ViewPreset[]
+  /** A calendar that only shows dates: the footer line instead of "Your request is for N working days". */
+  footerText?: (range: { from: string; to: string } | null) => string
 }
 
 export function DateRangeDialog(props: DateRangeDialogProps) {
@@ -66,6 +70,7 @@ export function DateRangeDialog(props: DateRangeDialogProps) {
 /** The dialog's content (exported for tests: it renders without a document). */
 export function DateRangeBody({
   mode = 'range', from, to, min, max, calendar, halfDay, onDone, onDraftChange, serverDays, noun = 'request', today: todayProp,
+  presets: ownPresets, footerText,
 }: Omit<DateRangeDialogProps, 'open' | 'onClose' | 'title'>) {
   const uid = useId()
   const today = todayProp ?? istToday()
@@ -101,7 +106,7 @@ export function DateRangeBody({
     gridRef.current?.querySelector<HTMLElement>(`[data-day="${cursor}"]`)?.focus()
   }, [cursor, month])
 
-  const presets = useMemo(() => datePresets(today, calendar, { min, max, single }), [today, calendar, min, max, single])
+  const presets = useMemo(() => ownPresets ?? datePresets(today, calendar, { min, max, single }), [ownPresets, today, calendar, min, max, single])
   const weeks = useMemo(() => monthWeeks(month), [month])
   const canPrev = !min || shiftMonth(month, -1) >= min.slice(0, 7)
   const canNext = !max || shiftMonth(month, 1) <= max.slice(0, 7)
@@ -156,7 +161,7 @@ export function DateRangeBody({
 
   const span = effective ? spanDays(effective.from, effective.to) : 0
   const allOff = !!effective && !single && days === 0
-  const footer = !effective
+  const footer = footerText ? footerText(effective) : !effective
     ? (single ? 'Pick a day' : 'Pick the first day, then the last')
     : single ? `Selected date: ${weekdayDdmmyyyy(effective.from)}`
       : allOff ? 'These days are all weekly offs or holidays'

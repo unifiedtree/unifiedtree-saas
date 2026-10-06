@@ -8,7 +8,7 @@
 
 /* Team today: the roster beside the cards; one column on narrow screens. */
 .tm-cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; min-width: 0; }
-.tm-main { flex: 3 1 520px; min-width: 0; }
+.tm-main { flex: 3 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .tm-side { flex: 2 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
 /* "Send a reminder": the design's red outlined pill. */

@@ -158,4 +158,21 @@ class BrandingImageTest {
     private static void check(byte[] b, Kind k) {
         BrandingImage.check(b, k);
     }
+
+    // ── V143_100: the letterhead banner ─────────────────────────────────────────
+
+    @Test void letterheadIsAKindOfItsOwn() {
+        assertEquals(Kind.LETTERHEAD, Kind.parse("letterhead"));
+        assertEquals("letterhead", Kind.LETTERHEAD.key());
+    }
+
+    @Test void aLetterheadMustBeAWideBanner() throws Exception {
+        var ok = BrandingImage.check(png(1600, 200), Kind.LETTERHEAD);
+        assertEquals(1600, ok.width());
+        assertNotNull(BrandingImage.check(jpeg(512, 256), Kind.LETTERHEAD));
+        var tall = assertThrows(ResponseStatusException.class, () -> BrandingImage.check(png(400, 300), Kind.LETTERHEAD));
+        assertTrue(tall.getReason().contains("twice as wide"));
+        // The same image is still a fine wide logo: the rule is the letterhead's alone.
+        assertNotNull(BrandingImage.check(png(400, 300), Kind.LOGO));
+    }
 }

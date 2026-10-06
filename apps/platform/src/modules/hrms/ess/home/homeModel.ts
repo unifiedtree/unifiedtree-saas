@@ -9,6 +9,7 @@ import type { LeaveBalanceResponse, LeaveRequestResponse, LeaveTypeResponse } fr
 import type { WfhRequestResponse } from '../../api/useWfh'
 import type { MyPayslip } from '../../api/usePayrollRuns'
 import type { AroundItem, MyDay, MyRequest, NeedsYouItem } from './homeApi'
+import { isSickLeave } from '../../calendar/calendarEvents'
 
 // ── Greeting ────────────────────────────────────────────────────────────────
 
@@ -363,9 +364,17 @@ export function calendarDays(args: {
   const home = new Set(wfhDays)
   const hol = new Map(holidays.map((h) => [h.date, h.name]))
   const onLeave = new Map<string, string>()
+  const sick = new Set<string>()
   for (const l of leaves) {
     if (!['APPROVED', 'PENDING', 'PENDING_L2'].includes(l.status)) continue
-    for (let d = l.startDate; d <= l.endDate; d = addDays(d, 1)) if (d.slice(0, 7) === month) onLeave.set(d, l.status === 'APPROVED' ? 'Leave' : 'Leave (waiting)')
+    // Sick leave has its own colour (client, 1 and 4 Oct).
+    const isSick = isSickLeave(l)
+    const word = isSick ? 'Sick leave' : 'Leave'
+    for (let d = l.startDate; d <= l.endDate; d = addDays(d, 1)) {
+      if (d.slice(0, 7) !== month) continue
+      onLeave.set(d, l.status === 'APPROVED' ? word : `${word} (waiting)`)
+      if (isSick) sick.add(d); else sick.delete(d)
+    }
   }
   const out: CalendarDay[] = []
   const first = `${month}-01`
@@ -377,7 +386,7 @@ export function calendarDays(args: {
     else if (rec && (rec.status === 'PRESENT' || rec.status === 'ON_TIME' || rec.status === 'HALF_DAY')) { tone = home.has(d) ? 'home' : rec.status === 'HALF_DAY' ? 'half' : 'present' }
     else if (rec && rec.status === 'LATE') tone = 'late'
     else if (hol.has(d) || rec?.status === 'HOLIDAY') { tone = 'holiday'; tip = hol.get(d) ?? 'Holiday' }
-    else if (onLeave.has(d) || rec?.status === 'ON_LEAVE') { tone = 'leave'; tip = onLeave.get(d) ?? 'Leave' }
+    else if (onLeave.has(d) || rec?.status === 'ON_LEAVE') { tone = sick.has(d) ? 'sick' : 'leave'; tip = onLeave.get(d) ?? 'Leave' }
     else if (rec?.status === 'ABSENT') tone = 'absent'
     else if (home.has(d) && d >= today) { tone = 'home'; tip = 'Work from home' }
     else if (off.has(dt(d).getDay()) || rec?.status === 'WEEKEND') tone = 'off'

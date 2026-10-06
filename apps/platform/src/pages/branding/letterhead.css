@@ -1,0 +1,29 @@
+/* Settings → Branding → Letterhead (LetterheadSection.tsx). The pages stay white in dark mode: they are
+ * the documents themselves. Everything around them uses tokens. */
+.lh-intro { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--u-ink2, #4A5A54); }
+.lh-previews { display: flex; flex-wrap: wrap; gap: 16px; }
+.lh-page { margin: 0; display: flex; flex-direction: column; gap: 6px; width: 200px; max-width: 100%; }
+.lh-page figcaption { font-size: 12.5px; font-weight: 600; color: var(--u-ink3, #6A7A73); }
+.lh-paper {
+  aspect-ratio: 210 / 297; background: #fff; border: 1px solid var(--u-ln, #E3E9E6); border-radius: 6px; padding: 14px 14px;
+  box-shadow: 0 6px 18px -10px rgba(15, 23, 42, .35); overflow: hidden; display: flex; flex-direction: column; gap: 10px;
+}
+.lh-head { border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; min-height: 18px; }
+.lh-banner { display: block; width: 100%; height: auto; }
+.lh-fallback { display: flex; align-items: center; gap: 6px; font-size: 9px; color: #0f172a; }
+.lh-fallback img { max-height: 16px; max-width: 64px; object-fit: contain; }
+.lh-body { display: flex; flex-direction: column; gap: 5px; }
+.lh-body i { display: block; height: 4px; width: 100%; border-radius: 2px; background: #e2e8f0; }
+.lh-body br { display: block; content: ''; height: 4px; }
+.lh-slip-t { display: block; height: 7px; width: 34%; border-radius: 2px; background: #0F6E56; opacity: .8; }
+.lh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.lh-table { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; border-top: 1px solid #e2e8f0; }
+.lh-net { display: block; height: 6px; width: 46%; margin-left: auto; border-radius: 2px; background: #0F6E56; opacity: .7; }
+.lh-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lh-hint { font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
+.lh-link { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--u-brt, #0F6E56); cursor: pointer; text-decoration: underline; }
+.lh-doc { border: 1px solid var(--u-ln, #E3E9E6); border-radius: 10px; overflow: hidden; background: #fff; }
+.lh-doc__frame { display: block; width: 100%; height: min(70vh, 760px); border: 0; background: #fff; }
+@media (max-width: 480px) {
+  .lh-page { width: calc(50% - 8px); }
+}

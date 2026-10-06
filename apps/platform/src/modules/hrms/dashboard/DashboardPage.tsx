@@ -25,6 +25,7 @@ import { NoticesStrip, type NoticeVm } from './NoticesStrip'
 import { ProbationCard } from './ProbationCard'
 import { ActivityCard, DeptCard, OnboardingCard, PayrollCard, PerformersCard, PipelineCard, ProjectsCard } from './InsightBlocks'
 import { ProjectProductivity } from './ProjectProductivity'
+import { EventsCalendar } from '../calendar/EventsCalendar'
 import { sectionPills, type DashSection, type PayMonth, type TrendColumn } from './dashboardModel'
 import { useSectionSpy } from './useSectionSpy'
 import './dashboard.css'
@@ -220,7 +221,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
 
         {/* ── Upcoming ─────────────────────────────────────────────────── */}
         <section data-sec="upcoming" aria-label="Upcoming" className="ud-group ud-group--sec">
-          <SectionHeading title="Upcoming" sub="Events, notices and probation reviews" icon="calendar"
+          <SectionHeading title="Upcoming" sub="The month’s calendar, events, notices and probation reviews" icon="calendar"
             actions={vm.compliance ? (
               <button type="button" className="ud-compliance" style={{ border: 0, background: 'transparent', cursor: 'pointer', font: 'inherit' }} onClick={() => go('/hrms/compliance')}>
                 {vm.compliance.due
@@ -228,6 +229,8 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
                   : <>Compliance: nothing due {isToday ? 'this month' : `this month through ${fmtShort(sel)}`}</>}
               </button>
             ) : undefined} />
+          {/* The month at a glance (Keka-style): holidays, leave (sick leave apart), birthdays and anniversaries. */}
+          <EventsCalendar today={vm.today} companyId={vm.companyId} />
           {/* Upcoming events: the company's notices on top, then holidays, birthdays, work anniversaries and retirements. */}
           <MilestonesCard today={vm.today} companyId={vm.companyId} canReadEmployees={vm.canReadEmployees} holidaysHref={vm.holidaysHref} onNavigate={go}
             top={vm.showNotices ? (

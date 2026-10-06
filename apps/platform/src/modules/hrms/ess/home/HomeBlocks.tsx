@@ -112,7 +112,7 @@ export function MyRequestsCard({ requests, loading, error, onRetry, today, onOpe
 
 const LEGEND = [
   { tone: 'present', label: 'Present' }, { tone: 'late', label: 'Late' }, { tone: 'home', label: 'Home' },
-  { tone: 'holiday', label: 'Holiday' }, { tone: 'leave', label: 'Leave' }, { tone: 'fix', label: 'To fix' },
+  { tone: 'holiday', label: 'Holiday' }, { tone: 'leave', label: 'Leave' }, { tone: 'sick', label: 'Sick leave' }, { tone: 'fix', label: 'To fix' },
 ] as const
 
 export function CalendarCard({ month, monthWord, days, sub, loading, error, onRetry, onOpen }: {

@@ -74,7 +74,7 @@ public class BrandingService {
                   FROM platform.tenant_branding WHERE tenant_id = ?
                 """,
                 rs -> {
-                    if (!rs.next()) return new View(name, BrandingImage.monogram(name), null, null, null, null, null, null, null);
+                    if (!rs.next()) return new View(name, BrandingImage.monogram(name), null, null, null, null, null, null, null, null, null, null);
                     String logo = displayUrl(tenantId, Kind.LOGO, rs.getBoolean("has_logo"), rs.getString("logo_version"),
                             rs.getString("logo_r2_key"), rs.getString("logo_url"));
                     String mark = displayUrl(tenantId, Kind.MARK, rs.getBoolean("has_mark"), rs.getString("mark_version"),
@@ -82,8 +82,59 @@ public class BrandingService {
                     return new View(name, BrandingImage.monogram(name), logo, mark,
                             intOrNull(rs, "logo_width"), intOrNull(rs, "logo_height"),
                             intOrNull(rs, "mark_width"), intOrNull(rs, "mark_height"),
-                            rs.getObject("updated_at", OffsetDateTime.class));
+                            rs.getObject("updated_at", OffsetDateTime.class), null, null, null);
                 }, tenantId);
+    }
+
+    /** {@link #view} plus the letterhead (V143_100), when its columns exist and one is uploaded. */
+    @Transactional(readOnly = true)
+    public View viewWithLetterhead(UUID tenantId) {
+        View v = view(tenantId);
+        if (!letterheadColumns()) return v;
+        return jdbc.query("""
+                SELECT letterhead_url, letterhead_r2_key, letterhead_version, letterhead_width, letterhead_height,
+                       letterhead_bytes IS NOT NULL AS has_lh
+                  FROM platform.tenant_branding WHERE tenant_id = ?
+                """,
+                rs -> {
+                    if (!rs.next()) return v;
+                    String url = displayUrl(tenantId, Kind.LETTERHEAD, rs.getBoolean("has_lh"), rs.getString("letterhead_version"),
+                            rs.getString("letterhead_r2_key"), rs.getString("letterhead_url"));
+                    return new View(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(), v.logoWidth(), v.logoHeight(),
+                            v.markWidth(), v.markHeight(), v.updatedAt(), url,
+                            url == null ? null : intOrNull(rs, "letterhead_width"), url == null ? null : intOrNull(rs, "letterhead_height"));
+                }, tenantId);
+    }
+
+    /**
+     * Whether the letterhead columns (V143_100) exist. Production applies migrations by hand, so the
+     * app may run before they do: until then a letterhead reads as "none" and an upload is refused
+     * with a plain message, never a failed query (which would also spoil the surrounding transaction).
+     * Checked until the columns appear, then remembered.
+     */
+    boolean letterheadColumns() {
+        if (letterheadReady) return true;
+        try {
+            Boolean ok = jdbc.queryForObject("""
+                    SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = 'platform' AND table_name = 'tenant_branding'
+                                      AND column_name = 'letterhead_version')
+                    """, Boolean.class);
+            letterheadReady = Boolean.TRUE.equals(ok);
+        } catch (Exception e) {
+            log.warn("Letterhead column check failed: {}", e.getMessage());
+            return false;
+        }
+        return letterheadReady;
+    }
+
+    private volatile boolean letterheadReady;
+
+    private void requireSlot(Kind kind) {
+        if (kind == Kind.LETTERHEAD && !letterheadColumns()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Letterhead uploads aren't switched on yet. Try again after the next update");
+        }
     }
 
     /**
@@ -107,6 +158,7 @@ public class BrandingService {
      */
     @Transactional(readOnly = true)
     public Optional<Asset> asset(UUID tenantId, Kind kind) {
+        if (kind == Kind.LETTERHEAD && !letterheadColumns()) return Optional.empty();
         String p = kind.key();
         return jdbc.query(
                 "SELECT " + p + "_bytes AS bytes, " + p + "_content_type AS ct, " + p + "_version AS ver, "
@@ -146,6 +198,18 @@ public class BrandingService {
         return Optional.empty();
     }
 
+    /**
+     * The uploaded letterhead banner as a {@code data:} URI for a PDF (PNG or JPEG), or empty when
+     * none is set: the letterhead is then the logo and the company name, as before.
+     */
+    public Optional<String> pdfLetterheadDataUri(UUID tenantId) {
+        Optional<Asset> a = asset(tenantId, Kind.LETTERHEAD);
+        if (a.isPresent() && ("image/png".equals(a.get().contentType()) || "image/jpeg".equals(a.get().contentType()))) {
+            return Optional.of("data:" + a.get().contentType() + ";base64," + Base64.getEncoder().encodeToString(a.get().bytes()));
+        }
+        return Optional.empty();
+    }
+
     // ------------------------------------------------------------------ write
 
     /**
@@ -173,6 +237,7 @@ public class BrandingService {
     /** Validate and persist raw bytes (the multipart path and tests share this). */
     @Transactional
     public View store(UUID tenantId, UUID actorId, Kind kind, byte[] bytes) {
+        requireSlot(kind);
         BrandingImage.Checked img = BrandingImage.check(bytes, kind);
         String version = sha(bytes);
         String p = kind.key();
@@ -217,12 +282,13 @@ public class BrandingService {
         if (oldKey != null && !oldKey.equals(r2Key)) r2.deleteQuietly(oldKey);
         log.info("Branding {} replaced for tenant={} {}x{} {} r2={}", p, tenantId, img.width(), img.height(),
                 img.contentType(), r2Url != null);
-        return view(tenantId);
+        return viewWithLetterhead(tenantId);
     }
 
     /** Remove one image. The app then shows the other image, or the monogram. */
     @Transactional
     public View remove(UUID tenantId, UUID actorId, Kind kind) {
+        requireSlot(kind);
         String p = kind.key();
         String oldKey = jdbc.query("SELECT " + p + "_r2_key FROM platform.tenant_branding WHERE tenant_id = ?",
                 rs -> rs.next() ? rs.getString(1) : null, tenantId);
@@ -233,7 +299,7 @@ public class BrandingService {
                 actorId, tenantId);
         if (oldKey != null) r2.deleteQuietly(oldKey);
         log.info("Branding {} removed for tenant={} by {}", p, tenantId, actorId);
-        return view(tenantId);
+        return viewWithLetterhead(tenantId);
     }
 
     // ------------------------------------------------------------------ util
@@ -264,7 +330,9 @@ public class BrandingService {
     /** What a signed-in member sees (and Settings edits). */
     public record View(String workspaceName, String monogram, String logoUrl, String markUrl,
                        Integer logoWidth, Integer logoHeight, Integer markWidth, Integer markHeight,
-                       OffsetDateTime updatedAt) {}
+                       OffsetDateTime updatedAt,
+                       /* V143_100: the letterhead banner (null when none, or before the migration). */
+                       String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight) {}
 
     /** What the public sign-in lookup returns: name and images only. */
     public record PublicView(String workspaceName, String monogram, String logoUrl, String markUrl) {}

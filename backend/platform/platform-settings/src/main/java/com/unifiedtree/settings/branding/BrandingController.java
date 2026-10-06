@@ -22,7 +22,7 @@ import java.util.UUID;
  *   <li>{@code GET    /v1/workspace/branding}: any signed-in member. The
  *       workspace name, its monogram letter and the logo / mark addresses.
  *       The app shell, splash, browser tab and Settings read it.</li>
- *   <li>{@code POST   /v1/workspace/branding/logo} and {@code /mark}:
+ *   <li>{@code POST   /v1/workspace/branding/logo}, {@code /mark} and {@code /letterhead} (V143_100):
  *       multipart upload, {@code settings.branding.write}. Re-validated on
  *       the server (see {@link BrandingImage}).</li>
  *   <li>{@code DELETE /v1/workspace/branding/logo} and {@code /mark}:
@@ -49,7 +49,7 @@ public class BrandingController {
     @GetMapping
     @PreAuthorize("isAuthenticated()")
     public BrandingDto get(@AuthenticationPrincipal Jwt jwt) {
-        return BrandingDto.of(service.view(tenantIdOf(jwt)));
+        return BrandingDto.of(service.viewWithLetterhead(tenantIdOf(jwt)));
     }
 
     @PostMapping(value = "/{kind}", consumes = "multipart/form-data")
@@ -103,11 +103,12 @@ public class BrandingController {
                               Integer logoWidth, Integer logoHeight,
                               Integer markWidth, Integer markHeight,
                               OffsetDateTime updatedAt,
-                              String faviconUrl, String primaryColor) {
+                              String faviconUrl, String primaryColor,
+                              String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight) {
         static BrandingDto of(BrandingService.View v) {
             return new BrandingDto(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(),
                     v.logoWidth(), v.logoHeight(), v.markWidth(), v.markHeight(), v.updatedAt(),
-                    v.markUrl(), null);
+                    v.markUrl(), null, v.letterheadUrl(), v.letterheadWidth(), v.letterheadHeight());
         }
     }
 }

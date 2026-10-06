@@ -193,6 +193,14 @@ describe('the month calendar', () => {
     expect(tone('2026-09-26')).toBe('off')
     expect(tone('2026-09-30')).toBeUndefined()
   })
+  it('marks sick leave in its own colour', () => {
+    const sick = { id: 's', employeeId: 'e', leaveTypeId: 'sl', leaveTypeName: 'Sick Leave', leaveTypeCategory: 'SICK', startDate: '2026-09-29', endDate: '2026-09-30', totalDays: 2, status: 'APPROVED', createdAt: '' } as LeaveRequestResponse
+    const casual = { id: 'c', employeeId: 'e', leaveTypeId: 'cl', leaveTypeName: 'Casual Leave', leaveTypeCategory: 'CASUAL', startDate: '2026-09-28', endDate: '2026-09-28', totalDays: 1, status: 'PENDING', createdAt: '' } as LeaveRequestResponse
+    const days = calendarDays({ month: '2026-09', today: '2026-09-25', history: [], wfhDays: [], leaves: [sick, casual], toFix: new Set(), holidays: [], off: SAT_SUN })
+    const at = (d: string) => days.find((x) => x.date === d)
+    expect(at('2026-09-29')).toMatchObject({ tone: 'sick', tip: 'Sick leave' })
+    expect(at('2026-09-28')).toMatchObject({ tone: 'leave', tip: 'Leave (waiting)' })
+  })
   it('sums up the month', () => {
     expect(calendarSub(17, 18, 1)).toBe('17 of 18 working days · 1 day to fix')
     expect(calendarSub(3, 3, 0)).toBe('3 of 3 working days')

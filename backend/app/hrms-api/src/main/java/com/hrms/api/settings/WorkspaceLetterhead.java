@@ -18,6 +18,9 @@ import java.util.UUID;
  * <p>The logo is the workspace's wide logo (else its square mark) from
  * Settings → Branding, embedded as a data URI so the PDF renderer needs no
  * network access. With no logo uploaded, the header is the company name alone.
+ *
+ * <p>A workspace that uploaded a letterhead banner (Settings → Branding, V143_100) gets that banner
+ * across the top instead of the logo and name. Without one, nothing changes.
  */
 @Component
 public class WorkspaceLetterhead implements LetterheadDecorator {
@@ -49,6 +52,12 @@ public class WorkspaceLetterhead implements LetterheadDecorator {
 
     /** The letterhead block: logo (when uploaded) and the company or workspace name. */
     public String headerHtml(UUID tenantId, String companyName) {
+        try {
+            Optional<String> banner = tenantId == null ? Optional.empty() : branding.pdfLetterheadDataUri(tenantId);
+            if (banner.isPresent()) return bannerBlock(banner.get());
+        } catch (Exception e) {
+            log.warn("Letterhead banner unavailable for tenant {}: {}", tenantId, e.getMessage());
+        }
         String name = firstNonBlank(companyName, workspaceName(tenantId));
         Optional<String> logo = Optional.empty();
         try {
@@ -96,6 +105,14 @@ public class WorkspaceLetterhead implements LetterheadDecorator {
          .append(hasName ? esc(name.strip()) : "")
          .append("</td></tr></table>");
         return b.toString();
+    }
+
+    /** The uploaded banner across the top of the page (pure, unit-tested). */
+    static String bannerBlock(String dataUri) {
+        if (dataUri == null || !dataUri.startsWith("data:image/")) return "";
+        return "<div style='margin:0 0 14pt 0;padding:0 0 8pt 0;border-bottom:1pt solid #e2e8f0'>"
+                + "<img src=\"" + dataUri.replace("\"", "") + "\" alt=\"\" style=\"width:100%;display:block\"/>"
+                + "</div>";
     }
 
     private static String firstNonBlank(String a, String b) {

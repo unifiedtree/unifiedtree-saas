@@ -979,6 +979,42 @@ public class PayrollRunService {
         this.letterhead = letterhead;
     }
 
+    /**
+     * The payslip template with example figures (audit H-55, "payslip template preview"): exactly the
+     * HTML a payslip PDF is drawn from, with the workspace's letterhead on top (the uploaded banner, or
+     * the logo and the company name). Nothing is read from payroll and nothing is stored.
+     */
+    public String payslipTemplatePreview(UUID tenantId, UUID companyId) {
+        String company = null;
+        if (companyId != null) {
+            try {
+                company = jdbc.query("SELECT name FROM org.companies WHERE id = ?", rs -> rs.next() ? rs.getString(1) : null, companyId);
+            } catch (Exception e) {
+                log.warn("Payslip preview: company {} name unavailable: {}", companyId, e.getMessage());
+            }
+        }
+        String html = renderPayslipHtml(samplePayslip(YearMonth.now(java.time.ZoneId.of("Asia/Kolkata")).minusMonths(1)));
+        return letterhead == null ? html : letterhead.applyToDocument(html, tenantId, company);
+    }
+
+    /** Example figures for the template preview: a plain month, nobody real. */
+    static PayslipDto samplePayslip(YearMonth ym) {
+        java.util.function.Function<String, BigDecimal> m = BigDecimal::new;
+        List<PayslipLineDto> earnings = List.of(
+                new PayslipLineDto("BASIC", "Basic", m.apply("25000")),
+                new PayslipLineDto("HRA", "House rent allowance", m.apply("10000")),
+                new PayslipLineDto("SPECIAL", "Special allowance", m.apply("7500")));
+        List<PayslipLineDto> deductions = List.of(
+                new PayslipLineDto("PF", "Provident fund", m.apply("1800")),
+                new PayslipLineDto("PT", "Professional tax", m.apply("200")));
+        List<PayslipLineDto> employer = List.of(new PayslipLineDto("PF_ER", "Provident fund (employer)", m.apply("1800")));
+        int days = ym.lengthOfMonth();
+        return new PayslipDto(null, null, "Asha Verma (example)", "EMP-0001", "Software Engineer",
+                periodLabel(ym.getMonthValue(), ym.getYear()), "XXXXXX234F", "XXXX6789",
+                BigDecimal.valueOf(days), BigDecimal.ZERO, earnings, deductions, employer,
+                m.apply("42500"), m.apply("2000"), m.apply("40500"), "Engineering", days, "PREVIEW", "Example Bank", "6789");
+    }
+
     /** White label: the payslip opens with the run's company name and the workspace logo. */
     private String withLetterhead(String html, UUID tenantId, UUID runId) {
         if (letterhead == null) return html;
