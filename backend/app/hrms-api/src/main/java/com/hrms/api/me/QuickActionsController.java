@@ -9,6 +9,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -64,9 +65,11 @@ public class QuickActionsController {
     @Operation(summary = "My quick actions for the Dashboard or Home (null = the default tiles)")
     @GetMapping({"/v1/me/quick-actions", "/v1/me/dashboard/quick-actions"})
     @PreAuthorize("isAuthenticated()")
+    @Transactional(readOnly = true)
     public QuickActionPrefs get(@RequestParam(defaultValue = "dashboard") String surface) {
         String s = surface(surface);
         UUID[] ids = session();
+        bindTenant(ids[0]);
         if (!tableReady()) return new QuickActionPrefs(false, null, month(), Map.of());
         List<String> rows;
         try {
@@ -84,11 +87,13 @@ public class QuickActionsController {
     @Operation(summary = "Save my quick actions (up to 6, in order), or {picked: null} for the default tiles")
     @PutMapping({"/v1/me/quick-actions", "/v1/me/dashboard/quick-actions"})
     @PreAuthorize("isAuthenticated()")
+    @Transactional
     public QuickActionPrefs save(@RequestParam(defaultValue = "dashboard") String surface,
                                  @RequestBody(required = false) SaveRequest body) {
         String s = surface(surface);
         UUID[] ids = session();
         List<String> picked = validate(body == null ? null : body.picked());
+        bindTenant(ids[0]);
         if (!tableReady()) throw new FeatureNotReady();
         FeatureNotReady.run(() -> {
             if (picked == null) {
@@ -127,6 +132,14 @@ public class QuickActionsController {
             throw new HrmsException("Choose dashboard or home.", HttpStatus.BAD_REQUEST, "QUICK_ACTIONS_SURFACE_INVALID");
         }
         return s;
+    }
+
+    /**
+     * The table's row-level security reads app.tenant_id, which lives only for the transaction (SET LOCAL): set it
+     * here, inside this handler's transaction, as every other JDBC handler does (UserProfileController.bindTenant).
+     */
+    private void bindTenant(UUID tenantId) {
+        jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)", String.class, tenantId.toString());
     }
 
     private boolean tableReady() {

@@ -18,6 +18,7 @@ import { TeamApprovals } from './TeamApprovals'
 import { TeamSchedule } from './TeamSchedule'
 import { NoTeamAccess, TeamToday } from './TeamToday'
 import { TEAM_VIEWS, inboxTabsFor, pickTab, pickView, type TeamView } from './teamModel'
+import { useExtraApprovals } from './useExtraApprovals'
 import './team.css'
 
 export function TeamDashboard() {
@@ -37,8 +38,10 @@ export function TeamDashboard() {
   const [messaging, setMessaging] = useState(false)
 
   const summary = useTeamSummary({ enabled: canTeam || canLeaveL1 })
-  // The same query Team today's "Waiting for you" reads: one request for the count and the card.
-  const inbox = useApprovalsInbox({ tab: 'all', page: 0, size: 3 }, { enabled: canInbox })
+  // The same query Team today's "Waiting for you" reads: one request for the count and the card. Like the
+  // Approvals list, it carries leave waiting for HR, and the count adds advances, overtime and skill levels.
+  const inbox = useApprovalsInbox({ tab: 'all', page: 0, size: 3, includeL2: true }, { enabled: canInbox })
+  const extra = useExtraApprovals({ enabled: canInbox })
 
   const allowed: TeamView[] = TEAM_VIEWS.map((v) => v.key)
     .filter((k) => k === 'today' || (k === 'schedule' && canTeam) || (k === 'approvals' && canInbox))
@@ -58,7 +61,7 @@ export function TeamDashboard() {
     return <PageFrame width="narrow" label="My team"><NoTeamAccess /></PageFrame>
   }
 
-  const waiting = inbox.data?.counts.all ?? 0
+  const waiting = (inbox.data?.counts.all ?? 0) + extra.rows.length
   const members = summary.data?.members
   const teamLabel = summary.data?.scope === 'DEPARTMENT' && summary.data.departmentNames.length ? summary.data.departmentNames.join(', ') : null
   // A message goes to the person's own team (their departments or direct reports), never the whole company,

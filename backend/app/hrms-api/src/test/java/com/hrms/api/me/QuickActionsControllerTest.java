@@ -117,6 +117,20 @@ class QuickActionsControllerTest {
     }
 
     @Test
+    void bindsTheTenantInsideItsOwnTransactionSoRowLevelSecuritySeesTheRow() throws Exception {
+        when(jdbc.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+        controller.get("dashboard");
+        controller.save("dashboard", new SaveRequest(List.of("att")));
+        verify(jdbc, org.mockito.Mockito.times(2))
+                .queryForObject(contains("set_config('app.tenant_id'"), eq(String.class), eq(tenant.toString()));
+        for (String m : List.of("get", "save")) {
+            assertThat(Arrays.stream(QuickActionsController.class.getMethods()).filter(x -> x.getName().equals(m))
+                    .findFirst().orElseThrow().getAnnotation(org.springframework.transaction.annotation.Transactional.class))
+                    .as(m + " is transactional").isNotNull();
+        }
+    }
+
+    @Test
     void needsASession() {
         TenantContext.clear();
         assertThat(code(() -> controller.get("dashboard"))).isEqualTo("NOT_AUTHENTICATED");

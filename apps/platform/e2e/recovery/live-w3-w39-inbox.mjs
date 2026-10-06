@@ -37,6 +37,8 @@ async function login(email) {
   }
 }
 async function signIn(page, email) {
+  // The face check-in prompt some people get after signing in: carry on without it, whenever it shows.
+  await page.addLocatorHandler(page.getByRole('button', { name: 'Continue without checking in' }), async (b) => { await b.click() })
   await page.goto(base + '/login')
   await page.locator('input[type=email]').fill(email)
   await page.locator('input[type=password]').fill(password)
@@ -51,6 +53,11 @@ function watch(page, label) {
     if (u.includes('/api/') && r.status() >= 400 && !u.includes('/canonical-auth/refresh')) failed.push(`${label}: ${r.status()} ${r.request().method()} ${u.split('/api')[1]}`)
   })
   return { errors, failed }
+}
+/** Closes the face check-in prompt when it is up (the locator handler only runs before an action). */
+const later = async (page) => {
+  const b = page.getByRole('button', { name: 'Continue without checking in' })
+  if (await b.waitFor({ timeout: 4000 }).then(() => true, () => false)) await b.click().catch(() => {})
 }
 const visible = (locator, timeout = 20_000) => locator.waitFor({ timeout }).then(() => true, () => false)
 const tileLabels = async (page) => page.getByRole('group', { name: 'Quick actions' }).locator('.uk-qa__label').allTextContents()
@@ -94,9 +101,11 @@ try {
   const page = await ctx.newPage()
   const w = watch(page, 'mgr'); watched.push(w)
   await signIn(page, 'mgr@unifiedtree.demo')
-  const inboxCall = page.waitForResponse((r) => r.url().includes('/v1/team/approvals?') && r.request().method() === 'GET', { timeout: 30_000 }).catch(() => null)
+  // The Approvals list's own request (the views bar's count reads 3 rows, without leave for HR).
+  const inboxCall = page.waitForResponse((r) => r.url().includes('/v1/team/approvals?') && r.url().includes('size=50') && r.request().method() === 'GET', { timeout: 30_000 }).catch(() => null)
   await page.goto(base + '/team?view=approvals')
   const ir = await inboxCall
+  await later(page)
   check('the inbox is asked for leave waiting for HR (includeL2)', !!ir && ir.url().includes('includeL2=true') && ir.ok(), ir ? `${ir.status()} ${ir.url().split('/api')[1]}` : 'no request')
 
   const card = (text) => page.locator('article.uko-apprc').filter({ hasText: text })
@@ -158,6 +167,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(base + '/team?view=approvals')
   await page.waitForLoadState('networkidle')
+  await later(page)
   const sw = await page.evaluate(() => document.documentElement.scrollWidth)
   check('390px: Approvals has no sideways scroll', sw <= 391, `scrollWidth ${sw}`)
   await page.screenshot({ path: `${SHOTS}/w39-approvals-390.png`, fullPage: true })
@@ -177,6 +187,7 @@ try {
   await signIn(op, 'owner@unifiedtree.demo')
   await op.goto(base + '/dashboard')
   await op.getByRole('group', { name: 'Quick actions' }).waitFor({ timeout: 30_000 })
+  await later(op)
   const before = await tileLabels(op)
   check('Dashboard shows the default quick actions', before.length >= 3, before.join(', '))
   const customise = op.getByRole('button', { name: 'Customise' })
@@ -216,8 +227,9 @@ try {
   const rp = await rctx.newPage()
   const rw = watch(rp, 'reader'); watched.push(rw)
   await signIn(rp, 'reader@unifiedtree.demo')
-  await rp.goto(base + '/')
+  await rp.goto(base + '/me')
   await rp.getByRole('group', { name: 'Quick actions' }).waitFor({ timeout: 30_000 })
+  await later(rp)
   const homeBefore = await tileLabels(rp)
   await rp.getByRole('button', { name: 'Customise' }).click()
   const hd = rp.getByRole('dialog', { name: 'Customise quick actions' })
