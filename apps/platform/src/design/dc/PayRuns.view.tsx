@@ -87,14 +87,14 @@ export function PayRunsView({ v }: { v: any }) {
           ) : null}
           {v.isError ? (
             <>
-              <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+              <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
                 <EmptyState icon={v.errIcon} title="Unable to load payroll runs" description="We couldn’t reach the payroll service. Nothing was changed — try again." action={v.retryAction} />
               </div>
             </>
           ) : null}
           {v.isEmpty ? (
             <>
-              <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+              <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
                 <EmptyState icon={v.emptyIcon} title="No payroll runs" description={v.emptyDesc} action={v.emptyAction} />
               </div>
             </>

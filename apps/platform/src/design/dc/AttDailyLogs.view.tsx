@@ -19,7 +19,7 @@ export function AttDailyLogsView({ v }: { v: any }) {
             <Fragment key={$index}>
               {t?.sel ? (
                 <>
-                  <div style={{borderRadius: "16px", boxShadow: "0 0 0 2px #0f6e56,0 10px 22px -14px rgba(15,110,86,.8)"}}>
+                  <div style={{borderRadius: "16px", boxShadow: "0 0 0 2px #0f6e56"}}>
                     <StatTile tile={t} />
                   </div>
                 </>

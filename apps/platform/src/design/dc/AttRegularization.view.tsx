@@ -94,7 +94,7 @@ export function AttRegularizationView({ v }: { v: any }) {
         ) : null}
         {v.viewMine ? (
           <>
-            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 20px", display: "grid", gap: "12px"}}>
+            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", padding: "18px 20px", display: "grid", gap: "12px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
                 <div>
                   <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>

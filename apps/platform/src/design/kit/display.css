@@ -417,7 +417,7 @@ button.uk-stat { font: inherit; font-family: var(--u-font, 'Inter', system-ui, s
   border-radius: 18px;
   background: var(--u-sf, #fff);
   border: 1px solid var(--u-ln, #E3E9E6);
-  box-shadow: 0 1px 2px rgba(14, 27, 22, .04);
+  box-shadow: none;
 }
 .uk-stat.uk-stat--live { min-height: 124px; padding: 18px; display: flex; align-items: center; gap: 16px; }
 .uk-stat.uk-stat--live-stack { min-height: 140px; padding: 16px 16px 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
@@ -1528,10 +1528,12 @@ a.uk-btn.uk-btn:hover { background: var(--b-bg-h); color: var(--b-fg-h); border-
 }
 
 /* ── Keyboard focus (README: brand border + 3px brand-soft ring; the theme's --u-focus is visible in dark) ── */
-:is(.uk-stat.uk-stat--link, .uk-qa, .uk-ptab, .uk-fpill, .uk-sact, .uk-retry, .uk-search, .uk-btn):focus-visible {
+:is(.uk-ptab, .uk-fpill, .uk-sact, .uk-retry, .uk-search, .uk-btn):focus-visible {
   border-color: var(--u-br, #0F6E56);
   box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs, #E8F3EE));
 }
+/* Cards stay flat on focus too: the brand border plus the app-wide 2px :focus-visible outline (index.css). */
+:is(.uk-stat.uk-stat--link, .uk-qa):focus-visible { border-color: var(--u-br, #0F6E56); box-shadow: none; }
 .uk-ptab.is-on:focus-visible,
 .uk-fpill.is-on:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px var(--u-brs2, #D2EADF)); }
 .uk-btn:is(.uk-btn--primary, .uk-btn--danger):focus-visible { border-color: transparent; box-shadow: 0 0 0 2px var(--u-sf, #fff), 0 0 0 4px var(--u-br, #0F6E56); }
@@ -1561,7 +1563,6 @@ a.uk-btn.uk-btn:hover { background: var(--b-bg-h); color: var(--b-fg-h); border-
   .uk-stat.uk-stat--live.uk-stat--link:hover,
   .uk-stat.uk-stat--live-stack.uk-stat--link:hover {
     border-color: color-mix(in oklab, var(--k, #0F6E56) 55%, var(--u-sf, #fff));
-    box-shadow: 0 26px 46px -28px color-mix(in oklab, var(--k, #0F6E56) 85%, transparent), 0 2px 8px -3px color-mix(in oklab, var(--k, #0F6E56) 30%, transparent);
   }
   .uk-stat--live .uk-fx-spot {
     background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, var(--k, #0F6E56) 12%, transparent), transparent 50%),
@@ -1578,7 +1579,7 @@ a.uk-btn.uk-btn:hover { background: var(--b-bg-h); color: var(--b-fg-h); border-
   .uk-stat--live .uk-stat__tile,
   .uk-stat--live-stack .uk-stat__tile { background: color-mix(in oklab, var(--k, #0F6E56) 11%, var(--u-sf, #fff)); }
   .uk-stat.uk-stat--live:focus-visible,
-  .uk-stat.uk-stat--live-stack:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--k, #0F6E56) 30%, transparent); }
+  .uk-stat.uk-stat--live-stack:focus-visible { border-color: color-mix(in oklab, var(--k, #0F6E56) 70%, var(--u-sf, #fff)); box-shadow: none; }
   .uk-empty__icon { box-shadow: 0 0 0 1px var(--u-ln, #E3E9E6), 0 12px 24px -14px rgba(15, 110, 86, .45), 0 0 0 9px color-mix(in oklab, var(--u-brs, #E8F3EE) 70%, transparent); }
   .uk-empty--error .uk-empty__icon { box-shadow: 0 0 0 1px var(--u-ln, #E3E9E6), 0 12px 24px -14px rgba(180, 35, 24, .35), 0 0 0 9px color-mix(in oklab, var(--u-rds, #FCEDEB) 70%, transparent); }
   .uk-empty.uk-empty--success {

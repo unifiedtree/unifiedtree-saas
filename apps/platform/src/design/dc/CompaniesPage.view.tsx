@@ -48,7 +48,7 @@ export function CompaniesPageView({ v }: { v: any }) {
                   </div>
                   {v.pickerClosed ? (
                     <>
-                      <button type="button" onClick={v.togglePicker} aria-haspopup="listbox" aria-expanded="false" aria-labelledby="co-pick-label" data-tip="Search and switch company" style={{width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: "9px 12px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,.04)", font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer"}} className="dc-companies-page-0">
+                      <button type="button" onClick={v.togglePicker} aria-haspopup="listbox" aria-expanded="false" aria-labelledby="co-pick-label" data-tip="Search and switch company" style={{width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: "9px 12px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer"}} className="dc-companies-page-0">
                         <span style={{width: "36px", height: "36px", borderRadius: "10px", background: "#0f6e56", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "13px", fontWeight: "800", letterSpacing: "-.02em"}}>
                           {txt(v.co?.initials)}
                         </span>
@@ -150,7 +150,7 @@ export function CompaniesPageView({ v }: { v: any }) {
                     </>
                   ) : null}
                 </div>
-                <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 20px", display: "grid", gap: "16px"}}>
+                <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px 20px", display: "grid", gap: "16px"}}>
                   {v.isLoading ? (
                     <>
                       <div role="status" aria-label="Loading company" style={{display: "grid", gap: "12px"}}>
@@ -267,7 +267,7 @@ export function CompaniesPageView({ v }: { v: any }) {
                   ) : null}
                 </section>
               </aside>
-              <section style={{flex: "999 1 0", minWidth: "min(100%,520px)", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "16px"}}>
+              <section style={{flex: "999 1 0", minWidth: "min(100%,520px)", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "16px"}}>
                 <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: "12px"}}>
                   <div style={{flex: "1 1 240px", minWidth: "0"}}>
                     <h2 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "17px", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px"}}>
@@ -615,12 +615,12 @@ export function CompaniesPageView({ v }: { v: any }) {
                 </>
               ) : null}
             </div>
-            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
               <EmptyState icon={v.emptyBuildingIcon} title={v.emptyTitle} description={v.emptyDesc} action={v.addCompanyAction} />
             </section>
             {v.archivedPanelEmpty ? (
               <>
-                <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "16px"}}>
+                <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "16px"}}>
                   {v.archivedCoList ? (
                     <>
                       <div style={{display: "grid", gap: "10px"}}>

@@ -12,7 +12,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
     <>
       <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
         <div style={{flex: "3 1 520px", minWidth: "0", display: "grid", gap: "16px"}}>
-          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "16px"}}>
+          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "16px"}}>
             <div style={{display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "4px 12px"}}>
               <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                 {"Pay breakdown"}
@@ -136,7 +136,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
               </>
             ) : null}
           </section>
-          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "4px"}}>
+          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "4px"}}>
             <div style={{display: "grid", gap: "3px", marginBottom: "8px"}}>
               <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                 {txt(v.checksTitle)}
@@ -179,7 +179,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
           </section>
         </div>
         <div style={{flex: "2 1 320px", minWidth: "0", display: "grid", gap: "16px"}}>
-          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "14px"}}>
+          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "14px"}}>
             <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
               {"Run details"}
             </h3>
@@ -209,7 +209,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
           </section>
           {v.showBank ? (
             <>
-              <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "12px"}}>
+              <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "12px"}}>
                 <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
                   <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
                     {"Bank disbursement"}
@@ -258,7 +258,7 @@ export function PayrollOverviewView({ v }: { v: any }) {
               </section>
             </>
           ) : null}
-          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "grid", gap: "14px"}}>
+          <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px 22px", display: "grid", gap: "14px"}}>
             <h3 style={{margin: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", fontSize: "16px", fontWeight: "700"}}>
               {"Activity"}
             </h3>

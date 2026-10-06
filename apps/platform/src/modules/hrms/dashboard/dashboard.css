@@ -116,9 +116,10 @@
   border: 1px solid var(--u-ln2, #EDF1EF); border-radius: 13px; background: var(--u-sf2, #F7F9F8); color: var(--u-ink, #0E1B16);
   font: inherit; text-align: left; cursor: pointer; transition: border-color .25s, background .25s, transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s;
 }
-.ud-tile:hover { border-color: var(--u-brl, #BFDFD1); background: var(--u-sf, #fff); transform: translateY(-2px); box-shadow: 0 12px 24px -18px rgba(15,110,86,.6); }
-.ud-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); border-color: var(--u-br, #0F6E56); }
-.ud-tile[aria-pressed="true"] { border-color: transparent; background: #0B5A46; color: #fff; box-shadow: 0 14px 26px -16px rgba(11,90,70,.9); transform: none; }
+/* Flat tiles (owner, 6 Oct 2026): hover and selected change the border, never a shadow. */
+.ud-tile:hover { border-color: var(--u-brl, #BFDFD1); background: var(--u-sf, #fff); transform: translateY(-2px); }
+.ud-tile:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); }
+.ud-tile[aria-pressed="true"] { border-color: #0B5A46; background: #0B5A46; color: #fff; transform: none; }
 .ud-tile__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
 .ud-tile__n { font-size: 22px; line-height: 26px; font-weight: 600; letter-spacing: -.02em; }
 .ud-tile__ic { color: var(--u-brt, #0F6E56); display: inline-flex; }

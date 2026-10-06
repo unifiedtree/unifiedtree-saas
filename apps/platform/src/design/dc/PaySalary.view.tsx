@@ -15,7 +15,7 @@ export function PaySalaryView({ v }: { v: any }) {
   return (
     <>
       <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font,'Inter',system-ui,sans-serif)", color: "#0f172a"}}>
-        <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+        <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px"}}>
           <span aria-hidden="true" style={{position: "absolute", right: "-60px", top: "-150px", width: "380px", height: "320px", borderRadius: "999px", background: "rgba(16,185,129,.10)", filter: "blur(60px)", pointerEvents: "none"}} />
           <div style={{position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px 24px", padding: "clamp(18px,2.4vw,26px) clamp(18px,2.6vw,30px)"}}>
             <div style={{flex: "999 1 300px", minWidth: "0", display: "grid", gap: "6px"}}>

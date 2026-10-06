@@ -23,7 +23,7 @@ export function AttendancePageView({ v }: { v: any }) {
     <>
       <div style={{display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: "16px", minWidth: "0", fontFamily: "var(--u-font)", color: "#0f172a"}}>
         {/* The module's pages (Analytics · Daily Tracking · Shifts & Overtime) are the shell's top tabs now (navModel). */}
-        <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+        <header style={{position: "relative", overflow: "hidden", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "20px"}}>
           <span aria-hidden="true" style={{position: "absolute", right: "-60px", top: "-150px", width: "380px", height: "320px", borderRadius: "999px", background: "rgba(16,185,129,.10)", filter: "blur(60px)", pointerEvents: "none"}} />
           <div style={{position: "relative", display: "grid", gap: "20px", padding: "clamp(18px,2.4vw,28px) clamp(18px,2.6vw,32px)"}}>
             <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px 24px"}}>

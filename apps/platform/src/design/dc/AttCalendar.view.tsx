@@ -27,7 +27,7 @@ export function AttCalendarView({ v }: { v: any }) {
         ) : null}
         {v.showCal ? (
           <>
-            <section aria-labelledby="cal-title" style={{flex: "1.7 1 440px", minWidth: "0", display: "grid", gap: "14px", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+            <section aria-labelledby="cal-title" style={{flex: "1.7 1 440px", minWidth: "0", display: "grid", gap: "14px", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: "10px 18px"}}>
                 <div>
                   <h3 id="cal-title" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
@@ -100,7 +100,7 @@ export function AttCalendarView({ v }: { v: any }) {
                 ))}
               </div>
             </section>
-            <aside aria-live="polite" style={{flex: "1 1 280px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+            <aside aria-live="polite" style={{flex: "1 1 280px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px"}}>
                 <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                   {txt(v.d?.title)}

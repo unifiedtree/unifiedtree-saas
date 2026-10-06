@@ -9,8 +9,7 @@
 .upf-banner__fade { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(180deg, transparent, var(--u-bg, #F3F6F4)); }
 
 .upf-body { position: relative; box-sizing: border-box; max-width: 1440px; margin: -168px auto 0; padding: 0 clamp(16px, 2.4vw, 36px) 56px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
-.upf-card { box-sizing: border-box; border-radius: 22px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); box-shadow: 0 24px 50px -34px rgba(14, 27, 22, .4); }
-:root[data-theme='dark'] .upf-card, [data-theme='dark'] .upf-card { box-shadow: var(--u-shc, 0 1px 2px rgba(0,0,0,.5)); }
+.upf-card { box-sizing: border-box; border-radius: 22px; background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); box-shadow: none; }
 
 /* Left card */
 .upf-left { flex: 0 1 340px; min-width: min(100%, 290px); display: flex; flex-direction: column; gap: 16px; padding: 22px; }

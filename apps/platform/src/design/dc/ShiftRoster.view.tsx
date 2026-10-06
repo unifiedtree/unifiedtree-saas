@@ -46,7 +46,7 @@ export function ShiftRosterView({ v }: { v: any }) {
         ) : null}
         {v.showList ? (
           <>
-            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", overflow: "hidden"}}>
+            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", overflow: "hidden"}}>
               {v.isDesktop ? (
                 <>
                   <div aria-hidden="true" style={{display: "grid", gridTemplateColumns: "minmax(0,1.7fr) minmax(0,1fr) minmax(0,1.7fr) minmax(0,1fr) 150px", gap: "16px", padding: "11px 18px", background: "#f8fafc", borderBottom: "1px solid #eef2f1", fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>

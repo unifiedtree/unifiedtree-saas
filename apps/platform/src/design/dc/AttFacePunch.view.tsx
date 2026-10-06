@@ -46,7 +46,7 @@ export function AttFacePunchView({ v }: { v: any }) {
                 <div style={{display: "grid", gap: "10px"}}>
                   {arr(v.review).map((r: any, $index: number) => (
                     <Fragment key={$index}>
-                      <article style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14px 20px", padding: "16px 18px", background: "#fff", border: "1px solid #fde68a", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                      <article style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14px 20px", padding: "16px 18px", background: "#fff", border: "1px solid #fde68a", borderRadius: "16px"}}>
                         <div style={{flex: "1 1 300px", minWidth: "0", display: "grid", gap: "10px"}}>
                           <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px"}}>
                             <HrAvatar name={r?.name} sub={r?.sub} />

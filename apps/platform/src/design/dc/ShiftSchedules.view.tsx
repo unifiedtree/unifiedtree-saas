@@ -63,7 +63,7 @@ export function ShiftSchedulesView({ v }: { v: any }) {
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,300px),1fr))", gap: "14px"}}>
               {arr(v.list).map((s: any, $index: number) => (
                 <Fragment key={$index}>
-                  <article style={{display: "grid", gap: "14px", alignContent: "start", padding: "18px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                  <article style={{display: "grid", gap: "14px", alignContent: "start", padding: "18px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
                     <div style={{display: "flex", alignItems: "center", gap: "12px", minWidth: "0"}}>
                       <span style={{position: "relative", flex: "0 0 44px", width: "44px", height: "44px", display: "inline-flex", alignItems: "center", justifyContent: "center"}}>
                         <svg width="44" height="44" aria-hidden="true" style={{position: "absolute", left: "0", top: "0"}}>

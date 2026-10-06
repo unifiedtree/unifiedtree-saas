@@ -61,7 +61,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
         ) : null}
         {v.pReady ? (
           <>
-            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.05)"}}>
+            <section style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px 18px", padding: "14px 18px"}}>
                 <div style={{flex: "1 1 380px", minWidth: "0", display: "flex", flexDirection: "column", gap: "4px"}}>
                   <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 10px"}}>

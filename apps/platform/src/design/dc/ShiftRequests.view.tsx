@@ -42,7 +42,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
               ) : null}
               {arr(v.pending).map((r: any, $index: number) => (
                 <Fragment key={$index}>
-                  <article style={{display: "grid", gap: "14px", padding: "18px 20px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                  <article style={{display: "grid", gap: "14px", padding: "18px 20px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
                     <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px 12px"}}>
                       <HrAvatar name={r?.name} sub={r?.sub} />
                       <span style={{display: "inline-flex", alignItems: "center", gap: "10px", fontSize: "12.5px", color: "#64748b"}}>
@@ -171,7 +171,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
         ) : null}
         {v.showMine ? (
           <>
-            <article style={{display: "grid", gap: "16px", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+            <article style={{display: "grid", gap: "16px", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
               <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px"}}>
                 <div style={{display: "flex", alignItems: "center", gap: "14px", minWidth: "0"}}>
                   <span style={{position: "relative", flex: "0 0 52px", width: "52px", height: "52px", display: "inline-flex", alignItems: "center", justifyContent: "center"}}>
@@ -233,7 +233,7 @@ export function ShiftRequestsView({ v }: { v: any }) {
                 </li>
               </ul>
             </article>
-            <section aria-labelledby="sr-mine" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 20px", display: "grid", gap: "12px"}}>
+            <section aria-labelledby="sr-mine" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", padding: "18px 20px", display: "grid", gap: "12px"}}>
               <h3 id="sr-mine" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                 {"Your requests"}
               </h3>
