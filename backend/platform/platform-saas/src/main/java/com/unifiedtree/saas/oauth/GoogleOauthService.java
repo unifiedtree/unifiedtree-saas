@@ -252,11 +252,17 @@ public class GoogleOauthService {
 
         GoogleIdClaims claims = verifyIdToken(idToken, row.nonce(), row.returnTo());
 
+        // A business's own login page (BusinessGoogleSignIn): hand back the verified email; the
+        // controller signs it into that business. No website account is made or touched.
+        if (BusinessGoogleSignIn.businessOf(row.returnTo()) != null) {
+            return new CallbackResult(null, null, row.returnTo(), claims.email());
+        }
+
         ResolvedAccount resolved = resolveAccount(claims, requestIp, userAgent, row.returnTo());
 
         AccountLoginResponse response = accounts.buildLoginResponseAfterOauth(resolved.accountId());
         String plainRefresh = accounts.issueRefresh(resolved.accountId(), userAgent, requestIp);
-        return new CallbackResult(response, plainRefresh, row.returnTo());
+        return new CallbackResult(response, plainRefresh, row.returnTo(), null);
     }
 
     // ── state row helpers ───────────────────────────────────────────────────
@@ -768,9 +774,11 @@ public class GoogleOauthService {
 
     public record AuthorizeStart(String authorizeUrl, UUID stateToken) {}
 
+    /** {@code businessEmail}: set (and the rest null) for a business sign-in — see BusinessGoogleSignIn. */
     public record CallbackResult(AccountLoginResponse loginResponse,
                                  String refreshToken,
-                                 String returnTo) {}
+                                 String returnTo,
+                                 String businessEmail) {}
 
     private record OauthStateRow(UUID stateToken,
                                  String codeVerifier,
