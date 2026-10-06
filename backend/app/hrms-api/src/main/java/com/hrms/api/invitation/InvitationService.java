@@ -114,6 +114,10 @@ public class InvitationService {
         if (found.isPresent() && found.get().getEmployeeId() != null && !found.get().getEmployeeId().equals(employeeId)) {
             throw new EmailAlreadyUsedException(EmployeeContactGuard.GENERIC_EMAIL_MESSAGE);
         }
+        // One business per person (owner decision, 6 Oct 2026): a NEW login is not made for
+        // an email that already signs in to another business. Re-inviting someone who
+        // already has a login here is unaffected.
+        if (found.isEmpty()) assertNotInAnotherBusiness(email, tenantId);
         UserCredentials creds = found.orElseGet(() -> {
             UserCredentials c = new UserCredentials();
             // Do NOT set id — BaseEntity uses @GeneratedValue(UUID). Assigning it
@@ -213,6 +217,24 @@ public class InvitationService {
 
         log.info("Invitation queued for {} (employee {})", email, employeeId);
         return new InvitationResult(true, expiresAt);
+    }
+
+    /** Shown to the admin as-is. */
+    static final String IN_ANOTHER_BUSINESS_MESSAGE =
+            "This email already signs in to another business. A person can belong to one business only; use a different email.";
+
+    /**
+     * Refuses an email that already signs in to another business (V144_2's
+     * auth.email_signs_in_elsewhere). Skipped until that function exists in the database.
+     */
+    void assertNotInAnotherBusiness(String email, UUID tenantId) {
+        Boolean ready = jdbc.queryForObject(
+                "SELECT to_regprocedure('auth.email_signs_in_elsewhere(text,uuid)') IS NOT NULL", Boolean.class);
+        if (!Boolean.TRUE.equals(ready)) return;
+        Boolean elsewhere = jdbc.queryForObject("SELECT auth.email_signs_in_elsewhere(?, ?)", Boolean.class, email, tenantId);
+        if (Boolean.TRUE.equals(elsewhere)) {
+            throw new BusinessRuleException(IN_ANOTHER_BUSINESS_MESSAGE, "EMAIL_IN_ANOTHER_BUSINESS");
+        }
     }
 
     @Transactional
