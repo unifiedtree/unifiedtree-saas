@@ -288,7 +288,7 @@ export function PricingCalculator() {
               </div>
 
               <p className="mt-3 text-center font-body text-[11.5px] text-text-tertiary">
-                Billed per company. 7-day free trial once autopay is set up; billing starts on day 8.
+                One autopay for your business, with a breakdown by company. 7-day free trial once autopay is set up; billing starts on day 8.
               </p>
             </div>
           </div>
