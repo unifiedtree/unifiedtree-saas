@@ -3,10 +3,14 @@
 // report permission, as inline pill tabs (DECISIONS 21).
 //   Headcount: the figures on a date (?asOf=), people by department (a department
 //     opens the directory), the month-end headcount for the last six months
-//     (/v1/reports/headcount/trend) and the departments table.
+//     (/v1/reports/headcount/trend), the departments table, joiners and leavers
+//     this month (/v1/reports/headcount/change) and the breakdown by branch,
+//     designation, employment type, gender, age or time with us (?by=,
+//     /v1/reports/headcount/breakdown: the same people, so it adds up).
 //   Attrition: a period (?period=: this financial year from /v1/reports/fiscal-year,
 //     the last 12 months, the year so far or last calendar year), exits, the
-//     annualised rate, the split, exits per month and the monthly trend.
+//     annualised rate, the split, joiners and leavers (/v1/reports/attrition/joiners),
+//     exits per month and the monthly trend.
 //   Diversity: today's gender split company-wide and women by department.
 // Download per view: its Excel workbook, its report's PDF and raw CSV from the
 // server, plus the whole-page snapshot PDF; chart PNGs. Every file is recorded
@@ -20,7 +24,12 @@ import {
 } from '@/design/kit/display'
 import { Select, useToast } from '@/design/kit/overlays'
 import { apiBlob } from '@/core/api/client'
-import { useAttritionReport, useDiversityReport, useFiscalYear, useHeadcountReport, useHeadcountTrend, type AttritionRow } from '@/modules/hrms/api/useReports'
+import { useAttritionReport, useDiversityReport, useFiscalYear, useHeadcountChange, useHeadcountReport, useHeadcountTrend, type AttritionRow } from '@/modules/hrms/api/useReports'
+import { useHeadcountBreakdown, useJoiners } from '@/modules/hrms/api/useWorkforceBreakdown'
+import {
+  breakdownColumn, breakdownGroups, breakdownLabel, breakdownOptions, breakdownRows, breakdownSheets, joinersByMonth, monthToDate, nothingRecorded, signed,
+  type BreakdownGroup,
+} from './workforceModel'
 import { csvBlob, saveAndRecord, saveServerFile, svgToPng, xlsxBlob, type Cell, type Sheet } from '@/shared/export/fileExport'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany, slug } from '@/modules/hrms/reports/useReportCompany'
@@ -82,6 +91,12 @@ export function WorkforceAnalytics() {
   const head = useHeadcountReport(company, asOf, { enabled: canHead && tab === 'headcount' })
   const trend = useHeadcountTrend(company, 6, asOf === todayIso ? null : asOf, { enabled: canHead && tab === 'headcount' })
   const attr = useAttritionReport(company, period?.from ?? '', period?.to ?? '', { enabled: canAttr && tab === 'attrition' && !!period })
+  const joiners = useJoiners(company, period?.from ?? '', period?.to ?? '', { enabled: canAttr && tab === 'attrition' && !!period })
+  const mtd = monthToDate(asOf)
+  const mtdLabel = `${parse(asOf).getDate() === 1 ? '' : '1 – '}${longDate(asOf)}`
+  const change = useHeadcountChange(company, mtd.from, mtd.to, { enabled: canHead && tab === 'headcount' })
+  const brk = useHeadcountBreakdown(company, asOf, { enabled: canHead && tab === 'headcount' })
+  const by = breakdownGroups(brk.data, params.get('by'))
   const div = useDiversityReport(company, { enabled: canDiv && tab === 'diversity' })
   const [busy, setBusy] = useState(false)
 
@@ -91,8 +106,9 @@ export function WorkforceAnalytics() {
     return [...rows.filter((r) => !r.none).sort((a, b) => b.total - a.total), ...rows.filter((r) => r.none)]
   }, [head.data])
   const t = depts.reduce((a, r) => ({ total: a.total + r.total, active: a.active + r.active, notice: a.notice + r.notice, probation: a.probation + r.probation }), { total: 0, active: 0, notice: 0, probation: 0 })
-  const months = (attr.data ?? []).map((r: AttritionRow) => ({ m: r.month, label: monthLabel(r.month), short: monthShort(r.month), exits: Number(r.exits) || 0, resign: Number(r.resignations) || 0, term: Number(r.terminations) || 0, other: Number(r.other_exits) || 0, headcount: Number(r.headcount) || 0, pct: Number(r.attrition_pct) || 0 }))
-  const ex = months.reduce((a, m) => ({ exits: a.exits + m.exits, resign: a.resign + m.resign, term: a.term + m.term, other: a.other + m.other }), { exits: 0, resign: 0, term: 0, other: 0 })
+  const jmap = joinersByMonth(joiners.data)
+  const months = (attr.data ?? []).map((r: AttritionRow) => ({ m: r.month, label: monthLabel(r.month), short: monthShort(r.month), exits: Number(r.exits) || 0, resign: Number(r.resignations) || 0, term: Number(r.terminations) || 0, other: Number(r.other_exits) || 0, headcount: Number(r.headcount) || 0, pct: Number(r.attrition_pct) || 0, joined: jmap?.get(r.month) ?? 0 }))
+  const ex = months.reduce((a, m) => ({ exits: a.exits + m.exits, resign: a.resign + m.resign, term: a.term + m.term, other: a.other + m.other, joined: a.joined + m.joined }), { exits: 0, resign: 0, term: 0, other: 0, joined: 0 })
   const avgHead = months.length ? months.reduce((a, m) => a + m.headcount, 0) / months.length : 0
   /** Exits over the average month-end headcount, scaled to a year. */
   const annualised = months.length && avgHead ? (ex.exits / avgHead) * (12 / months.length) * 100 : 0
@@ -134,7 +150,8 @@ export function WorkforceAnalytics() {
   })
   const deptRows = (): Cell[][] => [['Department', 'Total', 'Active', 'On notice', 'Probation', 'Share %'], ...depts.map((r) => [r.dept, r.total, r.active, r.notice, r.probation, pctOf(r.total, t.total)]), ['Total', t.total, t.active, t.notice, t.probation, 100]]
   const snapshotFrom = period?.from ?? iso(new Date(today.getFullYear(), today.getMonth() - 11, 1))
-  const snapshot = { key: 'snapshot', label: 'Dashboard snapshot (PDF)', sub: 'Every view you can see, made on the server', run: () => server('/v1/reports/workforce-analytics/export.pdf', { from: snapshotFrom, to: todayIso }, `${base}.pdf`) }
+  // The snapshot is made for today: on a past headcount date it would not match the screen.
+  const snapshotItem = { key: 'snapshot', label: 'Dashboard snapshot (PDF)', sub: 'Every view you can see, made on the server', run: () => server('/v1/reports/workforce-analytics/export.pdf', { from: snapshotFrom, to: todayIso }, `${base}.pdf`) }
   const headChart = () => stackedBarsSvg({ title: 'Headcount by department', subtitle: `${co.companyName} · as of ${longDate(asOf)}`, bars: depts.map((r) => ({ label: r.dept, parts: [r.active, r.notice, r.probation] })), series: [['Active', SERIES_COLORS.a], ['On notice', SERIES_COLORS.b], ['Probation', SERIES_COLORS.c]] })
   const trendChart = () => stackedBarsSvg({ title: 'Headcount · last 6 months', subtitle: co.companyName, bars: (trend.data ?? []).map((p) => ({ label: monthLabel(p.month), parts: [p.headcount] })), series: [['Headcount', SERIES_COLORS.a]] })
   const exitsChart = () => stackedBarsSvg({ title: 'Exits per month', subtitle: `${co.companyName} · ${range}`, bars: months.map((m) => ({ label: m.label, parts: [m.resign, m.term, m.other] })), series: [['Resigned', SERIES_COLORS.a], ['Terminated', SERIES_COLORS.b], ['Other', SERIES_COLORS.c]] })
@@ -142,8 +159,10 @@ export function WorkforceAnalytics() {
   const items = tab === 'headcount' && head.data ? [
     { key: 'xlsx', label: 'Headcount workbook (.xlsx)', sub: 'Figures, departments and the 6-month trend', run: () => run(async () => {
       const sheets: Sheet[] = [
-        { name: 'Summary', widths: [28, 34], rows: [['Workforce analytics · Headcount', ''], ['Company', co.companyName], ['As of', longDate(asOf)], ['Headcount', t.total], ['Active', t.active], ['Probation', t.probation], ['On notice', t.notice]] },
+        { name: 'Summary', widths: [28, 34], rows: [['Workforce analytics · Headcount', ''], ['Company', co.companyName], ['As of', longDate(asOf)], ['Headcount', t.total], ['Active', t.active], ['Probation', t.probation], ['On notice', t.notice],
+          ...(change.data ? [[`Joined (${mtdLabel})`, change.data.joined], [`Left (${mtdLabel})`, change.data.left], [`Net change (${mtdLabel})`, change.data.joined - change.data.left]] as Cell[][] : [])] },
         { name: 'Departments', widths: [28, 10, 10, 12, 12, 10], rows: deptRows() },
+        ...(brk.data ? breakdownSheets(brk.data).map((x) => ({ name: x.name, widths: [28, 10, 10, 12, 12, 10], rows: x.rows })) : []),
         ...(trend.data ? [{ name: 'Last 6 months', widths: [14, 14, 12], rows: [['Month', 'As of', 'Headcount'], ...trend.data.map((p) => [monthLabel(p.month), longDate(p.asOf), p.headcount] as Cell[])] }] : []),
       ]
       const file = `${base}-headcount-${asOf}.xlsx`
@@ -155,14 +174,22 @@ export function WorkforceAnalytics() {
       saveAndRecord(file, csvBlob(deptRows()), meta('CSV', { tab: 'headcount', asOf }, depts.length))
       return `${file} downloaded`
     }) },
+    ...(brk.data && by ? [{ key: 'by-csv', label: `By ${breakdownColumn(by.key).toLowerCase()} (CSV)`, sub: 'The breakdown table as raw rows', run: () => run(async () => {
+      const file = `${base}-by-${by.key}-${asOf}.csv`
+      saveAndRecord(file, csvBlob(breakdownRows(brk.data!, by.key)), meta('CSV', { tab: 'headcount', asOf, by: by.key }, by.groups.length))
+      return `${file} downloaded`
+    }) }] : []),
     { key: 'pdf', label: 'Headcount report (PDF)', sub: 'Made on the server, as of the same date', run: () => server('/v1/reports/headcount/export.pdf', { asOf }, `headcount-${slug(co.companyName)}-${asOf}.pdf`) },
     { key: 'raw', label: 'Raw rows (CSV)', sub: 'Straight from the server, same date', run: () => server('/v1/reports/headcount/export.csv', { asOf }, `headcount-${slug(co.companyName)}-${asOf}.csv`) },
-    snapshot,
+    ...(asOf === todayIso ? [snapshotItem] : []),
   ] : tab === 'attrition' && attr.data && period ? [
     { key: 'xlsx', label: 'Attrition workbook (.xlsx)', sub: 'Figures and the monthly trend', run: () => run(async () => {
       const sheets: Sheet[] = [
-        { name: 'Summary', widths: [28, 34], rows: [['Workforce analytics · Attrition', ''], ['Company', co.companyName], ['Period', `${period.short} (${range})`], ['Exits', ex.exits], ['Attrition rate (annualised)', `${annualised.toFixed(1)}%`], ['Resigned', ex.resign], ['Terminated', ex.term], ['Other', ex.other]] },
-        { name: 'Monthly trend', widths: [12, 8, 10, 11, 8, 11, 12], rows: [['Month', 'Exits', 'Resigned', 'Terminated', 'Other', 'Headcount', 'Attrition %'], ...months.map((m) => [m.label, m.exits, m.resign, m.term, m.other, m.headcount, m.pct] as Cell[])] },
+        { name: 'Summary', widths: [28, 34], rows: [['Workforce analytics · Attrition', ''], ['Company', co.companyName], ['Period', `${period.short} (${range})`], ['Exits', ex.exits], ['Attrition rate (annualised)', `${annualised.toFixed(1)}%`], ['Resigned', ex.resign], ['Terminated', ex.term], ['Other', ex.other],
+          ...(jmap ? [['Joined', ex.joined], ['Net change', ex.joined - ex.exits]] as Cell[][] : [])] },
+        { name: 'Monthly trend', widths: [12, 8, 8, 10, 11, 8, 11, 12], rows: jmap
+          ? [['Month', 'Joined', 'Exits', 'Resigned', 'Terminated', 'Other', 'Headcount', 'Attrition %'], ...months.map((m) => [m.label, m.joined, m.exits, m.resign, m.term, m.other, m.headcount, m.pct] as Cell[])]
+          : [['Month', 'Exits', 'Resigned', 'Terminated', 'Other', 'Headcount', 'Attrition %'], ...months.map((m) => [m.label, m.exits, m.resign, m.term, m.other, m.headcount, m.pct] as Cell[])] },
       ]
       const file = `${base}-attrition-${period.value}.xlsx`
       saveAndRecord(file, xlsxBlob(sheets), meta('XLSX', { tab: 'attrition', period: period.short, from: period.from, to: period.to }, months.length))
@@ -170,7 +197,7 @@ export function WorkforceAnalytics() {
     }) },
     { key: 'pdf', label: 'Attrition report (PDF)', sub: 'Made on the server, same period', run: () => server('/v1/reports/attrition/export.pdf', { from: period.from, to: period.to }, `attrition-${slug(co.companyName)}-${period.from}_${period.to}.pdf`) },
     { key: 'raw', label: 'Raw rows (CSV)', sub: 'Straight from the server, same period', run: () => server('/v1/reports/attrition/export.csv', { from: period.from, to: period.to }, `attrition-${slug(co.companyName)}-${period.from}_${period.to}.csv`) },
-    snapshot,
+    snapshotItem,
   ] : tab === 'diversity' && div.data ? [
     { key: 'xlsx', label: 'Diversity workbook (.xlsx)', sub: 'Company-wide and by department', run: () => run(async () => {
       const sheets: Sheet[] = [
@@ -183,7 +210,7 @@ export function WorkforceAnalytics() {
     }) },
     { key: 'pdf', label: 'Diversity report (PDF)', sub: 'Made on the server', run: () => server('/v1/reports/diversity/export.pdf', {}, `diversity-${slug(co.companyName)}-${todayIso}.pdf`) },
     { key: 'raw', label: 'Raw rows (CSV)', sub: 'Straight from the server', run: () => server('/v1/reports/diversity/export.csv', {}, `diversity-${slug(co.companyName)}-${todayIso}.csv`) },
-    snapshot,
+    snapshotItem,
   ] : []
 
   if (!tabs.length || !tab) {
@@ -228,6 +255,17 @@ export function WorkforceAnalytics() {
                     <MiniStat label="On notice" value={num(t.notice)} tone="danger" countUp={false} />
                   </MiniStatGrid>
                 </Section>
+                {!change.notAvailable && (
+                  <Section title="Joiners and leavers" sub={`This month so far · ${mtdLabel}`} rise loading={change.isLoading} skeleton="stats" skeletonRows={3} error={change.error} onRetry={() => change.refetch()}>
+                    {change.data && (
+                      <MiniStatGrid>
+                        <MiniStat label="Joined" value={num(change.data.joined)} note="Joining date this month" tone="success" countUp={false} />
+                        <MiniStat label="Left" value={num(change.data.left)} note="Last working day this month" tone="danger" countUp={false} />
+                        <MiniStat label="Net change" value={signed(change.data.joined - change.data.left)} note="Joined minus left" tone="neutral" countUp={false} />
+                      </MiniStatGrid>
+                    )}
+                  </Section>
+                )}
                 <div className="rp-row">
                   <Section title="By department" rise empty={depts.length ? false : { title: 'No records for this date.' }}
                     actions={depts.length ? <Button variant="secondary" size={32} icon="download" aria-label="Download chart as PNG" title="Download chart as PNG" onClick={() => png(`headcount-by-department-${slug(co.companyName)}-${asOf}.png`, headChart(), { tab: 'headcount', asOf })} /> : undefined}>
@@ -246,6 +284,38 @@ export function WorkforceAnalytics() {
                     </Section>
                   )}
                 </div>
+                {!brk.notAvailable && (
+                  <Section title="Breakdown" sub={by ? `Headcount by ${breakdownLabel(by.key).toLowerCase()} on ${longDate(asOf)}` : undefined} rise
+                    loading={brk.isLoading} skeleton="chart" error={brk.error} onRetry={() => brk.refetch()}
+                    empty={brk.data && !brk.data.total ? { title: 'No people on the rolls on this date.' } : false}
+                    actions={brk.data?.total ? (
+                      <div style={{ width: 200, maxWidth: '100%' }}>
+                        <Select aria-label="Break down by" size="md" value={by?.key ?? ''} options={breakdownOptions(brk.data)} onChange={(e) => setParam('by', e.target.value)} />
+                      </div>
+                    ) : undefined}>
+                    {by && brk.data && (
+                      <>
+                        {nothingRecorded(by.groups) && <p className="rp-note" style={{ margin: '0 0 10px' }}>Nobody has this recorded yet. Add it on each person's profile and it shows here.</p>}
+                        <BarList label={`Headcount by ${breakdownLabel(by.key).toLowerCase()}`} labelWidth="minmax(90px,170px)" valueWidth={48}
+                          items={by.groups.map((g) => ({
+                            key: g.name, label: g.none ? <span className="rp-italic">{g.name}</span> : g.name, value: num(g.total), amount: g.total,
+                            title: `${g.name}: ${g.total} (${g.active} active, ${g.probation} on probation, ${g.onNotice} on notice)`,
+                          }))} />
+                        <div style={{ marginTop: 14 }}>
+                          <Table<BreakdownGroup> label={`Headcount by ${breakdownLabel(by.key).toLowerCase()}`} mobile="cards" minWidth={520} rowKey={(g) => g.name} rows={by.groups}
+                            columns={[
+                              { key: 'name', header: breakdownColumn(by.key), primary: true, render: (g) => <span className={g.none ? 'rp-italic' : undefined}>{g.name}</span> },
+                              { key: 'total', header: 'Total', numeric: true, render: (g) => num(g.total) },
+                              { key: 'active', header: 'Active', numeric: true, render: (g) => num(g.active) },
+                              { key: 'probation', header: 'Probation', numeric: true, render: (g) => num(g.probation) },
+                              { key: 'notice', header: 'On notice', numeric: true, render: (g) => num(g.onNotice) },
+                              { key: 'share', header: 'Share', numeric: true, render: (g) => `${pctOf(g.total, brk.data!.total)}%` },
+                            ] as TableColumn<BreakdownGroup>[]} />
+                        </div>
+                      </>
+                    )}
+                  </Section>
+                )}
                 {depts.length > 0 && (
                   <Section title="Departments" sub={canDirectory ? 'Click a department to open it in the Workforce Directory' : 'Headcount by department'} body="flush" rise>
                     <Table<Dept> label="Departments" mobile="cards" minWidth={560} rowKey={(r) => r.id ?? 'none'} rows={depts}
@@ -272,6 +342,17 @@ export function WorkforceAnalytics() {
                     <MiniStat label="Other" value={num(ex.other)} note="Any other exit type" tone="neutral" countUp={false} />
                   </MiniStatGrid>
                 </Section>
+                {!joiners.notAvailable && (
+                  <Section title="Joiners and leavers" sub={period?.short} rise loading={joiners.isLoading} skeleton="stats" skeletonRows={3} error={joiners.error} onRetry={() => joiners.refetch()}>
+                    {jmap && (
+                      <MiniStatGrid>
+                        <MiniStat label="Joined" value={num(ex.joined)} note="Joining date in the period" tone="success" countUp={false} />
+                        <MiniStat label="Left" value={num(ex.exits)} note="Last working day in the period" tone="danger" countUp={false} />
+                        <MiniStat label="Net change" value={signed(ex.joined - ex.exits)} note="Joined minus left" tone="neutral" countUp={false} />
+                      </MiniStatGrid>
+                    )}
+                  </Section>
+                )}
                 <div className="rp-row">
                   <Section title="Exits per month" rise
                     actions={months.length ? <Button variant="secondary" size={32} icon="download" aria-label="Download chart as PNG" title="Download chart as PNG" onClick={() => png(`exits-per-month-${slug(co.companyName)}-${period?.value}.png`, exitsChart(), { tab: 'attrition', from: period?.from ?? '', to: period?.to ?? '' })} /> : undefined}>
@@ -282,6 +363,7 @@ export function WorkforceAnalytics() {
                     <Table label="Monthly trend" mobile="cards" minWidth={420} rowKey={(m) => m.m} rows={[...months].reverse()}
                       columns={[
                         { key: 'month', header: 'Month', primary: true, render: (m) => m.label },
+                        ...(jmap ? [{ key: 'joined', header: 'Joined', numeric: true, render: (m: (typeof months)[number]) => num(m.joined) }] : []),
                         { key: 'resign', header: 'Resigned', numeric: true, render: (m) => num(m.resign) },
                         { key: 'term', header: 'Terminated', numeric: true, render: (m) => num(m.term) },
                         { key: 'other', header: 'Other', numeric: true, render: (m) => num(m.other) },
