@@ -228,6 +228,16 @@ public class CanonicalProdSecurityConfig {
                     "/v1/accounts/auth/google/callback",
                     "/v1/platform/auth/login"
                 ).permitAll()
+                // Server-to-server API for Marketing Automation (Node). It has no user
+                // JWT; MarketingServiceTokenFilter, which runs after this chain, refuses
+                // every request without the shared service token (and fails closed when
+                // none is configured). Not unprotected — gated one layer further in.
+                .requestMatchers("/v1/internal/**").permitAll()
+                // The UnifiedTree admin console (admin.unifiedtree.com). Outer layer;
+                // every controller method also checks @platformAdmin (platform-tenant
+                // token) and its own platform.* permission.
+                .requestMatchers("/v1/platform/admin", "/v1/platform/admin/**")
+                    .hasRole("PLATFORM_SUPER_ADMIN")
                 // Sign-up approval is for UnifiedTree's platform operators only.
                 // The controller also checks the token is a platform one
                 // (PlatformAdminAccess); this is the outer layer. Not all of

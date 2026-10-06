@@ -98,6 +98,28 @@ UPDATE platform.module_plans
    AND cardinality(included_modules) = 0
    AND EXISTS (SELECT 1 FROM platform.module_catalog WHERE key = 'whatsapp');
 
+-- Structured limits for what a plan allows (contacts, campaigns, agents, ...).
+-- module_plans.features is the website's bullet list, not machine-readable, so
+-- Marketing had nowhere in UnifiedTree to read "how many contacts may this
+-- company keep". Keys are Marketing's own vocabulary (see
+-- MARKETING_FEATURE_MAPPING.md); an absent key means "fall back to Marketing's
+-- legacy plan" during the migration, not "unlimited". A company row may
+-- override its plan's limits (e.g. a negotiated contract).
+ALTER TABLE platform.module_plans   ADD COLUMN IF NOT EXISTS limits JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE platform.company_modules ADD COLUMN IF NOT EXISTS limits JSONB;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_module_plans_limits_object') THEN
+        ALTER TABLE platform.module_plans
+            ADD CONSTRAINT ck_module_plans_limits_object CHECK (jsonb_typeof(limits) = 'object');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_company_modules_limits_object') THEN
+        ALTER TABLE platform.company_modules
+            ADD CONSTRAINT ck_company_modules_limits_object CHECK (limits IS NULL OR jsonb_typeof(limits) = 'object');
+    END IF;
+END $$;
+
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ut_app') THEN
