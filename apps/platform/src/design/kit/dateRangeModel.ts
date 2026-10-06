@@ -134,6 +134,15 @@ export function allowed(day: string, min?: string | null, max?: string | null): 
   return (!min || day >= min) && (!max || day <= max)
 }
 
+/**
+ * Whether `day` is in reach of a range at most `maxSpan` calendar days long: while only the start is tapped, a
+ * day further than that after it can't be the end (a day before it starts again, so it stays allowed).
+ */
+export function inReach(day: string, sel: DraftRange, maxSpan?: number): boolean {
+  if (!maxSpan || !sel.from || sel.to) return true
+  return day < sel.from || day <= shiftDay(sel.from, maxSpan - 1)
+}
+
 // ── presets ─────────────────────────────────────────────────────────────────
 
 export type PresetKey = 'today' | 'tomorrow' | 'restOfWeek' | 'nextWeek' | 'nextMonday'
@@ -198,6 +207,8 @@ export function datePresets(
 /** A quick pick for a calendar that only SHOWS dates (no working-day rule). */
 export interface ViewPreset {
   key: 'today' | 'thisWeek' | 'nextWeek' | 'thisMonth' | 'nextMonth' | 'next30'
+    // The admin dashboard's picks (modules/hrms/dashboard/dashboardRange.ts).
+    | 'yesterday' | 'lastWeek' | 'lastMonth'
   label: string
   from: string
   to: string

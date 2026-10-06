@@ -39,6 +39,7 @@ import { useEmployeeDirectory } from '../api/useWorkforce'
 import { headcountFileName, headcountSheets } from './headcountWorkbook'
 import { saveAndRecord, xlsxBlob } from '@/shared/export/fileExport'
 import { endOfIstDay, monthToDate, parseDashboardDate } from './dashboardDate'
+import { parseRangeFrom, periodLabel, pickToUrl, rangeRollNote, rangeTotals } from './dashboardRange'
 import { useInboxCounts } from './NeedsAction'
 import { AdminDashboard, type DashboardVm } from '@/design/dc/AdminDashboard'
 import {
@@ -49,7 +50,7 @@ import { useMyDay } from '../attendance/webpunch/useMyDay'
 import { WebPunchDialog } from '../attendance/webpunch/WebPunchDialog'
 
 /** The people figures (RollStats) come with hrms.employee.read; the month's joiners / leavers on a past day only. */
-interface Stats extends RollStats { openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string }
+interface Stats extends RollStats { joinedInPeriod?: number; leftInPeriod?: number; openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string }
 interface Alert { type: string; count: number; label: string; path: string }
 interface Notice { id: string; title: string; body: string; expiresOn?: string; createdAt: string }
 interface Project { id: string; name: string; status: string; total: number; completed: number }
@@ -77,12 +78,16 @@ export function AdminDashboardContainer() {
   const rawDate = params.get('date')
   const parsed = parseDashboardDate(rawDate, today)
   const date = parsed.date
-  const setDate = (iso: string | null) => setParams((prev) => {
+  // One day (?date=, none = today), or a range: ?from= its first day, ?date= its last (owner decision, 6 Oct).
+  const setRange = (from: string | null, iso: string | null) => setParams((prev) => {
     const next = new URLSearchParams(prev)
     if (iso && iso < today) next.set('date', iso)
     else next.delete('date')
+    if (from) next.set('from', from)
+    else next.delete('from')
     return next
   }, { replace: true })
+  const setDate = (iso: string | null) => setRange(null, iso)
   const futureNoted = useRef(false)
   useEffect(() => {
     if (!rawDate || date) return
@@ -96,6 +101,14 @@ export function AdminDashboardContainer() {
   }, [rawDate, date, parsed.future])
   const sel = date || today
   const isPast = !!date
+  // A range: its first day (null for one day). The cards add the period up; the rest of the page shows `sel`.
+  const rawFrom = params.get('from')
+  const rangeFrom = parseRangeFrom(rawFrom, sel)
+  useEffect(() => {
+    // A start that isn't a day before the end (or reaches too far back) is dropped or moved up in the URL.
+    if (rawFrom && rawFrom !== rangeFrom) setRange(rangeFrom, date)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawFrom, rangeFrom, date])
   /** `&date=` for the endpoints that take a past day; nothing for today's view (the same request as before). */
   const dq = isPast ? `&date=${sel}` : ''
   const [projectsOpen, setProjectsOpen] = useState(false)
@@ -154,7 +167,10 @@ export function AdminDashboardContainer() {
   const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast, { includeSelf: true })
   const trendPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'history', sel, 'self'], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${addDays(sel, -30)}&to=${sel}&includeLeavers=true&includeSelf=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
   const trend = isPast ? trendPast : trendToday
-  const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId, date], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}${dq}`), enabled: canReadCompany && !!companyId })
+  // A range: the period's per-day counts (the chart's own endpoint; people who left during it count on the days they worked).
+  const trendRange = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'range', rangeFrom, sel, 'self'], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${rangeFrom}&to=${sel}&includeLeavers=true&includeSelf=true`), enabled: canReadTeam && !!rangeFrom, staleTime: 60_000 })
+  // A range adds its first day: the end day's summary plus the period's joiners and leavers (a server without it ignores it).
+  const stats = useQuery({ queryKey: ['dashboard', 'summary', companyId, date, ...(rangeFrom ? ['from', rangeFrom] : [])], queryFn: () => apiJson<Stats>(`/v1/admin/dashboard/stats?companyId=${companyId}${dq}${rangeFrom ? `&from=${rangeFrom}` : ''}`), enabled: canReadCompany && !!companyId })
   // Total employees comes from the summary's headcount (rollTotal). Only a viewer who gets neither it nor the
   // headcount report (a server before the Home fix, today) falls back to the directory's count.
   const noRollTotal = !canReadCompany || (stats.isSuccess && stats.data?.headcount == null)
@@ -307,7 +323,7 @@ export function AdminDashboardContainer() {
         showTotal: canReadEmployees, showAtt: canReadTeam,
         total, totalLoading,
         // Who is confirmed, on probation and serving notice; a past date: the month's joiners and leavers (§5.5).
-        totalNote: rollNote(st, isPast, monthToDate(sel)),
+        totalNote: rangeFrom ? rangeRollNote(st, periodLabel(rangeFrom, sel), fmtShort(sel).slice(0, -5)) : rollNote(st, isPast, monthToDate(sel)),
         // Says why "scheduled" isn't Total employees when it isn't: people off that day, or the viewer's team only.
         presentNote: presentNote(c.present, sched, { total: canReadEmployees ? total : null, companyWide: canShiftAdmin, isPast }),
         leaveNote: `Approved leave · ${pctOf(c.onLeave, c.total)}%`,
@@ -315,6 +331,12 @@ export function AdminDashboardContainer() {
         spark: { present: series('present'), leave: series('onLeave'), late: series('late'), half: series('halfDay'), wfh: series('wfh'), none: isPast ? null : series('notMarked'), absent: series('absent') },
         sparkDot: dot,
       },
+      // ── a date range: the period's totals for the cards ──
+      range: rangeFrom ? {
+        from: rangeFrom, to: sel, period: periodLabel(rangeFrom, sel),
+        totals: trendRange.data ? rangeTotals(trendRange.data, rangeFrom, sel, today) : null,
+        loading: trendRange.isLoading, error: trendRange.error,
+      } : null,
       // ── quick actions, seats ──
       quick: qa.map((q) => ({ ...q, hint: hint[q.key], kind: kind[q.key] })),
       seats: canBilling && seatsData && seatsData.total > 0 ? seatsData : null,
@@ -358,13 +380,13 @@ export function AdminDashboardContainer() {
       activity: activityRows, activityLoading: activity.isLoading, activityError: activity.error,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [team.data, team.isLoading, team.error, trend.data, trend.isLoading, trend.error, directory.data, directory.isLoading, stats.data, stats.isLoading, alerts.data, seats.data, holidays.data, headcount.data, headcount.isLoading, headcount.error,
+  }, [rangeFrom, trendRange.data, trendRange.isLoading, trendRange.error, team.data, team.isLoading, team.error, trend.data, trend.isLoading, trend.error, directory.data, directory.isLoading, stats.data, stats.isLoading, alerts.data, seats.data, holidays.data, headcount.data, headcount.isLoading, headcount.error,
     performers.data, performers.isLoading, performers.error, onboarding.data, onboarding.isLoading, onboarding.error, hiring.data, hiring.isLoading, hiring.error, projects.data, projects.isLoading, projects.error,
     runs.data, runs.isLoading, runs.error, activity.data, activity.isLoading, activity.error, notices.data, notices.isLoading, notices.isError, probations.data, probations.isLoading, probations.error,
     inbox, sel, today, greetName, isPast, noticePage, noticePages, ctx, exporting, company, companiesLoading, punchMode])
 
   const refetch = {
-    live: () => { team.refetch(); trend.refetch(); directory.refetch() }, trend: () => trend.refetch(), notices: () => notices.refetch(), probations: () => probations.refetch(),
+    live: () => { team.refetch(); trend.refetch(); directory.refetch(); if (rangeFrom) trendRange.refetch() }, trend: () => trend.refetch(), notices: () => notices.refetch(), probations: () => probations.refetch(),
     dept: () => headcount.refetch(), performers: () => performers.refetch(), onboarding: () => onboarding.refetch(), hiring: () => hiring.refetch(),
     projects: () => projects.refetch(), payroll: () => runs.refetch(), activity: () => activity.refetch(),
   }
@@ -378,6 +400,7 @@ export function AdminDashboardContainer() {
         refetch={refetch}
         onNavigate={onNavigate}
         onDate={setDate}
+        onPick={(picked) => { const u = pickToUrl(picked, today); setRange(u.from, u.date) }}
         onPunch={setPunch}
         onExport={exportHeadcount}
         onNoticePage={setNoticePage}

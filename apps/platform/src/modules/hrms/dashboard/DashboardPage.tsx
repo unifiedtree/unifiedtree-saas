@@ -19,7 +19,8 @@ import type { DayBuckets } from '../attendance/attendanceBuckets'
 import type { StaffStatusResponse } from '../api/useAttendance'
 import type { UpcomingProbation } from '../api/useProbation'
 import { NeedsAction, type Inbox } from './NeedsAction'
-import { DateChipButton, PastBanner, SeatsStrip, TodayAttendance } from './OverviewBlocks'
+import { DateChipButton, PastBanner, RangeBanner, SeatsStrip, TodayAttendance } from './OverviewBlocks'
+import type { RangeTotals } from './dashboardRange'
 import { TrendCard } from './TrendCard'
 import { NoticesStrip, type NoticeVm } from './NoticesStrip'
 import { ProbationCard } from './ProbationCard'
@@ -46,6 +47,11 @@ export interface DashboardVm {
     total: number | null; totalLoading: boolean; totalNote: string; presentNote: string; leaveNote: string; lateNote: string
     spark: { present: Series; leave: Series; late: Series; half: Series; wfh: Series; none: Series; absent: Series }; sparkDot?: number
   }
+  /**
+   * A date range (from ?from= to the day shown): the stat cards add up the period. Null for one day, which
+   * behaves exactly as before. totals: null until the period's counts have loaded.
+   */
+  range: { from: string; to: string; period: string; totals: RangeTotals | null; loading: boolean; error: unknown } | null
   quick: { key: string; label: string; path: string; hint: string; kind?: QuickIconKind }[]
   /** soft: the server allows going over the seats; overNote: "N extra users will be billed…" when over. */
   seats: { used: number; total: number; soft?: boolean; overNote?: string | null } | null
@@ -78,6 +84,8 @@ export interface DashboardPageProps {
   refetch: Record<'live' | 'trend' | 'notices' | 'probations' | 'dept' | 'performers' | 'onboarding' | 'hiring' | 'projects' | 'payroll' | 'activity', () => void>
   onNavigate: (path: string) => void
   onDate: (iso: string | null) => void
+  /** The date picker's Apply: one day (from === to) or a range. */
+  onPick: (picked: { from: string; to: string }) => void
   /** Opens the web face punch (the container owns the dialog). */
   onPunch: (mode: 'in' | 'out') => void
   onExport: () => void
@@ -104,7 +112,7 @@ function useStuck() {
   return { sentinel, stuck }
 }
 
-export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, onExport, onNoticePage, onSaveNotice, onArchiveNotice, projectsOpen, onProjects }: DashboardPageProps) {
+export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPick, onPunch, onExport, onNoticePage, onSaveNotice, onArchiveNotice, projectsOpen, onProjects }: DashboardPageProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const pills = sectionPills(vm.sections)
   const ready = !vm.liveLoading && !vm.noticesLoading
@@ -145,8 +153,27 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
     s.showAtt && statCard({ label: 'Not marked', aniIcon: 'none', accent: 'none', value: liveDisabled ? null : c.notMarked, note: 'No punch recorded', spark: s.spark.none, sparkDot: s.sparkDot, onClick: () => go(att('NOT_MARKED')) }),
     s.showAtt && statCard({ label: 'Absence', aniIcon: 'absent', accent: 'absent', value: liveDisabled ? null : c.absent, note: 'Unplanned, no leave', spark: s.spark.absent, sparkDot: s.sparkDot, onClick: () => go(att('ABSENT')) }),
   ].filter(Boolean) as JSX.Element[]
+  // A range: the same cards, adding up the period (person-days), each note saying the period. No sparklines:
+  // the note then has the card's width, so the period is read whole.
+  const r = vm.range, rt = r?.totals
+  const rangeCards = r ? (() => {
+    const v = (n: number | undefined) => (r.error ? null : rt ? n ?? 0 : null)
+    const rangeLink = (status: string) => `/hrms/attendance?tab=team&status=${status}&date=${r.to}`
+    const loading = r.loading
+    return [
+      s.showTotal && statCard({ label: 'Total employees', aniIcon: 'users', accent: 'people', value: s.total, loading: s.totalLoading, note: s.totalNote, onClick: () => go('/hrms/employees') }),
+      s.showAtt && statCard({ label: 'Present days', aniIcon: 'present', accent: 'present', loading, value: v(rt?.present), note: rt ? `${rt.attendancePct}% attendance · ${r.period}` : r.period, onClick: () => go(rangeLink('PRESENT')) }),
+      s.showAtt && statCard({ label: 'Leave days', aniIcon: 'leave', accent: 'leave', loading, value: v(rt?.onLeave), note: `Approved leave · ${r.period}`, onClick: () => go(rangeLink('ON_LEAVE')) }),
+      s.showAtt && statCard({ label: 'Late arrivals', aniIcon: 'late', accent: 'late', loading, value: v(rt?.late), note: `After grace · ${r.period}`, onClick: () => go(rangeLink('LATE')) }),
+      s.showAtt && statCard({ label: 'Half days', aniIcon: 'half', accent: 'half', loading, value: v(rt?.halfDay), note: r.period, onClick: () => go(rangeLink('HALF_DAY')) }),
+      s.showAtt && statCard({ label: 'WFH days', aniIcon: 'wfh', accent: 'wfh', loading, value: v(rt?.wfh), note: `Work from home · ${r.period}`, onClick: () => go(rangeLink('WORK_FROM_HOME')) }),
+      s.showAtt && statCard({ label: 'Not marked', aniIcon: 'none', accent: 'none', loading, value: v(rt?.notMarked), note: `No punch yet · ${r.period}`, onClick: () => go(rangeLink('NOT_MARKED')) }),
+      s.showAtt && statCard({ label: 'Absences', aniIcon: 'absent', accent: 'absent', loading, value: v(rt?.absent), note: `Unplanned, no leave · ${r.period}`, onClick: () => go(rangeLink('ABSENT')) }),
+    ].filter(Boolean) as JSX.Element[]
+  })() : null
+  const shown = rangeCards ?? cards
   const pairs: JSX.Element[][] = []
-  for (let i = 0; i < cards.length; i += 2) pairs.push(cards.slice(i, i + 2))
+  for (let i = 0; i < shown.length; i += 2) pairs.push(shown.slice(i, i + 2))
 
   const showInbox = vm.canAtt || vm.canFix || vm.canLeave
   const showPeople = vm.sections.people, showHire = vm.sections.hiring, showPay = vm.sections.payroll
@@ -168,8 +195,7 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
         <section data-sec="overview" aria-label="Overview" className="ud-group">
           <PageHeader size="greeting" wave title={vm.greeting} sub={greetSub}
             actions={<>
-              <DateChipButton sel={sel} today={vm.today} daily={vm.daily} holidays={vm.holidays} onApply={onDate}
-                onOpenTracking={(iso) => go(`/hrms/attendance?tab=team&date=${iso}`)} />
+              <DateChipButton sel={sel} from={r?.from ?? null} today={vm.today} daily={vm.daily} holidays={vm.holidays} onApply={onPick} />
               {/* The viewer's own punch, as on Home at /me: this dashboard is their Home. */}
               {vm.punch === 'out' && <Button variant="secondary" size={46} icon="logOut" onClick={() => onPunch('out')}>Check out</Button>}
               {vm.punch === 'in' && <Button variant="secondary" size={46} icon="scanFace" onClick={() => onPunch('in')}>Check in</Button>}
@@ -177,12 +203,17 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
               {vm.addEmployee && <Button variant="primary" size={46} icon="userPlus" disabled={!!vm.addEmployee.disabledReason} title={vm.addEmployee.disabledReason ?? undefined}
                 onClick={() => go('/hrms/employees?add=1')}>Add employee</Button>}
             </>} />
-          {isPast && !liveDisabled && <PastBanner sel={sel} onBack={() => onDate(null)} />}
+          {r
+            ? <RangeBanner from={r.from} to={r.to} today={vm.today} onBack={() => onDate(null)} />
+            : isPast && !liveDisabled && <PastBanner sel={sel} onBack={() => onDate(null)} />}
+          {r && !!r.error && (
+            <div className="ud-past" role="alert"><span className="ud-past__txt">Couldn’t load the attendance for {r.period}.</span><Button size={32} onClick={refetch.live}>Try again</Button></div>
+          )}
           {liveDisabled && (
             <div className="ud-past" role="alert"><span className="ud-past__txt">Couldn’t load {day}’s attendance.</span><Button size={32} onClick={refetch.live}>Try again</Button></div>
           )}
           {pairs.length > 0 && (
-            <div className="ud-stats" role="group" aria-label={isToday ? 'Today at a glance' : `${fmtShort(sel)} at a glance`}>
+            <div className="ud-stats" role="group" aria-label={r ? `${r.period} at a glance` : isToday ? 'Today at a glance' : `${fmtShort(sel)} at a glance`}>
               {pairs.map((p, i) => <div key={i} className="ud-pair">{p}</div>)}
             </div>
           )}
