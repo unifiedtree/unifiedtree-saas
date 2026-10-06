@@ -10,17 +10,20 @@ import com.unifiedtree.saas.marketing.MarketingUsageService.UsageSummary;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -46,13 +49,16 @@ public class PlatformMarketingAdminController {
     private final MarketingUsageService usage;
     private final JdbcTemplate jdbc;
     private final PlatformAuditTrail audit;
+    private final MarketingAccessService access;
 
     public PlatformMarketingAdminController(PlatformDirectoryService directory, MarketingUsageService usage,
-                                            JdbcTemplate jdbc, PlatformAuditTrail audit) {
+                                            JdbcTemplate jdbc, PlatformAuditTrail audit,
+                                            MarketingAccessService access) {
         this.directory = directory;
         this.usage = usage;
         this.jdbc = jdbc;
         this.audit = audit;
+        this.access = access;
     }
 
     public record IdentityMapRow(UUID id, String kind, String legacyMarketingUserId, String legacyRole,
@@ -61,6 +67,8 @@ public class PlatformMarketingAdminController {
                                  String quarantineReason, Instant mappedAt, Instant createdAt) {}
 
     public record BillingModeRequest(@NotBlank String billingMode, BigDecimal monthlySpendLimit) {}
+
+    public record RetireRequest(@NotBlank String reason) {}
 
     /** Companies with Marketing switched on (any source), with channel counts. */
     @GetMapping("/companies")
@@ -107,6 +115,27 @@ public class PlatformMarketingAdminController {
                         ts(rs.getTimestamp("created_at"))),
                 pageArgs.toArray());
         return PageResult.of(rows, p, s, total == null ? 0 : total);
+    }
+
+    /**
+     * Retire an identity mapping: that Marketing user no longer stands for the company (owner) or person (member).
+     * For when Marketing lost the user (a database restore) or a link was wrong; the next Sign in with UnifiedTree then
+     * creates a fresh principal. Nothing is deleted, and a retired mapping is never re-pointed by the service.
+     */
+    @PostMapping("/identity-map/{id}/retire")
+    @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.marketing.manage')")
+    public Map<String, Object> retireMapping(@PathVariable UUID id, @Valid @RequestBody RetireRequest req,
+                                             @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
+        String reason = req.reason().strip();
+        if (reason.length() < 5) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reason must be at least 5 characters");
+        }
+        // The write runs in the service's transaction (a bare JdbcTemplate update here would never commit)
+        Map<String, Object> row = access.retireMapping(id);
+        audit.record(Operator.of(jwt), http, "MARKETING_IDENTITY_RETIRED", "marketing_identity", id,
+                "%s mapping of Marketing user %s (company %s) retired. Reason: %s".formatted(
+                        row.get("kind"), row.get("legacy_marketing_user_id"), row.get("company_id"), reason));
+        return Map.of("id", id, "status", "RETIRED");
     }
 
     @GetMapping("/channels")

@@ -274,6 +274,25 @@ public class MarketingAccessService {
     }
 
     /**
+     * Retire an identity mapping (operator action). Returns the retired row's kind, Mongo user and company; 404 when
+     * the mapping does not exist, 409 when it is already retired.
+     */
+    @Transactional
+    public Map<String, Object> retireMapping(UUID mappingId) {
+        List<Map<String, Object>> retired = jdbc.queryForList("""
+                UPDATE platform.marketing_identity_map SET status = 'RETIRED', updated_at = now()
+                 WHERE id = ? AND status <> 'RETIRED'
+                RETURNING kind, legacy_marketing_user_id, company_id
+                """, mappingId);
+        if (!retired.isEmpty()) return retired.get(0);
+        Integer exists = jdbc.queryForObject(
+                "SELECT count(*) FROM platform.marketing_identity_map WHERE id = ?", Integer.class, mappingId);
+        throw exists != null && exists > 0
+                ? new ResponseStatusException(HttpStatus.CONFLICT, "That mapping is already retired")
+                : new ResponseStatusException(HttpStatus.NOT_FOUND, "Mapping not found");
+    }
+
+    /**
      * The workspace user an account acts as in one workspace (audit.events records actors by that id), or null when
      * the account is not an active member there. platform.account_workspaces has no RLS.
      */

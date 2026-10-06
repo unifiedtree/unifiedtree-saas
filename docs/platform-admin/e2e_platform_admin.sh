@@ -202,6 +202,19 @@ req PUT /v1/internal/marketing/principals "{\"kind\":\"COMPANY_OWNER\",\"legacyM
 expect "a second, different owner for the same company -> 409" 409
 req PUT /v1/internal/marketing/principals "{\"kind\":\"COMPANY_OWNER\",\"legacyMarketingUserId\":\"65a1b2c3d4e5f60718293a4b\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A2\"}" "$ST"
 expect "re-pointing a mapped Marketing user to another company -> 409" 409
+req GET "/v1/platform/admin/marketing/identity-map?status=MAPPED&tenantId=$TENANT_DEMO" "" "$OPS"
+expect "operator sees the owner mapping" 200 "any(r['legacyMarketingUserId']=='65a1b2c3d4e5f60718293a4b' for r in j['content'])"
+MAP_ID=$(jget "[r['id'] for r in j['content'] if r['legacyMarketingUserId']=='65a1b2c3d4e5f60718293a4b'][0]")
+req POST "/v1/platform/admin/marketing/identity-map/$MAP_ID/retire" '{"reason":""}' "$OPS"
+expect "retiring a mapping without a reason -> 400" 400
+req POST "/v1/platform/admin/marketing/identity-map/$MAP_ID/retire" '{"reason":"Marketing database restored; owner user lost"}' "$OPS"
+expect "operator retires the owner mapping" 200 "j['status']=='RETIRED'"
+req POST "/v1/platform/admin/marketing/identity-map/$MAP_ID/retire" '{"reason":"second attempt"}' "$OPS"
+expect "retiring it again -> 409" 409
+req PUT /v1/internal/marketing/principals "{\"kind\":\"COMPANY_OWNER\",\"legacyMarketingUserId\":\"65a1b2c3d4e5f60718293a4c\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ST"
+expect "after retirement a fresh owner principal can be recorded (recovery path)" 200 "j['companyOwnerLegacyUserId']=='65a1b2c3d4e5f60718293a4c'"
+req PUT /v1/internal/marketing/principals "{\"kind\":\"COMPANY_OWNER\",\"legacyMarketingUserId\":\"65a1b2c3d4e5f60718293a4b\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ST"
+expect "the retired Marketing user is never re-pointed by the service -> 409 PRINCIPAL_HELD" 409 "'PRINCIPAL_HELD' in raw"
 req POST /v1/internal/marketing/channels "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"wabaId\":\"104000000000001\",\"displayName\":\"Demo WABA\"}" "$ST"
 expect "WABA registered to A1 (DIRECT_CUSTOMER)" 200 "j['billingMode']=='DIRECT_CUSTOMER'"
 CH=$(jget "j['id']")
