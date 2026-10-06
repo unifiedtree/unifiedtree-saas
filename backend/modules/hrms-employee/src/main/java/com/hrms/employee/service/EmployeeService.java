@@ -228,7 +228,7 @@ public class EmployeeService {
             employee.setJobTitle(request.jobTitle());
         }
         if (request.employmentType() != null) {
-            employee.setEmploymentType(request.employmentType());
+            employee.setEmploymentType(request.employmentType().name());
         }
         if (request.workLocation() != null) {
             employee.setWorkLocation(request.workLocation());

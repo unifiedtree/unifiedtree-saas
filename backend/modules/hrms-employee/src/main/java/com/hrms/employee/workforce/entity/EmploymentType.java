@@ -1,6 +1,8 @@
 package com.hrms.employee.workforce.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hrms.core.entity.BaseEntity;
+import com.hrms.employee.workforce.service.EmploymentTypeCodes;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -28,4 +30,14 @@ public class EmploymentType extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
+
+    /**
+     * One of the five defaults every company has (by code, decision 6 Oct 2026): it can't be removed,
+     * renamed, re-coded or switched off. Not a column; read-only in the JSON ("builtIn").
+     */
+    @Transient
+    @JsonProperty(value = "builtIn", access = JsonProperty.Access.READ_ONLY)
+    public boolean isBuiltIn() {
+        return EmploymentTypeCodes.isDefault(code);
+    }
 }

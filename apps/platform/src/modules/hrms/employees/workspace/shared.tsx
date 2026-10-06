@@ -116,7 +116,8 @@ export const workSchema = z.object({
   designationId:      z.string().optional(),
   branchId:           z.string().optional(),
   reportingManagerId: z.string().optional(),
-  employmentType:     z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT']).optional(),
+  // A default code or the company's own type's code (6 Oct 2026); the server checks it against the company's types.
+  employmentType:     z.string().max(30).optional(),
   // ctcAnnual accepts three shapes cleanly: undefined (field never touched),
   // "" (admin cleared it — treat as undefined), and a positive number. The
   // previous z.coerce.number().positive().optional() rejected "" because

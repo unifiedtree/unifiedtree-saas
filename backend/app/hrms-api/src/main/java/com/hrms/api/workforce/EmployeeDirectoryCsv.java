@@ -43,7 +43,7 @@ final class EmployeeDirectoryCsv {
                     nz(e.employeeCode()), nz(e.firstName()), nz(e.lastName()), nz(e.email()), nz(e.phone()),
                     name(departments, e.departmentId()), name(designations, e.designationId()),
                     name(branches, e.branchId()), name(managers, e.reportingManagerId()),
-                    e.employmentType() == null ? "" : e.employmentType().name(),
+                    nz(e.employmentType()),
                     e.employmentStatus() == null ? "" : e.employmentStatus().name(),
                     nz(e.dateOfJoining()), nz(e.probationEndDate()), nz(e.noticeStartDate()), nz(e.lastWorkingDay()))));
         }

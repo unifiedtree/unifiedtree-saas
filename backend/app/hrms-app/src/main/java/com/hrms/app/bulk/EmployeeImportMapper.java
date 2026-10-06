@@ -331,7 +331,7 @@ public final class EmployeeImportMapper {
                 null,                           // geoFenceZoneId
                 null,                           // weeklyOffDays: the company's
                 managerId,                      // null = the department's head
-                type,
+                type.name(),
                 joined,
                 null,                           // ctcAnnual
                 pan,

@@ -807,8 +807,10 @@ public class WorkforceController {
     // -- Employment types ----------------------------------------------------
     @GetMapping("/employment-types")
     @PreAuthorize("isAuthenticated()")
-    public List<EmploymentType> listEmploymentTypes(@RequestParam UUID companyId) {
-        return employmentTypes.listForCompany(companyId);
+    public List<EmploymentType> listEmploymentTypes(@RequestParam UUID companyId,
+                                                    @RequestParam(defaultValue = "false") boolean includeInactive) {
+        // includeInactive (6 Oct 2026): Master's list also shows the switched-off ones, to switch them on again.
+        return employmentTypes.listForCompany(companyId, includeInactive);
     }
 
     @PostMapping("/employment-types")

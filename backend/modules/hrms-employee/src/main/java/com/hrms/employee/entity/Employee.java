@@ -2,7 +2,6 @@ package com.hrms.employee.entity;
 
 import com.hrms.core.entity.BaseEntity;
 import com.hrms.core.enums.EmploymentStatus;
-import com.hrms.employee.enums.EmploymentType;
 import com.hrms.employee.enums.Gender;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -83,9 +82,10 @@ public class Employee extends BaseEntity {
     @Column(name = "job_title", length = 150)
     private String jobTitle;
 
-    @Enumerated(EnumType.STRING)
+    // A plain code (6 Oct 2026): a company's own employment type code must load here too, not only
+    // the enum's names, or reading such a person through this legacy entity would fail.
     @Column(name = "employment_type", length = 30)
-    private EmploymentType employmentType;
+    private String employmentType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "employment_status", nullable = false, length = 30)

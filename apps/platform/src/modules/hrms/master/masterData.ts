@@ -25,6 +25,13 @@ export type Rec = Record<string, any> & { _key?: string }
 // ── labels and looks ─────────────────────────────────────────────────────────
 export const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full-time', PART_TIME: 'Part-time', INTERN: 'Intern', CONTRACT: 'Contract', CONSULTANT: 'Consultant' }
 export const TYPE_CODE: Record<string, string> = Object.fromEntries(Object.entries(TYPE_LABEL).map(([k, v]) => [v, k]))
+/** The five default employment types every company has (owner decision 6 Oct 2026): they can't be removed, renamed or switched off. */
+export const DEFAULT_TYPE_CODES = Object.keys(TYPE_LABEL)
+export const isDefaultType = (t: { code?: string | null; builtIn?: boolean } | null | undefined) =>
+  !!t && (t.builtIn ?? DEFAULT_TYPE_CODES.includes(String(t.code || '').trim().toUpperCase()))
+/** A person's employment type as pages show it: a default's own label, else the company type's name (`nameOf`), else the code tidied. */
+export const typeLabel = (code?: string | null, nameOf?: (code: string) => string | undefined) =>
+  (!code ? '' : TYPE_LABEL[code] || nameOf?.(code) || pretty(code))
 const STATUS_LABEL: Record<string, string> = { ACTIVE: 'Active', PROBATION: 'Probation', NOTICE_PERIOD: 'On notice', EXITED: 'Exited', TERMINATED: 'Exited', SUSPENDED: 'Suspended' }
 /** "GENERAL" → "General"; anything already in mixed case is left alone. */
 export const pretty = (s?: string | null) => (!s ? '' : s === s.toUpperCase() ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ') : s)
@@ -76,7 +83,9 @@ const pctText = (n?: number | null) => (n == null ? '—' : `${+Number(n).toFixe
 const months = (n?: number | null) => (n == null ? '—' : n === 0 ? 'None' : n === 1 ? '1 month' : `${n} months`)
 
 // ── records ──────────────────────────────────────────────────────────────────
-export function employeeRec(e: WorkforceEmployee, gradeOfDesig: Map<string, string>, shiftOf: Map<string, string>): Rec {
+/** `typeName(company, code)`: the name of a company's own employment type (6 Oct 2026), for its people's `type`. */
+export function employeeRec(e: WorkforceEmployee, gradeOfDesig: Map<string, string>, shiftOf: Map<string, string>,
+  typeName?: (co: string, code: string) => string | undefined): Rec {
   const first = e.firstName || '', last = e.lastName || ''
   const name = [first, e.middleName, last].filter(Boolean).join(' ') || e.employeeCode || 'Employee'
   const st = e.employmentStatus || 'ACTIVE'
@@ -84,7 +93,7 @@ export function employeeRec(e: WorkforceEmployee, gradeOfDesig: Map<string, stri
   return {
     _key: e.id, _raw: e, id: e.id, code: e.employeeCode || '—', name, first, last,
     desig: e.designationId || '', dept: e.departmentId || '', grade: (e.designationId && gradeOfDesig.get(e.designationId)) || '',
-    branch: e.branchId || '', co: e.companyId, type: TYPE_LABEL[e.employmentType || ''] || pretty(e.employmentType) || 'Full-time',
+    branch: e.branchId || '', co: e.companyId, type: typeLabel(e.employmentType, typeName && ((c) => typeName(e.companyId, c))) || 'Full-time',
     joined: e.dateOfJoining || '', status: STATUS_LABEL[st] || pretty(st), statusLabel: st === 'TERMINATED' ? 'Terminated' : undefined,
     lwd: out ? '' : e.lastWorkingDay || '', exitOn: out ? e.lastWorkingDay || '' : '',
     email: e.email || '', phone: e.phone || '', shift: shiftOf.get(e.id) || '', mgrId: e.reportingManagerId || '', probEnd: e.probationEndDate || '',
@@ -147,7 +156,8 @@ export function classRec(t: EmploymentTypeRecord, hr: HrConfigResponse | null | 
   return {
     _key: t.id, _raw: t, id: t.id, code: t.code || '', name: t.name, desc: '', sub, type: TYPE_LABEL[t.code || ''] || t.name,
     probation: months(hr?.probationPeriodMonths), notice: hr?.defaultNoticePeriodDays ?? null, pf: null, esi: null, gratuity: null, leave: 'All leave types',
-    status: t.active === false ? 'Inactive' : 'Active', t: tone, icon, system: !!t.system, co: t.companyId,
+    // The five defaults (by code) are locked; a company's own types can be edited and switched off.
+    status: t.active === false ? 'Inactive' : 'Active', t: tone, icon, system: isDefaultType(t) || !!t.system, co: t.companyId,
   }
 }
 

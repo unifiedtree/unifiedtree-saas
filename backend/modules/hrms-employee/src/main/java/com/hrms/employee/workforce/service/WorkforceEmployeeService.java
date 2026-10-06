@@ -513,8 +513,9 @@ public class WorkforceEmployeeService {
         // selected department's head. The client no longer ships a chip picker;
         // the rule "you report to the head of your department" is canonical.
         e.setReportingManagerId(resolveReportingManager(req.reportingManagerId(), req.departmentId()));
-        e.setEmploymentType(req.employmentType() != null
-                ? req.employmentType() : WorkforceEmployee.EmploymentType.FULL_TIME);
+        // Any active employment type of the company (6 Oct 2026), or one of the five defaults; none = Full-time.
+        String type = EmploymentTypeCodes.resolveForEmployee(jdbc, req.companyId(), req.employmentType(), null);
+        e.setEmploymentType(type != null ? type : EmploymentTypeCodes.FULL_TIME);
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.PROBATION);
         e.setDateOfJoining(req.dateOfJoining());
         // Default probation (HR Configuration → Probation → Default probation):
@@ -568,6 +569,8 @@ public class WorkforceEmployeeService {
             if (EmployeeContactGuard.isEmailIndexViolation(ex)) {
                 throw new EmailAlreadyUsedException(EmployeeContactGuard.GENERIC_EMAIL_MESSAGE);
             }
+            // A company's own type before V143_104 dropped the five-codes-only check: a clear message, not a 500.
+            if (EmploymentTypeCodes.isOldCheckViolation(ex)) throw EmploymentTypeCodes.notReady();
             throw ex;
         }
     }
@@ -607,7 +610,10 @@ public class WorkforceEmployeeService {
             }
         }
         if (req.reportingManagerId() != null) e.setReportingManagerId(req.reportingManagerId());
-        if (req.employmentType()   != null) e.setEmploymentType(req.employmentType());
+        if (req.employmentType()   != null) {
+            String type = EmploymentTypeCodes.resolveForEmployee(jdbc, e.getCompanyId(), req.employmentType(), e.getEmploymentType());
+            if (type != null) e.setEmploymentType(type);
+        }
         if (req.employmentStatus() != null) e.setEmploymentStatus(req.employmentStatus());
         if (req.dateOfJoining()    != null) e.setDateOfJoining(req.dateOfJoining());
         if (req.probationEndDate() != null) e.setProbationEndDate(req.probationEndDate());

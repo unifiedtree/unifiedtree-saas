@@ -254,7 +254,7 @@ public final class WorkforceDtos {
             UUID branchId,
             UUID geoFenceZoneId,
             UUID reportingManagerId,
-            WorkforceEmployee.EmploymentType employmentType,
+            String employmentType,    // an employment type code of the company (6 Oct 2026: not only the five defaults)
             WorkforceEmployee.EmploymentStatus employmentStatus,
             LocalDate dateOfJoining,
             LocalDate probationEndDate,
@@ -314,7 +314,7 @@ public final class WorkforceDtos {
             UUID geoFenceZoneId,
             String weeklyOffDays,
             UUID reportingManagerId,
-            WorkforceEmployee.EmploymentType employmentType,
+            String employmentType,    // an employment type code of the company (6 Oct 2026: not only the five defaults)
             LocalDate dateOfJoining,
             BigDecimal ctcAnnual,
             // identity
@@ -433,7 +433,7 @@ public final class WorkforceDtos {
             UUID branchId,
             UUID geoFenceZoneId,
             UUID reportingManagerId,
-            WorkforceEmployee.EmploymentType employmentType,
+            String employmentType,    // an employment type code of the company (6 Oct 2026: not only the five defaults)
             WorkforceEmployee.EmploymentStatus employmentStatus,
             LocalDate dateOfJoining,
             LocalDate probationEndDate,

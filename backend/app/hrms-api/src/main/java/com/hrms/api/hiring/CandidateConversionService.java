@@ -74,12 +74,12 @@ public class CandidateConversionService {
         return new String[] {parts[0], String.join(" ", Arrays.copyOfRange(parts, 1, parts.length))};
     }
 
-    /** Requisition employment type is free text ("Full-time", "FULL_TIME"); unknown values stay unset. */
-    static WorkforceEmployee.EmploymentType employmentType(String raw) {
+    /** Requisition employment type is free text ("Full-time", "FULL_TIME"): a default code; unknown values stay unset. */
+    static String employmentType(String raw) {
         if (raw == null || raw.isBlank()) return null;
         String key = raw.trim().toUpperCase(Locale.ROOT).replaceAll("[\\s-]+", "_");
         for (WorkforceEmployee.EmploymentType t : WorkforceEmployee.EmploymentType.values()) {
-            if (t.name().equals(key)) return t;
+            if (t.name().equals(key)) return t.name();
         }
         return null;
     }

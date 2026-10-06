@@ -20,9 +20,9 @@ class CandidateConversionServiceTest {
 
     @Test
     void mapsRequisitionEmploymentTypeLeniently() {
-        assertEquals(WorkforceEmployee.EmploymentType.FULL_TIME, CandidateConversionService.employmentType("Full-time"));
-        assertEquals(WorkforceEmployee.EmploymentType.FULL_TIME, CandidateConversionService.employmentType("FULL_TIME"));
-        assertEquals(WorkforceEmployee.EmploymentType.INTERN, CandidateConversionService.employmentType("intern"));
+        assertEquals(WorkforceEmployee.EmploymentType.FULL_TIME.name(), CandidateConversionService.employmentType("Full-time"));
+        assertEquals(WorkforceEmployee.EmploymentType.FULL_TIME.name(), CandidateConversionService.employmentType("FULL_TIME"));
+        assertEquals(WorkforceEmployee.EmploymentType.INTERN.name(), CandidateConversionService.employmentType("intern"));
         assertNull(CandidateConversionService.employmentType("Freelance"));
         assertNull(CandidateConversionService.employmentType(null));
     }

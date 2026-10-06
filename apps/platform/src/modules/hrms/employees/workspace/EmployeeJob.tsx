@@ -128,9 +128,9 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
             <label className="block text-[13px] font-semibold text-text-primary mb-1">Employment Type</label>
             <select {...register('employmentType')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
               <option value="">— None —</option>
-              {/* Only real backend enum codes — a custom/lookup code would 400 on save. */}
+              {/* The company's active types: the five defaults and its own (6 Oct 2026: the server checks the code). */}
               {empTypes
-                .filter((t) => t.active && t.code && ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'].includes(t.code))
+                .filter((t) => t.active && t.code)
                 .map((t) => <option key={t.id} value={t.code!}>{t.name}</option>)}
             </select>
           </div>

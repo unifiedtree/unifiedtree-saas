@@ -215,9 +215,9 @@ class EmployeeImportMapperTest {
         var mapped = map(future, blank);
         assertThat(mapped).hasSize(2);
         assertThat(mapped.get(0).request().dateOfJoining()).isEqualTo(LocalDate.of(2030, 1, 15));
-        assertThat(mapped.get(0).request().employmentType()).isEqualTo(WorkforceEmployee.EmploymentType.CONSULTANT);
+        assertThat(mapped.get(0).request().employmentType()).isEqualTo(WorkforceEmployee.EmploymentType.CONSULTANT.name());
         assertThat(mapped.get(1).request().dateOfJoining()).isEqualTo(LocalDate.now(ZoneId.of("Asia/Kolkata")));
-        assertThat(mapped.get(1).request().employmentType()).isEqualTo(WorkforceEmployee.EmploymentType.FULL_TIME);
+        assertThat(mapped.get(1).request().employmentType()).isEqualTo(WorkforceEmployee.EmploymentType.FULL_TIME.name());
     }
 
     @Test
