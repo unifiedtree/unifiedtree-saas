@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAccessToken } from '@unifiedtree/sdk'
-import { apiJson, API_BASE_URL } from '@/core/api/client'
+import { apiJson, API_BASE_URL, HttpError } from '@/core/api/client'
+import { prepareImage, uploadRecordImage } from '@/modules/hrms/api/useRecordImages'
 
 /**
  * The signed-in user, as the backend describes them at /v1/users/me.
@@ -109,11 +110,31 @@ export function useUpdateCurrentUser() {
  * We deliberately bypass {@link apiJson} — that helper stringifies bodies as
  * JSON, but a multipart request must NOT set Content-Type manually (the
  * browser needs to add the boundary).
+ *
+ * w43 (V143.102): someone with an employee record uploads to their employee
+ * photo instead (POST /v1/hrms/employees/{id}/photo, stored by the server, no
+ * R2 needed), so the same photo shows on their profile, in the directory, team
+ * lists and the header. A server without that endpoint (404, or
+ * FEATURE_NOT_READY before the migration) falls back to the old upload below.
  */
 export function useUploadAvatar() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (file: File) => {
+      const employeeId = qc.getQueryData<CurrentUser>(CURRENT_USER_KEY)?.employeeId
+      if (employeeId) {
+        // A picture this browser can't redraw (HEIC outside Safari) goes the old way below.
+        const blob = await prepareImage(file, 'photo').catch(() => null)
+        if (blob) {
+          try {
+            return { avatarUrl: await uploadRecordImage('employee', employeeId, blob) as string | null }
+          } catch (e) {
+            const notThere = e instanceof HttpError && (e.status === 404 || (e.payload as { errorCode?: string; code?: string } | undefined)?.errorCode === 'FEATURE_NOT_READY'
+              || (e.payload as { code?: string } | undefined)?.code === 'FEATURE_NOT_READY')
+            if (!notThere) throw e
+          }
+        }
+      }
       const form = new FormData()
       form.append('file', file)
       const bearer = getAccessToken()

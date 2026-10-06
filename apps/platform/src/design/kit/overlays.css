@@ -443,6 +443,7 @@
   display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600;
 }
 .uko-appr-av[data-size="lg"] { width: 42px; height: 42px; font-size: 13px; }
+.uko-appr-img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .uko-appr-main { flex: 1; min-width: 0; }
 .uko-appr-name { display: block; font-size: 14px; font-weight: 500; line-height: 1.35; }
 .uko-appr-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; border-radius: 4px; }

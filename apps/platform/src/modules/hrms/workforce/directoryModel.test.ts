@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Rec } from '../master/masterData'
 import {
-  bulkStatusTargets, deptOptions, deptScope, exitChange, filterEmployees, sortEmployees, statusOptions, suggestedLastDay, tenure, typeOptions,
+  agencyIsRequired, bulkStatusTargets, deptOptions, deptScope, desigOptions, startType, exitChange, filterEmployees, sortEmployees, statusOptions, suggestedLastDay, tenure, typeOptions,
   type DirectoryFilter, type Lookups,
 } from './directoryModel'
 
@@ -41,6 +41,11 @@ describe('filterEmployees', () => {
     expect(names(filterEmployees(E, { ...none, status: 'Exited' }, look))).toEqual(['Mohammed Arif'])
     expect(names(filterEmployees(E, { ...none, branch: 'b2', type: 'Full-time' }, look))).toEqual(['Ananya Iyer'])
   })
+  it('designation narrows to the people with that title, with the other filters', () => {
+    expect(names(filterEmployees(E, { ...none, desig: 'se' }, look))).toEqual(['Priya Sharma', 'Rahul Kumar'])
+    expect(names(filterEmployees(E, { ...none, desig: 'se', dept: 'web' }, look))).toEqual(['Rahul Kumar'])
+    expect(names(filterEmployees(E, { ...none, desig: 'hrg', status: 'Active' }, look))).toEqual([])
+  })
   it('a milestone shows only the people the server picked, nobody while loading', () => {
     expect(names(filterEmployees(E, { ...none, milestone: { on: true, ids: new Set(['2']) } }, look))).toEqual(['Rahul Kumar'])
     expect(filterEmployees(E, { ...none, milestone: { on: true, ids: null } }, look)).toHaveLength(0)
@@ -62,7 +67,17 @@ describe('options', () => {
     expect(o.map((x) => x.value)).toEqual(['Active', 'Probation', 'On notice', 'Exited', 'Suspended', 'Terminated'])
     expect(o.find((x) => x.value === 'Suspended')?.count).toBe(0)
   })
-  it('types: the base three plus the ones on records', () => expect(typeOptions(E)).toEqual(['Full-time', 'Part-time', 'Intern', 'Contract']))
+  it('types come from the data: active employment types, then any other type on a record — no fixed list', () => {
+    const classes: Rec[] = [{ type: 'Full-time', status: 'Active' }, { type: 'Consultant', status: 'Active' }, { type: 'Apprentice', status: 'Active' }, { type: 'Part-time', status: 'Inactive' }]
+    expect(typeOptions(E, classes)).toEqual(['Full-time', 'Consultant', 'Apprentice', 'Intern', 'Contract'])
+    expect(typeOptions(E)).toEqual(['Full-time', 'Intern', 'Contract'])
+  })
+  it('designations: all by name, or those of the chosen department (and its sub-departments)', () => {
+    const ds: Rec[] = [{ id: 'se', name: 'Software Engineer', dept: 'eng' }, { id: 'fe', name: 'Frontend Dev', dept: 'web' }, { id: 'hrg', name: 'HR Generalist', dept: 'hr' }, { id: 'in', name: 'Intern', dept: '' }]
+    expect(desigOptions(ds, depts, '').map((o) => o.label)).toEqual(['Frontend Dev', 'HR Generalist', 'Intern', 'Software Engineer'])
+    expect(desigOptions(ds, depts, 'eng').map((o) => o.value)).toEqual(['fe', 'in', 'se'])
+    expect(desigOptions(ds, depts, 'eng').find((o) => o.value === 'fe')?.sub).toBe('Web')
+  })
   it('departments: each parent followed by its children', () => expect(deptOptions(depts).map((d) => d.label)).toEqual(['Engineering', 'Web', 'People']))
 })
 
@@ -84,5 +99,27 @@ describe('status changes', () => {
     expect(tenure('2026-10-01', today)).toBe('Joined this month')
     expect(tenure('2024-07-01', today)).toBe('2 yr 3 mo')
     expect(tenure('', today)).toBe('—')
+  })
+})
+
+describe('Add employee: employment type and staffing agency (w43)', () => {
+  const base = { showAgency: true, canAgency: true, contractType: 'Contract' }
+  it('a contract worker needs their agency on Add', () => {
+    expect(agencyIsRequired({ ...base, type: 'Contract', isEdit: false })).toBe(true)
+    expect(agencyIsRequired({ ...base, type: 'Full-time', isEdit: false })).toBe(false)
+  })
+  it('on Edit only when the type changes to Contract', () => {
+    expect(agencyIsRequired({ ...base, type: 'Contract', isEdit: true, wasType: 'Full-time' })).toBe(true)
+    expect(agencyIsRequired({ ...base, type: 'Contract', isEdit: true, wasType: 'Contract' })).toBe(false)
+  })
+  it('not for someone who can’t see or link agencies', () => {
+    expect(agencyIsRequired({ ...base, showAgency: false, type: 'Contract', isEdit: false })).toBe(false)
+    expect(agencyIsRequired({ ...base, canAgency: false, type: 'Contract', isEdit: false })).toBe(false)
+  })
+  it('a new person starts as the company’s Full-time, else its first type', () => {
+    expect(startType(['Consultant', 'Contract', 'Full-time', 'Intern'], 'Full-time')).toBe('Full-time')
+    expect(startType(['Consultant', 'Contract', 'Intern'], 'Full-time')).toBe('Consultant')
+    expect(startType(['Contract', 'Full-time'], 'Contract')).toBe('Contract')
+    expect(startType([], 'Full-time')).toBe('Full-time')
   })
 })

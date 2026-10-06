@@ -1,0 +1,14 @@
+/* ImagePicker: a preview beside its buttons, vertically centred; the buttons wrap on a phone. */
+.wf-imgpick { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.wf-imgpick__main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wf-imgpick__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wf-imgpick__hint { font-size: 12.5px; line-height: 1.45; color: var(--text-tertiary); }
+.wf-imgpick .uk-av { flex-shrink: 0; }
+.wf-imgpick .uk-av--square .uk-av__img { object-fit: contain; background: #fff; } /* logos are drawn for white, in both themes */
+
+/* PhotoEditButton: a 28px round button on the photo's lower left (the checked-in dot is on the right), its icon centred. */
+.wf-photo-btn { position: absolute; left: -2px; bottom: -2px; width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 2px solid var(--bg-surface, #fff); background: var(--accent-solid, #0F6E56); color: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(15, 30, 24, .18); }
+.wf-photo-btn:hover { filter: brightness(1.08); }
+.wf-photo-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.wf-photo-btn svg { display: block; }

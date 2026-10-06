@@ -301,9 +301,10 @@
 .utm .mix span:first-child{border-radius:99px 3px 3px 99px}
 .utm .mix span:last-child{border-radius:3px 99px 99px 3px}
 .utm .legend{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:16px}
-.utm .lg{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);font-weight:500}
-.utm .lg i{width:10px;height:10px;border-radius:3px;background:var(--ts)}
-.utm .lg b{color:var(--text-primary);font-weight:700}
+/* Scoped to .legend: a bare .lg also matched ".tile lg" and turned the big tiles into flex rows, so their icon or initials sat at the left (w43). */
+.utm .legend .lg{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);font-weight:500}
+.utm .legend .lg i{width:10px;height:10px;border-radius:3px;background:var(--ts)}
+.utm .legend .lg b{color:var(--text-primary);font-weight:700}
 .utm .tree{display:flex;align-items:center;gap:10px;min-width:0}
 .utm .tw{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;border:0;background:transparent;color:var(--text-tertiary);cursor:pointer;flex-shrink:0;padding:0}
 .utm .tw:hover{background:var(--bg-subtle);color:var(--text-primary)}
@@ -380,3 +381,15 @@
 .utm .toast .ti.err{background:#ef4444}
 /* Real names can be long: the person column truncates (as .who intends) instead of widening the table. */
 .utm .t td .who{max-width:320px}
+/* w43: a branch / agency logo in its tile (contained, on a white plate in both themes: logos are drawn for white), the agency card's workers count
+   as a button that opens the workers panel, and that panel's rows. */
+.utm .tile.logo,.drawer .tile.logo{background:#fff;border:1px solid var(--border-subtle);overflow:hidden;padding:3px}
+.utm .tile.logo img,.drawer .tile.logo img{display:block;width:100%;height:100%;object-fit:contain;border-radius:inherit}
+.utm .cc-crew{display:grid;grid-template-columns:auto auto;align-items:end;justify-content:start;column-gap:4px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:8px}
+.utm .cc-crew b{grid-column:1/-1;display:block;font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1;color:var(--text-primary)}
+.utm .cc-crew span{font-size:12.5px;color:var(--text-tertiary);font-weight:600;line-height:18px}
+.utm .cc-crew svg{color:var(--text-tertiary);align-self:center}
+.utm .cc-crew:hover span,.utm .cc-crew:hover svg{color:var(--accent-fg)}
+.utm .cc-crew:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft,rgba(15,110,86,.18))}
+.drawer .ov-links.crew .ov-l{gap:12px}
+.drawer .ov-links.crew .ov-l .n{margin-left:auto}

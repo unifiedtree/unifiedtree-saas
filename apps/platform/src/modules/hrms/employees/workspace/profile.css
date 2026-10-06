@@ -73,15 +73,16 @@
 .upf-banner-ok { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); font-size: 13.5px; font-weight: 500; }
 .upf-banner-warn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--u-gds, #FAF1E1); color: var(--u-gdt, #8A5A10); font-size: 13.5px; font-weight: 500; }
 .upf-attn { display: flex; flex-direction: column; }
-.upf-attn__row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; flex-wrap: wrap; }
+.upf-attn__row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: 12px; flex-wrap: wrap; }
 .upf-attn__row:hover { background: var(--u-sf2, #F7F9F8); }
-.upf-attn__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--u-gdt, #8A5A10); }
+/* The dot sits on the title's line (centre of a 20px line), not between the title and the sub-line (w43). */
+.upf-attn__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--u-gdt, #8A5A10); margin-top: 6px; }
 .upf-attn__dot[data-tone='red'] { background: var(--u-rdt, #B42318); }
 .upf-attn__dot[data-tone='ok'] { background: var(--u-brt, #0F6E56); }
 .upf-attn__t { flex: 1 1 200px; min-width: 0; }
-.upf-attn__title { font-size: 13.5px; font-weight: 500; }
+.upf-attn__title { font-size: 13.5px; font-weight: 500; line-height: 20px; }
 .upf-attn__sub { margin-top: 2px; font-size: 12.5px; color: var(--u-ink3, #6A7A73); }
-.upf-attn__acts { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.upf-attn__acts { display: inline-flex; flex-wrap: wrap; gap: 6px; align-self: center; }
 .upf-net { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
 .upf-net > span:first-child { font-size: 14px; font-weight: 500; }
 .upf-net > span:last-child { font-size: 22px; font-weight: 500; letter-spacing: -.02em; }

@@ -36,6 +36,7 @@ import { useCurrentCompany } from '../company/CurrentCompany'
 import { saveAndRecord } from '@/shared/export/fileExport'
 import { useToast } from '@/design/kit/overlays'
 import { isValidRange, rangeLabel, type DateRange } from '@/design/dc/milestoneRange'
+import { useRecordImages } from '../api/useRecordImages'
 
 // The generated design module is untyped JavaScript; these are the pieces used here.
 const { NAV, TopTabs, Toasts, ICONS, deriveDB, Hero } = Design as any
@@ -257,6 +258,9 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     : MILESTONES), [milestoneRange])
   const milestoneQ = useQuery({ queryKey: ['hrms', 'employees', 'milestone', milestone, milestoneRange?.from ?? '', milestoneRange?.to ?? ''], queryFn: () => loadMilestone(milestone, milestoneRange), enabled: canEmpRead && !!milestone && page === 'employees', staleTime: 60_000 })
   const milestoneIds = useMemo(() => (milestoneQ.data ? new Set(milestoneQ.data) : null), [milestoneQ.data])
+  // Branch and agency logos (V143.102): record id → address; empty until the server has them.
+  const branchLogos = useRecordImages('branch', canCoRead && want('branches'))
+  const agencyLogos = useRecordImages('agency', canContrRead && want('agencies'))
   const slabsQ = useQuery({ queryKey: ['hrms', 'payroll', 'pt-slabs', ptCode], queryFn: () => apiJson<PtSlab[]>(`/v1/payroll/pt-slabs/${ptCode}`), enabled: !!ptCode && canSlabs && want('statutory'), staleTime: Infinity })
 
   const colls: Record<string, Coll<unknown>> = {
@@ -277,15 +281,16 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     const many = companies.length > 1, coName = new Map(companies.map((c) => [c.id, c.name]))
     const known = new Set(Object.keys(ICONS))
     const gradesSorted = grades.data.slice().sort((a, b) => (a.level || 0) - (b.level || 0))
+    const bLogo = branchLogos.data?.urls ?? {}, aLogo = agencyLogos.data?.urls ?? {}
     const compCodes = new Set((compQ.data ?? []).map((c) => c.code))
     return {
       employees,
       companies: companies.map((c, i) => companyRec(c, i, branchList.find((b) => b.companyId === c.id && b.headquarters && b.active !== false))),
-      branches: branchList.map(branchRec),
+      branches: branchList.map((b) => ({ ...branchRec(b), logo: bLogo[b.id] || null })),
       depts: depts.data.map((d, i) => deptRec(d, i, d.departmentHeadEmployeeId ? nameOf.get(d.departmentHeadEmployeeId) || null : null, known)),
       desigs: desigList.map(desigRec),
       grades: gradesSorted.map(gradeRec),
-      agencies: contractors.data.map(agencyRec),
+      agencies: contractors.data.map((a, i) => ({ ...agencyRec(a, i), logo: aLogo[a.id] || null })),
       classes: typeList.map((t) => classRec(t, hr.get(t.companyId), [t.payrollEligible ? 'Paid through payroll' : 'Not paid through payroll', many ? coName.get(t.companyId) : ''].filter(Boolean).join(' · '))),
       shifts: shiftList.map(shiftRec),
       leaves: leavesL.data.map(leaveRec),
@@ -293,7 +298,7 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
       components: (compQ.data ?? []).map((c) => componentRec(c, setQ.data)),
       statutory: setQ.data ? statutoryRecs(setQ.data, slabsQ.data ?? [], compCodes) : [],
     } as Record<string, Rec[]>
-  }, [empQ.data, companies, branchesQ.data, depts.data, desigs.data, grades.data, types.data, contractors.data, shiftsL.data, leavesL.data, polQs.data, compQ.data, setQ.data, slabsQ.data, schedQ.data, hrQs, scopeIds])
+  }, [empQ.data, companies, branchesQ.data, depts.data, desigs.data, grades.data, types.data, contractors.data, shiftsL.data, leavesL.data, polQs.data, compQ.data, setQ.data, slabsQ.data, schedQ.data, hrQs, scopeIds, branchLogos.data, agencyLogos.data])
 
   // ── local edits waiting for the server ──
   const [over, setOver] = useState<Record<string, Rec[]>>({})
@@ -401,12 +406,20 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
         else show(r.notAcknowledged ? 'Everyone who hasn’t acknowledged was already reminded in the last 24 hours' : 'Everyone has acknowledged it', 'info')
       } catch (e) { show(errText(e), 'error') }
     },
-    /** The employment types someone can be given — the ones linked to the employee record's type. */
-    typeOptions: (cur?: string) => {
-      const list = db.classes.filter((c) => c.status === 'Active' && c.co === defaultCo && TYPE_LABEL[c.code]).map((c) => c.type as string)
-      const base = list.length ? list : ['Full-time', 'Part-time', 'Intern']
-      return cur && !base.includes(cur) ? base.concat([cur]) : base
+    /**
+     * The employment types someone can be given in a company (`co`, default the top bar's): that company's
+     * active types (Classification Rules) whose code an employee record can hold. From the data only — the
+     * old fixed fallback (Full-time / Part-time / Intern) is gone (w43: testers saw "only 3 options").
+     */
+    typeOptions: (cur?: string, co?: string) => {
+      const c = co || defaultCo
+      const list = db.classes.filter((x) => x.status === 'Active' && x.co === c && TYPE_LABEL[x.code]).map((x) => x.type as string)
+      return cur && !list.includes(cur) ? list.concat([cur]) : list
     },
+    /** Upload a branch / agency logo (V143.102): org.company.write / hrms.contractor.write. */
+    canLogo: { branches: canCoWrite, agencies: canContrWrite } as Record<string, boolean>,
+    /** The contract workers linked to an agency (GET /v1/hrms/contractors/{id}/workers). */
+    loadWorkers: (agencyId: string) => apiJson<{ employeeId: string; employeeCode?: string | null; name?: string | null; employmentStatus?: string | null; linkedAt?: string | null }[]>(`/v1/hrms/contractors/${agencyId}/workers`),
   }
 
   const group = nav.find((g: any) => g.items.some((i: any) => i.id === page)) || null

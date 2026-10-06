@@ -61,6 +61,7 @@ import { EmployeeExpenses } from './workspace/EmployeeExpenses'
 import { daysUntil, fmtDate, fmtDateTime, hrs, inr, plural, tenure } from './workspace/profileFormat'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { greetingName } from '@/shared/hooks/greetingName'
+import { PhotoEditButton } from '../workforce/PhotoEditButton'
 
 const STATUS: Record<string, [string, StatusTone]> = {
   ACTIVE: ['Active', 'brand'], PROBATION: ['Probation', 'mint'], NOTICE_PERIOD: ['Notice period', 'warning'],
@@ -458,7 +459,11 @@ export function EmployeeDetail() {
       <ProfileFrame
         screenLabel="Employee profile"
         back={{ label: canRead ? 'Workforce directory' : 'Back', onClick: back }}
-        avatar={{ name: v.name, src: emp.profilePhotoUrl, checkedIn: v.checkedIn }}
+        avatar={{
+          name: v.name, src: emp.profilePhotoUrl, checkedIn: v.checkedIn,
+          // Photo (V143.102): the person themself, or someone who may edit people.
+          overlay: canWrite || self ? <PhotoEditButton employeeId={emp.id} name={v.name} current={emp.profilePhotoUrl} self={self} onChange={() => void empQ.refetch()} /> : undefined,
+        }}
         name={v.name}
         status={{ label: v.stLabel, tone: v.stTone }}
         roleLine={v.roleLine}

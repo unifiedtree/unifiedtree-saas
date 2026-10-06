@@ -7,18 +7,18 @@ import type { Rec } from '../master/masterData'
 
 /** The statuses the directory always offers, in this order (others found on records follow). */
 export const BASE_STATUSES = ['Active', 'Probation', 'On notice', 'Exited', 'Suspended'] as const
-/** The employment types the Type filter always offers. */
-export const BASE_TYPES = ['Full-time', 'Part-time', 'Intern'] as const
 
 export const STATUS_TONE: Record<string, StatusTone> = {
   Active: 'success', Probation: 'amber', 'On notice': 'leave', Exited: 'neutral', Suspended: 'danger', Inactive: 'neutral',
 }
 export const statusTone = (s: string): StatusTone => STATUS_TONE[s] || 'neutral'
 
-/** The directory's filters: status, department (with its sub-departments; '__none' = no department), branch, type, words, milestone. */
+/** The directory's filters: status, department (with its sub-departments; '__none' = no department), designation, branch, type, words, milestone. */
 export interface DirectoryFilter {
   status: string
   dept: string
+  /** A designation id; '' = any (w43: testers asked to filter by designation). */
+  desig?: string
   branch: string
   type: string
   q: string
@@ -48,6 +48,7 @@ export function filterEmployees(list: Rec[], f: DirectoryFilter, look: Lookups):
     (!f.status || e.status === f.status)
     && (!ids || (f.dept === '__none' ? !e.dept : ids.includes(e.dept)))
     && (!f.milestone.on || !!(f.milestone.ids && f.milestone.ids.has(e.id)))
+    && (!f.desig || e.desig === f.desig)
     && (!f.branch || e.branch === f.branch)
     && (!f.type || e.type === f.type)
     && (!ql || `${e.name} ${e.code} ${e.email || ''} ${look.desigName(e.desig)}`.toLowerCase().includes(ql)))
@@ -74,8 +75,28 @@ export function statusOptions(list: Rec[]): { value: string; count: number }[] {
   return all.map((s) => ({ value: s, count: list.filter((e) => e.status === s).length }))
 }
 
-export function typeOptions(list: Rec[]): string[] {
-  return Array.from(new Set<string>([...BASE_TYPES, ...list.map((e) => e.type as string)]))
+/**
+ * The Type filter's options, from the data: the workspace's active employment types (Classification
+ * Rules, as each record reads them: `type`), then any other type found on a record. No fixed list
+ * (w43: testers saw "only 3 options" — the old fixed Full-time / Part-time / Intern).
+ */
+export function typeOptions(list: Rec[], classes: Rec[] = []): string[] {
+  const fromTypes = classes.filter((c) => c.status !== 'Inactive').map((c) => c.type as string)
+  return Array.from(new Set<string>([...fromTypes, ...list.map((e) => e.type as string)].filter(Boolean)))
+}
+
+/**
+ * The Designation filter's options: every designation, or, with a department chosen, the ones of that
+ * department and its sub-departments (and those without a department). Sorted by name; the
+ * department shows under each, so two "Team Lead"s can be told apart.
+ */
+export function desigOptions(desigs: Rec[], depts: Rec[], dept: string): { value: string; label: string; sub?: string }[] {
+  const scope = dept && dept !== '__none' ? deptScope(dept, depts) : null
+  const deptName = (id: string) => (depts.find((d) => d.id === id) || {}).name as string | undefined
+  return desigs
+    .filter((x) => !scope || !x.dept || scope.includes(x.dept))
+    .slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    .map((x) => ({ value: x.id as string, label: x.name as string, sub: (x.dept && deptName(x.dept)) || undefined }))
 }
 
 /** The department filter's options: top-level departments, each followed by its sub-departments. */
@@ -140,4 +161,19 @@ export function localActiveSeries(list: Rec[], today: Date, liveNow: number): nu
   })
   out[11] = liveNow
   return out
+}
+
+/**
+ * Add employee / Edit details (w43): whether the staffing agency must be picked. It shows for a contract
+ * worker to people who can see agencies; it is required on Add, and on an edit that makes someone a
+ * contract worker (an existing contract worker without one isn't blocked from other edits).
+ */
+export function agencyIsRequired(o: { type: string; isEdit: boolean; wasType?: string; showAgency: boolean; canAgency: boolean; contractType: string }): boolean {
+  return o.type === o.contractType && o.showAgency && o.canAgency && (!o.isEdit || o.wasType !== o.contractType)
+}
+
+/** The type a new person starts with: the current one if the company has it, else its Full-time, else its first. */
+export function startType(options: string[], current: string): string {
+  if (!options.length || options.includes(current)) return current
+  return options.includes('Full-time') ? 'Full-time' : options[0]
 }
