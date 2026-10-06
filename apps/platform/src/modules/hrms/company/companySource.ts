@@ -1,11 +1,11 @@
 // Where the HRMS company selector gets its list of companies (the one adapter; CurrentCompany.tsx uses it).
 //
-// Today: GET /v1/hrms/companies for people who may read it, else the person's own company (useOrg's
-// companiesQuery, so it shares that cache entry), with the person's own company as their home company.
-// As GET /v1/me/companies will (company-access contract §2), only workspace-wide people (and logins
-// with no employee record) get every company; everyone else gets their own company.
-// Next: GET /v1/me/companies (the companies the caller may access, their role there and their home
-// company). Switching is the one line `COMPANY_SOURCE` below.
+// GET /v1/me/companies (company-access contract §2): the companies the caller may access, their role
+// there and their home company. Only a list from there turns on the X-Company-Id header (`fromMe`).
+// A server without it (the web app deployed before the backend) is answered from the older list:
+// GET /v1/hrms/companies for people who may read it, else the person's own company (useOrg's
+// companiesQuery, so it shares that cache entry), narrowed as the server narrows it — only
+// workspace-wide people (and logins with no employee record) get every company.
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import { CURRENT_USER_KEY, type CurrentUser } from '@/shared/hooks/useCurrentUser'
@@ -23,12 +23,14 @@ export interface AccessibleCompanies {
   companies: AccessibleCompany[]
   /** The person's own (home) company: the default current company. Null when unknown. */
   homeId: string | null
+  /** The list came from GET /v1/me/companies: the server knows X-Company-Id (and its CORS allows it). */
+  fromMe?: boolean
 }
 
 export type CompanySource = 'hrms-companies' | 'me-companies'
 
-/** Which list the selector uses. 'me-companies' once GET /v1/me/companies is live everywhere. */
-export const COMPANY_SOURCE: CompanySource = 'hrms-companies'
+/** Which list the selector uses: GET /v1/me/companies ('hrms-companies': the older list only). */
+export const COMPANY_SOURCE: CompanySource = 'me-companies'
 
 /** Roles that work across every company (company-access contract §2, "allCompanies"). */
 export const WORKSPACE_WIDE_ROLES = ['OWNER', 'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] as const
@@ -76,28 +78,37 @@ export function readMeCompanies(body: MeCompaniesBody | MeCompanyRow[] | null): 
 /**
  * The query behind the selector. `canList` = the caller holds a company-list permission
  * (useOrg's COMPANY_LIST_PERMISSIONS) and `wide` = a workspace-wide role (isWorkspaceWide); only the
- * 'hrms-companies' source uses them (the server decides for GET /v1/me/companies).
+ * older list uses them (the server decides for GET /v1/me/companies).
  */
 export function accessibleCompaniesQuery(
   canList: boolean, qc: QueryClient, source: CompanySource = COMPANY_SOURCE, api: ApiFetch = apiJson, wide = true,
 ): { queryKey: QueryKey; queryFn: () => Promise<AccessibleCompanies> } {
+  const older = async (): Promise<AccessibleCompanies> => {
+    // fetchQuery: the same cache entry as useCompanies, so pages that still read it cost no second call.
+    const list = await qc.fetchQuery({ ...companiesQuery(canList, qc, api), staleTime: 30_000 })
+    const homeId = await ownCompanyId(qc, api)
+    const companies = list.map((c) => ({ id: c.id, name: c.name }))
+    const own = companies.filter((c) => c.id === homeId)
+    return { companies: !wide && own.length ? own : companies, homeId }
+  }
   if (source === 'me-companies') {
     return {
-      queryKey: [...ACCESSIBLE_COMPANIES_KEY, 'me'],
-      queryFn: async () => readMeCompanies(await api<MeCompaniesBody | MeCompanyRow[]>('/v1/me/companies')),
+      queryKey: [...ACCESSIBLE_COMPANIES_KEY, 'me', canList ? 'list' : 'own', wide ? 'all' : 'mine'],
+      queryFn: async () => {
+        let body: MeCompaniesBody | MeCompanyRow[]
+        try {
+          body = await api<MeCompaniesBody | MeCompanyRow[]>('/v1/me/companies')
+        } catch {
+          // Not on this server yet (or failing): the older list, and no X-Company-Id.
+          return older()
+        }
+        const read = readMeCompanies(body)
+        // An empty answer is no answer: keep the pages working on the older list.
+        return read.companies.length ? { ...read, fromMe: true } : older()
+      },
     }
   }
-  return {
-    queryKey: [...ACCESSIBLE_COMPANIES_KEY, canList ? 'list' : 'own', wide ? 'all' : 'mine'],
-    queryFn: async () => {
-      // fetchQuery: the same cache entry as useCompanies, so pages that still read it cost no second call.
-      const list = await qc.fetchQuery({ ...companiesQuery(canList, qc, api), staleTime: 30_000 })
-      const homeId = await ownCompanyId(qc, api)
-      const companies = list.map((c) => ({ id: c.id, name: c.name }))
-      const own = companies.filter((c) => c.id === homeId)
-      return { companies: !wide && own.length ? own : companies, homeId }
-    },
-  }
+  return { queryKey: [...ACCESSIBLE_COMPANIES_KEY, canList ? 'list' : 'own', wide ? 'all' : 'mine'], queryFn: older }
 }
 
 /**

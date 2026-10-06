@@ -11,7 +11,8 @@
 //    Shifts & overtime and the Dashboard to B's data, with nothing of the demo company's left on screen.
 //  - The choice survives a reload; a link with ?co=<demo company> opens the demo company.
 //  - reader@ (an employee: their own company only) gets no selector, even with two companies.
-//  - Requests carry no X-Company-Id yet (it is switched on with GET /v1/me/companies).
+//  - The list comes from GET /v1/me/companies, and every API call carries X-Company-Id = the company on
+//    screen; the Dashboard's attendance (a team view) follows it, so B shows none of the demo company's people.
 //  - Phone 390 and dark mode: the selector and its menu read well (screenshots only).
 //  - Once B is removed, owner@ is back to one company: no selector, the demo company's data.
 // Screenshots go to W3_SHOTS (w26-cosel-*.png). Everything made here is removed at the end: only rows of
@@ -60,7 +61,8 @@ async function signIn(email, viewport = { width: 1440, height: 900 }) {
   const page = await context.newPage()
   const errors = [], failed = [], companyHeaders = []
   page.on('pageerror', (e) => errors.push(String(e.message || e)))
-  page.on('request', (r) => { if (r.url().includes('/api/') && r.headers()['x-company-id']) companyHeaders.push(r.url().split('/api')[1]) })
+  // API calls only (the dev server also serves source files under src/…/api/).
+  page.on('request', (r) => { if (r.url().includes('/api/v1/')) companyHeaders.push({ co: r.headers()['x-company-id'] || '', path: '/v1/' + r.url().split('/api/v1/')[1] }) })
   page.on('response', (r) => {
     if (!r.url().includes('/api/') || r.status() < 400 || r.url().includes('/canonical-auth/refresh')) return
     failed.push(`${r.status()} ${r.request().method()} ${r.url().split('/api')[1]}`)
@@ -128,6 +130,8 @@ try {
   const sh = await owner('POST', `/v1/shifts?companyId=${coId}`, { name: shiftName, shiftType: 'FIXED', startTime: '07:00:00', endTime: '15:00:00', gracePeriodMinutes: 10, workingHoursPerDay: 8 })
   check('API: a shift in B', sh.status === 201 || sh.status === 200, `status ${sh.status} ${JSON.stringify(sh.json).slice(0, 160)}`)
   const nt = await owner('POST', '/v1/admin/dashboard/notices', { companyId: coId, title: noticeTitle, body: 'Only for company B.' })
+  const mine = await owner('GET', '/v1/me/companies')
+  check('API: GET /v1/me/companies lists both companies for owner@', mine.status === 200 && (mine.json?.companies || []).some((c) => c.companyId === coId) && (mine.json?.companies || []).some((c) => c.companyId === demo.id), `status ${mine.status}`)
   check('API: a dashboard notice in B', nt.status === 201 || nt.status === 200, `status ${nt.status} ${JSON.stringify(nt.json).slice(0, 160)}`)
 
   // ── 2. owner@ with two companies: switch A → B ──
@@ -171,11 +175,20 @@ try {
     await o.open('/dashboard')
     check('demo company: the Dashboard has no B notice', await absent(o.page, noticeTitle))
 
+    check('demo company: the Dashboard lists its people', await seen(o.page, 'Finance Lead'))
     // Back on B from the selector, on the Dashboard: the page follows at once.
+    const markB = o.companyHeaders.length
     await switchTo(o.page, coName)
     check('switch on the Dashboard: B’s notice appears', await seen(o.page, noticeTitle))
+    check('B: the Dashboard’s attendance lists none of the demo company’s people', await absent(o.page, 'Finance Lead'))
 
-    check('two companies: no X-Company-Id sent yet', !o.companyHeaders.length, o.companyHeaders.slice(0, 3).join(' | '))
+    // Since the last switch (to B, on the Dashboard): HRMS calls name B; none name the demo company.
+    const sinceB = o.companyHeaders.slice(markB)
+    const hrmsCalls = sinceB.filter((c) => !/^\/v1\/(canonical-auth|auth|public|me\/companies)/.test(c.path) || /^\/v1\/canonical-auth\/me(\?|$)/.test(c.path))
+    check('X-Company-Id: B on the calls after switching to B', hrmsCalls.length > 0 && hrmsCalls.every((c) => c.co === coId), hrmsCalls.filter((c) => c.co !== coId).slice(0, 3).map((c) => `${c.co || 'none'} ${c.path}`).join(' | '))
+    check('X-Company-Id: never on /v1/me/companies or sign-in, refresh and sign-out calls',
+      o.companyHeaders.filter((c) => /^\/v1\/(canonical-auth|me\/companies)/.test(c.path) && !/^\/v1\/canonical-auth\/me(\?|$)/.test(c.path) && c.co).length === 0)
+    check('permissions follow the company: /v1/canonical-auth/me asked again with B', sinceB.some((c) => /^\/v1\/canonical-auth\/me(\?|$)/.test(c.path) && c.co === coId))
     check('two companies: no page errors', !o.errors.length, o.errors[0] || '')
     check('two companies: no failed API calls', !o.failed.length, o.failed.join(' | '))
 

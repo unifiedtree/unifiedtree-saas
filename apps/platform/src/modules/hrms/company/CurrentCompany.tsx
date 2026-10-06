@@ -14,7 +14,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAnyPermission, useAuthStore } from '@unifiedtree/sdk'
-import { setCompanyHeader } from '@/core/api/client'
+import { apiJson, setCompanyHeader } from '@/core/api/client'
 import { useAccessContext } from '@/shared/navigation/useAccess'
 import { COMPANY_LIST_PERMISSIONS, useCompanies } from '../api/useOrg'
 import { ACCESSIBLE_COMPANIES_KEY, COMPANY_SOURCE, accessibleCompaniesQuery, isCompanyNeutral, isWorkspaceWide, type AccessibleCompany, type CompanySource } from './companySource'
@@ -93,12 +93,14 @@ export function CurrentCompanyProvider({ children, source = COMPANY_SOURCE, api 
   const [version, setVersion] = useState(0)
 
   const companyId = resolveCompany(companies, sel.chosen, homeId)
-  // Every request after this render carries it (when the server knows the header: see client.ts).
-  setCompanyHeader(source === 'me-companies' ? companyId : null)
+  // Every request after this render carries it, when the list came from GET /v1/me/companies (a
+  // server that knows the header; see client.ts).
+  const sendHeader = !!query.data?.fromMe
+  setCompanyHeader(sendHeader ? companyId : null)
 
   const switchTo = useCallback((id: string, fromUrl = false) => {
     if (id === companyId || !companies.some((c) => c.id === id)) return
-    setCompanyHeader(source === 'me-companies' ? id : null)
+    setCompanyHeader(sendHeader ? id : null)
     // Nothing loaded for the other company may show while this one's loads.
     qc.removeQueries({ predicate: (q) => !isCompanyNeutral(q.queryKey) })
     writeStored(key, id)
@@ -108,7 +110,7 @@ export function CurrentCompanyProvider({ children, source = COMPANY_SOURCE, api 
     if (!fromUrl && params.has('co')) {
       setParams((cur) => { const next = new URLSearchParams(cur); next.set('co', id); return next }, { replace: true })
     }
-  }, [companyId, companies, source, qc, key, params, setParams])
+  }, [companyId, companies, sendHeader, qc, key, params, setParams])
 
   // Access to the current company was taken away (the server answers COMPANY_ACCESS_DENIED): forget the
   // choice, load the list again and land on the home company (company-access contract §1).
@@ -124,6 +126,23 @@ export function CurrentCompanyProvider({ children, source = COMPANY_SOURCE, api 
     // Under ['hrms', 'companies']: the list the selector reads and the one it is built from.
     void qc.invalidateQueries({ queryKey: ACCESSIBLE_COMPANIES_KEY.slice(0, 2) })
   }), [qc, companyId, key])
+
+  // Permissions follow the company (company-access contract §1): with the header on, ask
+  // GET /v1/canonical-auth/me again whenever the company changes and use its roles, permissions and
+  // personal-pages answer. Signing in at the home company needs no second ask: the session already has them.
+  const applyAccess = useAuthStore((s) => s.applyCompanyAccess)
+  const accessFor = useRef<string | null>(null)
+  const latest = useRef(companyId)
+  latest.current = companyId
+  useEffect(() => {
+    if (!sendHeader || !companyId || accessFor.current === companyId) return
+    const first = accessFor.current === null
+    accessFor.current = companyId
+    if (first && companyId === homeId) return
+    const ask = api ?? apiJson
+    ask<{ roles?: string[]; permissions?: string[]; personalPages?: boolean | null }>('/v1/canonical-auth/me')
+      .then((me) => { if (latest.current === companyId && me) applyAccess(me) }, () => { /* keep the permissions we have */ })
+  }, [sendHeader, companyId, homeId, applyAccess, api])
 
   // A link to another company (?co=) switches to it, and is remembered like a pick in the selector.
   useEffect(() => {

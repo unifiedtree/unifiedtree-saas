@@ -142,13 +142,13 @@ describe('switching company', () => {
 })
 
 describe('the X-Company-Id header', () => {
-  it('is not sent while the list comes from /v1/hrms/companies (production’s CORS would refuse it)', () => {
-    render({ companies: [A, B], homeId: B.id })
+  it('is not sent when the list did not come from /v1/me/companies (a server that may not allow it)', () => {
+    render({ companies: [A, B], homeId: B.id }, { source: 'me-companies' })
     expect(companyHeaderFor('/v1/leave/types')).toEqual({})
   })
 
   it('carries the current company once the list comes from /v1/me/companies, and a switch moves it', () => {
-    const { value } = render({ companies: [A, B], homeId: B.id }, { source: 'me-companies' })
+    const { value } = render({ companies: [A, B], homeId: B.id, fromMe: true }, { source: 'me-companies' })
     expect(companyHeaderFor('/v1/leave/types?companyId=co-b')).toEqual({ 'X-Company-Id': B.id })
     value.setCompany(A.id)
     expect(companyHeaderFor('/v1/attendance/dashboard')).toEqual({ 'X-Company-Id': A.id })
@@ -156,7 +156,13 @@ describe('the X-Company-Id header', () => {
 
   it('is never sent to sign-in, public pages or the company list itself', () => {
     setCompanyHeader(B.id)
-    for (const p of ['/v1/canonical-auth/refresh', '/v1/auth/login', '/v1/public/module-plans', '/v1/me/companies']) expect(companyHeaderFor(p)).toEqual({})
+    for (const p of ['/v1/canonical-auth/refresh', '/v1/canonical-auth/login', '/v1/canonical-auth/logout', '/v1/canonical-auth/methods', '/v1/auth/login', '/v1/public/module-plans', '/v1/me/companies']) expect(companyHeaderFor(p)).toEqual({})
+  })
+
+  it('is sent to GET /v1/canonical-auth/me, whose roles and permissions are the company’s', () => {
+    setCompanyHeader(B.id)
+    expect(companyHeaderFor('/v1/canonical-auth/me')).toEqual({ 'X-Company-Id': B.id })
+    expect(companyHeaderFor('/v1/canonical-auth/me-something')).toEqual({})
   })
 })
 
@@ -214,7 +220,21 @@ describe('the list (companySource)', () => {
         ],
       },
     }))
-    await expect(q.queryFn()).resolves.toEqual({ companies: [{ ...B, role: 'Dept Manager' }, { ...A, role: 'Employee' }], homeId: B.id })
+    await expect(q.queryFn()).resolves.toEqual({ companies: [{ ...B, role: 'Dept Manager' }, { ...A, role: 'Employee' }], homeId: B.id, fromMe: true })
+  })
+
+  it('a server without GET /v1/me/companies: the older list, and no header', async () => {
+    const answers = {
+      '/v1/hrms/companies': [{ ...A, active: true }, { ...B, active: true }], '/v1/users/me': { id: 'u-1', companyId: A.id },
+    }
+    const missing = async <T,>(path: string): Promise<T> => {
+      if (path === '/v1/me/companies') throw new HttpError('Not found', 404)
+      return api(answers)<T>(path)
+    }
+    await expect(accessibleCompaniesQuery(true, new QueryClient(), 'me-companies', missing).queryFn()).resolves.toEqual({ companies: [A, B], homeId: A.id })
+    // An empty answer is treated the same way.
+    const empty = async <T,>(path: string): Promise<T> => (path === '/v1/me/companies' ? { companies: [] } as T : api(answers)<T>(path))
+    await expect(accessibleCompaniesQuery(true, new QueryClient(), 'me-companies', empty).queryFn()).resolves.toEqual({ companies: [A, B], homeId: A.id })
   })
 
   it('no role line for workspace-wide people (same roles everywhere), and a home flag without homeCompanyId', () => {

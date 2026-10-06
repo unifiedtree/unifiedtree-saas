@@ -188,6 +188,19 @@ export const useAuthStore = create<AuthState>()((set) => ({
     }
   },
 
+  applyCompanyAccess: (me) => set((s) => {
+    if (s.status !== 'authenticated' || !s.user) return {};
+    const grants: PermissionGrant[] = (me.permissions ?? []).map((p) =>
+      typeof p === 'string' ? { code: p, scope: 'ORG' as Scope } : p,
+    );
+    return {
+      user: { ...s.user, roles: me.roles ?? s.user.roles },
+      permissions: me.permissions ? buildPermissionMap(grants) : s.permissions,
+      scopes: me.scopes ?? s.scopes,
+      personalPages: typeof me.personalPages === 'boolean' ? me.personalPages : s.personalPages,
+    };
+  }),
+
   loginWithCredentials: ({ token, userId, email, firstName, lastName, roles, permissions, tenantId, tenantSlug, tenantName, activeModules, personalPages }: LoginWithCredentialsParams) => {
     setAccessToken(token);
 

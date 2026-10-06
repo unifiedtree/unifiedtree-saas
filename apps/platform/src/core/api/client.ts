@@ -134,10 +134,14 @@ async function refreshOnce(): Promise<boolean> {
 let companyHeader: string | null = null
 export function setCompanyHeader(companyId: string | null) { companyHeader = companyId || null }
 
-/** Calls that are not about a company: sign-in, public pages and the company list itself. */
+/**
+ * Calls that are not about a company: sign-in, refresh, sign-out, public pages and the company list
+ * itself. GET /v1/canonical-auth/me does carry it: its roles and permissions are the company's.
+ */
 const NO_COMPANY_HEADER = ['/v1/canonical-auth', '/v1/auth', '/v1/public', '/v1/me/companies']
+const ME_PATH = /^\/v1\/canonical-auth\/me(\?|$)/
 export function companyHeaderFor(path: string): Record<string, string> {
-  if (!companyHeader || NO_COMPANY_HEADER.some((p) => path.startsWith(p))) return {}
+  if (!companyHeader || (!ME_PATH.test(path) && NO_COMPANY_HEADER.some((p) => path.startsWith(p)))) return {}
   return { 'X-Company-Id': companyHeader }
 }
 
