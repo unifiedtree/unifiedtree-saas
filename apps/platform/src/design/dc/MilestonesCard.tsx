@@ -9,9 +9,7 @@
 // Every list comes from an endpoint that already exists: the milestones list (or retirement due) for the
 // people, the holiday calendar (GET /v1/settings/holidays?from=&to=) for holidays, the dashboard's notices
 // for the notices. Hand-built on the redesign kit (PgDashboard "Upcoming milestones": columns, each with
-// its range pill); tokens only, so it follows dark mode. The range logic lives in milestoneRange.ts. The
-// staff card (modules/hrms/milestones/UpcomingMilestones.tsx) reuses the range menu, the custom range and
-// the data hook.
+// its range pill); tokens only, so it follows dark mode. The range logic lives in milestoneRange.ts.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Avatar, Section } from '@/design/kit/display'
 import {

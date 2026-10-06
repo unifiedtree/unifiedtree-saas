@@ -30,7 +30,6 @@ import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { greetingName } from '@/shared/hooks/greetingName'
 import { UpcomingProbations } from './probation/UpcomingProbations'
-import { UpcomingMilestones } from './milestones/UpcomingMilestones'
 // NOTE: the Attendance Overview donut + legend is rendered INLINE in this file
 // (see `attendanceSlices`). A separate `dashboard/AttendanceOverview.tsx`
 // component existed until 2026-09-21 but the redesign stopped rendering it while
@@ -896,7 +895,6 @@ export const RoleDashboard: React.FC = () => {
             probations call GET /v1/probation/upcoming, which the backend
             guards with hrms.employee.read, so the card follows that gate. */}
         <section aria-label="Upcoming key dates" className="space-y-6">
-          <UpcomingMilestones />
           {canReadEmployees && <UpcomingProbations />}
         </section>
 

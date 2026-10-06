@@ -238,6 +238,8 @@ export const ROUTE_TREE = (
             for a company-wide read (each widget still fetches behind its own permission); everyone
             else is sent to their own Home (DashboardRoute). */}
         <Route path="/dashboard" element={<DashboardRoute><Dashboard /></DashboardRoute>} />
+        {/* business.unifiedtree.com/hrms opens HRMS's home, as the launcher's HRMS tile does (it used to say "Page not found"). */}
+        <Route path="/hrms" element={<Navigate to="/dashboard" replace />} />
         {/* AUTH-ONLY (intentional): Analytics renders mock KPIs (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/analytics" element={<ComingSoonForAdmins module="analytics" />} />
