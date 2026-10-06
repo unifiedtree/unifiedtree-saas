@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -44,7 +43,6 @@ public class PlatformAdminBootstrap implements CommandLineRunner {
     private static final UUID PLATFORM_SUPER_ADMIN_ROLE_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000006");
 
-    private final JdbcTemplate jdbc;
     private final PasswordService passwords;
     private final PlatformAdminBootstrapWriter writer;
     private final boolean enabled;
@@ -53,14 +51,12 @@ public class PlatformAdminBootstrap implements CommandLineRunner {
     private final String  password;
 
     public PlatformAdminBootstrap(
-            JdbcTemplate jdbc,
             PasswordService passwords,
             PlatformAdminBootstrapWriter writer,
             @Value("${unifiedtree.platform-admin.enabled:false}") boolean enabled,
             @Value("${unifiedtree.platform-admin.email:}") String email,
             @Value("${unifiedtree.platform-admin.name:UnifiedTree Admin}") String name,
             @Value("${unifiedtree.platform-admin.password:}") String password) {
-        this.jdbc = jdbc;
         this.passwords = passwords;
         this.writer = writer;
         this.enabled = enabled;
@@ -82,11 +78,16 @@ public class PlatformAdminBootstrap implements CommandLineRunner {
             return;
         }
 
-        // Idempotency: skip if the platform tenant already has any users.
-        Integer existing = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM auth.user_credentials WHERE tenant_id = ?",
-                Integer.class, PLATFORM_TENANT_ID);
-        if (existing != null && existing > 0) {
+        // Idempotency: skip if the platform tenant already has any users. The
+        // count must run with the platform tenant bound, or RLS hides the rows.
+        int existing;
+        TenantContext.setTenantId(PLATFORM_TENANT_ID);
+        try {
+            existing = writer.countPlatformUsers(PLATFORM_TENANT_ID);
+        } finally {
+            TenantContext.clear();
+        }
+        if (existing > 0) {
             log.info("Platform admin bootstrap: {} user(s) already exist in platform tenant - skipping.",
                     existing);
             return;
