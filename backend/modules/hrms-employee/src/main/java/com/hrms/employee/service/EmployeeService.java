@@ -228,7 +228,11 @@ public class EmployeeService {
             employee.setJobTitle(request.jobTitle());
         }
         if (request.employmentType() != null) {
-            employee.setEmploymentType(request.employmentType().name());
+            // The same rule as /v1/hrms/employees (6 Oct 2026): a default code, an active type of the
+            // person's company, or the code they already have (the phone's staff profile sends it back).
+            String type = com.hrms.employee.workforce.service.EmploymentTypeCodes.resolveForEmployee(
+                    jdbc, employee.getCompanyId(), request.employmentType(), employee.getEmploymentType());
+            if (type != null) employee.setEmploymentType(type);
         }
         if (request.workLocation() != null) {
             employee.setWorkLocation(request.workLocation());
