@@ -1,5 +1,6 @@
 package com.hrms.api.workforce;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.employee.workforce.service.MilestoneWindow;
 import com.unifiedtree.security.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,6 +35,10 @@ import java.util.UUID;
 @RequestMapping("/v1/hrms/retirements")
 public class RetirementController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     /** Longest look-ahead one request may ask for (five years). */
     static final int MAX_DAYS = 1830;
@@ -52,6 +57,7 @@ public class RetirementController {
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         MilestoneWindow.Range range = MilestoneWindow.Range.optional(from, to);
         UUID tenantId = TenantContext.getTenantId();
         if (tenantId == null) return List.of();

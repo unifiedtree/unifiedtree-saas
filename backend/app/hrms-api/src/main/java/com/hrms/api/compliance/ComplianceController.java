@@ -1,5 +1,6 @@
 package com.hrms.api.compliance;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.compliance.dto.ComplianceItemRequest;
 import com.hrms.compliance.dto.ComplianceItemResponse;
 import com.hrms.compliance.dto.FileFilingRequest;
@@ -46,6 +47,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class ComplianceController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final ComplianceService complianceService;
     private final PoshService poshService;
     private final EmployeeRepository employeeRepository;
@@ -63,6 +68,7 @@ public class ComplianceController {
     @GetMapping("/calendar-events")
     @PreAuthorize("hasAuthority('hrms.compliance.read')")
     public ResponseEntity<List<ComplianceCalendarEventResponse>> calendarEvents(@RequestParam(required = false) UUID companyId, @RequestParam(required = false) java.time.LocalDate from, @RequestParam(required = false) java.time.LocalDate to) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(complianceService.calendarEvents(companyId, from, to));
     }
 
@@ -72,6 +78,7 @@ public class ComplianceController {
     public ResponseEntity<PageResponse<InspectorSessionResponse>> listInspectorSessions(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(complianceService.listInspectorSessions(companyId, pageable));
     }
 
@@ -111,6 +118,7 @@ public class ComplianceController {
     public ResponseEntity<PageResponse<ComplianceItemResponse>> listItems(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 50) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(enrichItems(complianceService.listItems(companyId, pageable)));
     }
 
@@ -140,6 +148,7 @@ public class ComplianceController {
     public ResponseEntity<PageResponse<StatutoryFilingResponse>> listFilings(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 50) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(complianceService.listFilings(companyId, pageable));
     }
 
@@ -171,6 +180,7 @@ public class ComplianceController {
     public ResponseEntity<PageResponse<PoshComplaintResponse>> listComplaints(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 50) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(poshService.listComplaints(companyId, pageable));
     }
 
@@ -228,6 +238,9 @@ public class ComplianceController {
         if (requested != null) {
             return requested;
         }
+        // Company access: the current company the client selected (X-Company-Id), else the caller's own.
+        UUID selected = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();
+        if (selected != null) return selected;
         UUID employeeId = extractEmployeeId(jwt);
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));

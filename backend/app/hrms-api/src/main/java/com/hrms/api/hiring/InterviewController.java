@@ -1,5 +1,6 @@
 package com.hrms.api.hiring;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +30,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class InterviewController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final InterviewService interviews;
 
     public InterviewController(InterviewService interviews) {
@@ -50,6 +55,7 @@ public class InterviewController {
     public List<InterviewService.CandidateCard> candidates(@RequestParam(required = false) UUID requisitionId,
                                                            @RequestParam(required = false) String stage,
                                                            @RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return interviews.candidates(requisitionId, stage, companyId);
     }
 
@@ -72,6 +78,7 @@ public class InterviewController {
     @GetMapping("/interviews")
     @PreAuthorize("hasAuthority('hrms.hiring.read')")
     public List<InterviewService.Interview> upcoming(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return interviews.upcoming(companyId);
     }
 

@@ -157,7 +157,8 @@ public class LeaveInsightsService {
             MonthStat now = byMonth.getOrDefault(nowKey, new MonthStat(nowKey, 0, 0, null));
             MonthStat last = byMonth.getOrDefault(lastKey, new MonthStat(lastKey, 0, 0, null));
 
-            UUID company = companyOf(callerEmployeeId);
+            // The approver's current company (X-Company-Id), else their own.
+            UUID company = com.unifiedtree.security.tenant.CompanyContext.currentOr(companyOf(callerEmployeeId));
             LocalDate next = nextWorkingDay(company, today);
             long[] away = onLeave(tenant, levelTwo, callerEmployeeId, today, next);
             return new ApprovalStats(levelTwo ? Scope.TENANT : Scope.TEAM,

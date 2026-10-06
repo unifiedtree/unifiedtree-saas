@@ -82,7 +82,8 @@ public class PerformanceController {
         UUID employeeId = extractEmployeeId(jwt);
         UUID companyId = request.companyId() != null
                 ? request.companyId()
-                : employeeRepository.findById(employeeId).map(Employee::getCompanyId).orElse(null);
+                : com.unifiedtree.security.tenant.CompanyContext.currentOr(  // the selected company (X-Company-Id), else the caller's own
+                        employeeRepository.findById(employeeId).map(Employee::getCompanyId).orElse(null));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(cycleService.createCycle(companyId, request));
     }

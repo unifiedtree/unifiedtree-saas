@@ -1,5 +1,6 @@
 package com.hrms.api.pli;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -42,6 +43,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class PliController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final PliService pliService;
     private final EmployeeRepository employeeRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
@@ -66,6 +71,7 @@ public class PliController {
     public ResponseEntity<PageResponse<PliTargetResponse>> listTargets(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(pliService.getTargets(companyId, pageable));
     }
 
@@ -75,6 +81,7 @@ public class PliController {
     public ResponseEntity<PliTargetResponse> createTarget(@Valid @RequestBody PliTargetRequest request,
                                                           @AuthenticationPrincipal Jwt jwt) {
         UUID companyId = request.companyId();
+        if (companyId == null) companyId = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();  // the selected company (X-Company-Id)
         if (companyId == null) {
             UUID employeeId = extractEmployeeId(jwt);
             Employee employee = employeeRepository.findById(employeeId)

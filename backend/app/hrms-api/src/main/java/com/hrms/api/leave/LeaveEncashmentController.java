@@ -1,5 +1,6 @@
 package com.hrms.api.leave;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentCreateRequest;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentDecisionRequest;
 import com.hrms.leave.dto.LeaveAccrualDtos.EncashmentOption;
@@ -38,6 +39,10 @@ import java.util.UUID;
 @Tag(name = "Leave encashment", description = "Cash in unused leave, with HR approval")
 @SecurityRequirement(name = "bearerAuth")
 public class LeaveEncashmentController {
+
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
 
     private final LeaveEncashmentService encashments;
 
@@ -91,6 +96,7 @@ public class LeaveEncashmentController {
     @GetMapping("/summary")
     @PreAuthorize("hasAuthority('hrms.leave.encash.approve')")
     public ResponseEntity<EncashmentSummary> summary(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(encashments.summary(companyId));
     }
 

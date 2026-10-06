@@ -1,7 +1,9 @@
 package com.hrms.api.access;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.rbac.security.EmployeeBaselinePermissions;
 import com.unifiedtree.rbac.security.PermissionChecker;
+import com.unifiedtree.security.tenant.CompanyContext;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,9 @@ public class AccessGuard {
     private final JdbcTemplate jdbc;
     private final EmployeeBaselinePermissions baseline;
     private final PermissionChecker permissionChecker;
+    /** Company access (V143.93): its cached profiles follow role and override changes too. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
 
     public AccessGuard(JdbcTemplate jdbc, EmployeeBaselinePermissions baseline, PermissionChecker permissionChecker) {
         this.jdbc = jdbc;
@@ -39,7 +44,18 @@ public class AccessGuard {
     public AccessPolicy.Actor actor(UUID actorId) {
         UUID id = actorId != null ? actorId : TenantContext.getUserId();
         if (id == null) throw AccessPolicy.refused("No signed-in user.", "NOT_AUTHENTICATED");
-        return new AccessPolicy.Actor(id, isOwner(id), Set.copyOf(effectivePermissions(id)));
+        return new AccessPolicy.Actor(id, isOwner(id), Set.copyOf(actingPermissions(id, CompanyContext.getScope())));
+    }
+
+    /**
+     * What the acting person holds for "only give what you hold": in a company
+     * they reach through a grant (CompanyAccessFilter scoped this request) their
+     * permissions THERE — the set this request's own checks used — else their
+     * normal ones, fresh from the database.
+     */
+    List<String> actingPermissions(UUID actorId, CompanyContext.Scope scope) {
+        if (scope != null && actorId.equals(TenantContext.getUserId())) return List.copyOf(scope.permissions());
+        return effectivePermissions(actorId);
     }
 
     /** Whether this person holds the built-in OWNER role in this workspace. */
@@ -115,6 +131,7 @@ public class AccessGuard {
      */
     public void evict(UUID userId) {
         permissionChecker.evictUser(TenantContext.getTenantId(), userId);
+        if (companyAccess != null) companyAccess.evictUser(TenantContext.getTenantId(), userId);
         baseline.invalidate();
     }
 }

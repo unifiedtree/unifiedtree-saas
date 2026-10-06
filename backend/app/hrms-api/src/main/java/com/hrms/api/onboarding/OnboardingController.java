@@ -1,5 +1,6 @@
 package com.hrms.api.onboarding;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.employee.entity.OnboardingInstance;
 import com.hrms.employee.entity.OnboardingInstanceTask;
 import com.hrms.employee.entity.OnboardingTask;
@@ -29,6 +30,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class OnboardingController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final OnboardingService onboardingService;
     private final OnboardingHireDetailsService hireDetails;
     private final OnboardingOverviewService overview;
@@ -53,6 +58,7 @@ public class OnboardingController {
     @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.read','hrms.onboarding.instance.write')")
     public List<OnboardingViews.AssetView> listAssets(@RequestParam(required = false) UUID companyId,
                                                       @AuthenticationPrincipal Jwt jwt) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return assetCare.listAssets(companyId, holds(jwt, "hrms.employee.read"));
     }
 
@@ -62,6 +68,7 @@ public class OnboardingController {
     public List<AssetCareService.Issue> assetIssues(@RequestParam(required = false) String status,
                                                     @RequestParam(required = false) UUID companyId,
                                                     @AuthenticationPrincipal Jwt jwt) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return assetCare.issues(status, companyId, holds(jwt, "hrms.employee.read"));
     }
 
@@ -109,6 +116,7 @@ public class OnboardingController {
     @Operation(summary = "List active onboarding templates (optionally filtered by company)")
     @PreAuthorize("@perm.check('hrms.onboarding.template.read')")
     public List<OnboardingViews.TemplateView> listTemplates(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         // The templates as before, plus usedBy: onboardings started from each (redesign BW-69).
         List<OnboardingTemplate> templates = onboardingService.listTemplates(companyId);
         java.util.Map<UUID, Long> usage = templates.isEmpty() ? java.util.Map.of() : overview.usageByTemplate();
@@ -208,7 +216,10 @@ public class OnboardingController {
                                                                @RequestParam(required = false) UUID companyId,
                                                                @AuthenticationPrincipal Jwt jwt) {
         java.time.LocalDate today = java.time.LocalDate.now(OnboardingOverviewService.IST);
-        if (isHrOrAdmin(jwt)) return overview.overview(null, status, companyId, today);
+        // Company access: HR's whole list covers the current company when none is
+        // named; a person's own onboardings follow the selected company only (no header: as before).
+        if (isHrOrAdmin(jwt)) return overview.overview(null, status, CompanyAccessService.listCompanyId(companyAccess, companyId), today);
+        if (companyId == null) companyId = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();
         UUID mine = employeeIdOrNull(jwt);
         if (mine == null) {
             return new OnboardingOverviewService.Overview(OnboardingOverviewService.count(List.of(), today), List.of());

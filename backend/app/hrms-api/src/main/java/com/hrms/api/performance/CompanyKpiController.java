@@ -1,5 +1,6 @@
 package com.hrms.api.performance;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +20,10 @@ import java.util.UUID;
 @RequestMapping("/v1/performance/company-kpis")
 public class CompanyKpiController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final CompanyKpiService service;
 
     public CompanyKpiController(CompanyKpiService service) {
@@ -29,6 +34,7 @@ public class CompanyKpiController {
     @PreAuthorize("hasAnyAuthority('hrms.performance.read','hrms.performance.review.self')")
     public List<CompanyKpiService.CompanyKpi> list(@RequestParam(required = false) UUID companyId,
                                                    @RequestParam(defaultValue = "false") boolean includeDropped) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.list(TenantContext.getTenantId(), companyId, includeDropped);
     }
 

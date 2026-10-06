@@ -1,5 +1,6 @@
 package com.hrms.api.hiring;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,6 +23,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class HiringInsightsController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final HiringInsightsService insights;
 
     public HiringInsightsController(HiringInsightsService insights) {
@@ -32,6 +37,7 @@ public class HiringInsightsController {
     @GetMapping("/summary")
     @PreAuthorize("hasAuthority('hrms.hiring.read')")
     public HiringInsightsService.Summary summary(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return insights.summary(companyId, today());
     }
 
@@ -45,6 +51,7 @@ public class HiringInsightsController {
         LocalDate today = today();
         LocalDate start = from != null ? from : HiringInsightsService.quarterStart(today);
         LocalDate end = to != null ? to : HiringInsightsService.quarterStart(today).plusMonths(3).minusDays(1);
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return insights.funnel(companyId, start, end);
     }
 

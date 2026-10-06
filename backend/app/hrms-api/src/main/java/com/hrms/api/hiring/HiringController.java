@@ -1,5 +1,6 @@
 package com.hrms.api.hiring;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -42,6 +43,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class HiringController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final HiringService hiringService;
     private final EmployeeRepository employeeRepository;
     private final com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies;
@@ -66,6 +71,7 @@ public class HiringController {
     public ResponseEntity<PageResponse<HiringOfferResponse>> listOffers(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(hiringService.getOffers(companyId, pageable));
     }
 
@@ -75,6 +81,7 @@ public class HiringController {
     public ResponseEntity<HiringOfferResponse> createOffer(@Valid @RequestBody HiringOfferRequest request,
                                                            @AuthenticationPrincipal Jwt jwt) {
         UUID companyId = request.companyId();
+        if (companyId == null) companyId = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();  // the selected company (X-Company-Id)
         if (companyId == null) {
             UUID employeeId = extractEmployeeId(jwt);
             Employee employee = employeeRepository.findById(employeeId)
@@ -110,6 +117,7 @@ public class HiringController {
             @Valid @RequestBody JobRequisitionRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         UUID companyId = request.companyId();
+        if (companyId == null) companyId = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();  // the selected company (X-Company-Id)
         if (companyId == null) {
             UUID employeeId = extractEmployeeId(jwt);
             Employee employee = employeeRepository.findById(employeeId)
@@ -126,6 +134,7 @@ public class HiringController {
     public ResponseEntity<PageResponse<JobRequisitionResponse>> listRequisitions(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(enrichPage(hiringService.getRequisitions(companyId, pageable)));
     }
 

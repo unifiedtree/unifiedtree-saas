@@ -2,6 +2,7 @@ package com.unifiedtree.rbac.company;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.hrms.core.exception.HrmsException;
 import com.unifiedtree.rbac.company.CompanyAccess.Grant;
 import com.unifiedtree.rbac.company.CompanyAccess.Profile;
 import com.unifiedtree.rbac.company.CompanyAccess.RoleRef;
@@ -15,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -214,6 +216,83 @@ public class CompanyAccessService {
         if (!enforce || TenantContext.getTenantId() == null || TenantContext.getUserId() == null) return null;
         Profile p = currentProfile();
         return p.known() ? p.accessibleCompanyIds() : null;
+    }
+
+    /**
+     * The company a list covers when the caller left its optional
+     * {@code companyId} out (docs/redesign/COMPANY_ACCESS.md, "Lists").
+     *
+     * <ul>
+     *   <li>A {@code companyId} the caller sent wins (the filter has checked it).</li>
+     *   <li>Else the current company the client selected ({@code X-Company-Id}).</li>
+     *   <li>Else, for a company-scoped person, their home company — never every company.</li>
+     *   <li>Else {@code null} = every company, as before: people who reach every
+     *       company (workspace-wide roles, logins without an employee record),
+     *       callers outside a workspace, and everyone while the kill switch is off.</li>
+     * </ul>
+     */
+    public UUID listCompanyId(UUID requested) {
+        if (requested != null || !enforce) return requested;
+        UUID selected = CompanyContext.getCompanyId();
+        if (selected != null) return selected;
+        UUID userId = signedInWorkspaceUser();
+        return userId == null ? null : defaultListCompany(profile(userId));
+    }
+
+    /** {@link #listCompanyId(UUID)} for a caller that names no company and sends no header. */
+    static UUID defaultListCompany(Profile p) {
+        if (!p.known() || p.allCompanies()) return null;
+        return p.homeCompanyId();
+    }
+
+    /**
+     * {@link #listCompanyId(UUID)} through an optional bean: controllers built by
+     * hand in unit tests have none and keep the {@code companyId} they were given.
+     */
+    public static UUID listCompanyId(CompanyAccessService access, UUID requested) {
+        return access == null ? requested : access.listCompanyId(requested);
+    }
+
+    /**
+     * Checks a {@code companyId} carried in a request BODY (creates and updates)
+     * — the one shared check, run for every JSON body by
+     * {@link CompanyBodyAccessAdvice}. For a company-scoped person the company
+     * must be one they may access AND the one the request's permissions were
+     * worked out for (the company the request names in its path, parameter or
+     * header, else their home company): otherwise their roles in one company
+     * would be used to write into another. 403 COMPANY_ACCESS_DENIED.
+     *
+     * <p>Not checked (as before): people who reach every company, callers outside
+     * a workspace, logins unknown to it, and everything while the kill switch is off.
+     */
+    public void checkBodyCompany(UUID companyId) {
+        if (companyId == null || !enforce) return;
+        UUID userId = signedInWorkspaceUser();
+        if (userId == null) return;
+        checkBodyCompany(profile(userId), companyId, CompanyContext.getScope());
+    }
+
+    static void checkBodyCompany(Profile p, UUID companyId, CompanyContext.Scope scope) {
+        if (companyId == null || !p.known() || p.allCompanies()) return;
+        if (!p.canAccess(companyId)) {
+            log.info("COMPANY_ACCESS_DENIED user={} company={} (request body)", p.userId(), companyId);
+            throw new HrmsException("You don't have access to this company.", HttpStatus.FORBIDDEN, "COMPANY_ACCESS_DENIED");
+        }
+        UUID permissionsFrom = scope != null ? scope.companyId() : p.homeCompanyId();
+        if (!companyId.equals(permissionsFrom)) {
+            log.info("COMPANY_ACCESS_DENIED user={} company={} (request body; request runs in {})",
+                    p.userId(), companyId, permissionsFrom);
+            throw new HrmsException("Switch to this company first, then try again.", HttpStatus.FORBIDDEN,
+                    "COMPANY_ACCESS_DENIED");
+        }
+    }
+
+    /** The signed-in user of a customer workspace, or null (no user, no workspace, the platform tenant). */
+    private static UUID signedInWorkspaceUser() {
+        UUID tenantId = TenantContext.getTenantId();
+        UUID userId = TenantContext.getUserId();
+        if (tenantId == null || userId == null || TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) return null;
+        return userId;
     }
 
     /** {@code GET /v1/me/companies}: the signed-in person's active companies. */
