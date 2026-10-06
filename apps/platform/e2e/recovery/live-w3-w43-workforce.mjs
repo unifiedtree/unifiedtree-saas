@@ -84,7 +84,12 @@ async function signIn(email, { width = 1440, height = 1000, theme = 'light' } = 
   errors.length = 0; failedApi.length = 0
   return { ctx, page, errors, failedApi }
 }
-const settle = async (page) => { await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {}); await page.waitForTimeout(900) }
+const settle = async (page) => {
+  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {}); await page.waitForTimeout(900)
+  // w50: the web check-in prompt (face stations, merged after this test was written) can cover the page.
+  const skip = page.getByRole('button', { name: 'Continue without checking in' })
+  if (await skip.count()) { await skip.first().click().catch(() => {}); await page.waitForTimeout(500) }
+}
 const shot = (page, name) => page.screenshot({ path: `${SHOTS}/w43-live-${name}.png` })
 
 let owner, reader, agencyId = null, newEmpId = null, branchId = null
@@ -154,7 +159,8 @@ try {
       const types = o.page.getByRole('button', { name: /All types/ }).first()
       await types.click()
       const opts = await o.page.getByRole('option').allInnerTexts()
-      check('1440: Type filter lists the workspace’s own types (Consultant from the data; no fixed Part-time)', opts.some((t) => t.includes('Consultant')) && !opts.some((t) => t.includes('Part-time')), opts.join(', '))
+      // w50 (6 Oct): every company now has the five default types, so Part-time is there too (from the data).
+      check('1440: Type filter lists the workspace’s own types (Consultant and Part-time from the data)', opts.some((t) => t.includes('Consultant')) && opts.some((t) => t.includes('Part-time')), opts.join(', '))
       await o.page.keyboard.press('Escape')
       const img = o.page.locator('table img[src*="/api/v1/public/images/"]')
       check('1440: a person’s photo shows on their directory row', await img.count() > 0)
@@ -165,9 +171,11 @@ try {
     await settle(o.page)
     const form = o.page.getByRole('dialog', { name: 'Add employee' })
     await form.waitFor({ timeout: 20_000 })
-    const typeOpts = await form.locator('[data-field="type"] [role="radio"]').allInnerTexts()
-    check(`${v.tag}: Add employee's types are the company's own (${typeOpts.join(', ')})`, typeOpts.includes('Consultant') && typeOpts.includes('Contract') && !typeOpts.includes('Part-time'))
-    await form.locator('[data-field="type"] [role="radio"]', { hasText: 'Contract' }).click()
+    // w50 (6 Oct): five default types (more than four), so the field is a dropdown.
+    await form.locator('[data-field="type"] button.uko-dd-trigger').first().click()
+    const typeOpts = (await o.page.getByRole('option').allInnerTexts()).map((t) => t.trim())
+    check(`${v.tag}: Add employee's types are the company's own (${typeOpts.join(', ')})`, ['Consultant', 'Contract', 'Part-time'].every((x) => typeOpts.some((t) => t.startsWith(x))))
+    await o.page.getByRole('option', { name: /^Contract/ }).first().click()
     const agencyField = form.locator('[data-field="agency"]')
     check(`${v.tag}: Contract shows the staffing agency picker, required`, await agencyField.count() === 1 && (await agencyField.locator('.uko-req').count()) === 1)
     await agencyField.scrollIntoViewIfNeeded()
