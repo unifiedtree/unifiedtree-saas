@@ -26,7 +26,7 @@ export function TermsPage() {
       <p>Your subscription auto-renews at the end of each cycle unless you cancel. Cancel any time from your workspace settings.</p>
 
       <h2>4. Refunds</h2>
-      <p>We offer a pro-rata refund for annual plans cancelled within the first 30 days. Monthly plans are non-refundable once the cycle starts, but you can cancel before the next billing date and won&apos;t be charged again.</p>
+      <p>We offer a pro-rata refund for annual plans cancelled within the first 30 days. Monthly plans are non-refundable once the cycle starts, but you can cancel before the next billing date and won&apos;t be charged again. Details are in our <a href="/refund-policy">Refund &amp; Cancellation Policy</a>.</p>
 
       <h2>5. Data ownership</h2>
       <p>You own your data. We store and process it only to provide the service. You can export your data at any time and we delete it 30 days after cancellation. See our <a href="/privacy">Privacy Policy</a> for details.</p>
