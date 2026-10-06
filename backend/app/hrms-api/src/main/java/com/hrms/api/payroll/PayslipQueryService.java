@@ -171,6 +171,8 @@ public class PayslipQueryService {
         for (String permission : ANSWER_PERMISSIONS) {
             if (people.size() >= MAX_RECIPIENTS) break;
             people.addAll(store.employeesHolding(tenantId, permission, asker, MAX_RECIPIENTS));
+            // People granted it in the asker's company (COMPANY_ACCESS.md).
+            people.addAll(store.employeesGranted(tenantId, permission, asker, asker));
         }
         return people.stream().limit(MAX_RECIPIENTS).toList();
     }

@@ -1,5 +1,6 @@
 package com.hrms.api.attendance;
 
+import com.unifiedtree.security.tenant.CompanyGrants;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,25 +64,43 @@ public class ApproverPath {
         try {
             UUID tenant = TenantContext.requireTenantId();
             Map<UUID, UUID> direct = new HashMap<>();
+            Map<UUID, UUID> companyOf = new HashMap<>();
             List<Object> args = new ArrayList<>();
             args.add(tenant);
             args.addAll(ids);
             jdbc.query("""
-                    SELECT e.id, COALESCE(e.reporting_manager_id, d.department_head_employee_id) AS approver
+                    SELECT e.id, e.company_id, COALESCE(e.reporting_manager_id, d.department_head_employee_id) AS approver
                       FROM hrms.employees e
                       LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
                      WHERE e.tenant_id = ? AND e.id IN (%s)
                     """.formatted(in(ids.size())),
-                    (RowCallbackHandler) rs -> direct.put((UUID) rs.getObject("id"), (UUID) rs.getObject("approver")),
+                    (RowCallbackHandler) rs -> {
+                        UUID id = (UUID) rs.getObject("id");
+                        direct.put(id, (UUID) rs.getObject("approver"));
+                        companyOf.put(id, (UUID) rs.getObject("company_id"));
+                    },
                     args.toArray());
             UUID hr = null, admin = null;
             boolean fallbackNeeded = ids.stream().anyMatch(id -> direct.get(id) == null || direct.get(id).equals(id));
-            if (fallbackNeeded) {
+            // People granted HR manager / super admin in a requester's company count for that
+            // company's requests (COMPANY_ACCESS.md): the fallback is then read per company.
+            boolean perCompany = fallbackNeeded && CompanyGrants.ready(jdbc);
+            if (fallbackNeeded && !perCompany) {
                 hr = firstWithRole(tenant, HR_MANAGER_ROLE);
                 admin = firstWithRole(tenant, SUPER_ADMIN_ROLE);
             }
+            Map<UUID, UUID[]> fallbackByCompany = new HashMap<>();
             for (UUID id : ids) {
-                UUID chosen = pick(id, direct.get(id), hr, admin);
+                UUID d = direct.get(id);
+                UUID chosen;
+                if (perCompany && (d == null || d.equals(id))) {
+                    UUID[] f = fallbackByCompany.computeIfAbsent(companyOf.get(id), company -> new UUID[] {
+                            CompanyGrants.firstRoleHolder(jdbc, tenant, HR_MANAGER_ROLE, company, null),
+                            CompanyGrants.firstRoleHolder(jdbc, tenant, SUPER_ADMIN_ROLE, company, null)});
+                    chosen = pick(id, d, f[0], f[1]);
+                } else {
+                    chosen = pick(id, d, hr, admin);
+                }
                 if (chosen != null) out.put(id, chosen);
             }
         } catch (DataAccessException | IllegalStateException e) {

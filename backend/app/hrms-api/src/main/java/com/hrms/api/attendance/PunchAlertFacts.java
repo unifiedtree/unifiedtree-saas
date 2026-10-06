@@ -22,6 +22,8 @@ class PunchAlertFacts {
     /** The most role holders one alert considers (the alert itself is capped lower). */
     static final int MAX_ROLE_HOLDERS = 500;
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PunchAlertFacts.class);
+
     private final JdbcTemplate jdbc;
 
     PunchAlertFacts(JdbcTemplate jdbc) {
@@ -86,6 +88,33 @@ class PunchAlertFacts {
                 tenantId, PunchAlertSettingsService.array(roleIds), companyId,
                 PunchAlertSettingsService.HIDDEN_ROLE_CODES.stream().sorted().collect(Collectors.joining(",", "{", "}")),
                 MAX_ROLE_HOLDERS);
+        // People granted one of these roles in this company (COMPANY_ACCESS.md) hold it here too.
+        if (out.size() < MAX_ROLE_HOLDERS && com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) {
+            java.util.Set<UUID> seen = out.stream().map(PunchAlerts.Candidate::employeeId)
+                    .collect(Collectors.toCollection(java.util.HashSet::new));
+            try {
+                jdbc.query("""
+                        SELECT DISTINCT e.id, a.company_id, (%s) AS working
+                          FROM rbac.user_company_access a
+                          JOIN rbac.roles r ON r.id = a.role_id AND (r.tenant_id IS NULL OR r.tenant_id = a.tenant_id)
+                          JOIN auth.user_credentials uc ON uc.id = a.user_id AND uc.tenant_id = a.tenant_id AND uc.is_active = TRUE
+                          JOIN hrms.employees e ON e.id = uc.employee_id AND e.tenant_id = a.tenant_id
+                         WHERE a.tenant_id = ? AND a.role_id = ANY(CAST(? AS uuid[])) AND a.company_id = ?
+                           AND NOT (r.code = ANY(CAST(? AS text[])))
+                         LIMIT ?
+                        """.formatted(PunchAlertSettingsService.WORKING), (RowCallbackHandler) rs -> {
+                            UUID id = (UUID) rs.getObject("id");
+                            if (out.size() < MAX_ROLE_HOLDERS && seen.add(id)) {
+                                out.add(new PunchAlerts.Candidate(id, (UUID) rs.getObject("company_id"), rs.getBoolean("working"), true));
+                            }
+                        },
+                        tenantId, PunchAlertSettingsService.array(roleIds), companyId,
+                        PunchAlertSettingsService.HIDDEN_ROLE_CODES.stream().sorted().collect(Collectors.joining(",", "{", "}")),
+                        MAX_ROLE_HOLDERS);
+            } catch (RuntimeException e) {
+                log.warn("Company grants left out of the punch alert role holders (company={}): {}", companyId, e.toString());
+            }
+        }
         return out;
     }
 

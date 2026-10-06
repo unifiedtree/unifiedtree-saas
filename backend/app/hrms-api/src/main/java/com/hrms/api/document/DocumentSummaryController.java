@@ -1,5 +1,6 @@
 package com.hrms.api.document;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.security.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -39,6 +40,10 @@ import java.util.UUID;
 @Tag(name = "Document", description = "Employee document vault — upload, browse, and self-service access")
 @SecurityRequirement(name = "bearerAuth")
 public class DocumentSummaryController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     static final int SOON_DAYS = 30;
@@ -94,6 +99,7 @@ public class DocumentSummaryController {
     @PreAuthorize("hasAuthority('hrms.document.read')")
     @Transactional(readOnly = true)
     public Summary employee(@PathVariable UUID employeeId) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         UUID tenant = TenantContext.requireTenantId();
         Summary s = summarise(tenant, employeeId);
         List<String> dept = jdbc.queryForList("""

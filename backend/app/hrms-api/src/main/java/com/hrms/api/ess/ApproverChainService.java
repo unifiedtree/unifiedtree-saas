@@ -8,6 +8,7 @@ import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.employee.workforce.entity.Department;
 import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import com.unifiedtree.notifications.service.NotificationLookupService;
+import com.unifiedtree.security.tenant.CompanyGrants;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -126,7 +127,7 @@ public class ApproverChainService {
                                     + "department head, or add an HR manager before applying for "
                                     + (kind == Kind.LEAVE ? "leave" : "WFH"),
                             "NO_APPROVER_AVAILABLE"));
-            source = terminalSource(applicant.getTenantId(), approverId);
+            source = terminalSource(applicant.getTenantId(), approverId, applicant.getCompanyId());
         }
         Employee resolved = employees.findById(approverId).orElse(null);
         if (!isValidApprover(resolved, applicant)) {
@@ -142,7 +143,7 @@ public class ApproverChainService {
                                 + "please contact HR to set up the approval chain.",
                         "APPROVER_INVALID");
             }
-            source = terminalSource(applicant.getTenantId(), approverId);
+            source = terminalSource(applicant.getTenantId(), approverId, applicant.getCompanyId());
         }
         UUID picked = approverId;
         UUID delegate = fallback.redirectIfDelegated(picked, LocalDate.now(clock));
@@ -164,9 +165,9 @@ public class ApproverChainService {
         if (direct != null && !direct.equals(self)) {
             return new Choice(direct, direct.equals(applicant.getManagerId()) ? Source.MANAGER : Source.DEPARTMENT_HEAD, null);
         }
-        UUID hr = lookup.firstEmployeeWithRole(tenant, HR_MANAGER);
+        UUID hr = lookup.firstEmployeeWithRole(tenant, HR_MANAGER, self);
         if (hr != null && !hr.equals(self)) return new Choice(hr, Source.HR, null);
-        UUID admin = lookup.firstEmployeeWithRole(tenant, SUPER_ADMIN);
+        UUID admin = lookup.firstEmployeeWithRole(tenant, SUPER_ADMIN, self);
         return admin != null && !admin.equals(self) ? new Choice(admin, Source.ADMIN, null) : null;
     }
 
@@ -189,6 +190,25 @@ public class ApproverChainService {
      * the person's roles.
      */
     Source terminalSource(UUID tenantId, UUID employeeId) {
+        return terminalSource(tenantId, employeeId, null);
+    }
+
+    /**
+     * {@link #terminalSource(UUID, UUID)}; an HR manager by a grant in the
+     * applicant's company ({@code companyId}) is HR too (COMPANY_ACCESS.md).
+     */
+    Source terminalSource(UUID tenantId, UUID employeeId, UUID companyId) {
+        if (companyId != null && CompanyGrants.ready(jdbc)) {
+            Boolean granted = jdbc.queryForObject("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM rbac.user_company_access a
+                          JOIN auth.user_credentials uc ON uc.id = a.user_id
+                         WHERE a.tenant_id = ? AND a.company_id = ? AND a.role_id = ?
+                           AND uc.employee_id = ? AND uc.is_active = TRUE
+                    )
+                    """, Boolean.class, tenantId, companyId, HR_MANAGER, employeeId);
+            if (Boolean.TRUE.equals(granted)) return Source.HR;
+        }
         Boolean hr = jdbc.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1 FROM rbac.user_roles ur

@@ -247,6 +247,11 @@ public class MilestoneReminderService {
         if (p.managerId() != null) ids.add(p.managerId());
         ids.addAll(employeesWithRole(tenantId, HR_MANAGER));
         ids.addAll(employeesWithRole(tenantId, SUPER_ADMIN));
+        // HR managers of the person's company through a grant (COMPANY_ACCESS.md).
+        if (com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) {
+            ids.addAll(com.unifiedtree.security.tenant.CompanyGrants.employeesGrantedRole(jdbc, tenantId,
+                    List.of(HR_MANAGER), com.unifiedtree.security.tenant.CompanyGrants.companyOf(jdbc, p.id())));
+        }
         // Never tell someone about their own milestone twice — they already got
         // the greeting, which reads very differently from "It's your birthday".
         ids.remove(p.id());

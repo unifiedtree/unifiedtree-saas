@@ -272,4 +272,14 @@ class PayslipQueryServiceTest {
         assertEquals(HttpStatus.BAD_REQUEST, bad.getStatus());
         assertEquals("INVALID_STATUS", bad.getErrorCode());
     }
+
+    @Test
+    void questionsAlsoReachPayrollPeopleGrantedInTheAskersCompany() {
+        // Company access (COMPANY_ACCESS.md): a role granted in the asker's company counts.
+        UUID grantee = UUID.randomUUID();
+        when(store.employeesHolding(TENANT, "payroll.runs.manage", READER, PayslipQueryService.MAX_RECIPIENTS))
+                .thenReturn(List.of(FIN));
+        when(store.employeesGranted(TENANT, "payroll.runs.manage", READER, READER)).thenReturn(List.of(grantee, FIN));
+        assertEquals(List.of(FIN, grantee), service.answerers(TENANT, READER), "each once, the workspace's payroll team first");
+    }
 }

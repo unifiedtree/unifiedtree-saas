@@ -1,5 +1,7 @@
 package com.hrms.api.leave;
 
+import com.hrms.api.access.RecordCompanyGuard;
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.leave.dto.LeaveApprovalRequest;
@@ -40,6 +42,13 @@ import java.util.stream.Collectors;
 @Tag(name = "Leave", description = "Leave applications, approvals, balances, and policies")
 @SecurityRequirement(name = "bearerAuth")
 public class LeaveController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
+    /** Company access: a company-scoped HR-level approver's tenant-wide lists cover their current company. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
 
     private final LeaveService leaveService;
     private final LeaveTypeService leaveTypeService;
@@ -196,6 +205,7 @@ public class LeaveController {
             @PathVariable UUID employeeId,
             @Valid @RequestBody LeaveRequestRequest request,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         UUID caller = extractEmployeeId(jwt);
         if (employeeId.equals(caller)) {
             throw new BusinessRuleException(
@@ -306,8 +316,10 @@ public class LeaveController {
         // OWN leaves instead of the queue. Mirror the same branch here.
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        UUID onlyCompany = adminOrHr ? CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
         long pendingApprovals = (adminOrHr
-                ? leaveService.getAllPending(employeeId, Pageable.ofSize(1))
+                ? (onlyCompany == null ? leaveService.getAllPending(employeeId, Pageable.ofSize(1))
+                        : leaveService.getAllPending(employeeId, onlyCompany, Pageable.ofSize(1)))
                 : leaveService.getPendingApprovalsForManager(employeeId, Pageable.ofSize(1)))
                 .totalElements();
         return ResponseEntity.ok(new LeaveOverviewResponse(balances, withDetails(recent.content(), false), pendingApprovals));
@@ -385,8 +397,11 @@ public class LeaveController {
         // Never their own requests, which they may not decide (audit 5 Oct 2026).
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        // A company-scoped HR-level approver: their current company only (COMPANY_ACCESS.md).
+        UUID onlyCompany = adminOrHr ? CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
         PageResponse<LeaveRequestResponse> page = adminOrHr
-                ? leaveService.getAllPending(callerOrNull(jwt), pageable)
+                ? (onlyCompany == null ? leaveService.getAllPending(callerOrNull(jwt), pageable)
+                        : leaveService.getAllPending(callerOrNull(jwt), onlyCompany, pageable))
                 : leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
         return ResponseEntity.ok(enrichPage(page, true));
     }
@@ -429,13 +444,18 @@ public class LeaveController {
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
         UUID me = extractEmployeeId(jwt);
-        PageResponse<LeaveRequestResponse> page = only == null
+        // A company-scoped HR-level approver: their current company only (COMPANY_ACCESS.md).
+        UUID onlyCompany = adminOrHr ? CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
+        PageResponse<LeaveRequestResponse> page = adminOrHr && onlyCompany != null
+                ? leaveService.getAllDecided(only, onlyCompany, pageable)
+                : only == null
                 ? (adminOrHr ? leaveService.getAllDecided(pageable) : leaveService.getDecidedApprovalsForManager(me, pageable))
                 : (adminOrHr ? leaveService.getAllDecided(only, pageable) : leaveService.getDecidedApprovalsForManager(me, only, pageable));
         PageResponse<LeaveRequestResponse> enriched = enrichPage(page, false);
         Map<String, Long> counts;
         try {
-            counts = leaveService.decidedCounts(adminOrHr ? null : me);
+            counts = onlyCompany != null ? leaveService.decidedCounts(null, onlyCompany)
+                    : leaveService.decidedCounts(adminOrHr ? null : me);
         } catch (org.springframework.dao.DataAccessException e) {
             counts = null; // the list still works without its counts
         }
@@ -464,7 +484,11 @@ public class LeaveController {
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
         // Not the caller's own requests, which they may not decide (audit 5 Oct 2026).
-        return ResponseEntity.ok(enrichPage(leaveService.getPendingL2Approvals(callerOrNull(jwt), pageable), true));
+        // A company-scoped HR-level approver: their current company only (COMPANY_ACCESS.md).
+        UUID onlyCompany = CompanyAccessService.scopedViewCompanyId(companyAccess);
+        return ResponseEntity.ok(enrichPage(onlyCompany == null
+                ? leaveService.getPendingL2Approvals(callerOrNull(jwt), pageable)
+                : leaveService.getPendingL2Approvals(callerOrNull(jwt), onlyCompany, pageable), true));
     }
 
     @Operation(summary = "L2 HR final approval or rejection")
@@ -543,6 +567,7 @@ public class LeaveController {
     public ResponseEntity<LeaveTypeResponse> updateType(
             @PathVariable UUID id,
             @Valid @RequestBody LeaveTypeRequest request) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.LEAVE_TYPE, id);
         return ResponseEntity.ok(leaveTypeService.updateLeaveType(id, request));
     }
 
@@ -551,6 +576,7 @@ public class LeaveController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('leave.type.write')")
     public void deactivateType(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.LEAVE_TYPE, id);
         leaveTypeService.deactivateLeaveType(id);
     }
 

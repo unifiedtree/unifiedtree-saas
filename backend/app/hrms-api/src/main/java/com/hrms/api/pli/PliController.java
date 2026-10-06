@@ -1,5 +1,6 @@
 package com.hrms.api.pli;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
@@ -42,6 +43,10 @@ import java.util.stream.Collectors;
 @Tag(name = "PLI", description = "Performance-linked incentive awards, approval, and payout")
 @SecurityRequirement(name = "bearerAuth")
 public class PliController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -96,6 +101,7 @@ public class PliController {
     @PreAuthorize("hasAnyAuthority('hrms.pli.target.write','hrms.pli.write')")
     public ResponseEntity<PliTargetResponse> updateTarget(@PathVariable UUID id,
                                                           @Valid @RequestBody PliTargetRequest request) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PLI_TARGET, id);
         return ResponseEntity.ok(pliService.updateTarget(id, request));
     }
 
@@ -105,6 +111,7 @@ public class PliController {
     @PostMapping("/awards")
     @PreAuthorize("hasAuthority('hrms.pli.write')")
     public ResponseEntity<PliAwardResponse> create(@Valid @RequestBody PliAwardRequest request) {
+        RecordCompanyGuard.checkEmployee(recordGuard, request.employeeId());
         UUID employeeId = request.employeeId();
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
@@ -139,6 +146,7 @@ public class PliController {
     public ResponseEntity<PliAwardResponse> decide(
             @PathVariable UUID id,
             @Valid @RequestBody PliDecisionRequest decision) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PLI_AWARD, id);
         return ResponseEntity.ok(enrichOne(pliService.decide(id, decision)));
     }
 
@@ -146,6 +154,7 @@ public class PliController {
     @PostMapping("/awards/{id}/pay")
     @PreAuthorize("hasAuthority('hrms.pli.write')")
     public ResponseEntity<PliAwardResponse> pay(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PLI_AWARD, id);
         return ResponseEntity.ok(enrichOne(pliService.pay(id)));
     }
 

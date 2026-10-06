@@ -1,5 +1,6 @@
 package com.hrms.api.advance;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +24,10 @@ import java.util.UUID;
 @RequestMapping("/v1/advance")
 public class AdvanceRecoveryController {
 
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
+
     private final AdvanceRecoveryService service;
     private final com.hrms.advance.service.AdvanceService advances;
 
@@ -34,6 +39,7 @@ public class AdvanceRecoveryController {
     @GetMapping("/{id}/schedule")
     @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public List<AdvanceRecoveryService.ScheduleRowDto> schedule(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         requireReadable(id, jwt);
         return service.listSchedule(TenantContext.getTenantId(), id);
     }
@@ -41,6 +47,7 @@ public class AdvanceRecoveryController {
     @GetMapping("/{id}/ledger")
     @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public List<AdvanceRecoveryService.LedgerRowDto> ledger(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         requireReadable(id, jwt);
         return service.listLedger(TenantContext.getTenantId(), id);
     }
@@ -48,6 +55,7 @@ public class AdvanceRecoveryController {
     @GetMapping("/{id}/summary")
     @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public AdvanceRecoveryService.RecoverySummaryDto summary(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         requireReadable(id, jwt);
         return service.summary(TenantContext.getTenantId(), id);
     }
@@ -58,6 +66,7 @@ public class AdvanceRecoveryController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceRecoveryService.ForecloseRequest req,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         requireVisible(id, jwt);
         return service.foreclose(TenantContext.getTenantId(), id, req, actorId(jwt));
     }
@@ -68,6 +77,7 @@ public class AdvanceRecoveryController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceRecoveryService.WriteOffRequest req,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         requireVisible(id, jwt);
         return service.writeOff(TenantContext.getTenantId(), id, req, actorId(jwt));
     }
@@ -78,6 +88,7 @@ public class AdvanceRecoveryController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceRecoveryService.SkipMonthRequest req,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         var advance = advances.getRequest(id);
         if (!canReadAll(jwt) && !java.util.Objects.equals(advance.approverId(), employeeId(jwt))) {
             throw new org.springframework.security.access.AccessDeniedException("This advance is not routed to you for approval.");

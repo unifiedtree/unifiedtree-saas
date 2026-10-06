@@ -337,6 +337,14 @@ public class AssetCareService {
                      LIMIT ?
                     """, UUID.class, tenant, MANAGE_PERMISSION, MANAGE_PERMISSION, MANAGE_PERMISSION, MAX_RECIPIENTS + 1);
             List<UUID> out = new ArrayList<>(ids);
+            // People granted it in the reporter's company (COMPANY_ACCESS.md).
+            if (com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) {
+                UUID company = com.unifiedtree.security.tenant.CompanyGrants.companyOf(jdbc, except);
+                for (UUID id : com.unifiedtree.security.tenant.CompanyGrants.employeesGrantedPermission(
+                        jdbc, tenant, MANAGE_PERMISSION, company)) {
+                    if (!out.contains(id)) out.add(id);
+                }
+            }
             out.remove(except);
             return out.size() > MAX_RECIPIENTS ? out.subList(0, MAX_RECIPIENTS) : out;
         } catch (RuntimeException e) {

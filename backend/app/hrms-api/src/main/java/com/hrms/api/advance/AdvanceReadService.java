@@ -217,6 +217,14 @@ public class AdvanceReadService {
                                  JOIN auth.user_credentials uc ON uc.id = ur.user_id
                                 WHERE ur.tenant_id = ? AND ur.role_id = ? AND uc.employee_id = ?)
                 """, Boolean.class, tenantId, HR_MANAGER_ROLE, employeeId);
-        return Boolean.TRUE.equals(hr);
+        if (Boolean.TRUE.equals(hr)) return true;
+        // HR manager of a company through a grant (COMPANY_ACCESS.md): the fallback picks them for that company.
+        if (!com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) return false;
+        Boolean granted = jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM rbac.user_company_access a
+                                 JOIN auth.user_credentials uc ON uc.id = a.user_id
+                                WHERE a.tenant_id = ? AND a.role_id = ? AND uc.employee_id = ?)
+                """, Boolean.class, tenantId, HR_MANAGER_ROLE, employeeId);
+        return Boolean.TRUE.equals(granted);
     }
 }

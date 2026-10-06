@@ -54,8 +54,12 @@ public class LeaveInsightsController {
     public ResponseEntity<LeaveInsightsService.ApprovalStats> stats(@RequestParam(defaultValue = "7") int months,
                                                                      @AuthenticationPrincipal Jwt jwt,
                                                                      Authentication auth) {
-        return ResponseEntity.ok(insights.approvalStats(employeeId(jwt), holds(auth, LEVEL_TWO), months,
-                LocalDate.now(LeaveInsightsService.IST)));
+        boolean levelTwo = holds(auth, LEVEL_TWO);
+        // A company-scoped level-two approver: their current company only (COMPANY_ACCESS.md).
+        UUID only = levelTwo ? CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
+        LocalDate today = LocalDate.now(LeaveInsightsService.IST);
+        return ResponseEntity.ok(only == null ? insights.approvalStats(employeeId(jwt), levelTwo, months, today)
+                : insights.approvalStats(employeeId(jwt), levelTwo, months, today, only));
     }
 
     @Operation(summary = "Leave between two dates (at most 62 days): the workspace for HR, the team for approvers, else your own")
@@ -67,7 +71,11 @@ public class LeaveInsightsController {
             @RequestParam(required = false) List<String> statuses,
             @AuthenticationPrincipal Jwt jwt,
             Authentication auth) {
-        return ResponseEntity.ok(insights.calendar(employeeId(jwt), scopeOf(auth), from, to, statuses));
+        LeaveInsightsService.Scope scope = scopeOf(auth);
+        // A company-scoped level-two approver: their current company only (COMPANY_ACCESS.md).
+        UUID only = scope == LeaveInsightsService.Scope.TENANT ? CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
+        return ResponseEntity.ok(only == null ? insights.calendar(employeeId(jwt), scope, from, to, statuses)
+                : insights.calendar(employeeId(jwt), scope, from, to, statuses, only));
     }
 
     @Operation(summary = "Colleagues off: first names of people in your department on approved leave, per working day (at most 62 days)")

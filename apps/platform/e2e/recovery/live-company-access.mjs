@@ -23,8 +23,14 @@
 //  - Lists whose companyId is optional: without one, mgr@ gets his current company (the
 //    header's, else home) instead of every company; owner@ without a header: every company
 //    as before, with a header: that company.
+//  - Records addressed by id (feat/company-access-3): a record in a company the caller can't
+//    access is 404 (as an unknown id); in a company they can access but are not working in,
+//    403 COMPANY_ACCESS_DENIED; their own team's records always. owner@ unchanged.
+//  - HR-level views: reader@ granted HR Manager in B sees only B's requests in the HR queue,
+//    the decided list (and its counts), the calendar and the stats; owner@ keeps the workspace.
+//  - Alerts: an HR Manager by grant in B is told about B's people (a probation decision).
 // Everything created (company, employee, grants, audit rows) is removed at the end.
-/* global process, console, fetch */
+/* global process, console, fetch, setTimeout */
 import { execFileSync } from 'node:child_process'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
@@ -42,7 +48,7 @@ const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const tag = String(Date.now() % 1000000)
 const tempName = `zz QA Access Co ${tag}` // sorts after every real company
-let companyB = null, empB = null, mgrUser = null
+let companyB = null, empB = null, empB2 = null, mgrUser = null, readerUser = null
 const start = sql('select now()')
 let where = 'start'
 const at = (name) => { where = name; console.log(`..  ${name}`) }
@@ -71,6 +77,7 @@ try {
   const mgr = await login('mgr@unifiedtree.demo')
   const reader = await login('reader@unifiedtree.demo')
   mgrUser = mgr.userId
+  readerUser = reader.userId
   check('fixtures: mgr@ and reader@ work in the demo company', !!mgr.userId && !!mgr.employeeId && !!reader.userId)
 
   // ── before company B exists ──
@@ -156,6 +163,34 @@ try {
   check(`company B gets an employee with A's code ${readerCode}, reporting to mgr@`, (emp.status === 201 || emp.status === 200) && !!empB, `status ${emp.status} ${JSON.stringify(emp.json).slice(0, 200)}`)
   check('the code exists once in each company', sql(`select count(distinct company_id) from hrms.employees where employee_code=${lit(readerCode)} and company_id in ('${companyA}','${companyB}')`) === '2')
 
+  // ── records addressed by id (feat/company-access-3) ──
+  at('records by id before a grant')
+  const emp2 = await owner('POST', '/v1/hrms/employees', { body: { companyId: companyB, employeeCode: `QA3${tag}`, firstName: 'QA', lastName: `Other ${tag}` } })
+  empB2 = emp2.json && (emp2.json.id || (emp2.json.employee && emp2.json.employee.id))
+  check('company B gets a second employee, reporting to nobody', (emp2.status === 201 || emp2.status === 200) && !!empB2, `status ${emp2.status}`)
+  const agency = await owner('POST', '/v1/hrms/contractors', { body: { companyId: companyB, agencyName: `QA Agency ${tag}` } })
+  const agencyB = agency.json && agency.json.id
+  check('owner@ creates a contractor agency in B', (agency.status === 201 || agency.status === 200) && !!agencyB, `status ${agency.status} ${errorCode(agency)}`)
+  const agencyA = sql(`select id from hrms.contractors where company_id='${companyA}' limit 1`)
+  r = await mgr('GET', `/v1/hrms/contractors/${agencyB}/workers`)
+  check("mgr@ (no access to B) opens B's agency by id → 404, as an unknown id", r.status === 404 && errorCode(r) === 'RESOURCE_NOT_FOUND', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('GET', '/v1/hrms/contractors/00000000-0000-0000-0000-00000000abcd/workers')
+  check('…the same answer as an id that does not exist', r.status === 404, `status ${r.status} ${errorCode(r)}`)
+  if (agencyA) {
+    r = await mgr('GET', `/v1/hrms/contractors/${agencyA}/workers`)
+    check("mgr@ opens his home company's agency → 200 as before", r.status === 200, `status ${r.status} ${errorCode(r)}`)
+  }
+  r = await owner('GET', `/v1/hrms/contractors/${agencyB}/workers`)
+  check("owner@ opens B's agency → 200 (workspace-wide: unchanged)", r.status === 200, `status ${r.status}`)
+  r = await mgr('GET', `/v1/hrms/employees/${empB2}`)
+  check("mgr@ opens a B employee by id → 404 (was 403 'not your team')", r.status === 404 && errorCode(r) === 'RESOURCE_NOT_FOUND', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('GET', `/v1/hrms/employees/${empB}`)
+  check('mgr@ still opens his own direct report in B → 200', r.status === 200 && r.json.id === empB, `status ${r.status} ${errorCode(r)}`)
+  r = await reader('GET', `/v1/expense/employees/${empB2}/claims`)
+  check("reader@ asks for a B employee's claims → 404", r.status === 404, `status ${r.status} ${errorCode(r)}`)
+  r = await reader('GET', `/v1/expense/employees/${reader.employeeId}/claims`)
+  check('reader@ reads his own claims → 200 as before', r.status === 200, `status ${r.status} ${errorCode(r)}`)
+
   // ── grant: Employee in B ──
   at('grant Employee in B')
   r = await owner('POST', `/v1/workspace/users/${mgrUser}/company-access`, { body: { companyId: companyB, roleCode: 'EMPLOYEE' } })
@@ -191,6 +226,18 @@ try {
   check("mgr@ reads B's departments", r.status === 200, `status ${r.status}`)
   r = await mgr('GET', `/v1/hrms/companies/${companyB}`, { company: companyB })
   check("mgr@ reads company B's profile", r.status === 200 && r.json.id === companyB, `status ${r.status}`)
+  r = await mgr('GET', `/v1/hrms/contractors/${agencyB}/workers`)
+  check("with access to B but working in A (no header): B's agency → 403 COMPANY_ACCESS_DENIED (switch first)", r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('GET', `/v1/hrms/contractors/${agencyB}/workers`, { company: companyB })
+  check("working in B: B's agency → 200", r.status === 200, `status ${r.status} ${errorCode(r)}`)
+  if (agencyA) {
+    r = await mgr('GET', `/v1/hrms/contractors/${agencyA}/workers`, { company: companyB })
+    check("working in B: his home company's agency → 403 COMPANY_ACCESS_DENIED", r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  }
+  r = await mgr('GET', `/v1/hrms/employees/${empB2}`, { company: companyB })
+  check("working in B: a B employee outside his team passes the company check (then 'not your team')", r.status === 403 && errorCode(r) !== 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('GET', `/v1/hrms/employees/${reader.employeeId}`, { company: companyB })
+  check('working in B: his own direct report in A still opens', r.status === 200, `status ${r.status} ${errorCode(r)}`)
   r = await mgr('GET', '/v1/hrms/branches', { company: companyB })
   check("mgr@ /branches with X-Company-Id: B → B's branches only", r.status === 200 && JSON.stringify(branchCos(r.json)) === JSON.stringify([companyB]), JSON.stringify(branchCos(r.json)))
   r = await mgr('GET', '/v1/hiring/summary', { company: companyB })
@@ -207,6 +254,47 @@ try {
   check('reader@ still cannot read B', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status}`)
   r = await reader('GET', `/v1/attendance/dashboard?companyId=${companyB}`)
   check("reader@ cannot reach B's team through a parameter either", r.status === 403, `status ${r.status}`)
+
+  // ── HR-level views for a company-scoped level-two approver (feat/company-access-3) ──
+  at('HR-level views')
+  r = await owner('POST', `/v1/workspace/users/${readerUser}/company-access`, { body: { companyId: companyB, roleCode: 'HR_MANAGER' } })
+  check('owner@ grants reader@ HR Manager in B', r.status === 200, `status ${r.status} ${errorCode(r)}`)
+  const aDecided = Number(sql(`select count(*) from leave_mgmt.leave_requests lr join hrms.employees e on e.id=lr.employee_id where lr.tenant_id='${tenant}' and e.company_id='${companyA}' and lr.status <> 'PENDING'`))
+  r = await reader('GET', '/v1/leave/approvals/history?size=50', { company: companyB })
+  const histB = (r.json && r.json.content) || []
+  check("reader@ in B: the decided list holds none of A's requests", r.status === 200 && !histB.some((x) => x.employeeId === reader.employeeId || x.employeeId === mgr.employeeId)
+    && r.json.totalElements === Number(sql(`select count(*) from leave_mgmt.leave_requests lr join hrms.employees e on e.id=lr.employee_id where e.company_id='${companyB}' and lr.status <> 'PENDING'`)), `status ${r.status} total ${r.json && r.json.totalElements}`)
+  check("…and its counts are B's (A has " + aDecided + ' decided)', r.status === 200 && r.json.counts && Object.values(r.json.counts).reduce((a, b) => a + b, 0) === r.json.totalElements, JSON.stringify(r.json && r.json.counts))
+  r = await owner('GET', '/v1/leave/approvals/history?size=50', { company: companyB })
+  check("owner@ with X-Company-Id: B still sees the workspace's decided list (unchanged)", r.status === 200 && r.json.totalElements >= aDecided, `status ${r.status} total ${r.json && r.json.totalElements} A ${aDecided}`)
+  r = await reader('GET', '/v1/leave/approvals/pending-l2', { company: companyB })
+  check("reader@ in B: HR's queue → 200, B's people only", r.status === 200 && (r.json.content || []).every((x) => x.employeeId === empB || x.employeeId === empB2), `status ${r.status} ${errorCode(r)}`)
+  r = await reader('GET', '/v1/leave/approvals/pending-l2')
+  check("reader@ in A (home, Employee there): HR's queue → 403", r.status === 403, `status ${r.status}`)
+  r = await reader('GET', '/v1/wfh/pending-approvals', { company: companyB })
+  check("reader@ in B: the WFH queue → 200, B's people only", r.status === 200 && (r.json.content || []).every((x) => x.employeeId === empB || x.employeeId === empB2), `status ${r.status} ${errorCode(r)}`)
+  const month = new Date().toISOString().slice(0, 7)
+  r = await reader('GET', `/v1/leave/calendar?from=${month}-01&to=${month}-28&statuses=APPROVED,PENDING,PENDING_L2`, { company: companyB })
+  check("reader@ in B: the leave calendar → B's people only", r.status === 200 && r.json.scope === 'TENANT' && (r.json.entries || []).every((x) => x.employeeId === empB || x.employeeId === empB2), `status ${r.status} ${errorCode(r)}`)
+  r = await reader('GET', '/v1/leave/approvals/stats', { company: companyB })
+  check('reader@ in B: the approval stats → 200', r.status === 200 && r.json.scope === 'TENANT', `status ${r.status} ${errorCode(r)}`)
+  r = await reader('GET', '/v1/team/approvals?kind=all&includeL2=true', { company: companyB })
+  check("reader@ in B: the approvals inbox → 200, B's people only", r.status === 200 && (r.json.rows || []).every((x) => x.employeeId === empB || x.employeeId === empB2), `status ${r.status} ${errorCode(r)}`)
+
+  at('alerts')
+  sql(`update hrms.employees set employment_status='PROBATION', probation_end_date=current_date + 10 where id='${empB}' and company_id='${companyB}'`)
+  const alertsFrom = sql('select now()')
+  const until = sql("select to_char(current_date + 40, 'YYYY-MM-DD')")
+  r = await owner('POST', `/v1/team/probation/${empB}/extend`, { body: { newEndDate: until, note: 'QA company access' }, company: companyB })
+  check("owner@ extends B's employee's probation", r.status === 200, `status ${r.status} ${errorCode(r)} ${JSON.stringify(r.json).slice(0, 200)}`)
+  let told = '0'
+  for (let i = 0; i < 10 && told === '0'; i++) {
+    told = sql(`select count(*) from notif.notifications where user_id='${readerUser}' and created_at >= '${alertsFrom}' and data->>'employeeId' = '${empB}'`)
+    if (told === '0') await new Promise((res) => setTimeout(res, 500))
+  }
+  check('reader@, HR Manager of B by grant, is told about it', told !== '0', `notifications ${told}`)
+  r = await owner('DELETE', `/v1/workspace/users/${readerUser}/company-access/${companyB}`)
+  check("owner@ takes reader@'s access to B away again", r.status === 200, `status ${r.status}`)
 
   at('admin views')
   r = await owner('GET', `/v1/workspace/company-access?companyId=${companyB}`)
@@ -250,20 +338,26 @@ try {
   try {
     if (companyB) sql(`delete from rbac.user_company_access where company_id='${companyB}'`)
     if (mgrUser) sql(`delete from audit.events where entity_id='${mgrUser}' and occurred_at >= '${start}' and summary like ${lit('%' + tempName + '%')}`)
+    if (readerUser) sql(`delete from audit.events where entity_id='${readerUser}' and occurred_at >= '${start}' and summary like ${lit('%' + tempName + '%')}`)
+    for (const e of [empB, empB2].filter(Boolean)) sql(`delete from notif.notifications where created_at >= '${start}' and data->>'employeeId' = '${e}'`)
     const mine = companyB && sql(`select count(*) from org.companies where id='${companyB}' and name=${lit(tempName)} and tenant_id='${tenant}'`) === '1'
     if (mine) {
       const cols = (col) => sql(`select c.table_schema||'.'||c.table_name from information_schema.columns c join information_schema.tables t on t.table_schema=c.table_schema and t.table_name=c.table_name where c.column_name='${col}' and t.table_type='BASE TABLE' and c.table_schema not in ('pg_catalog','information_schema')`).split('\n').filter(Boolean)
-      const empTables = empB ? cols('employee_id') : []
+      const emps = [empB, empB2].filter(Boolean)
+      const empTables = emps.length ? cols('employee_id') : []
       const coTables = cols('company_id').filter((t) => t !== 'org.companies')
       // A few passes: rows that point at other rows go first.
       for (let pass = 0; pass < 4; pass++) {
-        for (const t of empTables) { try { sql(`delete from ${t} where employee_id='${empB}'`) } catch { /* later pass */ } }
-        if (empB) { try { sql(`delete from audit.events where entity_id='${empB}'`); sql(`delete from hrms.employees where id='${empB}' and company_id='${companyB}'`) } catch { /* later pass */ } }
+        for (const e of emps) {
+          for (const t of empTables) { try { sql(`delete from ${t} where employee_id='${e}'`) } catch { /* later pass */ } }
+          try { sql(`delete from audit.events where entity_id='${e}'`); sql(`delete from hrms.employees where id='${e}' and company_id='${companyB}'`) } catch { /* later pass */ }
+        }
         for (const t of coTables) { try { sql(`delete from ${t} where company_id='${companyB}'`) } catch { /* later pass */ } }
       }
       sql(`delete from audit.events where entity_id='${companyB}'`)
       const gone = sql(`with d as (delete from org.companies where id='${companyB}' and name=${lit(tempName)} and tenant_id='${tenant}' returning id) select count(*) from d`)
-      check('cleanup: company B, its employee and the grants removed', gone === '1' && (!empB || sql(`select count(*) from hrms.employees where id='${empB}'`) === '0'))
+      check('cleanup: company B, its employees and the grants removed', gone === '1'
+        && emps.every((e) => sql(`select count(*) from hrms.employees where id='${e}'`) === '0'))
     }
   } catch (err) {
     check('cleanup: company B, its employee and the grants removed', false, String(err).split('\n')[0])

@@ -37,6 +37,13 @@ import java.util.stream.Collectors;
 public class InboxQueries {
 
     private final JdbcTemplate jdbc;
+    /**
+     * Company access: a company-scoped HR-level approver's tenant-wide sources
+     * (leave, leave waiting for HR, work from home) cover their current company
+     * only (COMPANY_ACCESS.md). Without the bean: the whole tenant, as before.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
 
     public InboxQueries(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -124,6 +131,11 @@ public class InboxQueries {
             LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
             """;
 
+    /** The company a company-scoped HR-level approver's tenant-wide sources cover; null = the whole tenant. */
+    private UUID onlyCompany() {
+        return com.unifiedtree.rbac.company.CompanyAccessService.scopedViewCompanyId(companyAccess);
+    }
+
     // ── sources ──────────────────────────────────────────────────────────────
 
     /**
@@ -138,6 +150,11 @@ public class InboxQueries {
                 """;
         List<Object> args = new ArrayList<>(List.of(tenantId, a.me()));
         if (!a.leaveL2()) args.addAll(List.of(a.me(), a.me(), a.me()));
+        UUID only = a.leaveL2() ? onlyCompany() : null;
+        if (only != null) {
+            scope = " AND e.company_id = ?";
+            args.add(only);
+        }
         List<Row> out = new ArrayList<>();
         jdbc.query("SELECT lr.id, lr.employee_id, lr.created_at, lr.start_date, lr.end_date, lr.total_days, lr.reason,"
                         + " lr.duration, lt.name AS type_name, " + PERSON
@@ -163,13 +180,17 @@ public class InboxQueries {
      */
     public List<Row> leaveL2(UUID tenantId, InboxAccess a) {
         List<Row> out = new ArrayList<>();
+        UUID only = onlyCompany();
+        List<Object> args = new ArrayList<>(List.of(tenantId, a.me()));
+        if (only != null) args.add(only);
         jdbc.query("SELECT lr.id, lr.employee_id, lr.created_at, lr.start_date, lr.end_date, lr.total_days, lr.reason,"
                         + " lr.duration, lr.approver_id, lr.decision_note, lt.name AS type_name,"
                         + " NULLIF(TRIM(COALESCE(l1.first_name, '') || ' ' || COALESCE(l1.last_name, '')), '') AS l1_name, " + PERSON
                         + " FROM leave_mgmt.leave_requests lr " + PERSON_JOIN.formatted("lr")
                         + " LEFT JOIN leave_mgmt.leave_types lt ON lt.id = lr.leave_type_id AND lt.tenant_id = lr.tenant_id"
                         + " LEFT JOIN hrms.employees l1 ON l1.id = lr.approver_id AND l1.tenant_id = lr.tenant_id"
-                        + " WHERE lr.tenant_id = ? AND lr.status = 'PENDING_L2' AND lr.employee_id <> ?",
+                        + " WHERE lr.tenant_id = ? AND lr.status = 'PENDING_L2' AND lr.employee_id <> ?"
+                        + (only != null ? " AND e.company_id = ?" : ""),
                 (RowCallbackHandler) rs -> {
                     Timestamp at = rs.getTimestamp("created_at");
                     Row r = new Row(LEAVE_L2, false, rs.getObject("id", UUID.class), rs.getObject("employee_id", UUID.class),
@@ -186,7 +207,7 @@ public class InboxQueries {
                     String note = rs.getString("decision_note");
                     if (note != null && !note.isBlank()) r.facts.add(new Fact("managerNote", "Manager's note", note.trim()));
                     out.add(r);
-                }, tenantId, a.me());
+                }, args.toArray());
         return out;
     }
 
@@ -197,6 +218,11 @@ public class InboxQueries {
                 """;
         List<Object> args = new ArrayList<>(List.of(tenantId, a.me()));
         if (!a.leaveL2()) args.addAll(List.of(a.me(), a.me(), a.me()));
+        UUID only = a.leaveL2() ? onlyCompany() : null;
+        if (only != null) {
+            scope = " AND e.company_id = ?";
+            args.add(only);
+        }
         List<Row> out = new ArrayList<>();
         jdbc.query("SELECT w.id, w.employee_id, w.created_at, w.from_date, w.to_date, w.reason, " + PERSON
                         + " FROM leave_mgmt.wfh_requests w " + PERSON_JOIN.formatted("w")

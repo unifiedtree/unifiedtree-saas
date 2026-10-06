@@ -367,6 +367,12 @@ public class SkillAssessmentService {
                      WHERE uc.tenant_id = ? AND uc.employee_id = ? AND uc.is_active
                        AND rp.permission_code IN ('hrms.learning.skill.approve'))
                 """, rs -> rs.next() && rs.getBoolean(1), tenantId, candidate);
+        if (!Boolean.TRUE.equals(canApprove) && com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) {
+            // Granted it in the employee's company (COMPANY_ACCESS.md).
+            UUID company = com.unifiedtree.security.tenant.CompanyGrants.companyOf(jdbc, employeeId);
+            canApprove = com.unifiedtree.security.tenant.CompanyGrants.employeesGrantedPermission(
+                    jdbc, tenantId, "hrms.learning.skill.approve", company).contains(candidate);
+        }
         return Boolean.TRUE.equals(canApprove) ? candidate : null;
     }
 

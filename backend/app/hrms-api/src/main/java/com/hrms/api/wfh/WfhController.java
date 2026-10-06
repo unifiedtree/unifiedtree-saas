@@ -46,6 +46,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class WfhController {
 
+    /** Company access: a company-scoped HR-level approver's tenant-wide queue covers their current company. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
+
     private final WfhService service;
     private final EmployeeRepository employeeRepository;
     private final WorkforceDepartmentRepository departmentRepository;
@@ -195,8 +199,11 @@ public class WfhController {
         boolean adminOrHr = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
         // Admin / HR: everyone's but their own, which they may not decide (audit 5 Oct 2026).
+        // A company-scoped HR-level approver: their current company only (COMPANY_ACCESS.md).
+        UUID onlyCompany = adminOrHr ? com.unifiedtree.rbac.company.CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
         PageResponse<WfhRequestResponse> page = adminOrHr
-                ? service.getAllPending(callerOrNull(jwt), pageable)
+                ? (onlyCompany == null ? service.getAllPending(callerOrNull(jwt), pageable)
+                        : service.getAllPending(callerOrNull(jwt), onlyCompany, pageable))
                 : service.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
         return ResponseEntity.ok(enrichPage(page));
     }

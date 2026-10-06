@@ -28,6 +28,15 @@ public class ApproverScopeGuard {
     private static final String HR_MARKER = "hrms.leave.approve.l2";
 
     private final TeamEmployeeScope teamScope;
+    /**
+     * Company access (COMPANY_ACCESS.md): a company-scoped HR-level approver
+     * decides requests of their current company's people only — what their
+     * queue shows. Optional, so guards built by hand in tests stay as before.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public ApproverScopeGuard(TeamEmployeeScope teamScope) {
         this.teamScope = teamScope;
@@ -40,7 +49,10 @@ public class ApproverScopeGuard {
      * callers — better to 403 than silently allow.
      */
     public void assertCanDecideFor(UUID requesterEmployeeId, Jwt jwt, Authentication auth) {
-        if (hasAuthority(auth, HR_MARKER)) return;
+        if (hasAuthority(auth, HR_MARKER)) {
+            assertInViewCompany(requesterEmployeeId);
+            return;
+        }
         if (requesterEmployeeId == null) throw refuse();
         Set<UUID> team;
         try {
@@ -49,6 +61,19 @@ public class ApproverScopeGuard {
             throw refuse();
         }
         if (!team.contains(requesterEmployeeId)) throw refuse();
+    }
+
+    /**
+     * For a company-scoped HR-level approver (people who reach every company
+     * are never narrowed): the requester must work in the company their
+     * tenant-wide queue covers (the selected company, else their home company).
+     */
+    void assertInViewCompany(UUID requesterEmployeeId) {
+        UUID only = com.unifiedtree.rbac.company.CompanyAccessService.scopedViewCompanyId(companyAccess);
+        if (only == null || jdbc == null || requesterEmployeeId == null) return;
+        java.util.List<UUID> company = jdbc.queryForList(
+                "SELECT company_id FROM hrms.employees WHERE id = ?", UUID.class, requesterEmployeeId);
+        if (!company.isEmpty() && !only.equals(company.get(0))) throw refuse();
     }
 
     private static boolean hasAuthority(Authentication auth, String authority) {

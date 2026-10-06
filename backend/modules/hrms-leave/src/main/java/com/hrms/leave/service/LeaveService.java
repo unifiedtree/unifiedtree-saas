@@ -591,6 +591,42 @@ public class LeaveService {
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
+    // ── The HR-level lists for one company (company access, COMPANY_ACCESS.md) ──
+    // A company-scoped level-two approver sees the requests of the people of
+    // their current company only. A null company = the whole tenant, exactly
+    // the methods above.
+
+    /** {@link #getAllPending(UUID, Pageable)} for one company's people; null company = the whole tenant. */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getAllPending(UUID approverEmployeeId, UUID companyId, Pageable pageable) {
+        if (companyId == null) return getAllPending(approverEmployeeId, pageable);
+        Page<LeaveRequest> page = approverEmployeeId == null
+                ? leaveRequestRepository.findAllPendingInCompany(companyId, pageable)
+                : leaveRequestRepository.findAllPendingExceptInCompany(approverEmployeeId, companyId, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /** {@link #getPendingL2Approvals(UUID, Pageable)} for one company's people; null company = the whole tenant. */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getPendingL2Approvals(UUID approverEmployeeId, UUID companyId, Pageable pageable) {
+        if (companyId == null) return getPendingL2Approvals(approverEmployeeId, pageable);
+        String status = ApprovalStatus.PENDING_L2.name();
+        Page<LeaveRequest> page = approverEmployeeId == null
+                ? leaveRequestRepository.findByStatusInCompany(status, companyId, pageable)
+                : leaveRequestRepository.findByStatusExceptInCompany(status, approverEmployeeId, companyId, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /** {@link #getAllDecided(Pageable)} / {@link #getAllDecided(ApprovalStatus, Pageable)} for one company; null company = the whole tenant. */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getAllDecided(ApprovalStatus status, UUID companyId, Pageable pageable) {
+        if (companyId == null) return status == null ? getAllDecided(pageable) : getAllDecided(status, pageable);
+        Page<LeaveRequest> page = status == null
+                ? leaveRequestRepository.findAllDecidedInCompany(companyId, pageable)
+                : leaveRequestRepository.findAllDecidedByStatusInCompany(status.name(), companyId, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<LeaveRequestResponse> getPendingApprovalsForManager(UUID managerId, Pageable pageable) {
         // Broadened match: also returns leaves whose applicant's current
@@ -663,9 +699,20 @@ public class LeaveService {
      */
     @Transactional(readOnly = true)
     public java.util.Map<String, Long> decidedCounts(UUID managerId) {
-        List<Object[]> rows = managerId == null
-                ? leaveRequestRepository.countAllDecidedByStatus()
-                : leaveRequestRepository.countDecidedForManagerByStatus(managerId);
+        return decidedCounts(managerId, null);
+    }
+
+    /**
+     * {@link #decidedCounts(UUID)}; for the tenant's rows ({@code managerId}
+     * null) only one company's people when {@code companyId} is set.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Long> decidedCounts(UUID managerId, UUID companyId) {
+        List<Object[]> rows = managerId != null
+                ? leaveRequestRepository.countDecidedForManagerByStatus(managerId)
+                : companyId != null
+                ? leaveRequestRepository.countAllDecidedByStatusInCompany(companyId)
+                : leaveRequestRepository.countAllDecidedByStatus();
         java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
         counts.put(ApprovalStatus.APPROVED.name(), 0L);
         counts.put(ApprovalStatus.REJECTED.name(), 0L);

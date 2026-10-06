@@ -1,5 +1,6 @@
 package com.hrms.api.leave;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.leave.dto.LeaveEntitlementDtos.ApplyPreview;
 import com.hrms.leave.dto.LeaveEntitlementDtos.ApplyResult;
 import com.hrms.leave.service.LeaveAccrualService;
@@ -35,6 +36,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class LeaveTypeApplyController {
 
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
+
     private final LeaveEntitlementService entitlements;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -48,6 +53,7 @@ public class LeaveTypeApplyController {
     @GetMapping("/{id}/apply-to-all/preview")
     @PreAuthorize("hasAuthority('leave.type.write')")
     public ResponseEntity<ApplyPreview> preview(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.LEAVE_TYPE, id);
         return ResponseEntity.ok(entitlements.preview(id, LeaveAccrualService.todayIst()));
     }
 
@@ -57,6 +63,7 @@ public class LeaveTypeApplyController {
     public ResponseEntity<ApplyResult> apply(@PathVariable UUID id,
                                              @RequestParam(required = false) Double days,
                                              @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.LEAVE_TYPE, id);
         ApplyResult result = entitlements.apply(id, days, actor(jwt), LeaveAccrualService.todayIst());
         if (auditService != null && (result.changed() > 0 || result.added() > 0)) {
             try {

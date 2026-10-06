@@ -1,5 +1,6 @@
 package com.hrms.api.fnf;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -39,6 +40,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class FnfController {
 
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
+
     private final FnfService fnfService;
     private final EmployeeRepository employeeRepository;
     private final FnfReadService reads;
@@ -61,6 +66,7 @@ public class FnfController {
     @PostMapping("/settlements")
     @PreAuthorize("@perm.check('hrms.fnf.process')")
     public ResponseEntity<FnfSettlementResponse> process(@Valid @RequestBody FnfSettlementRequest request) {
+        RecordCompanyGuard.checkEmployee(recordGuard, request.employeeId());
         // QA-FIX (2026-08-13 reverify R1): was throwing IllegalArgumentException which
         // fell through GlobalExceptionHandler to a 500 INTERNAL_ERROR, masking the real
         // "employee not found" from clients. Use HrmsException(NOT_FOUND) so it maps to
@@ -84,6 +90,7 @@ public class FnfController {
             @RequestParam(required = false) List<FnfStatus> status,
             @RequestParam(required = false) UUID employeeId,
             @PageableDefault(size = 20) Pageable pageable) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         // No filter = today's call exactly (BW-64 adds the two optional filters).
         return ResponseEntity.ok(enrichPage(fnfService.getSettlements(status, employeeId, pageable)));
     }
@@ -118,6 +125,7 @@ public class FnfController {
     @GetMapping("/settlements/{id}")
     @PreAuthorize("hasAuthority('hrms.fnf.read')")
     public ResponseEntity<FnfSettlementResponse> get(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.FNF_SETTLEMENT, id);
         return ResponseEntity.ok(enrichOne(fnfService.getSettlement(id)));
     }
 
@@ -129,6 +137,7 @@ public class FnfController {
     public ResponseEntity<FnfSettlementResponse> approve(
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.FNF_SETTLEMENT, id);
         return ResponseEntity.ok(enrichOne(fnfService.approve(id, extractEmployeeId(jwt))));
     }
 
@@ -142,6 +151,7 @@ public class FnfController {
     @PreAuthorize("@perm.check('hrms.fnf.pay')")
     public ResponseEntity<FnfSettlementResponse> pay(@PathVariable UUID id,
                                                      @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.FNF_SETTLEMENT, id);
         // Disburser != requester (segregation of duties).
         FnfSettlementResponse existing = fnfService.getSettlement(id);
         UUID caller = jwt == null ? null : extractEmployeeId(jwt);
@@ -160,6 +170,7 @@ public class FnfController {
     @PostMapping("/settlements/{id}/cancel")
     @PreAuthorize("@perm.check('hrms.fnf.process')")
     public ResponseEntity<FnfSettlementResponse> cancel(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.FNF_SETTLEMENT, id);
         return ResponseEntity.ok(enrichOne(fnfService.cancel(id)));
     }
 
