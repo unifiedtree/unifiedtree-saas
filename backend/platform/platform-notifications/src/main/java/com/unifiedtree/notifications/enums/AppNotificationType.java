@@ -71,6 +71,10 @@ public enum AppNotificationType {
     TRIAL_ENDING_SOON,
     TRIAL_EXPIRED,
     SUBSCRIPTION_HALTED,          // autopay charge failed after Razorpay's retries; grace timer started
+    /** Daily from 3 days before a subscription's due date: the autopay charge that is coming (owner rule, 6 Oct 2026). */
+    PAYMENT_DUE_SOON,
+    /** Daily while a charge is unpaid after its due date, until it is paid or the grace ends (owner rule, 6 Oct 2026). */
+    PAYMENT_OVERDUE,
     /**
      * Workspace's active-employee count exceeds its paid seat cap. Fired for
      * <em>grandfathered</em> tenants only — those that were already over cap on

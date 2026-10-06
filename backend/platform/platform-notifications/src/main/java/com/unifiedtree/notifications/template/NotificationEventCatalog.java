@@ -126,6 +126,12 @@ public final class NotificationEventCatalog {
     private static final Placeholder WEEK_START = ph("weekStart", "The Monday the week starts, for example 28 Sep 2026");
 
     private static final Map<String, EventDef> BY_KEY = new LinkedHashMap<>();
+    private static final List<Placeholder> BILLING_PLACEHOLDERS = List.of(
+            ph("amount", "The amount, for example ₹4,000"),
+            ph("dueDate", "The due date, for example 6 Nov 2026"),
+            ph("when", "today, tomorrow or in N days"),
+            ph("graceEndsOn", "The last day before unpaid modules pause, for example 13 Nov 2026"));
+
     private static final Map<AppNotificationType, EventDef> BY_TYPE = new EnumMap<>(AppNotificationType.class);
 
     static {
@@ -535,6 +541,22 @@ public final class NotificationEventCatalog {
                 "Sent to admins when an autopay charge fails. Always sent: the workspace locks if it isn't fixed.",
                 EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH, DeliveryChannel.EMAIL),
                 "Payment failed — please update your card", "Your autopay charge didn't go through. Access continues until the grace date."));
+        add(new EventDef("billing.payment_due", AppNotificationType.PAYMENT_DUE_SOON, "Billing", "Payment due soon", "Admins",
+                "Sent to the owner and super admins every day from 3 days before a payment is due. Always sent.",
+                EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH, DeliveryChannel.EMAIL), EnumSet.noneOf(DeliveryChannel.class),
+                true, false, true, BILLING_PLACEHOLDERS,
+                "Payment of {{amount}} due {{when}}",
+                "Your autopay will charge {{amount}} on {{dueDate}}. Make sure your card, UPI or bank account can cover it.",
+                "Payment of {{amount}} due {{when}}",
+                "Your autopay will charge {{amount}} on {{dueDate}}. Make sure your card, UPI or bank account can cover it."));
+        add(new EventDef("billing.payment_overdue", AppNotificationType.PAYMENT_OVERDUE, "Billing", "Payment overdue", "Admins",
+                "Sent to the owner and super admins every day while a payment is unpaid after its due date. Always sent: unpaid modules pause when the grace ends.",
+                EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH, DeliveryChannel.EMAIL), EnumSet.noneOf(DeliveryChannel.class),
+                true, false, true, BILLING_PLACEHOLDERS,
+                "Payment of {{amount}} is overdue",
+                "The payment due on {{dueDate}} didn't go through. Pay by {{graceEndsOn}} to keep using your modules; sign-in stays open.",
+                "Payment of {{amount}} is overdue",
+                "The payment due on {{dueDate}} didn't go through. Pay by {{graceEndsOn}} to keep using your modules; sign-in stays open."));
         add(fixed("billing.seat_limit", AppNotificationType.BILLING_OVER_CAP, "Billing", "More employees than paid seats", "Admins",
                 "Sent to admins when active employees exceed the paid seats. Always sent: adding people is blocked until it's fixed.",
                 EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH),
