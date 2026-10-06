@@ -92,3 +92,6 @@
 .wf-lead { margin: 0; font-size: 14px; line-height: 21px; color: var(--u-ink2, #4A5A54); }
 .wf-lead b { color: var(--u-ink, #0E1B16); font-weight: 600; }
 .wf-errors .wf-wrap { white-space: normal; }
+
+/* A branch / agency logo in a picker option (w43): the whole logo, on white. */
+.wf-logo-av .uk-av__img { object-fit: contain; background: #fff; }

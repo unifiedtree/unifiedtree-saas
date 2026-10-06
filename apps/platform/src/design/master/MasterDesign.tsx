@@ -9,6 +9,8 @@ import { portalHost, TODAY, TODAY_ISO, NEXT_MONTH, NONE, orNone, pl } from './ma
 import { DateField } from '@/shared/components/calendar'
 import { desigTree, reportsToOptions } from '@/modules/hrms/master/desigTree'
 import './desigTree.css'
+import { mediaSrc } from '@/design/kit/displayUtil'
+import { ImagePicker } from '@/modules/hrms/workforce/ImagePicker'
 const ICONS={
 search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
@@ -121,6 +123,10 @@ function Pill({s,t,children}){return <span className="pill" style={tone(t||STATU
 const AV_TONES=['green','blue','violet','amber','teal','rose','indigo','cyan','orange','pink'];
 function Av({name,size}){let h=0;for(const c of String(name))h=(h*31+c.charCodeAt(0))>>>0;return <span className={'av'+(size?' '+size:'')} style={tone(AV_TONES[h%AV_TONES.length])}>{initials(name)}</span>}
 function Who({name,sub,sm}){return <div className={'who'+(sm?' sm':'')}><Av name={name} size={sm?'sm':''}/><div><b>{name}</b>{sub&&<small>{sub}</small>}</div></div>}
+// A branch / agency logo (V143.102, w43) in its tile, or the tile's own icon / initials when there is none.
+function LogoTile({src,cls,t,children}){return src?<span className={cls+' logo'}><img src={mediaSrc(src)} alt="" draggable={false}/></span>:<span className={cls} style={tone(t)}>{children}</span>}
+// The logo field of a branch / agency form: upload once the record exists (it needs its id).
+function logoField(kind,rec,canLogo,noun){return {k:'logo',type:'custom',render:()=><Field label={'Logo'} span2 hint={canLogo?'Shown on the '+noun+'’s row and in pickers.':'You don’t have access to change the logo'}>{canLogo?<ImagePicker kind={kind} id={rec._key||rec.id} name={rec.name} current={rec.logo} size={52}/>:<LogoTile src={rec.logo} cls="tile lg" t={rec.t||'slate'}>{initials(rec.name)}</LogoTile>}</Field>}}
 function Meter({v,wide}){return <div className={'meter'+(wide?' wide':'')}><span style={{width:Math.max(0,Math.min(100,v||0))+'%'}}></span></div>}
 function Spark({data,w=100,h=38}){const mx=Math.max(...data),mn=Math.min(...data),r=(mx-mn)||1;const pts=data.map((v,i)=>[i*w/(data.length-1),h-4-(v-mn)/r*(h-10)]);const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');const l=pts[pts.length-1];return <svg width={w} height={h} viewBox={'0 0 '+w+' '+h} aria-hidden="true" style={{display:'block',overflow:'visible'}}><path d={line+' L'+w+' '+h+' L0 '+h+' Z'} fill="var(--tb)"></path><path d={line} fill="none" stroke="var(--ts)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"></path><circle cx={l[0]} cy={l[1]} r="3.4" fill="#fff" stroke="var(--ts)" strokeWidth="2"></circle></svg>}
 function Stat({icon,label,value,unit,sub,t='blue',on,onClick,z}){return <div className={'stat'+(onClick?' click':'')+(on?' on':'')} style={tone(t)} onClick={onClick} role={onClick?'button':undefined} tabIndex={onClick?0:undefined} onKeyDown={onClick?e=>{if(e.key==='Enter')onClick()}:undefined}><span className="stat-ico"><Icon name={icon} size={20}/></span><div className="stat-m"><div className="stat-l">{label}</div><div className="stat-v">{value}{unit&&<small>{unit}</small>}</div>{sub&&<div className="stat-s">{sub}</div>}</div>{z&&<div className="stat-z">{z}</div>}</div>}
@@ -335,7 +341,7 @@ const onSave=v=>{const first=v.first.trim(),last=v.last.trim(),name=first+' '+la
 return <RecordForm title={isEdit?'Edit '+emp.name:'Add employee'} sub={isEdit?emp.code+' · changes apply from the next payroll run':'They get an employee code, login invite and the rules for their classification.'} icon={isEdit?'pencil':'user-plus'} sections={!isEdit&&act.accessStep?sections.concat([{title:'Access',fields:[{k:'access',type:'custom',render:(v,set)=>act.accessStep(v.access,x=>set('access',x))}]}]):sections} initial={initial} onSave={onSave} onClose={onClose} preview={preview} cta={isEdit?'Save changes':'Add employee'}/>
 }
 function ContractorsPage(){
-const {db,update,toast,act}=useApp();const M=useMaps();const [form,setForm]=React.useState(null);const [end,setEnd]=React.useState(null);
+const {db,update,toast,act}=useApp();const M=useMaps();const [form,setForm]=React.useState(null);const [end,setEnd]=React.useState(null);const [crew,setCrew]=React.useState(null);
 const A=db.agencies;const total=A.filter(a=>a.status==='Active').reduce((s,a)=>s+a.workers,0);
 const expiring=A.filter(a=>a.status==='Active'&&daysTo(a.licence)<=30);
 const renew=a=>{if(!a.licence){setForm(a);return}const dt=asDate(a.licence);dt.setFullYear(dt.getFullYear()+1);update('agencies',L=>L.map(x=>x.id===a.id?Object.assign({},x,{licence:dt.toISOString().slice(0,10)}):x));toast(a.name+' licence renewed to '+fmtDate(dt.toISOString().slice(0,10)))};
@@ -348,21 +354,37 @@ return <>
 <Stat icon="alert-triangle" t={expiring.length?'red':'green'} label="Licences expiring" value={expiring.length} sub={expiring.length?expiring[0].name+' · '+(daysTo(expiring[0].licence)<0?'expired':daysTo(expiring[0].licence)+' days'):A.some(a=>a.status==='Active'&&a.licence)?'All valid for 30+ days':'No licence dates added yet'}/>
 </div>
 <div className="cgrid wide">{A.map(a=>{const dd=daysTo(a.licence),share=pct(a.workers,total),on=a.status==='Active';return <div key={a.id} className={'ccard'+(on?'':' off')}>
-<div className="cc-h"><span className="tile lg" style={tone(a.t)}>{initials(a.name)}</span><div className="cc-t"><b className="lg">{a.name}</b><small>{a.service?a.service+' · ':''}Reg. {a.reg||'—'}</small></div><Pill s={a.status}/><Menu items={[{icon:'pencil',label:'Edit agency',on:()=>setForm(a)},on&&{icon:'refresh-cw',label:'Renew licence',on:()=>renew(a)},'-',on?{icon:'ban',label:'End contract',danger:true,on:()=>setEnd(a)}:{icon:'check-circle',label:'Reactivate',on:()=>setStatus(a,'Active')}]}/></div>
-<div className="cc-n"><div><b className="num">{a.workers==null?'—':a.workers}</b><span>active workers</span></div><div className="cc-share"><div className="ack-top"><span className="muted">Share of contract workforce</span><b>{a.workers==null?'—':share+'%'}</b></div><Meter v={share} wide/></div></div>
+<div className="cc-h"><LogoTile src={a.logo} cls="tile lg" t={a.t}>{initials(a.name)}</LogoTile><div className="cc-t"><b className="lg">{a.name}</b><small>{a.service?a.service+' · ':''}Reg. {a.reg||'—'}</small></div><Pill s={a.status}/><Menu items={[{icon:'pencil',label:'Edit agency',on:()=>setForm(a)},{icon:'users',label:'View workers',on:()=>setCrew(a)},on&&{icon:'refresh-cw',label:'Renew licence',on:()=>renew(a)},'-',on?{icon:'ban',label:'End contract',danger:true,on:()=>setEnd(a)}:{icon:'check-circle',label:'Reactivate',on:()=>setStatus(a,'Active')}]}/></div>
+<div className="cc-n"><button type="button" className="cc-crew" onClick={()=>setCrew(a)} aria-label={'Workers of '+a.name}><b className="num">{a.workers==null?'—':a.workers}</b><span>active workers</span><Icon name="chevron-right" size={15}/></button><div className="cc-share"><div className="ack-top"><span className="muted">Share of contract workforce</span><b>{a.workers==null?'—':share+'%'}</b></div><Meter v={share} wide/></div></div>
 <dl className="kv"><dt><Icon name="user" size={15}/>Contact</dt><dd>{a.contact||'—'}</dd><dt><Icon name="phone" size={15}/>Phone</dt><dd className="num">{a.phone||'—'}</dd><dt><Icon name="mail" size={15}/>Email</dt><dd>{a.email||'—'}</dd><dt><Icon name="map-pin" size={15}/>Deployed at</dt><dd>{a.sites&&a.sites.length?a.sites.map(s=>M.branch[s].name).join(', '):'—'}</dd></dl>
 <div className="cc-f"><Icon name="shield-check" size={16}/><span>{a.licence?'Licence '+(a.licenceNo?a.licenceNo+' ':'')+(dd<0?'expired':'valid till')+' '+fmtDate(a.licence):'No licence date added'}</span><span className="sp"></span>{on&&dd<=30?<span className="warn-link" onClick={()=>renew(a)}><Icon name="alert-triangle" size={14}/>{dd<0?'Expired':'Expires in '+dd+' days'} · Renew</span>:<span className="muted">{a.since?'Since '+a.since:''}</span>}</div>
 </div>})}
 <button className="add-card" onClick={()=>setForm({})}><span className="tile lg"><Icon name="plus" size={22}/></span>Add a staffing agency</button></div>
 {form&&<AgencyForm a={form.id?form:null} onClose={()=>setForm(null)}/>}
+{crew&&<AgencyWorkers a={crew} onClose={()=>setCrew(null)}/>}
 {end&&<Modal title={'End contract with '+end.name+'?'} body={'The agency is marked inactive. '+pl(end.workers||0,'contract worker stays','contract workers stay')+' linked on their employee records, and you can reactivate the agency later.'} icon="ban" t="red" danger cta="End contract" onClose={()=>setEnd(null)} onOk={()=>setStatus(end,'Inactive')}/>}
 </>
+}
+// An agency's contract workers (GET /v1/hrms/contractors/{id}/workers): everyone linked to it on their
+// employee record (Add employee → Contract → Staffing agency). A row opens the person's record.
+const WORKER_STATUS={ACTIVE:'Active',PROBATION:'Probation',NOTICE_PERIOD:'On notice',EXITED:'Exited',TERMINATED:'Exited',SUSPENDED:'Suspended'};
+function AgencyWorkers({a,onClose}){
+const {act}=useApp();const [st,setSt]=React.useState({rows:null,err:null});
+React.useEffect(()=>{let live=true;act.loadWorkers(a._key||a.id).then(r=>{if(live)setSt({rows:r,err:null})},e=>{if(live)setSt({rows:[],err:(e&&e.message)||'Please try again.'})});return()=>{live=false}},[a.id]);
+const rows=st.rows;
+return <Drawer title={a.name+' · workers'} sub="Contract workers linked to this agency on their employee record." lead={<LogoTile src={a.logo} cls="tile" t={a.t}>{initials(a.name)}</LogoTile>} onClose={onClose} width={520} footer={<><span className="sp"></span><button className="btn" onClick={onClose}>Close</button></>}>
+{rows==null?<div className="muted" role="status">Loading workers…</div>
+:st.err?<Empty icon="alert-triangle" title="Workers couldn’t load" body={st.err}/>
+:!rows.length?<Empty icon="users" title="No workers linked yet" body="Add someone with the Contract employment type and pick this agency, or edit a contract worker’s record."/>
+:<div className="ov-links crew">{rows.map(w=><div key={w.employeeId} className="ov-l" role="button" tabIndex={0} onClick={()=>act.openRecord(w.employeeId)} onKeyDown={e=>{if(e.key==='Enter')act.openRecord(w.employeeId)}}><Who sm name={w.name||w.employeeCode||'Employee'} sub={w.employeeCode||undefined}/><span className="n"><Pill s={WORKER_STATUS[w.employmentStatus]||w.employmentStatus||'Active'}/></span><Icon name="chevron-right" size={16} className="go"/></div>)}</div>}
+</Drawer>
 }
 function AgencyForm({a,onClose}){
 const {db,update,toast,act,route}=useApp();const isEdit=!!a;
 const sites=v=>db.branches.filter(b=>b.status==='Active'&&b.co===((a&&a.co)||v.co||(db.companies[0]||{}).id));
 const sections=[{title:'Agency',fields:[coField(db,isEdit,['sites'],act),{k:'name',label:'Agency name',req:true,span2:true,placeholder:'e.g. Apex Staffing Solutions'},{k:'reg',label:'Registration no.',req:true,upper:true,placeholder:'e.g. APX-9981'},{k:'service',label:'Service provided',placeholder:'e.g. Security & front desk'}]},
 {title:'Point of contact',fields:[{k:'contact',label:'Contact person',req:true},{k:'phone',label:'Phone',placeholder:'+91 98xxx xxxxx'},{k:'email',label:'Email',span2:true,type:'email',validate:x=>!x||/^\S+@\S+\.\S+$/.test(x)?null:'Enter a valid email address'}]},
+...(isEdit?[{title:'Logo',fields:[logoField('agency',a,!!(act.canLogo&&act.canLogo.agencies),'agency')]}]:[]),
 {title:'Deployment',fields:[{k:'sites',label:'Deployed at',type:'multi',span2:true,options:v=>sites(v).map(b=>({v:b.id,l:b.city||b.name})),validate:(x,v)=>!sites(v).length||x&&x.length?null:'Pick at least one site'},{k:'workers',label:'Active workers',type:'number',min:0,suffix:'people',disabled:true,hint:'Counted from the contract workers linked to this agency on their employee record'},{k:'licenceNo',label:'Licence number',placeholder:'e.g. CLRA/KA/2021/0077'},{k:'licence',label:'Licence valid till',type:'date',hint:'CLRA licence — flagged on this page and the overview 30 days before it expires'}]}];
 const onSave=v=>{const rec=Object.assign({t:'teal',status:'Active',since:''},a||{},v,{id:isEdit?a.id:'A'+Date.now(),workers:isEdit?a.workers:0});update('agencies',L=>isEdit?L.map(x=>x.id===a.id?rec:x):L.concat([rec]));toast(isEdit?'Saved '+rec.name:rec.name+' added');onClose()};
 return <RecordForm title={isEdit?'Edit '+a.name:'Add staffing agency'} sub="Contract workers from this agency are tracked for attendance and CLRA compliance." icon="hard-hat" t="orange" sections={sections} initial={a||{sites:[],workers:0,co:newCo(db,route,act)}} onSave={onSave} onClose={onClose} cta={isEdit?'Save changes':'Add agency'}/>
@@ -428,7 +450,7 @@ return <>
 <div className="card tcard"><div className="tbar"><TSearch value={q} onChange={setQ} placeholder="Search branch, city or state…"/>{!act.globalCo&&<Dropdown label="Company" all="All companies" value={co} options={db.companies.map(c=>({v:c.id,l:c.name}))} onChange={setCo} icon="landmark"/>}<Dropdown label="Status" all="Active branches" value={route.archived?'all':''} options={[{v:'all',l:'Include inactive'}]} onChange={x=>act.showArchivedBranches(!!x,co)} icon="archive"/><span className="sp"></span><span className="meta">{rows.length} branches</span></div>
 {rows.length?<div className="twrap"><table className="t"><thead><tr><th>Branch</th><th>Type</th><th>Company</th><th>People</th><th>Status</th><th className="act"></th></tr></thead><tbody>
 {rows.map(b=>{const n=d.branch[b.id]||0,bt=BRANCH_KIND_TONE[b.kind]||'slate';return <tr key={b.id} className={'click'+(b.status==='Active'?'':' off')} onClick={()=>setForm(b)}>
-<td><div className="ic-row"><span className="tile" style={tone(bt)}><Icon name={b.icon||'building'} size={18}/></span><div><span className="t1">{b.name}</span><span className="t2"><span className="mono" style={{fontSize:11.5}}>{b.code||'—'}</span> · {[b.city,b.state].filter(Boolean).join(', ')||'—'}</span></div></div></td>
+<td><div className="ic-row"><LogoTile src={b.logo} cls="tile" t={bt}><Icon name={b.icon||'building'} size={18}/></LogoTile><div><span className="t1">{b.name}</span><span className="t2"><span className="mono" style={{fontSize:11.5}}>{b.code||'—'}</span> · {[b.city,b.state].filter(Boolean).join(', ')||'—'}</span></div></div></td>
 <td><span className="chip">{b.kind}</span></td><td><span className="t1">{M.co[b.co]?M.co[b.co].name:'—'}</span></td>
 <td><div className="ic-row"><b className="num" style={{minWidth:28,color:'var(--text-primary)'}}>{n}</b><div className="meter" style={tone(bt,{width:120})}><span style={{width:pct(n,max)+'%'}}></span></div></div></td>
 <td><Pill s={b.status}/></td>
@@ -438,10 +460,10 @@ return <>
 </>
 }
 function BranchForm({b,init,onClose}){
-const {db,update,toast}=useApp();const isEdit=!!b;
+const {db,update,toast,act}=useApp();const isEdit=!!b;
 const icons={'Head office':'building-2','Branch':'building','Regional office':'building','Office':'building','Sales office':'building','Plant':'factory','Warehouse':'warehouse'};
 const sections=[{title:'Branch',fields:[{k:'name',label:'Branch name',req:true,placeholder:'e.g. Kochi Office'},{k:'code',label:'Code',req:true,upper:true,placeholder:'e.g. KOC',validate:x=>db.branches.some(y=>y.code===x&&(!isEdit||y.id!==b.id))?'Code already in use':null},{k:'kind',label:'Type',type:'select',options:['Head office','Branch','Plant','Warehouse','Office','Store','Other'],hint:'Head office makes this the company’s head office in place of the current one'},{k:'co',label:'Company',type:'select',req:true,disabled:isEdit,options:db.companies.map(c=>({v:c.id,l:c.name}))}]},
-{title:'Location',fields:[{k:'city',label:'City',req:true},{k:'state',label:'State',type:'select',req:true,search:true,options:v=>Array.from(new Set(IN_STATES.concat(v.state?[v.state]:[]))),hint:'Professional Tax uses one state for now, set in Statutory Settings'}]}];
+{title:'Location',fields:[{k:'city',label:'City',req:true},{k:'state',label:'State',type:'select',req:true,search:true,options:v=>Array.from(new Set(IN_STATES.concat(v.state?[v.state]:[]))),hint:'Professional Tax uses one state for now, set in Statutory Settings'}]}].concat(isEdit?[{title:'Logo',fields:[logoField('branch',b,!!(act.canLogo&&act.canLogo.branches),'branch')]}]:[]);
 const onSave=v=>{const rec=Object.assign({status:'Active'},b||{},v,{icon:icons[v.kind]||'building'});update('branches',L=>isEdit?L.map(x=>x.id===b.id?rec:x):L.concat([rec]));toast(isEdit?'Saved '+rec.name:rec.name+' added');onClose()};
 return <RecordForm title={isEdit?'Edit '+b.name:'Add branch'} sub="People are assigned to a branch for attendance and holidays." icon="map-pin" t="teal" sections={sections} initial={init} onSave={onSave} onClose={onClose} cta={isEdit?'Save changes':'Add branch'}/>
 }
@@ -741,4 +763,4 @@ classes:(v,onClose)=><ClassForm c={null} onClose={onClose}/>,
 shifts:(v,onClose)=><ShiftForm s={null} onClose={onClose}/>,
 agencies:(v,onClose)=><AgencyForm a={null} onClose={onClose}/>};
 const PAGES={overview:OverviewPage,employees:EmployeesPage,contractors:ContractorsPage,classes:ClassesPage,companies:CompaniesPage,branches:BranchesPage,departments:DepartmentsPage,designations:DesignationsPage,grades:GradesPage,shifts:ShiftsPage,leaves:LeavesPage,policies:PoliciesPage,components:ComponentsPage,statutory:StatutoryPage};
-export { AppCtx, NAV, TopTabs, PAGES, Toasts, Icon, ICONS, Empty, Hero, tone, deriveDB, STATUS_TONE, TYPE_TONE, FormFrame, CREATE_FORMS, EmpForm, DeptForm, ClassForm, GradeForm, ShiftForm, LeaveForm, AgencyForm }
+export { AppCtx, NAV, TopTabs, PAGES, Toasts, Icon, ICONS, Empty, Hero, tone, deriveDB, STATUS_TONE, TYPE_TONE, FormFrame, CREATE_FORMS, EmpForm, DeptForm, ClassForm, GradeForm, ShiftForm, LeaveForm, AgencyForm, BranchForm, AgencyWorkers }

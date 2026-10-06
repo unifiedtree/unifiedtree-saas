@@ -1,8 +1,8 @@
 // Avatars and monograms: initials on a tinted or brand-green disc, a photo when
 // there is one, and an optional presence dot (More panel, profile header).
 // Square monograms are the company marks on Companies & branches.
-import { useState, type CSSProperties } from 'react'
-import { cx, initialsOf } from './displayUtil'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { cx, initialsOf, mediaSrc } from './displayUtil'
 import './display.css'
 
 export { initialsOf }
@@ -21,7 +21,7 @@ export interface AvatarProps {
   name?: string | null
   /** Your own initials/short name (e.g. a company's "DT"), instead of deriving them. */
   initials?: string
-  /** Photo URL. Falls back to initials if it fails to load. */
+  /** Photo URL (a server path like /v1/public/images/… gets the API base). Falls back to initials if it fails to load. */
   src?: string | null
   /** Diameter in px (default 34). */
   size?: number
@@ -64,7 +64,10 @@ export function Avatar({
 }: AvatarProps) {
   const [broken, setBroken] = useState(false)
   const text = (initials && initials.trim()) || initialsOf(name)
-  const showImg = !!src && !broken
+  const url = mediaSrc(src)
+  // A new picture (an upload) gets its own chance to load.
+  useEffect(() => { setBroken(false) }, [url])
+  const showImg = !!url && !broken
   const dot = size <= 40 ? 10 : size <= 56 ? 13 : 14
   const label = name ? String(name) : undefined
   const a11y = decorative ? { 'aria-hidden': true as const } : { role: 'img' as const, 'aria-label': label ? label + (status && statusLabel ? ', ' + statusLabel : '') : statusLabel }
@@ -77,7 +80,7 @@ export function Avatar({
       }}
       {...a11y}
     >
-      {showImg ? <img className="uk-av__img" src={src!} alt="" onError={() => setBroken(true)} draggable={false} /> : text}
+      {showImg ? <img className="uk-av__img" src={url!} alt="" onError={() => setBroken(true)} draggable={false} /> : text}
       {status && (
         <span className={cx('uk-av__dot', `uk-av__dot--${status}`)} title={statusLabel}
           style={{ width: dot, height: dot, ['--uk-dot-ring' as string]: size <= 56 ? '2.5px' : '3px', right: size > 60 ? 2 : 0, bottom: size > 60 ? 2 : 1 } as CSSProperties} />

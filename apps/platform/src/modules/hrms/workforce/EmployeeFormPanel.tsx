@@ -14,7 +14,11 @@
 // Work email (2026-10-05): checked against everyone in the workspace as you type and again on
 // Save (useEmailCheck) — "This email already belongs to …" on the field, and nothing is saved.
 // Mobile: a number someone else has is a warning under the field, never a block.
-import { useMemo, useState, type ReactNode } from 'react'
+// Employment type (w43, testers 6 Oct): the chosen company's own active types, from the data (no fixed
+// list; four or fewer as segments, more as a dropdown). A contract worker needs their staffing agency:
+// picking Contract shows the agency picker, required on Add (and when an edit changes the type to
+// Contract), so they show under that agency's workers. Branch and agency pickers show their logos.
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNextEmployeeCode } from '../api/useSettings'
 import { useEmailCheck, usePhoneWarning } from '../api/useContactCheck'
 import { Avatar, Callout, Chip } from '@/design/kit/display'
@@ -23,7 +27,7 @@ import { SegmentedControl } from '@/design/kit/display'
 import { TODAY_ISO } from '@/design/master/masterRuntime'
 import type { Rec } from '../master/masterData'
 import type { CreateKind } from '../master/masterCreate'
-import { deptOptions, fmtDate, fmtL, shiftHours } from './directoryModel'
+import { agencyIsRequired, deptOptions, fmtDate, fmtL, shiftHours, startType } from './directoryModel'
 import { useMaps, useMasterApp } from './masterApp'
 
 /** Below the "Create" panel (InlineCreate CREATE_PANEL_Z = 250), which opens over this form. */
@@ -32,6 +36,12 @@ export const EMPLOYEE_FORM_Z = 200
 /** Changing one field empties the ones that depend on it. */
 const CLEARS: Record<string, string[]> = { co: ['branch', 'dept', 'desig', 'agency'], dept: ['desig'] }
 const EMAIL = /^\S+@\S+\.\S+$/
+/** The employment type whose people come through a staffing agency (its code is CONTRACT). */
+export const CONTRACT_TYPE = 'Contract'
+/** A logo (or the initials) in front of a picker option, when any option of the list has a logo. */
+const logoLead = (list: Rec[]) => list.some((x) => x.logo)
+  ? (x: Rec) => <Avatar name={String(x.name)} src={x.logo} size={24} shape="square" tone="pale" className="wf-logo-av" />
+  : () => undefined
 
 interface FieldProps {
   name: string
@@ -88,19 +98,35 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
   const nextCode = codeQ.data?.preview || ''
 
   const mk = (kind: CreateKind) => (!isEdit && act.inlineCreate ? act.inlineCreate(kind, v, set) : undefined)
-  const showAgency = v.type === 'Contract' && act.showAgency
+  const isContract = v.type === CONTRACT_TYPE
+  const showAgency = isContract && act.showAgency
+  // Required on Add, and when an edit makes someone a contract worker (an existing one without an agency isn't blocked).
+  const agencyRequired = agencyIsRequired({ type: String(v.type || ''), isEdit, wasType: isEdit ? String(emp!.type || '') : undefined, showAgency: !!act.showAgency, canAgency: !!act.canAgency, contractType: CONTRACT_TYPE })
 
-  const opts = useMemo(() => ({
+  const opts = useMemo(() => {
+    const coBranches = db.branches.filter((b) => b.co === v.co)
+    const coAgencies = db.agencies.filter((a) => a.co === v.co && (a.status === 'Active' || a.id === v.agency))
+    const bLead = logoLead(coBranches), aLead = logoLead(coAgencies)
+    return {
     companies: db.companies.map((c): DropdownOption => ({ value: c.id, label: c.name })),
-    branches: db.branches.filter((b) => b.co === v.co).map((b): DropdownOption => ({ value: b.id, label: b.name, sub: b.city || undefined })),
+    branches: coBranches.map((b): DropdownOption => ({ value: b.id, label: b.name, sub: b.city || undefined, leading: bLead(b) })),
     depts: deptOptions(db.depts).filter((o) => (db.depts.find((x) => x.id === o.value) || {}).co === v.co).map((o): DropdownOption => ({ value: o.value, label: o.label, sub: o.sub })),
     desigs: db.desigs.filter((x) => x.co === v.co && (x.dept === v.dept || !x.dept)).map((x): DropdownOption => ({ value: x.id, label: x.name, sub: x.grade || undefined })),
     shifts: db.shifts.filter((s) => s.status === 'Active').map((s): DropdownOption => ({ value: s.id, label: s.name, sub: s.kind === 'Flexible' ? 'Flexible' : shiftHours(s) })),
-    agencies: [{ value: '', label: 'No agency' } as DropdownOption].concat(db.agencies.filter((a) => a.co === v.co && (a.status === 'Active' || a.id === v.agency)).map((a) => ({ value: a.id, label: a.name, sub: a.service || undefined }))),
-    types: act.typeOptions(v.type).map((t) => ({ value: t, label: t })),
-  }), [db, v.co, v.dept, v.type, v.agency, act])
+    agencies: (isEdit ? [{ value: '', label: 'No agency' } as DropdownOption] : []).concat(coAgencies.map((a) => ({ value: a.id, label: a.name, sub: a.service || undefined, leading: aLead(a) }))),
+    types: act.typeOptions(isEdit ? String(emp!.type || '') || undefined : undefined, String(v.co || '') || undefined).map((t) => ({ value: t, label: t })),
+    }
+  }, [db, v.co, v.dept, v.agency, act, isEdit, emp])
 
-  const required: [string, boolean][] = [['first', true], ['last', true], ['email', true], ['co', !isEdit], ['branch', true], ['dept', true], ['desig', true], ['joined', true]]
+  // Add: the type starts as the company's Full-time (or its first type) once its types are known.
+  useEffect(() => {
+    if (isEdit) return
+    const next = startType(opts.types.map((o) => o.value), String(v.type || ''))
+    if (next !== v.type) setV((o) => ({ ...o, type: next, agency: '' }))
+  }, [isEdit, opts.types, v.type])
+
+  const required: [string, boolean][] = [['first', true], ['last', true], ['email', true], ['co', !isEdit], ['branch', true], ['dept', true], ['desig', true], ['joined', true],
+    ['type', !isEdit], ['agency', agencyRequired]]
   const submit = async () => {
     if (saving) return
     const e: Record<string, string> = {}
@@ -120,7 +146,7 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
     const co = M.branch[v.branch].co
     const rec: Rec = {
       ...(isEdit ? emp : {}), ...v, name, first, last, grade: ds.grade, co,
-      id: isEdit ? emp!.id : nextCode || 'Assigned when saved', status: isEdit ? emp!.status : 'Probation', agency: v.type === 'Contract' ? (v.agency || '') : '',
+      id: isEdit ? emp!.id : nextCode || 'Assigned when saved', status: isEdit ? emp!.status : 'Probation', agency: isContract ? (v.agency || '') : '',
     }
     update('employees', (L) => (isEdit ? L.map((x) => (x.id === emp!.id ? rec : x)) : L.concat([rec])))
     toast(isEdit ? `Saved changes to ${name}` : `${name}${nextCode ? ` added as ${nextCode}` : ' added'}`)
@@ -192,18 +218,29 @@ export function EmployeeFormPanel({ emp, onClose }: EmployeeFormPanelProps) {
                 placeholder={v.dept ? 'Select…' : 'Pick a department first'} emptyText="No designations for this department yet." onChange={(x) => set('desig', x)} />
             </Field>
             <DateInput label="Date of joining" required value={v.joined || ''} error={errs.joined} onChange={(e) => set('joined', e.target.value)} />
-            <Field name="type" label="Employment type" full create={mk('classes')}>
-              <SegmentedControl label="Employment type" semantics="radio" size="xl" className="wf-seg" options={opts.types} value={v.type || ''} onChange={(x) => set('type', x)} />
+            <Field name="type" label="Employment type" required={!isEdit} full create={mk('classes')} error={errs.type}
+              hint={opts.types.length ? undefined : 'This company has no employment types yet. Add one in Classification Rules.'}>
+              {opts.types.length > 4
+                ? <Dropdown label="Employment type" options={opts.types} value={v.type || ''} invalid={!!errs.type} onChange={(x) => set('type', x)} />
+                : opts.types.length > 0 && <SegmentedControl label="Employment type" semantics="radio" size="xl" className="wf-seg" options={opts.types} value={v.type || ''} onChange={(x) => set('type', x)} />}
             </Field>
             <Field name="shift" label="Shift" create={mk('shifts')} hint={act.canAssignShift ? undefined : 'You don’t have access to assign shifts'}>
               <Dropdown label="Shift" options={opts.shifts} value={v.shift || ''} disabled={!act.canAssignShift} searchable={opts.shifts.length > 6}
                 emptyText="No active shifts yet." onChange={(x) => set('shift', x)} />
             </Field>
             {showAgency && (
-              <Field name="agency" label="Staffing agency" full create={mk('agencies')}
-                hint={act.canAgency ? 'The agency that supplies this contract worker. Its worker count on Contractor Master is counted from these links.' : 'You don’t have access to change the agency'}>
-                <Dropdown label="Staffing agency" options={opts.agencies} value={v.agency || ''} disabled={!act.canAgency} onChange={(x) => set('agency', x)} />
+              <Field name="agency" label="Staffing agency" required={agencyRequired} full create={mk('agencies')} error={errs.agency}
+                hint={!act.canAgency ? 'You don’t have access to change the agency'
+                  : opts.agencies.length ? 'The agency that supplies this contract worker. They show under its workers on Contractor Master.'
+                    : 'This company has no active staffing agency yet. Create one here, or in Contractor Master.'}>
+                <Dropdown label="Staffing agency" options={opts.agencies} value={v.agency || ''} disabled={!act.canAgency} invalid={!!errs.agency}
+                  searchable={opts.agencies.length > 6} emptyText="No active agencies in this company yet." onChange={(x) => set('agency', x)} />
               </Field>
+            )}
+            {isContract && !act.showAgency && (
+              <div className="wf-field" data-full="">
+                <Callout tone="info" icon="info">Contract workers belong to a staffing agency. Someone with Contractor Master access links them to theirs.</Callout>
+              </div>
             )}
           </FieldGrid>
         </section>

@@ -1,6 +1,7 @@
 // A directory row's quick profile (the Master design's EmpProfile) on the kit side panel:
 // employment facts, contact, who they report to, the rules of their employment type, and
-// Start exit · Full record · Close · Edit details. Same facts and links as before.
+// Start exit · Full record · Close · Edit details. Same facts and links as before; their photo
+// (V143.102) and, for a contract worker, their staffing agency (w43).
 import { Avatar, Callout, Chip, KeyValueGrid, StatusPill, CellPerson } from '@/design/kit/display'
 import { PanelButton, SidePanel } from '@/design/kit/overlays'
 import { NONE, TODAY } from '@/design/master/masterRuntime'
@@ -39,7 +40,7 @@ export function EmployeeProfilePanel({ e, canWrite, onClose, onEdit, onExit }: E
       </>}>
       <div className="wf-prof">
         <div className="wf-prof__head">
-          <Avatar name={e.name} size={56} tone="pale" />
+          <Avatar name={e.name} src={e._raw?.profilePhotoUrl} size={56} tone="pale" />
           <div className="wf-prof__id">
             <h3>{e.name}</h3>
             <p>{ds.name} · {dp.name}</p>
@@ -62,6 +63,7 @@ export function EmployeeProfilePanel({ e, canWrite, onClose, onEdit, onExit }: E
             { label: 'Company', value: co?.name || '—' },
             { label: 'Branch', value: br.name + (br.city ? `, ${br.city}` : '') },
             { label: 'Shift', value: sh ? `${sh.name} · ${shiftHours(sh)}` : '—' },
+            ...(e.type === 'Contract' ? [{ label: 'Staffing agency', value: (db.agencies.find((x) => x.id === e.agency) || {}).name || 'Not linked yet' }] : []),
             { label: 'Tenure', value: tenure(e.joined, TODAY) },
           ]} />
         </section>

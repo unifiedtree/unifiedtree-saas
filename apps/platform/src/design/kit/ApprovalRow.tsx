@@ -8,6 +8,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Check, X } from 'lucide-react'
 import { dashIcon } from '@/design/dc/icons'
+import { mediaSrc } from './displayUtil'
 import './overlays.css'
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
@@ -22,8 +23,10 @@ export interface ApprovalRowProps {
   meta?: ReactNode
   /** Kind pill in the card layout, e.g. "Leave". */
   kind?: ReactNode
-  /** Avatar content; default: initials from the name. */
+  /** Avatar content; default: their photo (below) or the initials of the name. */
   avatar?: ReactNode
+  /** Their photo's address (a server path like /v1/public/images/… gets the API base); initials when it fails. */
+  photo?: string | null
   /** The reason they gave (shown in quotes in the card layout). */
   reason?: ReactNode
   /** Label/value facts in the card layout, e.g. Balance after, Others out. */
@@ -70,7 +73,7 @@ function useStillBefore(until: number | null): boolean {
 }
 
 export function ApprovalRow({
-  name, title, meta, kind, avatar, reason, facts, flag, status, statusLabel, busy = false,
+  name, title, meta, kind, avatar, photo, reason, facts, flag, status, statusLabel, busy = false,
   onApprove, onReject, onUndo, canUndo, undoUntil, withNote = false, notePlaceholder = 'Add a note (optional)',
   onOpen, variant = 'compact',
 }: ApprovalRowProps) {
@@ -88,7 +91,11 @@ export function ApprovalRow({
       {busy === 'undo' ? 'Undoing…' : 'Undo'}
     </button>
   )
-  const av = <span className="uko-appr-av" data-size={variant === 'card' ? 'lg' : undefined} aria-hidden="true">{avatar ?? initials(name)}</span>
+  const [broken, setBroken] = useState<string | null>(null)
+  const pic = mediaSrc(photo)
+  const av = <span className="uko-appr-av" data-size={variant === 'card' ? 'lg' : undefined} aria-hidden="true">
+    {avatar ?? (pic && broken !== pic ? <img className="uko-appr-img" src={pic} alt="" draggable={false} onError={() => setBroken(pic)} /> : initials(name))}
+  </span>
 
   if (variant === 'compact') {
     return (

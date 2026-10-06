@@ -42,6 +42,7 @@ export { StatusPill, CountBadge, Chip, StatusDot, STATUS_TONES } from './StatusP
 export type { StatusPillProps, StatusTone, CountBadgeProps, ChipProps, StatusDotProps } from './StatusPill'
 
 export { Avatar, initialsOf } from './Avatar'
+export { mediaSrc } from './displayUtil'
 export type { AvatarProps, AvatarTone } from './Avatar'
 
 export { EmptyState, ErrorState, errorText } from './EmptyState'

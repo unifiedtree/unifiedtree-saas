@@ -13,6 +13,7 @@ import { useApprovalsInbox } from '../api/shared/useApprovalsInbox'
 import { useRecentDecisions } from '../api/shared/useRecentDecisions'
 import type { InboxRow, InboxTab, RecentDecision } from '../api/shared/contracts'
 import { RejectReasonDialog } from './TeamDialogs'
+import { useRecordImages } from '../api/useRecordImages'
 import { useTeamDecisions } from './useTeamDecisions'
 import { useExtraApprovals } from './useExtraApprovals'
 import { countsWithExtras, extraRowsInTab, newestFirst } from './extraApprovals'
@@ -37,6 +38,8 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
   const toast = useToast()
   const [page, setPage] = useState(0)
   const inbox = useApprovalsInbox({ tab, page, size: PAGE_SIZE, includeL2: true })
+  // Photos (V143.102) by employee id; initials until there are any.
+  const photos = useRecordImages('employee').data?.urls ?? {}
   const extra = useExtraApprovals()
   const recent = useRecentDecisions()
   const { decide, approveAll, undo } = useTeamDecisions()
@@ -138,12 +141,12 @@ export function TeamApprovals({ tab, onTab }: { tab: InboxTab; onTab: (t: InboxT
             ) : (
               <>
                 {decided.map((d) => (
-                  <ApprovalRow key={`d-${d.id}`} variant="card" name={d.employeeName} title={d.summary}
+                  <ApprovalRow key={`d-${d.id}`} variant="card" name={d.employeeName} photo={photos[d.employeeId]} title={d.summary}
                     status={d.decision === 'APPROVED' ? 'approved' : 'rejected'} statusLabel={decisionWord(d.decision)}
                     busy={busy[d.requestId] === 'undo' ? 'undo' : false} onUndo={() => takeBack(d)} undoUntil={d.undoUntil} />
                 ))}
                 {pending.map((r) => (
-                  <ApprovalRow key={`${r.kind}-${r.requestId}`} variant="card" name={r.employeeName} kind={KIND_LABEL[r.kind]}
+                  <ApprovalRow key={`${r.kind}-${r.requestId}`} variant="card" name={r.employeeName} photo={photos[r.employeeId]} kind={KIND_LABEL[r.kind]}
                     meta={r.canDecide ? relTime(r.createdAt) : `${relTime(r.createdAt)} · not yours to decide`}
                     title={inboxWhat(r)} reason={r.reason || undefined}
                     facts={r.facts.map((f) => ({ label: f.label, value: f.value }))}

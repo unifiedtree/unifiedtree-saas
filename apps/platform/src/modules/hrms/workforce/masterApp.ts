@@ -27,7 +27,12 @@ export interface MasterAct {
   openRecord: (id: string) => void
   milestone: { value: string; options: { v: string; l: string }[]; set: (v: string) => void; ids: Set<string> | null }
   exportEmployees: (rows: Rec[]) => void
-  typeOptions: (cur?: string) => string[]
+  /** The employment types someone can be given in company `co` (default: the top bar's), from the data. */
+  typeOptions: (cur?: string, co?: string) => string[]
+  /** May upload a logo: { branches, agencies } (V143.102). */
+  canLogo: Record<string, boolean>
+  /** The contract workers linked to an agency. */
+  loadWorkers: (agencyId: string) => Promise<{ employeeId: string; employeeCode?: string | null; name?: string | null; employmentStatus?: string | null; linkedAt?: string | null }[]>
 }
 
 export interface MasterApp {

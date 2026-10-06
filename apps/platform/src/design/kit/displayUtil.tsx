@@ -68,3 +68,18 @@ export function pctOf(value: number | null | undefined, max: number | null | und
 export function formatFigure(v: number): string {
   return v.toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
+
+/**
+ * A picture address as the browser can load it. The server hands out photos and logos it stores
+ * itself as paths under its API root ("/v1/public/images/…", V143.102), so they get the API's base
+ * (the same VITE_API_URL / VITE_API_BASE_URL / "/api" rule as core/api/client.ts). Anything
+ * else (a full URL, data:, blob:) is used as it is, as before.
+ */
+export function mediaSrc(src: string | null | undefined): string | null {
+  if (!src) return null
+  if (src.startsWith('/v1/')) {
+    const base = ((import.meta.env.VITE_API_URL as string | undefined) || (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api').replace(/\/$/, '')
+    return base + src
+  }
+  return src
+}

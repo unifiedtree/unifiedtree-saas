@@ -7,8 +7,10 @@
 //   - the sub-pages (Employee Master · Contractor Master · Classification Rules) are the header's
 //     segmented tabs (the Organization Setup look, 293fe825);
 //   - figures (server BW-90 stats when present, the records otherwise) filter by status on click;
-//   - search (name, code, email, designation), department (with sub-departments) / branch /
-//     type / milestone filters, status pills, sorting, 10 a page, select the page;
+//   - search (name, code, email, designation), department (with sub-departments) / designation
+//     (?designationId, w43) / branch / type / milestone filters, status pills, sorting, 10 a page,
+//     select the page. The Type filter's options come from the data (w43: no fixed list);
+//   - a person's photo (profilePhotoUrl, V143.102) on their row and their quick profile;
 //   - Import, Export (the same CSV and export log), Add employee, a row's quick profile, Edit
 //     details, Start exit (last working day → notice or exited), bulk Change status and Export.
 // Actions that change people need hrms.employee.write; Import needs hrms.employee.import.
@@ -27,7 +29,7 @@ import { useEmployeeStats } from '../api/shared/useEmployeeStats'
 import type { Rec } from '../master/masterData'
 import { MASTER_ROUTES } from '../master/MasterContainer'
 import {
-  bulkStatusTargets, deptOptions, exitChange, filterEmployees, fmtDate, isLeaving, localActiveSeries, sortEmployees, statusOptions,
+  bulkStatusTargets, deptOptions, desigOptions, exitChange, filterEmployees, fmtDate, isLeaving, localActiveSeries, sortEmployees, statusOptions,
   statusTone, suggestedLastDay, tenure, typeOptions, type Sort, type SortKey,
 } from './directoryModel'
 import { EmployeeFormPanel } from './EmployeeFormPanel'
@@ -109,6 +111,8 @@ function Directory({ stats, statsLoading, canWrite, onEdit, shown }: DirectoryPr
   const [q, setQ] = useState(route.q || '')
   const [status, setStatus] = useState(route.status || '')
   const [dept, setDept] = useState(route.dept || '')
+  const [urlParams] = useSearchParams()
+  const [desig, setDesig] = useState(() => urlParams.get('designationId') || '')
   const [branch, setBranch] = useState(route.branch || '')
   const [type, setType] = useState('')
   const [sort, setSort] = useState<Sort>({ k: 'code', d: 1 })
@@ -120,16 +124,16 @@ function Directory({ stats, statsLoading, canWrite, onEdit, shown }: DirectoryPr
 
   const ms = act.milestone
   const rows = useMemo(() => sortEmployees(
-    filterEmployees(E, { status, dept, branch, type, q, milestone: { on: !!ms.value, ids: ms.ids } }, M.look), sort, M.look),
-  [E, status, dept, branch, type, q, ms.value, ms.ids, sort, M.look])
-  useEffect(() => { setPage(0) }, [status, dept, branch, type, q, sort.k, sort.d, ms.value, ms.ids])
+    filterEmployees(E, { status, dept, desig, branch, type, q, milestone: { on: !!ms.value, ids: ms.ids } }, M.look), sort, M.look),
+  [E, status, dept, desig, branch, type, q, ms.value, ms.ids, sort, M.look])
+  useEffect(() => { setPage(0) }, [status, dept, desig, branch, type, q, sort.k, sort.d, ms.value, ms.ids])
   shown.current = rows
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   const cur = Math.min(page, pages - 1)
   const slice = rows.slice(cur * PAGE_SIZE, (cur + 1) * PAGE_SIZE)
 
-  const any = !!(status || dept || branch || type || q.trim() || ms.value)
-  const clear = () => { setStatus(''); setDept(''); setBranch(''); setType(''); setQ(''); ms.set('') }
+  const any = !!(status || dept || desig || branch || type || q.trim() || ms.value)
+  const clear = () => { setStatus(''); setDept(''); setDesig(''); setBranch(''); setType(''); setQ(''); ms.set('') }
   const toggleStatus = (s: string) => setStatus((x) => (x === s ? '' : s))
 
   // ── figures: the server's (BW-90) when it has them, else counted from the records ──
@@ -157,8 +161,11 @@ function Directory({ stats, statsLoading, canWrite, onEdit, shown }: DirectoryPr
   // ── filters ──
   const statusOpts = statusOptions(E)
   const deptOpts: DropdownOption[] = [{ value: '', label: 'All departments' }, ...deptOptions(db.depts).map((o) => ({ value: o.value, label: o.label, sub: o.sub })), { value: '__none', label: 'No department', sub: 'People without one' }]
+  const desigOpts: DropdownOption[] = [{ value: '', label: 'All designations' }, ...desigOptions(db.desigs || [], db.depts || [], dept)]
+  // A department that doesn't have the chosen designation clears it.
+  const pickDept = (x: string) => { setDept(x); if (desig && !desigOptions(db.desigs || [], db.depts || [], x).some((o) => o.value === desig)) setDesig('') }
   const branchOpts: DropdownOption[] = [{ value: '', label: 'All branches' }, ...db.branches.map((b) => ({ value: b.id, label: b.name, sub: b.city || undefined }))]
-  const typeOpts: DropdownOption[] = [{ value: '', label: 'All types' }, ...typeOptions(E).map((t) => ({ value: t, label: t }))]
+  const typeOpts: DropdownOption[] = [{ value: '', label: 'All types' }, ...typeOptions(E, db.classes || []).map((t) => ({ value: t, label: t }))]
   const msOpts: DropdownOption[] = [{ value: '', label: 'All people' }, ...ms.options.map((o) => ({ value: o.v, label: o.l }))]
 
   // ── selection and bulk actions ──
@@ -182,7 +189,7 @@ function Directory({ stats, statsLoading, canWrite, onEdit, shown }: DirectoryPr
   const viewing = view ? E.find((e) => e.id === view) : null
 
   const columns: TableColumn<Rec>[] = [
-    { key: 'name', header: 'Employee', sortable: true, primary: true, render: (e) => <CellPerson name={e.name} sub={e.email || M.desig[e.desig].name} /> },
+    { key: 'name', header: 'Employee', sortable: true, primary: true, render: (e) => <CellPerson name={e.name} sub={e.email || M.desig[e.desig].name} src={e._raw?.profilePhotoUrl} /> },
     { key: 'code', header: 'Code', sortable: true, width: 120, render: (e) => <Chip variant="code">{e.code}</Chip> },
     { key: 'desig', header: 'Designation', sortable: true, render: (e) => <CellStack primary={M.desig[e.desig].name} secondary={`${M.dept[e.dept].name} · ${e.type}`} /> },
     { key: 'branch', header: 'Branch', render: (e) => M.branch[e.branch].name },
@@ -219,7 +226,9 @@ function Directory({ stats, statsLoading, canWrite, onEdit, shown }: DirectoryPr
         <div className="wf-bar">
           <Input fieldClassName="wf-search" leading="search" size="md" placeholder="Search name, code, email or role…" aria-label="Search employees"
             value={q} onChange={(e) => setQ(e.target.value)} />
-          <Dropdown className="wf-filter" label="Department" options={deptOpts} value={dept} onChange={(x) => setDept(x)} searchable menuWidth={260} />
+          <Dropdown className="wf-filter" label="Department" options={deptOpts} value={dept} onChange={pickDept} searchable menuWidth={260} />
+          <Dropdown className="wf-filter" label="Designation" options={desigOpts} value={desig} onChange={(x) => setDesig(x)} searchable={desigOpts.length > 7} menuWidth={260}
+            emptyText="No designations in this department" />
           <Dropdown className="wf-filter" label="Branch" options={branchOpts} value={branch} onChange={(x) => setBranch(x)} searchable={branchOpts.length > 7} menuWidth={240} />
           <Dropdown className="wf-filter" label="Type" options={typeOpts} value={type} onChange={(x) => setType(x)} searchable={false} menuWidth={200} />
           <Dropdown className="wf-filter wf-filter--wide wf-filter--milestone" label="Milestone" options={msOpts} value={ms.value} onChange={(x) => ms.set(x)} searchable={false} menuWidth={280} />
