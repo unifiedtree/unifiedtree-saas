@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -24,7 +25,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -134,13 +137,19 @@ public class PlatformCatalogController {
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.entitlement.manage')")
     public Map<String, Object> clearEntitlement(@PathVariable UUID tenantId, @PathVariable UUID companyId,
                                                 @PathVariable String moduleKey,
+                                                @RequestParam(required = false) String reason,
                                                 @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
+        // Same rule as switching a product on or off: every manual change says why
+        if (reason == null || reason.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reason is required");
+        }
         directory.requireCompany(tenantId, companyId);
         Operator op = Operator.of(jwt);
         boolean cleared = entitlements.clearManual(companyId, moduleKey);
         if (cleared) {
             audit.record(op, http, "ENTITLEMENT_OVERRIDE_CLEARED", "company", companyId,
-                    "Workspace %s company %s: manual %s override removed".formatted(tenantId, companyId, moduleKey));
+                    "Workspace %s company %s: manual %s override removed. Reason: %s"
+                            .formatted(tenantId, companyId, moduleKey, reason.strip()));
         }
         return Map.of("cleared", cleared, "effective", entitlements.resolve(tenantId, companyId, moduleKey));
     }

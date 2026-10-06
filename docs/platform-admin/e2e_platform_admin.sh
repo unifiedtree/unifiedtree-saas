@@ -100,6 +100,8 @@ expect "manual override without a reason -> 400" 400
 req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A2/entitlements/whatsapp" '{"status":"ACTIVE","reason":"Two-week pilot agreed by sales"}' "$OPS"
 expect "manual ACTIVE turns Marketing on for A2" 200 "j['entitled'] and j['source']=='MANUAL'"
 req DELETE "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A2/entitlements/whatsapp" "" "$OPS"
+expect "removing an override without a reason -> 400" 400
+req DELETE "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A2/entitlements/whatsapp?reason=Pilot%20ended" "" "$OPS"
 expect "removing the override turns it off again" 200 "j['cleared'] and not j['effective']['entitled']"
 req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_B1/entitlements/whatsapp" '{"status":"ACTIVE","reason":"wrong workspace attempt"}' "$OPS"
 expect "override for a company under the wrong workspace -> 404" 404
