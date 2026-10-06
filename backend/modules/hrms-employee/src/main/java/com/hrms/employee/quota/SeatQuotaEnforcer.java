@@ -11,7 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * Single canonical enforcement point for the workspace's paid seat cap.
+ * Single canonical check point for the workspace's paid seats.
+ *
+ * <p><b>Soft limit (owner decision, 6 Oct 2026; contract with the HRMS lane):</b> going over the
+ * bought seats no longer blocks adding an employee. The extra users are billed at the end of the
+ * cycle; {@code GET /v1/workspace/seats/usage} reports {@code overBy} so the web and the app say so.
+ * The only refusal left is {@code QUOTA_LOOKUP_FAILED} (fail closed when the count itself fails).
  *
  * <p>Every code path that inserts a row into {@code hrms.employees} calls
  * {@link #assertCapacity()} (or the batched {@link #assertCapacity(int)})
@@ -126,20 +131,11 @@ public class SeatQuotaEnforcer {
                             + "contact support if this keeps happening.");
         }
 
-        if (u.purchased() <= 0) {
-            // A configured-but-zero cap is a real cap ("this workspace has
-            // bought nothing"): block it. Callers that want to fail-open on
-            // missing config should not be assigning 0 as a cap.
-            log.info("SEAT_LIMIT_EXCEEDED tenant={} purchased=0 current={} (no active plan)",
-                    tenantId, u.current());
-            throw new SeatLimitExceededException(tenantId, 0, u.current());
-        }
-
-        if (u.current() + additional > u.purchased()) {
-            log.info("SEAT_LIMIT_EXCEEDED tenant={} purchased={} current={} additional={}",
-                    tenantId, u.purchased(), u.current(), additional);
-            throw new SeatLimitExceededException(
-                    tenantId, u.purchased(), u.current());
+        // Soft limit: over the bought seats is allowed and billed at the cycle end.
+        int after = u.current() + additional;
+        if (after > u.purchased()) {
+            log.info("SEAT_SOFT_LIMIT tenant={} purchased={} current={} additional={} overBy={} (allowed; billed at cycle end)",
+                    tenantId, u.purchased(), u.current(), additional, after - Math.max(0, u.purchased()));
         }
     }
 }
