@@ -85,6 +85,8 @@ public class PolicyController {
             @RequestParam(required = false) UUID companyId,
             @AuthenticationPrincipal Jwt jwt) {
         UUID resolvedCompany = companyId;
+        // The selected company (X-Company-Id), else the caller's own.
+        if (resolvedCompany == null && request.companyId() == null) resolvedCompany = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();
         if (resolvedCompany == null && request.companyId() == null) {
             Employee caller = employeeRepository.findById(extractEmployeeId(jwt)).orElse(null);
             if (caller != null) {

@@ -1,5 +1,6 @@
 package com.hrms.api.leave;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,6 +34,10 @@ import java.util.UUID;
 @Tag(name = "Leave", description = "Leave applications, approvals, balances, and policies")
 @SecurityRequirement(name = "bearerAuth")
 public class LeaveInsightsController {
+
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
 
     static final String LEVEL_TWO = "hrms.leave.approve.l2";
     static final String LEVEL_ONE = "hrms.leave.approve.l1";
@@ -84,6 +89,7 @@ public class LeaveInsightsController {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(insights.balances(companyId, yearOrNow(year), q, page, size));
     }
 
@@ -92,6 +98,7 @@ public class LeaveInsightsController {
     @PreAuthorize("hasAnyAuthority('hrms.leave.employee.read','hrms.report.leave')")
     public ResponseEntity<LeaveInsightsService.Usage> usage(@RequestParam(required = false) UUID companyId,
                                                             @RequestParam(required = false) Integer year) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(insights.usage(companyId, yearOrNow(year)));
     }
 

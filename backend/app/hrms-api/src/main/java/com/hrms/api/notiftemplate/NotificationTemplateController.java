@@ -1,5 +1,6 @@
 package com.hrms.api.notiftemplate;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -32,6 +33,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class NotificationTemplateController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final NotificationTemplateService templateService;
     private final EmployeeRepository employeeRepository;
 
@@ -49,6 +54,7 @@ public class NotificationTemplateController {
             @AuthenticationPrincipal Jwt jwt) {
         NotificationTemplateRequest request = NotificationTemplateRules.validate(body);
         UUID companyId = request.companyId();
+        if (companyId == null) companyId = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();  // the selected company (X-Company-Id)
         if (companyId == null) {
             UUID employeeId = extractEmployeeId(jwt);
             companyId = employeeRepository.findById(employeeId)
@@ -71,6 +77,7 @@ public class NotificationTemplateController {
     public ResponseEntity<PageResponse<NotificationTemplateResponse>> list(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(templateService.listTemplates(companyId, pageable));
     }
 

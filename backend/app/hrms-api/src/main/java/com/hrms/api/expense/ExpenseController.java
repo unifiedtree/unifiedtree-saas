@@ -1,5 +1,6 @@
 package com.hrms.api.expense;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -40,6 +41,10 @@ import java.util.stream.Collectors;
 @Tag(name = "Expense", description = "Expense claims, approvals, reimbursement, and policies")
 @SecurityRequirement(name = "bearerAuth")
 public class ExpenseController {
+
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
 
     private final ExpenseService expenseService;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -494,6 +499,7 @@ public class ExpenseController {
     public ResponseEntity<ExpensePolicyResponse> createPolicy(
             @Valid @RequestBody ExpensePolicyRequest request,
             @RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.status(HttpStatus.CREATED).body(policyService.createPolicy(companyId, request));
     }
 

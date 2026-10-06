@@ -1,5 +1,6 @@
 package com.hrms.api.expense;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,10 @@ import java.util.UUID;
 @RequestMapping("/v1/expense/reimbursement-batches")
 public class ReimbursementBatchController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final ReimbursementBatchService service;
 
     public ReimbursementBatchController(ReimbursementBatchService service) {
@@ -38,6 +43,7 @@ public class ReimbursementBatchController {
     public List<ReimbursementBatchService.BatchDto> list(
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) String status) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.list(TenantContext.getTenantId(), companyId, status);
     }
 

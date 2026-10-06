@@ -17,6 +17,12 @@
 //  - The rules: no grant for the home company, no whole-business role per company,
 //    mgr@ cannot grant; rows are invisible from another workspace (RLS, read-only SQL).
 //  - Revoke: B is gone from mgr@'s companies and 403 again. Every change is audited.
+//  - Bodies (feat/company-access-2): a companyId in a request body must be a company the
+//    caller may access AND the one the request runs in (header / parameter, else home):
+//    403 COMPANY_ACCESS_DENIED before the endpoint's own permission check. owner@ unchanged.
+//  - Lists whose companyId is optional: without one, mgr@ gets his current company (the
+//    header's, else home) instead of every company; owner@ without a header: every company
+//    as before, with a header: that company.
 // Everything created (company, employee, grants, audit rows) is removed at the end.
 /* global process, console, fetch */
 import { execFileSync } from 'node:child_process'
@@ -115,6 +121,34 @@ try {
   r = await owner('GET', '/v1/hrms/departments', { company: '00000000-0000-0000-0000-00000000abcd' })
   check('owner@ X-Company-Id: a company not in the workspace → 403', r.status === 403, `status ${r.status}`)
 
+  at('bodies and optional lists before a grant')
+  const branch = await owner('POST', '/v1/hrms/branches', { body: { companyId: companyB, name: `QA Branch ${tag}` } })
+  const branchB = branch.json && branch.json.id
+  check('owner@ creates a branch in B (body companyId B, workspace-wide: unchanged)', branch.status === 201 && !!branchB, `status ${branch.status} ${errorCode(branch)}`)
+  r = await mgr('POST', '/v1/hrms/branches', { body: { companyId: companyB, name: 'nope' } })
+  check('mgr@ body companyId B → 403 COMPANY_ACCESS_DENIED', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/hrms/branches', { body: { companyId: companyA, name: 'nope' } })
+  check('mgr@ body companyId A (home) passes the company check (then his permission refuses)', r.status === 403 && errorCode(r) !== 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/expense/claims', { body: { companyId: companyB, title: '' } })
+  check('mgr@ expense claim with companyId B → 403 COMPANY_ACCESS_DENIED', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/expense/claims', { body: { companyId: companyA, title: '' } })
+  check('mgr@ expense claim with companyId A → reaches validation (400)', r.status === 400, `status ${r.status} ${errorCode(r)}`)
+  r = await reader('POST', '/v1/expense/claims', { body: { companyId: 'dddddddd-dddd-dddd-dddd-dddddddddddd', title: '' } })
+  check('reader@ body with a company of no workspace → 403', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status}`)
+  const branchCos = (list) => [...new Set((Array.isArray(list) ? list : []).map((b) => b.companyId))].sort()
+  r = await mgr('GET', '/v1/hrms/branches')
+  check("mgr@ /branches without companyId: his home company's branches only (was every company)", r.status === 200 && JSON.stringify(branchCos(r.json)) === JSON.stringify([companyA]), JSON.stringify(branchCos(r.json)))
+  r = await owner('GET', '/v1/hrms/branches')
+  check('owner@ /branches without companyId or header: every company, as before', r.status === 200 && branchCos(r.json).includes(companyA) && branchCos(r.json).includes(companyB), JSON.stringify(branchCos(r.json)))
+  r = await owner('GET', '/v1/hrms/branches', { company: companyB })
+  check("owner@ /branches with X-Company-Id: B → B's branches only", r.status === 200 && JSON.stringify(branchCos(r.json)) === JSON.stringify([companyB]), JSON.stringify(branchCos(r.json)))
+  r = await mgr('GET', '/v1/hiring/summary')
+  check('mgr@ hiring summary without companyId covers his home company', r.status === 200 && r.json.companyId === companyA, `status ${r.status} ${r.json && r.json.companyId}`)
+  r = await owner('GET', '/v1/hiring/summary')
+  check('owner@ hiring summary without companyId or header: every company (null), as before', r.status === 200 && r.json.companyId === null, `status ${r.status} ${r.json && r.json.companyId}`)
+  r = await owner('GET', '/v1/hiring/summary', { company: companyB })
+  check('owner@ hiring summary with X-Company-Id: B covers B', r.status === 200 && r.json.companyId === companyB, `status ${r.status}`)
+
   at('employee in B')
   const readerCode = sql(`select employee_code from hrms.employees where id='${reader.employeeId}'`)
   const emp = await owner('POST', '/v1/hrms/employees', { body: { companyId: companyB, employeeCode: readerCode, firstName: 'QA', lastName: `Access ${tag}`, reportingManagerId: mgr.employeeId } })
@@ -157,6 +191,18 @@ try {
   check("mgr@ reads B's departments", r.status === 200, `status ${r.status}`)
   r = await mgr('GET', `/v1/hrms/companies/${companyB}`, { company: companyB })
   check("mgr@ reads company B's profile", r.status === 200 && r.json.id === companyB, `status ${r.status}`)
+  r = await mgr('GET', '/v1/hrms/branches', { company: companyB })
+  check("mgr@ /branches with X-Company-Id: B → B's branches only", r.status === 200 && JSON.stringify(branchCos(r.json)) === JSON.stringify([companyB]), JSON.stringify(branchCos(r.json)))
+  r = await mgr('GET', '/v1/hiring/summary', { company: companyB })
+  check('mgr@ hiring summary with X-Company-Id: B covers B', r.status === 200 && r.json.companyId === companyB, `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/hrms/branches', { body: { companyId: companyB, name: 'nope' } })
+  check('mgr@ body companyId B without the header → 403 (it would run with his home roles)', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/hrms/branches', { body: { companyId: companyB, name: 'nope' }, company: companyB })
+  check('mgr@ body companyId B with X-Company-Id: B passes the company check (then his permission there refuses)', r.status === 403 && errorCode(r) !== 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/hrms/branches', { body: { companyId: companyA, name: 'nope' }, company: companyB })
+  check('mgr@ body companyId A while working in B → 403 COMPANY_ACCESS_DENIED', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status} ${errorCode(r)}`)
+  r = await mgr('POST', '/v1/expense/claims', { body: { companyId: companyB, title: '' }, company: companyB })
+  check('mgr@ expense claim companyId B with X-Company-Id: B → reaches validation (400)', r.status === 400, `status ${r.status} ${errorCode(r)}`)
   r = await reader('GET', '/v1/hrms/departments', { company: companyB })
   check('reader@ still cannot read B', r.status === 403 && errorCode(r) === 'COMPANY_ACCESS_DENIED', `status ${r.status}`)
   r = await reader('GET', `/v1/attendance/dashboard?companyId=${companyB}`)

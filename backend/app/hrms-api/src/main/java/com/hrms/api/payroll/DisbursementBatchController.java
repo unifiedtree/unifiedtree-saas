@@ -1,5 +1,6 @@
 package com.hrms.api.payroll;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +29,10 @@ import java.util.UUID;
 @RequestMapping("/v1/payroll/disbursement/batches")
 public class DisbursementBatchController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final DisbursementBatchService service;
 
     public DisbursementBatchController(DisbursementBatchService service) {
@@ -40,6 +45,7 @@ public class DisbursementBatchController {
             @RequestParam(required = false) UUID runId,
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) String status) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.list(TenantContext.getTenantId(), runId, companyId, status);
     }
 

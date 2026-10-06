@@ -1,5 +1,6 @@
 package com.hrms.api.workforce;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class OrgChartController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final OrgChartService service;
 
     public OrgChartController(OrgChartService service) {
@@ -37,6 +42,7 @@ public class OrgChartController {
     @PreAuthorize("isAuthenticated()")
     public OrgChartService.OrgChart chart(@RequestParam(required = false) UUID companyId,
                                           @AuthenticationPrincipal Jwt jwt, Authentication auth) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.chart(companyId, jwt, auth);
     }
 }

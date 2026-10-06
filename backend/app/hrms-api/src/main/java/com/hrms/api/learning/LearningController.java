@@ -1,5 +1,6 @@
 package com.hrms.api.learning;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.learning.dto.EmployeeSkillRequest;
 import com.hrms.learning.dto.EmployeeSkillResponse;
 import com.hrms.learning.service.SkillService;
@@ -30,6 +31,10 @@ import java.util.UUID;
 @RequestMapping("/v1/learning")
 public class LearningController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final LearningService service;
     private final SkillService skillService;
     private final LearningDetailsService details;
@@ -45,6 +50,7 @@ public class LearningController {
     @GetMapping("/programs/summary")
     @PreAuthorize("hasAuthority('hrms.learning.read')")
     public LearningDetailsService.ProgramsSummary programsSummary(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return details.summary(TenantContext.getTenantId(), companyId);
     }
 
@@ -75,6 +81,7 @@ public class LearningController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.listPrograms(TenantContext.getTenantId(),
                 companyId, status, search, page, size);
     }

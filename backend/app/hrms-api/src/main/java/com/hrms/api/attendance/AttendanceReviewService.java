@@ -531,7 +531,8 @@ public class AttendanceReviewService {
         } catch (IllegalArgumentException noEmployeeId) {
             return false;
         }
-        UUID company = employees.findById(self).map(Employee::getCompanyId).orElse(null);
+        // The current company the admin selected (X-Company-Id), else their own.
+        UUID company = com.unifiedtree.security.tenant.CompanyContext.currentOr(employees.findById(self).map(Employee::getCompanyId).orElse(null));
         return company != null && employees.findById(employeeId).map(e -> company.equals(e.getCompanyId())).orElse(false);
     }
 

@@ -1,5 +1,6 @@
 package com.hrms.api.workforce;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.BranchResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ClassificationRuleResponse;
@@ -193,6 +194,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
     public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId,
                                              @RequestParam(defaultValue = "false") boolean includeArchived) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         // includeArchived: archived branches too (isActive=false), for the
         // Companies & Branches "Inactive" filter. Pickers leave it off.
         return companyId == null ? branches.listAll(includeArchived) : branches.listForCompany(companyId, includeArchived);
@@ -372,6 +374,7 @@ public class WorkforceController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo,
             // Redesign BW-96: only this person's direct reports.
             @RequestParam(required = false) UUID reportingManagerId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return employees.directory(new WorkforceFilter(companyId, departmentId, branchId, status, search, page, pageSize,
                 noDepartment, milestoneKind(milestone), milestoneWithin, milestoneRange(milestoneFrom, milestoneTo), reportingManagerId));
     }
@@ -418,6 +421,7 @@ public class WorkforceController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo,
             @RequestParam(required = false) UUID reportingManagerId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         var milestoneKind = milestoneKind(milestone);
         var range = milestoneRange(milestoneFrom, milestoneTo);
         List<WorkforceEmployeeResponse> rows = new java.util.ArrayList<>();
@@ -484,6 +488,7 @@ public class WorkforceController {
     @GetMapping("/employees/stats")
     @PreAuthorize("hasAuthority('hrms.employee.read')")
     public EmployeeStats.Response employeeStats(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return employeeStats.stats(companyId, holdsOrChecks(WorkforceAccess.ATTRITION_READ));
     }
 
@@ -517,6 +522,7 @@ public class WorkforceController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int pageSize) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return recordQueries.exits(companyId, status, search, page, pageSize);
     }
 
@@ -574,6 +580,7 @@ public class WorkforceController {
     @GetMapping("/employees/counts")
     @PreAuthorize("hasAuthority('hrms.employee.read')")
     public EmployeeCountsResponse employeeCounts(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return employees.counts(companyId);
     }
 

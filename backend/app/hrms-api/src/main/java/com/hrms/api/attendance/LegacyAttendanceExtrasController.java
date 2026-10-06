@@ -226,7 +226,7 @@ public class LegacyAttendanceExtrasController {
         Employee current = employeeRepository.findById(currentEmployeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + currentEmployeeId));
         List<Employee> employees = isAdmin(jwt)
-                ? employeeRepository.findActiveByCompany(current.getCompanyId())
+                ? employeeRepository.findActiveByCompany(com.unifiedtree.security.tenant.CompanyContext.currentOr(current.getCompanyId()))
                 : employeeRepository.findByManagerId(currentEmployeeId);
         // Exclude the caller from the team list — admins/managers should not
         // see themselves on live-location / Find Others (and shouldn't show as

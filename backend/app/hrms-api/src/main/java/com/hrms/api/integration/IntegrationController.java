@@ -1,5 +1,6 @@
 package com.hrms.api.integration;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.integration.dto.IntegrationConnectionRequest;
 import com.hrms.integration.dto.IntegrationConnectionResponse;
@@ -31,6 +32,10 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class IntegrationController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private static final Logger log = LoggerFactory.getLogger(IntegrationController.class);
 
     private final IntegrationService integrationService;
@@ -56,6 +61,7 @@ public class IntegrationController {
     public ResponseEntity<PageResponse<IntegrationConnectionResponse>> list(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return ResponseEntity.ok(integrationService.listConnections(companyId, pageable));
     }
 

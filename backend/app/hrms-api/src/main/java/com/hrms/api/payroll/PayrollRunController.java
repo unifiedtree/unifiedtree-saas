@@ -1,5 +1,6 @@
 package com.hrms.api.payroll;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,10 @@ import java.util.UUID;
 @RequestMapping("/v1/payroll")
 public class PayrollRunController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final PayrollRunService service;
 
     /** The audit log (Settings -> Audit logs). Optional, so tests can build the controller bare. */
@@ -46,6 +51,7 @@ public class PayrollRunController {
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String status) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.listRuns(TenantContext.getTenantId(), companyId, year, status);
     }
 

@@ -80,7 +80,10 @@ public class AttendancePolicyController {
         return saved;
     }
 
+    /** The current company (X-Company-Id, access already checked), else the caller's own. */
     private UUID callerCompany(Jwt jwt) {
+        UUID selected = com.unifiedtree.security.tenant.CompanyContext.getCompanyId();
+        if (selected != null) return selected;
         return employees.findById(AttendanceReviewService.callerEmployeeId(jwt))
                 .map(e -> e.getCompanyId())
                 .orElseThrow(() -> new BusinessRuleException("Choose a company.", "COMPANY_REQUIRED"));

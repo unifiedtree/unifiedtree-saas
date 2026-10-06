@@ -35,6 +35,18 @@ public final class CompanyContext {
     public static void setCompanyId(UUID companyId) { COMPANY_ID.set(companyId); }
     public static UUID getCompanyId() { return COMPANY_ID.get(); }
 
+    /**
+     * The company an admin-type view works in: the one the client selected with
+     * {@code X-Company-Id} (access already checked), else {@code own} (the
+     * caller's own company — exactly the behaviour before company access).
+     * Self-service ("my leave", "my expenses") keeps using the caller's own
+     * company and never calls this.
+     */
+    public static UUID currentOr(UUID own) {
+        UUID selected = COMPANY_ID.get();
+        return selected != null ? selected : own;
+    }
+
     public static void setScope(Scope scope) { SCOPE.set(scope); }
     public static Scope getScope() { return SCOPE.get(); }
 

@@ -268,7 +268,9 @@ public class AssistedPunchService {
         } else {
             // Everyone working in the caller's company (the company-wide attendance scope).
             // A login without an employee record sees the workspace (row-level security keeps it to the tenant).
-            pool = caller != null ? employees.findActiveByCompany(caller.getCompanyId()) : employees.findAll();
+            // With a company selected (X-Company-Id): that company's people.
+            UUID company = com.unifiedtree.security.tenant.CompanyContext.currentOr(caller != null ? caller.getCompanyId() : null);
+            pool = company != null ? employees.findActiveByCompany(company) : employees.findAll();
         }
         String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
         List<Employee> matches = pool.stream()
@@ -414,7 +416,8 @@ public class AssistedPunchService {
         Set<UUID> team = scope == Scope.TEAM && caller != null
                 ? teamScope.teamOf(caller).stream().map(Employee::getId).collect(Collectors.toSet())
                 : Set.of();
-        HrmsException refused = refusal(scope, callerId, caller != null ? caller.getCompanyId() : null, target, team);
+        HrmsException refused = refusal(scope, callerId,
+                com.unifiedtree.security.tenant.CompanyContext.currentOr(caller != null ? caller.getCompanyId() : null), target, team);
         if (refused != null) throw refused;
         String name = name(target);
 

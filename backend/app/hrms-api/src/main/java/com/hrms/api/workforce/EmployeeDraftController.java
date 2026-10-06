@@ -1,5 +1,6 @@
 package com.hrms.api.workforce;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +30,10 @@ import java.util.UUID;
 @RequestMapping("/v1/hrms/employee-drafts")
 public class EmployeeDraftController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final EmployeeDraftService drafts;
 
     public EmployeeDraftController(EmployeeDraftService drafts) {
@@ -39,6 +44,7 @@ public class EmployeeDraftController {
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public List<EmployeeDraftService.Draft> list(@RequestParam(required = false) UUID companyId,
                                                  @AuthenticationPrincipal Jwt jwt) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return drafts.list(userId(jwt), companyId);
     }
 

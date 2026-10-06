@@ -1,5 +1,6 @@
 package com.hrms.api.payroll;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,6 +29,10 @@ import java.util.UUID;
 @RequestMapping("/v1/payroll/structures")
 public class SalaryStructureListController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final SalaryStructureListService service;
 
     public SalaryStructureListController(SalaryStructureListService service) {
@@ -42,12 +47,14 @@ public class SalaryStructureListController {
             @RequestParam(defaultValue = "false") boolean noStructure,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.page(TenantContext.getTenantId(), companyId, q, noStructure, page, size);
     }
 
     @GetMapping("/summary")
     @PreAuthorize("hasAuthority('payroll.structure.read')")
     public SalaryStructureListService.StructureSummaryDto summary(@RequestParam(required = false) UUID companyId) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.summary(TenantContext.getTenantId(), companyId);
     }
 

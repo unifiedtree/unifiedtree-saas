@@ -1,5 +1,6 @@
 package com.hrms.api.payroll;
 
+import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,10 @@ import java.util.UUID;
 @RequestMapping("/v1/payroll/bank-profiles")
 public class BankProfileController {
 
+    /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompanyAccessService companyAccess;
+
     private final BankProfileService service;
 
     public BankProfileController(BankProfileService service) {
@@ -35,6 +40,7 @@ public class BankProfileController {
     public List<BankProfileService.BankProfileDto> list(
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) Boolean activeOnly) {
+        companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
         return service.list(TenantContext.getTenantId(), companyId, activeOnly);
     }
 
