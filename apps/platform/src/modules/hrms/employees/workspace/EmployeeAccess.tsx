@@ -13,6 +13,9 @@
  * The server applies the levels rules (never your own roles, only what you hold, owner-only roles) and
  * audits every change; this tab only says up front what it will refuse. The tab is shown to people who
  * hold workspace.users.manage (with workspace.users.read, which finding the login needs).
+ * Companies (6 Oct): their role in each company (rbac/components/CompanyAccessSection). Give a role →
+ * Create makes a new role on the spot (POST /v1/rbac/roles, rbac.role.write, as Add employee's Access
+ * step) and gives it straight away, through the same list of roles you may give, never around it.
  * The full Roles & access pages stay where they are (/users, /roles); this tab links to them.
  */
 import { useMemo, useState } from 'react'
@@ -22,11 +25,15 @@ import { usePermission, P } from '@unifiedtree/sdk'
 import { Button, Callout, KeyValueGrid, ListRow, ListRows, Section, StatusPill, IconTile, type StatusTone } from '@/design/kit/display'
 import { Dialog, PanelButton, SidePanel, useToast } from '@/design/kit/overlays'
 import { useAuthStore } from '@/core/auth/authStore'
-import { RISK_LABEL, isRisky } from '@/modules/rbac/api/useRbac'
+import { RISK_LABEL, isRisky, useCreateRole } from '@/modules/rbac/api/useRbac'
 import {
   useAssignableRoles, useAssignRole, useRevokeRole, useUserPermissions, useWorkspaceUsers, useResendWorkspaceInvite,
   groupRolesByModule, type AssignableRole, type WorkspaceUser,
 } from '@/modules/rbac/api/useWorkspaceAccess'
+import { pickCreatedRole, type CreatedRolePick } from '@/modules/rbac/api/newPersonAccess'
+import { CompanyAccessSection } from '@/modules/rbac/components/CompanyAccessSection'
+import { RoleFields, newRoleBody, roleDraftFor, roleDraftProblem, type RoleDraft } from '@/modules/rbac/components/RoleFields'
+import { CreateButton, CreatePanel, needPermission, useCreatePanel } from '@/shared/components/inlineCreate/InlineCreate'
 import { UserPermissionOverrides } from '@/pages/users/UserPermissionOverrides'
 import { sendInvite } from '../api/useInvitation'
 import { invitationKey, useInvitationStatus } from '../api/useProfileData'
@@ -112,6 +119,10 @@ function UserAccess({ user, name, links }: { user: WorkspaceUser; name: string; 
   const [picking, setPicking] = useState(false)
   const [confirmGrant, setConfirmGrant] = useState<AssignableRole | null>(null)
   const [confirmLast, setConfirmLast] = useState<AssignableRole | null>(null)
+  const canCreateRole = usePermission(P.RBAC_ROLE_WRITE)
+  const roleCreate = useCreatePanel()
+  const createRole = useCreateRole()
+  const [roleDraft, setRoleDraft] = useState<RoleDraft>(() => roleDraftFor('create'))
 
   const all = roles.data ?? []
   const byCode = useMemo(() => new Map(all.map((r) => [r.roleCode, r])), [all])
@@ -143,6 +154,24 @@ function UserAccess({ user, name, links }: { user: WorkspaceUser; name: string; 
     onError: (e) => { toast.error('Couldn’t remove the role', { detail: (e as Error).message }); setConfirmLast(null) },
   })
   const onGive = (r: AssignableRole) => { if (isRisky(r.riskLevel)) setConfirmGrant(r); else give(r) }
+  // A new role made here is given through the list of roles you may give (read again after it is made).
+  // The role panel takes the place of Give a role (a side panel can't open over another one).
+  const startCreateRole = () => { setPicking(false); setRoleDraft(roleDraftFor('create')); roleCreate.start() }
+  const saveRole = () => void roleCreate.save(async (): Promise<CreatedRolePick> => {
+    const missing = roleDraftProblem(roleDraft, true)
+    if (missing) throw new Error(missing)
+    const created = await createRole.mutateAsync(newRoleBody(roleDraft))
+    const fresh = await roles.refetch()
+    if (fresh.isError) return { kind: 'skip', reason: `${created.displayName} was created, but the list of roles couldn’t be loaded again, so it wasn’t given. Give it once the list is back.` }
+    return pickCreatedRole(created.code, created.displayName, fresh.data ?? [])
+  }, {
+    then: (pick) => {
+      if (pick.kind === 'skip') { toast.info(pick.reason, { duration: 7000 }); return }
+      if (pick.kind === 'confirm') { setConfirmGrant(pick.role); return }
+      give(pick.role)
+      toast.info('The new role has no permissions yet. Choose what it can do in Roles & permissions.', { duration: 7000 })
+    },
+  })
   const onRemove = (code: string, label: string) => {
     if (user.roles.length === 1) { setConfirmLast(byCode.get(code) ?? { roleCode: code, displayName: label, module: 'core', moduleActive: true }); return }
     remove(code, label)
@@ -196,6 +225,8 @@ function UserAccess({ user, name, links }: { user: WorkspaceUser; name: string; 
         </ListRows>
       </Section>
 
+      <CompanyAccessSection userId={user.userId} name={name} locked={rolesLocked} lockedReason={lockedReason} />
+
       <Section title="Permissions" sub="Individual changes on top of their roles, and everything they can do as a result."
         loading={access.isLoading} error={access.error} onRetry={() => void access.refetch()} skeleton="list">
         {access.data && (
@@ -208,6 +239,10 @@ function UserAccess({ user, name, links }: { user: WorkspaceUser; name: string; 
 
       <SidePanel open={picking} onClose={() => setPicking(false)} title="Give a role" sub={`To ${name}. They get it the next time they sign in.`} busy={assign.isPending}
         footer={<PanelButton size="lg" onClick={() => setPicking(false)}>Done</PanelButton>}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+          <span className="upf-note">Not the right role? Create one and give it now.</span>
+          <CreateButton ref={roleCreate.trigger} noun="role" blockedReason={!canCreateRole ? needPermission('roles') : rolesLocked ? lockedReason : null} onClick={startCreateRole} />
+        </div>
         {roles.isLoading ? <p className="upf-note">Loading roles…</p>
           : roles.error ? <Callout tone="danger">Couldn’t load the roles: {(roles.error as Error).message}</Callout>
             : giveable.length === 0 ? <p className="upf-note">{name} already has every role.</p>
@@ -244,6 +279,12 @@ function UserAccess({ user, name, links }: { user: WorkspaceUser; name: string; 
           </Callout>
         )}
       </Dialog>
+
+      <CreatePanel open={roleCreate.open} title="New role" cta="Create and give" busy={roleCreate.busy || assign.isPending} error={roleCreate.error}
+        sub={`It starts with no permissions and is given to ${name}. Choose what it can do in Roles & permissions.`}
+        onCancel={roleCreate.cancel} onSubmit={saveRole}>
+        <RoleFields draft={roleDraft} onChange={setRoleDraft} showCode />
+      </CreatePanel>
 
       <Dialog open={!!confirmLast} onClose={() => setConfirmLast(null)} title="Remove their last role?" icon="alertTriangle" tone="danger" busy={revoke.isPending}
         sub={`${name} (${user.email}) will have no roles and will see a No access screen until a role is given.`}

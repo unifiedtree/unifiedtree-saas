@@ -130,6 +130,8 @@ export function useAssignRole() {
     onSuccess: (_d, { userId }) => {
       qc.invalidateQueries({ queryKey: USERS_KEY })
       qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'user-permissions', userId] })
+      // A role that covers every company changes their companies too (useCompanyAccess.ts).
+      qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'company-access', userId] })
     },
   })
 }
@@ -142,6 +144,8 @@ export function useRevokeRole() {
     onSuccess: (_d, { userId }) => {
       qc.invalidateQueries({ queryKey: USERS_KEY })
       qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'user-permissions', userId] })
+      // A role that covers every company changes their companies too (useCompanyAccess.ts).
+      qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'company-access', userId] })
     },
   })
 }
