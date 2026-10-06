@@ -103,8 +103,10 @@ public class MarketingInternalController {
             // Marketing may only write its own kind of event, never impersonate platform ones.
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "action must start with MARKETING_");
         }
+        // The person behind a Marketing action is recorded as their user in that workspace (null if not a member)
+        UUID actor = access.actorUserId(req.accountId(), req.tenantId());
         scoped.write(req.tenantId(), () -> {
-            audit.recordAs(null, req.actorEmail(), null, "marketing-service", "marketing", action,
+            audit.recordAs(actor, req.actorEmail(), null, "marketing-service", "marketing", action,
                     req.entityType(), req.entityId(), clip(req.summary(), 1000));
             return null;
         });

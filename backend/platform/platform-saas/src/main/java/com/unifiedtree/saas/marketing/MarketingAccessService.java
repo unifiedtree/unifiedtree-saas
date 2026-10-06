@@ -241,8 +241,9 @@ public class MarketingAccessService {
         }
         int written;
         try {
-            // A Mongo user already MAPPED to another company is never silently re-pointed:
-            // the WHERE makes the upsert a no-op, which is reported as a conflict below.
+            // Only a PENDING row (found by the backfill) or this company's own MAPPED row may be (re)written. A Mongo
+            // user MAPPED to another company, or QUARANTINED/RETIRED by an operator, is never re-pointed by the
+            // service: the WHERE makes the upsert a no-op, reported as a conflict below.
             written = jdbc.update("""
                     INSERT INTO platform.marketing_identity_map
                            (kind, legacy_marketing_user_id, legacy_role, legacy_email, account_id, tenant_id,
@@ -253,19 +254,35 @@ public class MarketingAccessService {
                            company_id = EXCLUDED.company_id, legacy_role = EXCLUDED.legacy_role,
                            legacy_email = EXCLUDED.legacy_email, status = 'MAPPED', mapped_at = now(),
                            updated_at = now()
-                     WHERE platform.marketing_identity_map.company_id IS NOT DISTINCT FROM EXCLUDED.company_id
-                        OR platform.marketing_identity_map.status <> 'MAPPED'
+                     WHERE platform.marketing_identity_map.status = 'PENDING'
+                        OR (platform.marketing_identity_map.status = 'MAPPED'
+                            AND platform.marketing_identity_map.company_id IS NOT DISTINCT FROM EXCLUDED.company_id)
                     """, k, legacyUserId, legacyRole, legacyEmail, accountId, tenantId, companyId);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Unique: one owner principal per company, one member principal per (account, company).
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "That company or person already has a different Marketing principal");
+                    "PRINCIPAL_CONFLICT: That company or person already has a different Marketing principal");
         }
         if (written == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "That Marketing user is already mapped to a different company");
+            String held = jdbc.query("SELECT status FROM platform.marketing_identity_map WHERE legacy_marketing_user_id = ?",
+                    (rs, i) -> rs.getString(1), legacyUserId).stream().findFirst().orElse(null);
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "QUARANTINED".equals(held) || "RETIRED".equals(held)
+                    ? "PRINCIPAL_HELD: That Marketing user is " + held.toLowerCase(Locale.ROOT) + " by an operator"
+                    : "PRINCIPAL_CONFLICT: That Marketing user is already mapped to a different company");
         }
         return principal(accountId, companyId);
+    }
+
+    /**
+     * The workspace user an account acts as in one workspace (audit.events records actors by that id), or null when
+     * the account is not an active member there. platform.account_workspaces has no RLS.
+     */
+    public UUID actorUserId(UUID accountId, UUID tenantId) {
+        if (accountId == null || tenantId == null) return null;
+        return jdbc.query("""
+                SELECT auth_user_id FROM platform.account_workspaces
+                 WHERE account_id = ? AND tenant_id = ? AND status = 'ACTIVE'
+                """, (rs, i) -> (UUID) rs.getObject(1), accountId, tenantId).stream().findFirst().orElse(null);
     }
 
     public PrincipalMapping principal(UUID accountId, UUID companyId) {
