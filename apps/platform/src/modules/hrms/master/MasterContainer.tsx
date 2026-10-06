@@ -58,10 +58,11 @@ const TWEAKS = { nav: 'Top tabs', density: 'Comfortable', pageSize: '10' }
 /** Links from elsewhere may carry the API's status names. */
 const STATUS_PARAM: Record<string, string> = { ACTIVE: 'Active', PROBATION: 'Probation', NOTICE_PERIOD: 'On notice', EXITED: 'Exited', TERMINATED: 'Exited', SUSPENDED: 'Suspended' }
 /** What each page reads — it waits for these before drawing. */
-const NEEDS: Record<string, string[]> = {
+// departments: 'branches' too, so a department's "Branches" field lists its company's branches (E-10).
+export const NEEDS: Record<string, string[]> = {
   overview: [], employees: ['employees', 'companies', 'branches', 'depts', 'desigs', 'grades', 'classes', 'shifts', 'leaves', 'agencies'],
   contractors: ['agencies', 'branches'], classes: ['classes', 'employees', 'agencies'], companies: ['companies', 'branches', 'employees'],
-  branches: ['branches', 'companies', 'employees'], departments: ['depts', 'employees', 'desigs'], designations: ['desigs', 'depts', 'grades', 'employees'],
+  branches: ['branches', 'companies', 'employees'], departments: ['depts', 'employees', 'desigs', 'branches'], designations: ['desigs', 'depts', 'grades', 'employees'],
   grades: ['grades', 'desigs', 'employees'], shifts: ['shifts', 'employees'], leaves: ['leaves', 'classes'], policies: ['policies', 'employees'],
   components: ['components'], statutory: ['statutory', 'components'],
   orgchart: [],
