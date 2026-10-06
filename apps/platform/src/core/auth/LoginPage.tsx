@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Camera, Eye, EyeOff } from 'lucide-react'
+import { ArrowRight, Camera, Eye, EyeOff, Smartphone } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson, AuthResponse, currentSubdomain, HttpError, WorkspaceStatus } from '@/core/api/client'
 import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
@@ -12,6 +12,16 @@ import { MonogramTile } from '@/shared/components/WorkspaceMark'
 /** /login's answer when the password was right but a two-factor code is needed. */
 type MfaChallenge = { mfaRequired?: boolean; mfaSetupRequired?: boolean; mfaToken?: string }
 type MfaSetupInfo = { secret: string; qrSvg: string; issuer: string }
+
+/**
+ * Google and mobile (SMS code) sign-in on the business page (owner, 6 Oct 2026). Off until the
+ * backend can sign a person into THIS business with them — see CONTRACTS-PROPOSAL §5: today's
+ * Google sign-in is account-only and the phone match is not scoped to the business.
+ */
+const EXTRA_SIGN_IN_METHODS = false
+
+/** The UnifiedTree HRMS app on Google Play (Android only). */
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.unifiedtree.hrms'
 
 /** Workspace slugs are lowercase alphanumeric + hyphens, like a DNS label. */
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/
@@ -29,7 +39,8 @@ function workspaceLoginUrl(slug: string): string {
 }
 
 /**
- * Login — a single centred card on a radiant emerald field.
+ * Login — the business's picture on the left, the sign-in on the right (owner-approved
+ * Keka-style layout, 6 Oct 2026); on a phone, just the sign-in.
  *
  * The card leads with the WORKSPACE's own logo (Settings → Branding), falling
  * back to its monogram and name, so every tenant's sign-in is theirs alone
@@ -230,20 +241,29 @@ export const LoginPage: React.FC = () => {
   const labelClass = 'block text-[13.5px] font-bold text-gray-700'
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
-      {/* ── Radiant emerald field ─────────────────────────────────── */}
-      <div
-        aria-hidden
-        className="absolute inset-0 ut-ground"
-      />
+    <main className="flex min-h-screen bg-white">
+      {/* ── The business's picture (large screens). One per business; until a
+          business uploads its own, its name on the emerald brand field. ───── */}
+      <aside aria-hidden className="relative hidden flex-1 overflow-hidden lg:block">
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(155deg, #0A4D3C 0%, #0F6E56 48%, #15876B 100%)' }} />
+        <div className="absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-32 right-[-6rem] h-[520px] w-[520px] rounded-full bg-black/10 blur-3xl" />
+        {!needsWorkspace && brand.workspaceName && (
+          <div className="absolute bottom-12 left-12 right-12 text-white">
+            <p className="text-[34px] font-black leading-tight tracking-tight">{brand.workspaceName}</p>
+            <p className="mt-2 max-w-md text-[15px] font-medium text-white/75">People, attendance, leave and payroll in one place.</p>
+          </div>
+        )}
+      </aside>
 
-      {/* ── The card ──────────────────────────────────────────────── */}
+      {/* ── The sign-in ───────────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[420px] rounded-[24px] bg-white/95 px-8 pb-8 pt-10 shadow-2xl ring-1 ring-black/5 backdrop-blur-xl"
+        className="relative flex w-full flex-col justify-center px-6 py-10 sm:px-10 lg:w-[520px] lg:flex-none lg:px-16"
       >
+        <div className="mx-auto w-full max-w-[380px]">
         {/* Workspace logo — theirs when uploaded; otherwise an Odoo-style
             "Your logo" placeholder (the striped texture is a small inside-the-
             placeholder cue, kept at a whisper of emerald). */}
@@ -259,7 +279,7 @@ export const LoginPage: React.FC = () => {
             /* No uploaded logo: the workspace's monogram and name (white label). */
             <div className="flex h-12 max-w-full items-center justify-center gap-3">
               <MonogramTile letter={brand.monogram} size={44} />
-              <span className="truncate text-xl font-black tracking-tight text-gray-900">{brand.workspaceName}</span>
+              {/* The heading below names the business; repeat it here only on the bare platform host. */}
             </div>
           ) : (
             <div
@@ -275,6 +295,11 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
         <div className="mb-8 h-px bg-gray-100" />
+        {!needsWorkspace && !mfa && !recovery && (
+          <h1 className="mb-6 text-[22px] font-extrabold tracking-tight text-gray-900">
+            {brand.workspaceName ? `Sign in to ${brand.workspaceName}` : 'Sign in'}
+          </h1>
+        )}
 
         {workspaceStatus && workspaceStatus.status !== 'ACTIVE' && (
           <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3.5 py-3 text-sm font-medium text-[var(--status-warning-fg)]">
@@ -463,6 +488,40 @@ export const LoginPage: React.FC = () => {
           </form>
         )}
 
+        {/* Other ways in (outside the form: its one submit button stays "Log in"). */}
+        {!needsWorkspace && !mfa && !recovery && EXTRA_SIGN_IN_METHODS && (
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-3 text-[12px] font-semibold uppercase tracking-wider text-gray-400">
+              <span className="h-px flex-1 bg-gray-100" />or<span className="h-px flex-1 bg-gray-100" />
+            </div>
+            <button type="button" className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50">
+              <Smartphone size={18} className="text-emerald-700" aria-hidden /> Continue with mobile
+            </button>
+            <button type="button" className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50">
+              <GoogleMark /> Continue with Google
+            </button>
+          </div>
+        )}
+
+        {/* The mobile app (Android, Google Play). */}
+        {!needsWorkspace && !mfa && !recovery && (
+          <div className="mt-8 flex justify-center">
+            <a
+              href={PLAY_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Get the app on Google Play"
+              className="inline-flex items-center gap-2.5 rounded-xl bg-gray-900 px-4 py-2 text-white transition-colors hover:bg-black"
+            >
+              <PlayMark />
+              <span className="flex flex-col leading-none">
+                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-white/75">Get it on</span>
+                <span className="text-[16px] font-bold">Google Play</span>
+              </span>
+            </a>
+          </div>
+        )}
+
         {/* The platform's credit shows only on the bare platform host (no
             workspace); inside a workspace the page is entirely theirs. */}
         {needsWorkspace && (
@@ -481,7 +540,32 @@ export const LoginPage: React.FC = () => {
         {!needsWorkspace && brandImage && brand.workspaceName && (
           <p className="pt-5 text-center text-[12px] font-medium text-gray-400">{brand.workspaceName}</p>
         )}
+        </div>
       </motion.div>
     </main>
+  )
+}
+
+/** Google's "G", for the Google sign-in button. */
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" fill="#4285F4" />
+      <path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z" fill="#34A853" />
+      <path d="M3.96 10.71A5.41 5.41 0 0 1 3.68 9c0-.59.1-1.17.28-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3-2.33z" fill="#FBBC05" />
+      <path d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58z" fill="#EA4335" />
+    </svg>
+  )
+}
+
+/** A plain play triangle in Google Play's colours, for the app badge. */
+function PlayMark() {
+  return (
+    <svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true">
+      <path d="M1 1.2 12.6 12 1 22.8c-.4-.2-.6-.6-.6-1.1V2.3c0-.5.2-.9.6-1.1z" fill="#00D7FE" />
+      <path d="m16.5 8.3-3.9 3.7L1 1.2c.3-.2.8-.2 1.2 0l14.3 7.1z" fill="#00F076" />
+      <path d="m16.5 15.7-14.3 7.1c-.4.2-.9.2-1.2 0L12.6 12l3.9 3.7z" fill="#FF3A44" />
+      <path d="M21 12c0 .5-.3 1-.8 1.2l-3.7 2.5-3.9-3.7 3.9-3.7 3.7 2.5c.5.2.8.7.8 1.2z" fill="#FFD500" />
+    </svg>
   )
 }
