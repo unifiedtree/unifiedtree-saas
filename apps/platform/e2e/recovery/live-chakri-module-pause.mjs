@@ -18,6 +18,7 @@ const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const db = process.env.RECOVERY_DB || 'ut_w3_dev'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'   // /v1/leave/types needs it (400 without)
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
@@ -45,7 +46,7 @@ try {
 
   const owner = await as('owner@unifiedtree.demo')
   check('owner: sign-in still works while paused', owner.ok)
-  const leave = await owner.call('/v1/leave/types')
+  const leave = await owner.call(`/v1/leave/types?companyId=${company}`)
   const b = leave.json || {}
   check('owner: leave answers 402 MODULE_PAUSED', leave.status === 402 && b.code === 'MODULE_PAUSED' && b.moduleKey === 'leave', `${leave.status} ${JSON.stringify(b).slice(0, 220)}`)
   check('owner: body has due date, grace end (due + 7 days), amount, canPay', b.dueSince === istDay(now - 9 * DAY) && b.graceEndedOn === istDay(now - 2 * DAY)
@@ -59,11 +60,11 @@ try {
   }
 
   const reader = await as('reader@unifiedtree.demo')
-  const rl = await reader.call('/v1/leave/types')
+  const rl = await reader.call(`/v1/leave/types?companyId=${company}`)
   check('employee: paused, and canPay false', rl.status === 402 && rl.json?.canPay === false, `${rl.status} ${JSON.stringify(rl.json).slice(0, 120)}`)
 
   sql(`update platform.subscriptions set past_due_since = now() - interval '6 days' where id='${id}'`)
-  const inGrace = await owner.call('/v1/leave/types')
+  const inGrace = await owner.call(`/v1/leave/types?companyId=${company}`)
   check('due 6 days ago (inside grace): nothing paused', inGrace.status === 200, String(inGrace.status))
 } catch (e) {
   check('test ran to the end', false, e.message.split('\n')[0])

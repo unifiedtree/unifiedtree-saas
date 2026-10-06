@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { asModulePaused, clearModulePaused, dueText, getModulePaused, openWhilePaused, reportModulePaused } from './modulePaused'
+import { asModulePaused, clearModulePaused, dueText, getModulePaused, moduleName, openWhilePaused, reportModulePaused } from './modulePaused'
 import { ModulePausedGate, ModulePausedScreen } from './ModulePausedScreen'
 
 const BODY = {
@@ -39,6 +39,9 @@ describe('asModulePaused', () => {
     expect(dueText(null)).toBeNull()
     expect(dueText(12000)).toBe('₹12,000')
   })
+  it('attendance, leave and payroll are parts of HRMS', () => {
+    for (const k of ['hrms', 'attendance', 'leave', 'payroll']) expect(moduleName(k)).toBe('HRMS')
+  })
 })
 
 describe('pages open while paused', () => {
@@ -49,8 +52,8 @@ describe('pages open while paused', () => {
 })
 
 describe('the screen', () => {
-  const screen = (canPay: boolean) => renderToStaticMarkup(
-    <ModulePausedScreen paused={asModulePaused(402, { ...BODY, canPay })!} onPay={() => {}} onRetry={() => {}} />)
+  const screen = (canPay: boolean, moduleKey = 'hrms') => renderToStaticMarkup(
+    <ModulePausedScreen paused={asModulePaused(402, { ...BODY, canPay, moduleKey })!} onPay={() => {}} onRetry={() => {}} />)
 
   it('a payer gets Pay now, the amount and the dates', () => {
     const html = screen(true)
@@ -66,6 +69,9 @@ describe('the screen', () => {
     expect(html).toContain('Ask your business owner to pay.')
     expect(html).not.toContain('Pay now')
     expect(html).toContain('Try again')
+  })
+  it('a refused attendance call still says "HRMS is paused"', () => {
+    expect(screen(true, 'attendance')).toContain('HRMS is paused')
   })
 
   const gate = (path: string) => renderToStaticMarkup(<MemoryRouter initialEntries={[path]}><ModulePausedGate><p>the page</p></ModulePausedGate></MemoryRouter>)

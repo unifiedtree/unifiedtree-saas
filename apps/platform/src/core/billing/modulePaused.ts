@@ -82,7 +82,8 @@ export function useModulePaused(): ModulePaused | null {
   return useSyncExternalStore(subscribe, getModulePaused, getModulePaused)
 }
 
-const MODULE_NAME: Record<string, string> = { hrms: 'HRMS' }
+// Attendance, leave and payroll are parts of the HRMS app (TenantModuleGuard's keys), so they pause as "HRMS".
+const MODULE_NAME: Record<string, string> = { hrms: 'HRMS', attendance: 'HRMS', leave: 'HRMS', payroll: 'HRMS' }
 export const moduleName = (key: string) => MODULE_NAME[key] || key.charAt(0).toUpperCase() + key.slice(1)
 
 /** "₹12,000", or null without an amount. */
