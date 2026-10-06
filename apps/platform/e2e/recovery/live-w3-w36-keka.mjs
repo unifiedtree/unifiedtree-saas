@@ -72,6 +72,8 @@ async function session(email, { width = 1440, height = 900, dark = false } = {})
   const ctx = await browser.newContext({ viewport: { width, height } })
   await ctx.addInitScript((t) => { try { window.localStorage.setItem('ut.theme', t) } catch { /* private mode */ } }, dark ? 'dark' : 'light')
   const page = await ctx.newPage()
+  // The "Check in with your face" prompt on sign-in is not what this test is about: step past it whenever it shows.
+  await page.addLocatorHandler(page.getByRole('button', { name: 'Continue without checking in' }), async (b) => { await b.click().catch(() => {}) })
   const errors = [], failed = []
   page.on('pageerror', (e) => errors.push(String(e.message || e)))
   page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400 && !r.url().includes('/canonical-auth/refresh')) failed.push(`${r.status()} ${r.request().method()} ${r.url().split('/api')[1]}`) })
