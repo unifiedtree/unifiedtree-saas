@@ -157,6 +157,8 @@ expect "Marketing entitlement decided by UnifiedTree (TEST 8): A1 entitled on pl
   "j['entitled'] and j['planKey']=='marketing' and j['limits']['contacts']==5000 and j['contractVersion']==1 and j['billingMode']=='DIRECT_CUSTOMER'"
 req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
 expect "A2 not entitled (TEST 7)" 200 "j['entitled'] is False"
+req GET "/v1/internal/marketing/companies/$CO_A1/entitlement?tenantId=$TENANT_BETA" "" "$ST"
+expect "entitlement asked under the wrong workspace -> 404" 404
 
 echo "== marketing.unifiedtree.com SSO =="
 req POST /v1/accounts/auth/login '{"email":"admin@unifiedtree.demo","password":"Hrms@12345"}'

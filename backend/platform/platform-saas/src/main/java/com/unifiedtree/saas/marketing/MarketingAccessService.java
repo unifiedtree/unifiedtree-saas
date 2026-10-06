@@ -105,6 +105,14 @@ public class MarketingAccessService {
 
     @Transactional(readOnly = true)
     public MarketingEntitlement entitlement(UUID tenantId, UUID companyId) {
+        // A company-level row says "entitled" whatever tenant is passed, so the pair is checked first: the company
+        // must be visible under that workspace's RLS binding. Writes are covered by composite FKs; this is the read.
+        Boolean inWorkspace = scoped.read(tenantId, () -> jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM org.companies WHERE id = ?)", Boolean.class, companyId));
+        if (!Boolean.TRUE.equals(inWorkspace)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "COMPANY_NOT_FOUND: That company is not in that workspace");
+        }
         Entitlement e = entitlements.resolve(tenantId, companyId, MODULE);
         Map<String, Object> plan = marketingPlan(e.subscriptionId());
         Map<String, Object> limits = new LinkedHashMap<>(parse((String) (plan == null ? null : plan.get("limits"))));
