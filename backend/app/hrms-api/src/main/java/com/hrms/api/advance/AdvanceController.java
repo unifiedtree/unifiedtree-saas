@@ -1,5 +1,6 @@
 package com.hrms.api.advance;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.advance.dto.AdvanceDecisionRequest;
 import com.hrms.advance.dto.AdvanceRequestCreateRequest;
 import com.hrms.advance.dto.AdvanceResponse;
@@ -37,6 +38,10 @@ import java.util.stream.Collectors;
 @Tag(name = "Advance", description = "Salary advance requests, approvals, and disbursement")
 @SecurityRequirement(name = "bearerAuth")
 public class AdvanceController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     private final AdvanceService advanceService;
     private final EmployeeRepository employeeRepository;
@@ -106,6 +111,7 @@ public class AdvanceController {
     public ResponseEntity<AdvanceResponse> requestOnBehalf(
             @Valid @RequestBody AdvanceOnBehalfRequest body,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.checkEmployee(recordGuard, body.employeeId());
         UUID caller = extractEmployeeId(jwt);
         if (body.employeeId().equals(caller)) {
             throw new com.hrms.core.exception.BusinessRuleException(
@@ -347,6 +353,7 @@ public class AdvanceController {
     @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
     public ResponseEntity<AdvanceResponse> getRequest(@PathVariable UUID id,
                                                       @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         AdvanceResponse adv = enrichOne(advanceService.getRequest(id));
         // Object-level authz (prevent intra-tenant IDOR): self-permission callers may
         // read ONLY their own request; the admin read permission may read any.
@@ -453,6 +460,7 @@ public class AdvanceController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceDecisionRequest decision,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         UUID approver = extractEmployeeId(jwt);
         // B3 FIX (audit 2026-08-15): self-approval guard. An employee whose
         // reporting_manager_id is themselves (or who forges the approver on the
@@ -485,6 +493,7 @@ public class AdvanceController {
     public ResponseEntity<AdvanceResponse> disburse(@PathVariable UUID id,
                                                     @Valid @RequestBody(required = false) DisburseRequest body,
                                                     @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.ADVANCE, id);
         // BW-62: an optional bank reference and first deduction month, checked
         // before anything changes. With no body it is today's payout exactly.
         java.time.YearMonth startMonth = firstDeductionMonth(body == null ? null : body.firstDeductionMonth(),

@@ -167,7 +167,10 @@ public class TeamProbationService {
 
     /** HR for this notice: people holding the probation reminders permission, not the decider or the employee. */
     private List<UUID> hrRecipients(UUID tenantId, UUID employeeId, UUID decider) {
-        return holders.employeesHolding(tenantId, HR_PERMISSION).stream()
+        java.util.Set<UUID> people = new java.util.LinkedHashSet<>(holders.employeesHolding(tenantId, HR_PERMISSION));
+        // People granted it in the employee's company (COMPANY_ACCESS.md).
+        people.addAll(holders.employeesGranted(tenantId, HR_PERMISSION, holders.companyOf(employeeId)));
+        return people.stream()
                 .filter(id -> !id.equals(employeeId) && !id.equals(decider))
                 .toList();
     }

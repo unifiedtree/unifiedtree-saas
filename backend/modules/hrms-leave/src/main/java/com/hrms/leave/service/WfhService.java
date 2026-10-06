@@ -369,6 +369,20 @@ public class WfhService {
         return PageResponse.from(page, this::toResponse);
     }
 
+    /**
+     * {@link #getAllPending(UUID, Pageable)} for one company's people: a
+     * company-scoped HR-level approver's queue (COMPANY_ACCESS.md). A null
+     * company = the whole tenant, as before.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<WfhRequestResponse> getAllPending(UUID approverEmployeeId, UUID companyId, Pageable pageable) {
+        if (companyId == null) return getAllPending(approverEmployeeId, pageable);
+        Page<WfhRequest> page = approverEmployeeId == null
+                ? repository.findAllPendingInCompany(companyId, pageable)
+                : repository.findAllPendingExceptInCompany(approverEmployeeId, companyId, pageable);
+        return PageResponse.from(page, this::toResponse);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<WfhRequestResponse> getPendingApprovalsForManager(UUID managerId, Pageable pageable) {
         Page<WfhRequest> page = repository.findPendingForManager(managerId, pageable);

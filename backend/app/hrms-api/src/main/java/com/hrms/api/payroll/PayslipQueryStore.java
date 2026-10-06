@@ -85,6 +85,18 @@ public class PayslipQueryStore {
      * per-person deny (the same effective set PermissionChecker uses). Active
      * accounts only, without {@code except}, at most {@code limit}.
      */
+    /**
+     * Employees granted, in {@code forEmployee}'s company, a role that carries
+     * {@code permission} (COMPANY_ACCESS.md), without {@code except}. Empty
+     * before the grants table exists.
+     */
+    public List<UUID> employeesGranted(UUID tenantId, String permission, UUID forEmployee, UUID except) {
+        if (!com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) return List.of();
+        UUID company = com.unifiedtree.security.tenant.CompanyGrants.companyOf(jdbc, forEmployee);
+        return com.unifiedtree.security.tenant.CompanyGrants.employeesGrantedPermission(jdbc, tenantId, permission, company)
+                .stream().filter(id -> !id.equals(except)).toList();
+    }
+
     public List<UUID> employeesHolding(UUID tenantId, String permission, UUID except, int limit) {
         Boolean overrides = jdbc.queryForObject("""
             SELECT CASE WHEN to_regclass('rbac.user_permission_overrides') IS NULL THEN false

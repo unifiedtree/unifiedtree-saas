@@ -1,5 +1,6 @@
 package com.hrms.api.payroll;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +29,10 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/v1/payroll")
 public class PayrollRunController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -58,6 +63,7 @@ public class PayrollRunController {
     @GetMapping("/runs/{id}")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public PayrollRunService.RunDto get(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return service.getRun(TenantContext.getTenantId(), id);
     }
 
@@ -74,12 +80,14 @@ public class PayrollRunController {
     @GetMapping("/runs/{id}/eligible-employees")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunService.EligibleEmployeeDto> eligible(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return service.listEligibleEmployees(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/runs/{id}/employees")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunService.RunEmployeeDto> employees(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return service.listRunEmployees(TenantContext.getTenantId(), id);
     }
 
@@ -87,6 +95,7 @@ public class PayrollRunController {
     @GetMapping("/runs/{id}/skipped")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunService.EligibleEmployeeDto> skipped(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return service.listSkippedEmployees(TenantContext.getTenantId(), id);
     }
 
@@ -94,6 +103,7 @@ public class PayrollRunController {
     @GetMapping("/runs/{id}/component-totals")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunService.ComponentTotalDto> componentTotals(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return service.componentTotals(TenantContext.getTenantId(), id);
     }
 
@@ -110,6 +120,7 @@ public class PayrollRunController {
     @PostMapping("/runs/{id}/process")
     @PreAuthorize("hasAuthority('payroll.runs.manage')")
     public PayrollRunService.RunDto process(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         PayrollRunService.RunDto run = service.processRun(TenantContext.getTenantId(), id, actorId(jwt));
         audit("PAYROLL_PROCESSED", run, "Processed", null);
         return run;
@@ -118,6 +129,7 @@ public class PayrollRunController {
     @PostMapping("/runs/{id}/lock")
     @PreAuthorize("hasAuthority('payroll.runs.lock')")
     public PayrollRunService.RunDto lock(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         PayrollRunService.RunDto run = service.lockRun(TenantContext.getTenantId(), id, actorId(jwt));
         audit("PAYROLL_LOCKED", run, "Locked", null);
         return run;
@@ -133,6 +145,7 @@ public class PayrollRunController {
     public PayrollRunService.RunDto reopen(@PathVariable UUID id,
                                           @jakarta.validation.Valid @RequestBody ReopenRequest req,
                                           @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         PayrollRunService.RunDto run = service.reopenRun(TenantContext.getTenantId(), id, req.reason(), actorId(jwt));
         audit("PAYROLL_REOPENED", run, "Reopened", "Reason: " + req.reason().trim());
         return run;
@@ -165,12 +178,14 @@ public class PayrollRunController {
     @GetMapping("/runs/{id}/employees/{empId}/payslip")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public PayrollRunService.PayslipDto payslip(@PathVariable UUID id, @PathVariable UUID empId) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return service.getPayslip(TenantContext.getTenantId(), id, empId);
     }
 
     @GetMapping("/runs/{id}/employees/{empId}/payslip.pdf")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public ResponseEntity<byte[]> payslipPdf(@PathVariable UUID id, @PathVariable UUID empId) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         byte[] pdf = service.generatePayslipPdf(TenantContext.getTenantId(), id, empId);
         return pdfResponse(pdf, "payslip-" + empId + ".pdf");
     }

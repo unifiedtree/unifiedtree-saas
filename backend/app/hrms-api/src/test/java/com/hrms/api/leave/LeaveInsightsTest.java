@@ -193,6 +193,39 @@ class LeaveInsightsTest {
         sqls.forEach(q -> assertTrue(q.contains("lr.tenant_id = ?")));
     }
 
+    // ── company access: a company-scoped level-two approver (COMPANY_ACCESS.md) ──
+
+    @Test void aCompanyScopedLevelTwoCalendarCoversTheirCompanyOnly() {
+        recordCalendar();
+        UUID only = UUID.randomUUID();
+        LocalDate from = LocalDate.of(2026, 10, 1), to = LocalDate.of(2026, 10, 31);
+        service.calendar(me, LeaveInsightsService.Scope.TENANT, from, to, null, only);
+        assertTrue(sqls.get(0).contains("AND e.company_id = ?"), sqls.get(0));
+        assertTrue(argsOf.get(0).contains(only));
+        // The team and self views are not touched; no company = the workspace, as before.
+        service.calendar(me, LeaveInsightsService.Scope.TEAM, from, to, null, only);
+        service.calendar(me, LeaveInsightsService.Scope.TENANT, from, to, null, null);
+        service.calendar(me, LeaveInsightsService.Scope.TENANT, from, to, null);
+        for (int i = 1; i < sqls.size(); i++) assertFalse(sqls.get(i).contains("e.company_id"), sqls.get(i));
+    }
+
+    @Test void aCompanyScopedLevelTwosStatsCoverTheirCompanyOnly() {
+        statsData();
+        UUID only = UUID.randomUUID();
+        service.approvalStats(me, true, 7, LocalDate.of(2026, 9, 25), only);
+        List<String> requestQueries = sqls.stream().filter(q -> q.contains("leave_requests")).toList();
+        assertEquals(4, requestQueries.size(), "two waiting counts, the months, who is away");
+        requestQueries.forEach(q -> assertTrue(q.contains("AND e.company_id = ?"), q));
+        for (int i = 0; i < sqls.size(); i++) {
+            if (sqls.get(i).contains("leave_requests")) assertTrue(argsOf.get(i).contains(only));
+        }
+        // A manager's (team) figures are never narrowed by it.
+        sqls.clear();
+        argsOf.clear();
+        service.approvalStats(me, false, 7, LocalDate.of(2026, 9, 25), only);
+        sqls.stream().filter(q -> q.contains("leave_requests")).forEach(q -> assertFalse(q.contains("e.company_id"), q));
+    }
+
     @Test void theControllerPicksTheScopeFromTheApprovalLevel() {
         assertEquals(LeaveInsightsService.Scope.TENANT, LeaveInsightsController.scopeOf(auth("hrms.leave.approve.l2", "hrms.leave.approve.l1")));
         assertEquals(LeaveInsightsService.Scope.TEAM, LeaveInsightsController.scopeOf(auth("hrms.leave.approve.l1", "leave.balance.read")));

@@ -1,5 +1,6 @@
 package com.hrms.api.payroll;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +26,10 @@ import java.util.UUID;
 @RequestMapping("/v1/payroll")
 public class PayrollRunInsightsController {
 
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
+
     private final PayrollRunInsightsService insights;
     private final PayrollRunService runs;
 
@@ -36,24 +41,28 @@ public class PayrollRunInsightsController {
     @GetMapping("/runs/{id}/checks")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunInsightsService.RunCheckDto> checks(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return insights.checks(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/runs/{id}/statutory")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunInsightsService.RunStatutoryDto> statutory(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return insights.statutory(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/runs/{id}/bank-readiness")
     @PreAuthorize("hasAuthority('hrms.disbursement.read')")
     public PayrollRunInsightsService.BankReadinessDto bankReadiness(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.PAYROLL_RUN, id);
         return insights.bankReadiness(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/employees/{employeeId}/payslips")
     @PreAuthorize("hasAuthority('payroll.runs.read')")
     public List<PayrollRunService.MyPayslipDto> employeePayslips(@PathVariable UUID employeeId) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         return runs.listEmployeePayslips(TenantContext.getTenantId(), employeeId);
     }
 }

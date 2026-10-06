@@ -1,5 +1,6 @@
 package com.hrms.api.workforce;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.api.attendance.TeamEmployeeScope;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ClassificationRuleResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ContractorResponse;
@@ -53,6 +54,9 @@ public class MasterDataController {
     private final ClassificationRuleService classifications;
     private final GradeService grades;
     private final TeamEmployeeScope teamScope;
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     public MasterDataController(ContractorService contractors,
                                 @Qualifier("workforceDepartmentService") DepartmentService departments,
@@ -78,6 +82,7 @@ public class MasterDataController {
     @PutMapping("/contractors/{id}")
     @PreAuthorize("hasAuthority('hrms.contractor.write')")
     public ContractorResponse updateContractor(@PathVariable UUID id, @Valid @RequestBody UpdateContractorRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CONTRACTOR, id);
         return contractors.update(id, req);
     }
 
@@ -85,6 +90,7 @@ public class MasterDataController {
     @PostMapping("/contractors/{id}/restore")
     @PreAuthorize("hasAuthority('hrms.contractor.write')")
     public ContractorResponse restoreContractor(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CONTRACTOR, id);
         return contractors.restore(id);
     }
 
@@ -96,6 +102,7 @@ public class MasterDataController {
     @GetMapping("/contractors/{id}/workers")
     @PreAuthorize("hasAuthority('hrms.contractor.read')")
     public List<ContractorWorkerResponse> contractorWorkers(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CONTRACTOR, id);
         List<ContractorWorkerResponse> all = contractors.workers(id);
         if (holds("hrms.contractor.write") || holds("hrms.employee.write")) return all;
         Set<UUID> team = team(jwt);
@@ -123,6 +130,7 @@ public class MasterDataController {
     @PreAuthorize("hasAnyAuthority('hrms.contractor.write','hrms.employee.write')")
     public ContractorWorkerResponse linkWorker(@PathVariable UUID id, @PathVariable UUID employeeId,
                                                @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CONTRACTOR, id);
         return contractors.linkWorker(id, employeeId, actor(jwt));
     }
 
@@ -130,6 +138,7 @@ public class MasterDataController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAnyAuthority('hrms.contractor.write','hrms.employee.write')")
     public void unlinkWorker(@PathVariable UUID id, @PathVariable UUID employeeId) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CONTRACTOR, id);
         contractors.unlinkWorker(id, employeeId);
     }
 
@@ -139,6 +148,7 @@ public class MasterDataController {
     @PatchMapping("/departments/{id}/parent")
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public DepartmentResponse moveDepartment(@PathVariable UUID id, @RequestParam(required = false) UUID parentId) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         return departments.moveUnder(id, parentId);
     }
 
@@ -146,6 +156,7 @@ public class MasterDataController {
     @PutMapping("/departments/{id}/branches")
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public DepartmentResponse setDepartmentBranches(@PathVariable UUID id, @Valid @RequestBody DepartmentBranchesRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         return departments.setBranches(id, req.branchIds());
     }
 
@@ -156,6 +167,7 @@ public class MasterDataController {
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public ClassificationRuleResponse updateClassification(@PathVariable UUID id,
                                                            @Valid @RequestBody UpdateClassificationRuleRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CLASSIFICATION, id);
         return classifications.update(id, req);
     }
 

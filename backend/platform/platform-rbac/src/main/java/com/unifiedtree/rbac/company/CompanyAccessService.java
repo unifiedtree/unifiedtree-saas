@@ -3,6 +3,7 @@ package com.unifiedtree.rbac.company;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.hrms.core.exception.HrmsException;
+import com.hrms.core.exception.ResourceNotFoundException;
 import com.unifiedtree.rbac.company.CompanyAccess.Grant;
 import com.unifiedtree.rbac.company.CompanyAccess.Profile;
 import com.unifiedtree.rbac.company.CompanyAccess.RoleRef;
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Company access (docs/redesign/COMPANY_ACCESS.md): which companies a person
@@ -75,6 +77,8 @@ public class CompanyAccessService {
         this.overrides = overrides;
         this.enforce = enforce;
         if (!enforce) log.warn("Company access checks are OFF (unifiedtree.company-access.enforce=false)");
+        // Grants also stop counting in the approver and alert lookups (CompanyGrants).
+        com.unifiedtree.security.tenant.CompanyGrants.enabled(enforce);
     }
 
     /** Whether company access is checked (see the kill switch on the constructor). */
@@ -285,6 +289,99 @@ public class CompanyAccessService {
             throw new HrmsException("Switch to this company first, then try again.", HttpStatus.FORBIDDEN,
                     "COMPANY_ACCESS_DENIED");
         }
+    }
+
+    // ── Records addressed by id (feat/company-access-3) ─────────────────────
+
+    /**
+     * Whose a record is, for {@link #checkRecord}: its company, and — for a
+     * record that belongs to one person (the person themself, their claim,
+     * advance, settlement, award or document) — that person, their reporting
+     * manager and the approver the record was sent to. Any part may be null.
+     */
+    public record RecordOwner(UUID companyId, UUID employeeId, UUID managerId, UUID approverId) {
+        public static RecordOwner ofCompany(UUID companyId) {
+            return new RecordOwner(companyId, null, null, null);
+        }
+
+        /** The person, their manager or the record's approver. */
+        boolean involves(UUID employee) {
+            return employee != null && (employee.equals(employeeId) || employee.equals(managerId)
+                    || employee.equals(approverId));
+        }
+    }
+
+    /**
+     * The one check for a record a request addresses by id (a department, a
+     * shift, a payroll run, an employee, someone's expense claim, …): for a
+     * company-scoped person the record's company must be one they may access —
+     * else 404 RESOURCE_NOT_FOUND, exactly what an unknown id answers, so the
+     * record's existence is not revealed — and the company the request's
+     * permissions were worked out for (the {@code /companies/{id}} path, the
+     * {@code companyId} parameter or the {@code X-Company-Id} header, else
+     * their home company) — else 403 COMPANY_ACCESS_DENIED "switch to this
+     * company first", as for a request body: their roles in one company never
+     * act on another company's records.
+     *
+     * <p>Always allowed: the person's own records, their direct reports' and
+     * the ones sent to them for approval (their own pages work in every
+     * company; a manager keeps their team and their approvals as before), a
+     * record with no company, and an unknown id (the endpoint
+     * answers its own 404). Not checked at all (as before), and {@code owner}
+     * is then never called: people who reach every company, callers outside a
+     * workspace, logins unknown to it, and everyone while the kill switch is off.
+     *
+     * @param resource what the record is, for the 404 message ("Department")
+     * @param id       the id the request named
+     * @param owner    reads whose the record is; null or a null company = nothing to check
+     */
+    public void checkRecord(String resource, Object id, Supplier<RecordOwner> owner) {
+        if (!enforce || owner == null) return;
+        UUID userId = signedInWorkspaceUser();
+        if (userId == null) return;
+        Profile p = profile(userId);
+        if (!p.known() || p.allCompanies()) return;
+        checkRecord(p, resource, id, owner.get(), CompanyContext.getScope());
+    }
+
+    static void checkRecord(Profile p, String resource, Object id, RecordOwner owner, CompanyContext.Scope scope) {
+        if (owner == null || owner.companyId() == null || !p.known() || p.allCompanies()) return;
+        if (owner.involves(p.employeeId())) return;
+        if (!p.canAccess(owner.companyId())) {
+            log.info("COMPANY_ACCESS_DENIED user={} company={} ({} {}: answered not found)",
+                    p.userId(), owner.companyId(), resource, id);
+            throw new ResourceNotFoundException(resource, id);
+        }
+        UUID permissionsFrom = scope != null ? scope.companyId() : p.homeCompanyId();
+        if (!owner.companyId().equals(permissionsFrom)) {
+            log.info("COMPANY_ACCESS_DENIED user={} company={} ({} {}; request runs in {})",
+                    p.userId(), owner.companyId(), resource, id, permissionsFrom);
+            throw new HrmsException("Switch to this company first, then try again.", HttpStatus.FORBIDDEN,
+                    "COMPANY_ACCESS_DENIED");
+        }
+    }
+
+    /**
+     * The company a tenant-wide view (the HR-level leave queue, the leave and
+     * work-from-home calendars, …) is narrowed to: for a company-scoped person
+     * the selected company ({@code X-Company-Id}), else their home company.
+     * {@code null} = not narrowed, exactly as before: people who reach every
+     * company (header or not), callers outside a workspace, logins unknown to
+     * it, and everyone while the kill switch is off.
+     */
+    public UUID scopedViewCompanyId() {
+        if (!enforce) return null;
+        UUID userId = signedInWorkspaceUser();
+        if (userId == null) return null;
+        Profile p = profile(userId);
+        if (!p.known() || p.allCompanies()) return null;
+        UUID selected = CompanyContext.getCompanyId();
+        return selected != null ? selected : p.homeCompanyId();
+    }
+
+    /** {@link #scopedViewCompanyId()} through an optional bean: null (not narrowed) without one. */
+    public static UUID scopedViewCompanyId(CompanyAccessService access) {
+        return access == null ? null : access.scopedViewCompanyId();
     }
 
     /** The signed-in user of a customer workspace, or null (no user, no workspace, the platform tenant). */

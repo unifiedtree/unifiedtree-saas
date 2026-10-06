@@ -1,5 +1,6 @@
 package com.hrms.api.document;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.document.dto.DocumentRequest;
 import com.hrms.document.dto.DocumentResponse;
@@ -35,6 +36,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class DocumentController {
 
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
+
     private final DocumentService documentService;
     private final EmployeeRepository employeeRepository;
     private final com.unifiedtree.settings.branding.DocumentStorage storage;
@@ -60,6 +65,7 @@ public class DocumentController {
     @PostMapping("/documents")
     @PreAuthorize("hasAuthority('hrms.document.write')")
     public ResponseEntity<DocumentResponse> create(@Valid @RequestBody DocumentRequest request) {
+        RecordCompanyGuard.checkEmployee(recordGuard, request.employeeId());
         if (request.fileUrl() == null || !request.fileUrl().matches("(?i)^https?://[^\\s]+$")) {
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide an HTTP(S) document URL or use file upload");
         }
@@ -89,6 +95,7 @@ public class DocumentController {
     public ResponseEntity<PageResponse<DocumentResponse>> employeeDocuments(
             @PathVariable UUID employeeId,
             @PageableDefault(size = 20) Pageable pageable) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         return ResponseEntity.ok(enrichPage(documentService.getEmployeeDocuments(employeeId, pageable)));
     }
 
@@ -97,6 +104,7 @@ public class DocumentController {
     @PreAuthorize("hasAnyAuthority('hrms.document.read','hrms.document.read.self')")
     public ResponseEntity<DocumentResponse> getDocument(@PathVariable UUID id,
                                                         @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DOCUMENT, id);
         DocumentResponse doc = enrichOne(documentService.getDocument(id));
         // Object-level authz (prevent intra-tenant IDOR): self-permission callers may
         // read ONLY their own document; the admin read permission may read any.
@@ -118,6 +126,7 @@ public class DocumentController {
     @PreAuthorize("hasAnyAuthority('hrms.document.write','hrms.document.write.self')")
     public void delete(@PathVariable UUID id,
                        @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DOCUMENT, id);
         DocumentResponse existing = documentService.getDocument(id);
         // Object-level authz: a self-only caller may only delete THEIR document.
         if (!callerHasPermission(jwt, "hrms.document.write")
@@ -139,6 +148,7 @@ public class DocumentController {
     @PreAuthorize("hasAuthority('hrms.document.verify')")
     public ResponseEntity<DocumentResponse> verify(@PathVariable UUID id,
                                                    @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DOCUMENT, id);
         UUID verifier = extractEmployeeId(jwt);
         DocumentResponse doc = documentService.verifyDocument(id, verifier);
         if (events != null) {
@@ -157,6 +167,7 @@ public class DocumentController {
     public ResponseEntity<DocumentResponse> reject(@PathVariable UUID id,
                                                    @jakarta.validation.Valid @RequestBody RejectionRequest body,
                                                    @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DOCUMENT, id);
         UUID verifier = extractEmployeeId(jwt);
         DocumentResponse doc = documentService.rejectDocument(id, verifier, body.reason());
         if (events != null) {

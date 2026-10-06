@@ -106,6 +106,9 @@ class ApproverChainFixtureTest {
         });
         when(lookup.firstEmployeeWithRole(any(), eq(ApproverChainService.HR_MANAGER))).thenAnswer(i -> firstHr);
         when(lookup.firstEmployeeWithRole(any(), eq(ApproverChainService.SUPER_ADMIN))).thenAnswer(i -> firstAdmin);
+        // The company-aware lookups (the person the request is about; grants in their company count too).
+        when(lookup.firstEmployeeWithRole(any(), eq(ApproverChainService.HR_MANAGER), any())).thenAnswer(i -> firstHr);
+        when(lookup.firstEmployeeWithRole(any(), eq(ApproverChainService.SUPER_ADMIN), any())).thenAnswer(i -> firstAdmin);
         when(lookup.employeeName(any(), any())).thenReturn("Someone");
         chain = new ApproverChainService(employees, departments, fallback, lookup, jdbc);
     }

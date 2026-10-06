@@ -261,7 +261,7 @@ public class ProbationService {
             long daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(IST), end);
 
             Map<UUID, String> candidates = new LinkedHashMap<>();
-            collectRecipients(tenantId, (UUID) r.get("reporting_manager_id"), candidates);
+            collectRecipients(tenantId, (UUID) r.get("reporting_manager_id"), (UUID) r.get("company_id"), candidates);
 
             String deepLink = platformBaseUrl + "/hrms/employees/" + empId;
             Map<String, String> values = new HashMap<>();
@@ -336,7 +336,7 @@ public class ProbationService {
             ((Number) r.get("auto_extend_days")).intValue());
     }
 
-    private void collectRecipients(UUID tenantId, UUID managerEmployeeId, Map<UUID, String> recipients) {
+    private void collectRecipients(UUID tenantId, UUID managerEmployeeId, UUID companyId, Map<UUID, String> recipients) {
         if (managerEmployeeId != null) {
             jdbc.queryForList("""
                 SELECT uc.id, uc.email FROM auth.user_credentials uc
@@ -355,6 +355,21 @@ public class ProbationService {
                AND uc.email IS NOT NULL
             """, tenantId).forEach(m ->
             recipients.putIfAbsent((UUID) m.get("id"), (String) m.get("email")));
+        // HR managers of the employee's company through a grant (COMPANY_ACCESS.md).
+        if (companyId != null && com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) {
+            jdbc.queryForList("""
+                SELECT DISTINCT uc.id, uc.email
+                  FROM rbac.user_company_access a
+                  JOIN rbac.roles r            ON r.id = a.role_id
+                  JOIN auth.user_credentials uc ON uc.id = a.user_id
+                 WHERE a.tenant_id = ?
+                   AND a.company_id = ?
+                   AND r.code = 'HR_MANAGER'
+                   AND uc.is_active = TRUE
+                   AND uc.email IS NOT NULL
+                """, tenantId, companyId).forEach(m ->
+                recipients.putIfAbsent((UUID) m.get("id"), (String) m.get("email")));
+        }
     }
 
     private void bindTenant(UUID tenantId) {

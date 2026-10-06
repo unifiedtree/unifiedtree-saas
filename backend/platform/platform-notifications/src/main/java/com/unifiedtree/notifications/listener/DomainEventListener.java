@@ -534,14 +534,18 @@ public class DomainEventListener {
         UUID direct = lookup.directApprover(employeeId, tenantId);
         if (direct != null && !direct.equals(employeeId)) return direct;
 
-        UUID hr = firstEmployeeWithRole(tenantId, HR_MANAGER);
+        UUID hr = firstEmployeeWithRole(tenantId, HR_MANAGER, employeeId);
         if (hr != null && !hr.equals(employeeId)) return hr;
-        UUID admin = firstEmployeeWithRole(tenantId, SUPER_ADMIN);
+        UUID admin = firstEmployeeWithRole(tenantId, SUPER_ADMIN, employeeId);
         return (admin != null && !admin.equals(employeeId)) ? admin : null;
     }
 
-    private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId) {
-        return lookup.firstEmployeeWithRole(tenantId, roleId);
+    /**
+     * The first holder of a role for a request of {@code forEmployeeId}: people
+     * granted the role in that person's company count too (COMPANY_ACCESS.md).
+     */
+    private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId, UUID forEmployeeId) {
+        return lookup.firstEmployeeWithRole(tenantId, roleId, forEmployeeId);
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -761,8 +765,8 @@ public class DomainEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onDocumentUploaded(DocumentUploadedEvent e) {
         try {
-            UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
-            if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
+            UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER, e.employeeId());
+            if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN, e.employeeId());
             if (hr == null) return;
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
             Map<String, Object> data = new HashMap<>();
@@ -870,8 +874,8 @@ public class DomainEventListener {
                         vars("leaveType", type, "days", days), data);
                 return;
             }
-            UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
-            if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
+            UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER, e.employeeId());
+            if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN, e.employeeId());
             if (hr == null || hr.equals(e.employeeId())) return;
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
             data.put("audience", "approver");
@@ -946,8 +950,8 @@ public class DomainEventListener {
     public void onSkillAssessmentSubmitted(SkillAssessmentSubmittedEvent e) {
         try {
             UUID to = e.approverEmployeeId();
-            if (to == null || to.equals(e.employeeId())) to = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
-            if (to == null || to.equals(e.employeeId())) to = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
+            if (to == null || to.equals(e.employeeId())) to = firstEmployeeWithRole(e.tenantId(), HR_MANAGER, e.employeeId());
+            if (to == null || to.equals(e.employeeId())) to = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN, e.employeeId());
             if (to == null || to.equals(e.employeeId())) {
                 log.warn("SkillAssessmentSubmittedEvent {}: no approver to notify", e.assessmentId());
                 return;

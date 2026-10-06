@@ -154,7 +154,7 @@ public class RetirementService {
         List<UUID> holders = alertRecipients(tenantId);
         int sent = 0;
         for (RetirementDue r : due) {
-            List<UUID> to = recipientsFor(holders, r.employeeId());
+            List<UUID> to = recipientsFor(withGrantees(tenantId, holders, r.employeeId()), r.employeeId());
             // Nobody to tell yet: don't claim, so the alert still goes out once
             // someone is given the permission.
             if (to.isEmpty()) continue;
@@ -179,6 +179,22 @@ public class RetirementService {
     /** The permission holders minus the retiring person, capped at {@link #MAX_RECIPIENTS}. */
     static List<UUID> recipientsFor(List<UUID> holders, UUID retiring) {
         return holders.stream().filter(id -> !id.equals(retiring)).distinct().limit(MAX_RECIPIENTS).toList();
+    }
+
+    /**
+     * {@code holders} plus the people granted the alert permission in the
+     * retiring person's company (COMPANY_ACCESS.md); {@code holders} itself
+     * before the grants table exists.
+     */
+    private List<UUID> withGrantees(UUID tenantId, List<UUID> holders, UUID retiring) {
+        if (!com.unifiedtree.security.tenant.CompanyGrants.ready(jdbc)) return holders;
+        UUID company = com.unifiedtree.security.tenant.CompanyGrants.companyOf(jdbc, retiring);
+        List<UUID> granted = com.unifiedtree.security.tenant.CompanyGrants.employeesGrantedPermission(
+                jdbc, tenantId, ALERT_PERMISSION, company);
+        if (granted.isEmpty()) return holders;
+        java.util.LinkedHashSet<UUID> all = new java.util.LinkedHashSet<>(holders);
+        all.addAll(granted);
+        return List.copyOf(all);
     }
 
     /** Employees whose sign-in holds hrms.retirement.alerts through one of their roles, longest-standing first. */

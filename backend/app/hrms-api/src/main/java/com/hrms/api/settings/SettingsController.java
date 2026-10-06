@@ -1,5 +1,6 @@
 package com.hrms.api.settings;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.settings.dto.SettingsDtos.CreateHolidayRequest;
 import com.unifiedtree.settings.dto.SettingsDtos.HolidayResponse;
 import com.unifiedtree.settings.dto.SettingsDtos.HrConfigResponse;
@@ -19,6 +20,10 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/v1/settings")
 public class SettingsController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     private final HrConfigurationService hrConfig;
     private final HolidayService         holidays;
@@ -112,6 +117,7 @@ public class SettingsController {
     @PreAuthorize("hasAuthority('settings.holidays.write')")
     public HolidayResponse updateHoliday(@PathVariable UUID id,
                                          @Valid @RequestBody com.hrms.api.leave.HolidayEditService.UpdateHolidayRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.HOLIDAY, id);
         return holidayEdits.update(id, req);
     }
 
@@ -119,6 +125,7 @@ public class SettingsController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('settings.holidays.write')")
     public void archiveHoliday(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.HOLIDAY, id);
         holidays.archive(id);
     }
 }

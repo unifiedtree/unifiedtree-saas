@@ -261,4 +261,54 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
     List<LeaveRequest> findApprovedLeaveInRange(@Param("employeeIds") Collection<UUID> employeeIds,
                                                 @Param("from") LocalDate from,
                                                 @Param("to") LocalDate to);
+
+    // ── One company's tenant-wide lists (company access, COMPANY_ACCESS.md) ──
+    // The HR-level lists above, narrowed to the requests of one company's
+    // people, for a company-scoped level-two approver (the selected company,
+    // else their home company). Everyone else keeps the lists above.
+
+    String IN_COMPANY = " AND lr.employee_id IN (SELECT ce.id FROM hrms.employees ce WHERE ce.company_id = :companyId)";
+
+    /** {@link #findAllPending} for one company. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING'" + IN_COMPANY + " ORDER BY lr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING'" + IN_COMPANY,
+        nativeQuery = true)
+    Page<LeaveRequest> findAllPendingInCompany(@Param("companyId") UUID companyId, Pageable pageable);
+
+    /** {@link #findAllPendingExcept} for one company. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING' AND lr.employee_id <> :me" + IN_COMPANY + " ORDER BY lr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING' AND lr.employee_id <> :me" + IN_COMPANY,
+        nativeQuery = true)
+    Page<LeaveRequest> findAllPendingExceptInCompany(@Param("me") UUID me, @Param("companyId") UUID companyId, Pageable pageable);
+
+    /** HR's queue of one status (PENDING_L2) for one company. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = :status" + IN_COMPANY + " ORDER BY lr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = :status" + IN_COMPANY,
+        nativeQuery = true)
+    Page<LeaveRequest> findByStatusInCompany(@Param("status") String status, @Param("companyId") UUID companyId, Pageable pageable);
+
+    /** {@link #findByStatusInCompany} without one person's own requests. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = :status AND lr.employee_id <> :me" + IN_COMPANY + " ORDER BY lr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = :status AND lr.employee_id <> :me" + IN_COMPANY,
+        nativeQuery = true)
+    Page<LeaveRequest> findByStatusExceptInCompany(@Param("status") String status, @Param("me") UUID me,
+                                                   @Param("companyId") UUID companyId, Pageable pageable);
+
+    /** {@link #findAllDecided} for one company. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + IN_COMPANY + " ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + IN_COMPANY,
+        nativeQuery = true)
+    Page<LeaveRequest> findAllDecidedInCompany(@Param("companyId") UUID companyId, Pageable pageable);
+
+    /** {@link #findAllDecidedByStatus} for one company. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = :status AND lr.status <> 'PENDING'" + IN_COMPANY + " ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = :status AND lr.status <> 'PENDING'" + IN_COMPANY,
+        nativeQuery = true)
+    Page<LeaveRequest> findAllDecidedByStatusInCompany(@Param("status") String status, @Param("companyId") UUID companyId,
+                                                       Pageable pageable);
+
+    /** {@link #countAllDecidedByStatus} for one company. */
+    @Query(value = "SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + IN_COMPANY + " GROUP BY lr.status",
+        nativeQuery = true)
+    List<Object[]> countAllDecidedByStatusInCompany(@Param("companyId") UUID companyId);
 }

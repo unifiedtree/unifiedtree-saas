@@ -136,17 +136,29 @@ public class LeaveInsightsService {
 
     @Transactional(readOnly = true)
     public ApprovalStats approvalStats(UUID callerEmployeeId, boolean levelTwo, int months, LocalDate today) {
+        return approvalStats(callerEmployeeId, levelTwo, months, today, null);
+    }
+
+    /**
+     * {@link #approvalStats(UUID, boolean, int, LocalDate)}; a level-two
+     * approver's workspace-wide figures cover only {@code onlyCompany}'s people
+     * when it is set (a company-scoped approver, COMPANY_ACCESS.md).
+     */
+    @Transactional(readOnly = true)
+    public ApprovalStats approvalStats(UUID callerEmployeeId, boolean levelTwo, int months, LocalDate today,
+                                       UUID onlyCompany) {
+        UUID only = levelTwo ? onlyCompany : null;
         return FeatureNotReady.guard(() -> {
             UUID tenant = tenant();
             int span = Math.max(1, Math.min(months, 24));
-            long[] pending = waitingCounts(tenant, "PENDING", levelTwo, callerEmployeeId);
-            long[] l2 = levelTwo ? waitingCounts(tenant, "PENDING_L2", true, callerEmployeeId) : new long[]{0, 0};
+            long[] pending = waitingCounts(tenant, "PENDING", levelTwo, callerEmployeeId, only);
+            long[] l2 = levelTwo ? waitingCounts(tenant, "PENDING_L2", true, callerEmployeeId, only) : new long[]{0, 0};
 
             YearMonth thisMonth = YearMonth.from(today);
             YearMonth first = thisMonth.minusMonths(span - 1L);
             // Last month is always read, for the "vs last month" figures, even with a one-month series.
             Map<String, MonthStat> byMonth = decisionsByMonth(tenant, levelTwo, callerEmployeeId,
-                    span > 1 ? first : thisMonth.minusMonths(1));
+                    span > 1 ? first : thisMonth.minusMonths(1), only);
             List<MonthStat> series = new ArrayList<>();
             for (YearMonth m = first; !m.isAfter(thisMonth); m = m.plusMonths(1)) {
                 String key = m.format(MONTH);
@@ -160,7 +172,7 @@ public class LeaveInsightsService {
             // The approver's current company (X-Company-Id), else their own.
             UUID company = com.unifiedtree.security.tenant.CompanyContext.currentOr(companyOf(callerEmployeeId));
             LocalDate next = nextWorkingDay(company, today);
-            long[] away = onLeave(tenant, levelTwo, callerEmployeeId, today, next);
+            long[] away = onLeave(tenant, levelTwo, callerEmployeeId, today, next, only);
             return new ApprovalStats(levelTwo ? Scope.TENANT : Scope.TEAM,
                     pending[0] + l2[0], pending[0], l2[0], pending[1] + l2[1],
                     now.approved(), last.approved(), now.avgDecisionHours(), last.avgDecisionHours(),
@@ -169,7 +181,7 @@ public class LeaveInsightsService {
     }
 
     /** [count, created in the last 24 hours] of one waiting status, in the pending list's scope. */
-    private long[] waitingCounts(UUID tenant, String status, boolean levelTwo, UUID me) {
+    private long[] waitingCounts(UUID tenant, String status, boolean levelTwo, UUID me, UUID only) {
         StringBuilder sql = new StringBuilder("""
                 SELECT COUNT(*) AS n,
                        COUNT(*) FILTER (WHERE lr.created_at >= now() - interval '24 hours') AS recent
@@ -187,12 +199,13 @@ public class LeaveInsightsService {
             sql.append(" AND lr.employee_id <> ?");
             args.add(me);
         }
+        inCompany(sql, args, only);
         return jdbc.query(sql.toString(), rs -> rs.next() ? new long[]{rs.getLong("n"), rs.getLong("recent")} : new long[]{0, 0},
                 args.toArray());
     }
 
     /** Final decisions (approved or rejected) per month from {@code first}, India time. */
-    private Map<String, MonthStat> decisionsByMonth(UUID tenant, boolean levelTwo, UUID me, YearMonth first) {
+    private Map<String, MonthStat> decisionsByMonth(UUID tenant, boolean levelTwo, UUID me, YearMonth first, UUID only) {
         Timestamp since = Timestamp.from(first.atDay(1).atStartOfDay(IST).toInstant());
         StringBuilder sql = new StringBuilder("""
                 SELECT to_char(date_trunc('month', COALESCE(lr.l2_approved_at, lr.decision_at) AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM') AS m,
@@ -209,6 +222,7 @@ public class LeaveInsightsService {
             sql.append(" AND ").append(MANAGER_MATCH);
             args.addAll(List.of(me, me, me));
         }
+        inCompany(sql, args, only);
         sql.append(" GROUP BY 1");
         Map<String, MonthStat> out = new HashMap<>();
         jdbc.query(sql.toString(), rs -> {
@@ -221,7 +235,7 @@ public class LeaveInsightsService {
     }
 
     /** [people on approved leave on {@code day1}, on {@code day2}], in the list's scope. */
-    private long[] onLeave(UUID tenant, boolean levelTwo, UUID me, LocalDate day1, LocalDate day2) {
+    private long[] onLeave(UUID tenant, boolean levelTwo, UUID me, LocalDate day1, LocalDate day2, UUID only) {
         StringBuilder sql = new StringBuilder("""
                 SELECT COUNT(DISTINCT lr.employee_id) FILTER (WHERE lr.start_date <= ? AND lr.end_date >= ?) AS d1,
                        COUNT(DISTINCT lr.employee_id) FILTER (WHERE lr.start_date <= ? AND lr.end_date >= ?) AS d2
@@ -238,6 +252,7 @@ public class LeaveInsightsService {
             sql.append(" AND ").append(MANAGER_MATCH);
             args.addAll(List.of(me, me, me));
         }
+        inCompany(sql, args, only);
         return jdbc.query(sql.toString(), rs -> rs.next() ? new long[]{rs.getLong("d1"), rs.getLong("d2")} : new long[]{0, 0},
                 args.toArray());
     }
@@ -252,6 +267,17 @@ public class LeaveInsightsService {
      */
     @Transactional(readOnly = true)
     public CalendarFeed calendar(UUID me, Scope scope, LocalDate from, LocalDate to, List<String> statuses) {
+        return calendar(me, scope, from, to, statuses, null);
+    }
+
+    /**
+     * {@link #calendar(UUID, Scope, LocalDate, LocalDate, List)}; the
+     * workspace-wide feed covers only {@code onlyCompany}'s people when it is
+     * set (a company-scoped level-two approver, COMPANY_ACCESS.md).
+     */
+    @Transactional(readOnly = true)
+    public CalendarFeed calendar(UUID me, Scope scope, LocalDate from, LocalDate to, List<String> statuses,
+                                 UUID onlyCompany) {
         checkRange(from, to);
         List<String> wanted = calendarStatuses(statuses);
         return FeatureNotReady.guard(() -> {
@@ -275,6 +301,8 @@ public class LeaveInsightsService {
             } else if (scope == Scope.SELF) {
                 sql.append(" AND lr.employee_id = ?");
                 args.add(me);
+            } else {
+                inCompany(sql, args, onlyCompany);
             }
             sql.append(" ORDER BY lr.start_date, emp_name, lr.id LIMIT ?");
             args.add(MAX_CALENDAR_ROWS + 1);
@@ -288,6 +316,13 @@ public class LeaveInsightsService {
             return new CalendarFeed(from, to, scope, wanted, truncated,
                     truncated ? List.copyOf(rows.subList(0, MAX_CALENDAR_ROWS)) : rows);
         });
+    }
+
+    /** Narrows a workspace-wide read (joined to the requester as {@code e}) to one company; nothing when null. */
+    private static void inCompany(StringBuilder sql, List<Object> args, UUID only) {
+        if (only == null) return;
+        sql.append(" AND e.company_id = ?");
+        args.add(only);
     }
 
     static List<String> calendarStatuses(List<String> raw) {

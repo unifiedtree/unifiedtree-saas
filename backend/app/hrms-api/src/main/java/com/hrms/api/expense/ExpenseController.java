@@ -1,5 +1,6 @@
 package com.hrms.api.expense;
 
+import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
@@ -41,6 +42,10 @@ import java.util.stream.Collectors;
 @Tag(name = "Expense", description = "Expense claims, approvals, reimbursement, and policies")
 @SecurityRequirement(name = "bearerAuth")
 public class ExpenseController {
+
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     /** Company access: an optional companyId left out means the caller's current company, not every company (COMPANY_ACCESS.md). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -161,6 +166,7 @@ public class ExpenseController {
             @PathVariable UUID employeeId,
             @Valid @RequestBody ExpenseClaimRequest request,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         UUID raisedBy = extractEmployeeId(jwt);
         Employee employee = onBehalfTarget(employeeId, raisedBy);
         UUID companyId = employee.getCompanyId();
@@ -188,6 +194,7 @@ public class ExpenseController {
             @PathVariable UUID employeeId,
             @RequestPart("file") org.springframework.web.multipart.MultipartFile file,
             @AuthenticationPrincipal Jwt jwt) throws java.io.IOException {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         Employee employee = onBehalfTarget(employeeId, extractEmployeeId(jwt));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(receipts.store(com.hrms.core.tenant.TenantContext.getTenantId(), employee.getId(), file));
@@ -337,6 +344,7 @@ public class ExpenseController {
             @AuthenticationPrincipal Jwt jwt,
             org.springframework.security.core.Authentication auth,
             @PageableDefault(size = 20) Pageable pageable) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         recordAccess.assertCanView(employeeId, jwt, auth, EMPLOYEE_READ, "hrms.expense.claim.approve");
         return ResponseEntity.ok(enrichPage(expenseService.getEmployeeClaims(employeeId, pageable)));
     }
@@ -357,6 +365,7 @@ public class ExpenseController {
     @PreAuthorize("hasAnyAuthority('hrms.expense.claim.read','hrms.expense.claim.self')")
     public ResponseEntity<ExpenseClaimResponse> getClaim(@PathVariable UUID id,
                                                          @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EXPENSE_CLAIM, id);
         ExpenseClaimResponse raw = expenseService.getClaim(id);
         // Object-level authz (prevent intra-tenant IDOR). The claim now carries
         // receipt files, so claim.read alone no longer opens every claim in the
@@ -449,6 +458,7 @@ public class ExpenseController {
             @PathVariable UUID id,
             @Valid @RequestBody ExpenseDecisionRequest decision,
             @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EXPENSE_CLAIM, id);
         UUID approver = extractEmployeeId(jwt);
         // 2026-09-09: object-level authz on the WRITE path (intra-tenant IDOR).
         // The 2026-09-08 audit scoped the approvals QUEUE — a DEPT_MANAGER now
@@ -481,6 +491,7 @@ public class ExpenseController {
     @PostMapping("/claims/{id}/reimburse")
     @PreAuthorize("@perm.check('hrms.expense.reimbursement')")
     public ResponseEntity<ExpenseClaimResponse> reimburse(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EXPENSE_CLAIM, id);
         return ResponseEntity.ok(enrichOne(expenseService.reimburse(id)));
     }
 
@@ -509,6 +520,7 @@ public class ExpenseController {
     public ResponseEntity<ExpensePolicyResponse> updatePolicy(
             @PathVariable UUID id,
             @Valid @RequestBody ExpensePolicyRequest request) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EXPENSE_POLICY, id);
         return ResponseEntity.ok(policyService.updatePolicy(id, request));
     }
 
@@ -517,6 +529,7 @@ public class ExpenseController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.expense.policy.write')")
     public void deactivatePolicy(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EXPENSE_POLICY, id);
         policyService.deactivatePolicy(id);
     }
 

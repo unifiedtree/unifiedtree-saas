@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import com.unifiedtree.security.tenant.CompanyGrants;
 
 import java.util.UUID;
 
@@ -109,6 +110,25 @@ public class NotificationLookupService {
                      ORDER BY uc.created_at
                      LIMIT 1
                     """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId);
+        } catch (Exception ex) {
+            log.warn("role-holder lookup failed (role={}, tenant={}): {}", roleId, tenantId, ex.toString());
+            return null;
+        }
+    }
+
+    /**
+     * {@link #firstEmployeeWithRole(UUID, UUID)} for a request of
+     * {@code forEmployeeId}: people granted the role in that person's company
+     * (rbac.user_company_access, COMPANY_ACCESS.md) count too, longest-serving
+     * first across both. Before the grants table exists, or when the person's
+     * company is unknown, exactly {@link #firstEmployeeWithRole(UUID, UUID)}.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public UUID firstEmployeeWithRole(UUID tenantId, UUID roleId, UUID forEmployeeId) {
+        if (tenantId == null || roleId == null) return null;
+        try {
+            UUID company = CompanyGrants.ready(jdbc) ? CompanyGrants.companyOf(jdbc, forEmployeeId) : null;
+            return CompanyGrants.firstRoleHolder(jdbc, tenantId, roleId, company, null);
         } catch (Exception ex) {
             log.warn("role-holder lookup failed (role={}, tenant={}): {}", roleId, tenantId, ex.toString());
             return null;

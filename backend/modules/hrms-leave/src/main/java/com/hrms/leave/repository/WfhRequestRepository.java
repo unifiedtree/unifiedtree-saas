@@ -82,6 +82,23 @@ public interface WfhRequestRepository extends JpaRepository<WfhRequest, UUID> {
     Page<WfhRequest> findAllPendingExcept(@Param("me") UUID me, Pageable pageable);
 
     /**
+     * {@link #findAllPending} for one company's people: a company-scoped
+     * HR-level approver's queue (company access, COMPANY_ACCESS.md).
+     */
+    @Query(value = "SELECT wr.* FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING'" + IN_COMPANY + " ORDER BY wr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING'" + IN_COMPANY,
+        nativeQuery = true)
+    Page<WfhRequest> findAllPendingInCompany(@Param("companyId") UUID companyId, Pageable pageable);
+
+    /** {@link #findAllPendingExcept} for one company's people. */
+    @Query(value = "SELECT wr.* FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING' AND wr.employee_id <> :me" + IN_COMPANY + " ORDER BY wr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING' AND wr.employee_id <> :me" + IN_COMPANY,
+        nativeQuery = true)
+    Page<WfhRequest> findAllPendingExceptInCompany(@Param("me") UUID me, @Param("companyId") UUID companyId, Pageable pageable);
+
+    String IN_COMPANY = " AND wr.employee_id IN (SELECT ce.id FROM hrms.employees ce WHERE ce.company_id = :companyId)";
+
+    /**
      * Any existing WFH request for the same employee that overlaps
      * [{@code fromDate}, {@code toDate}] and is currently in one of the
      * given statuses. Used at apply time to block a duplicate submission on

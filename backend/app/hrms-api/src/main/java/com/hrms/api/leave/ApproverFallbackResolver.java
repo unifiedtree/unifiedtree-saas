@@ -1,5 +1,6 @@
 package com.hrms.api.leave;
 
+import com.unifiedtree.security.tenant.CompanyGrants;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -102,18 +103,28 @@ public class ApproverFallbackResolver {
             """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId);
     }
 
+    /**
+     * The first holder of the role other than the applicant. People granted the
+     * role in the applicant's company (rbac.user_company_access) count too,
+     * longest-serving first across both (COMPANY_ACCESS.md); before the grants
+     * table exists this is the role-holder query exactly as it always was.
+     */
     private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId, UUID notEmployeeId) {
-        return jdbc.query("""
-            SELECT uc.employee_id
-              FROM rbac.user_roles ur
-              JOIN auth.user_credentials uc ON uc.id = ur.user_id
-             WHERE ur.tenant_id = ?
-               AND ur.role_id = ?
-               AND uc.employee_id IS NOT NULL
-               AND uc.employee_id <> ?
-               AND uc.is_active = TRUE
-             ORDER BY uc.created_at
-             LIMIT 1
-            """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId, notEmployeeId);
+        UUID company = CompanyGrants.ready(jdbc) ? CompanyGrants.companyOf(jdbc, notEmployeeId) : null;
+        if (company == null) {
+            return jdbc.query("""
+                SELECT uc.employee_id
+                  FROM rbac.user_roles ur
+                  JOIN auth.user_credentials uc ON uc.id = ur.user_id
+                 WHERE ur.tenant_id = ?
+                   AND ur.role_id = ?
+                   AND uc.employee_id IS NOT NULL
+                   AND uc.employee_id <> ?
+                   AND uc.is_active = TRUE
+                 ORDER BY uc.created_at
+                 LIMIT 1
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId, notEmployeeId);
+        }
+        return CompanyGrants.firstRoleHolder(jdbc, tenantId, roleId, company, notEmployeeId);
     }
 }

@@ -1,6 +1,7 @@
 package com.hrms.api.workforce;
 
 import com.unifiedtree.rbac.company.CompanyAccessService;
+import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.BranchResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ClassificationRuleResponse;
@@ -101,6 +102,9 @@ public class WorkforceController {
     /** Company access (V143.93): company-scoped people list only the companies they may access. */
     @Autowired(required = false)
     private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
+    /** Company access: a record addressed by id must be in a company the caller may work in (COMPANY_ACCESS.md). */
+    @Autowired(required = false)
+    private RecordCompanyGuard recordGuard;
 
     public WorkforceController(CompanyService companies,
                                @Qualifier("workforceBranchService") BranchService branches,
@@ -215,6 +219,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('org.company.write')")
     public BranchResponse updateBranch(@PathVariable UUID id,
                                        @Valid @RequestBody com.hrms.employee.workforce.dto.WorkforceDtos.UpdateBranchRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.BRANCH, id);
         return branches.update(id, req);
     }
 
@@ -222,6 +227,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('org.geofence.write')")
     public BranchResponse updateGeofence(@PathVariable UUID id,
                                          @Valid @RequestBody UpdateGeofenceRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.BRANCH, id);
         return branches.updateGeofence(id, req);
     }
 
@@ -229,6 +235,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('org.company.write')")
     public void archiveBranch(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.BRANCH, id);
         branches.archive(id);
     }
 
@@ -250,6 +257,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public DepartmentResponse renameDepartment(@PathVariable UUID id,
                                                @RequestParam String name) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         return departments.rename(id, name);
     }
 
@@ -261,6 +269,7 @@ public class WorkforceController {
             @PathVariable UUID id,
             @RequestParam(required = false) String colorHex,
             @RequestParam(required = false) String iconKey) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         return departments.updateAppearance(id, colorHex, iconKey);
     }
 
@@ -277,6 +286,7 @@ public class WorkforceController {
             // Redesign BW-95: null = leave unchanged, blank = clear. 503
             // FEATURE_NOT_READY (and nothing changed) until V143_52 is applied.
             @RequestParam(required = false) String costCentre) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         return departments.updateDetails(id, code, description, costCentre);
     }
 
@@ -284,6 +294,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public DepartmentResponse setDepartmentHead(@PathVariable UUID id,
                                                 @RequestParam(required = false) UUID employeeId) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         return departments.setHead(id, employeeId);
     }
 
@@ -291,6 +302,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public void archiveDepartment(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DEPARTMENT, id);
         departments.archive(id);
     }
 
@@ -313,6 +325,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('hrms.designation.write')")
     public DesignationResponse updateDesignation(@PathVariable UUID id,
                                                  @Valid @RequestBody UpdateDesignationRequest req) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DESIGNATION, id);
         return designations.update(id, req);
     }
 
@@ -320,6 +333,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.designation.write')")
     public void archiveDesignation(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.DESIGNATION, id);
         designations.archive(id);
     }
 
@@ -536,6 +550,7 @@ public class WorkforceController {
     @GetMapping("/employees/{id}")
     @PreAuthorize("hasAuthority('hrms.employee.read') or hasAuthority('hrms.employee.team.manage') or @perm.check('hrms.employee.team.manage')")
     public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        RecordCompanyGuard.checkEmployee(recordGuard, id);
         boolean read = WorkforceAccess.holds(WorkforceAccess.EMPLOYEE_READ);
         if (read) return employees.get(id);
         // Past the guard without hrms.employee.read means hrms.employee.team.manage is held.
@@ -646,6 +661,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public WorkforceEmployeeResponse updateEmployee(@PathVariable UUID id,
                                                     @Valid @RequestBody UpdateWorkforceEmployeeRequest req) {
+        RecordCompanyGuard.checkEmployee(recordGuard, id);
         return employees.update(id, req);
     }
 
@@ -653,6 +669,7 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public WorkforceEmployeeResponse confirm(@PathVariable UUID id,
                                              @RequestParam LocalDate confirmationDate) {
+        RecordCompanyGuard.checkEmployee(recordGuard, id);
         return employees.confirm(id, confirmationDate);
     }
 
@@ -663,6 +680,7 @@ public class WorkforceController {
                                                  @RequestParam LocalDate lastWorkingDay,
                                                  @RequestParam(required = false) String reason,
                                                  @RequestParam(required = false) String exitType) {
+        RecordCompanyGuard.checkEmployee(recordGuard, id);
         return employees.startNotice(id, noticeStart, lastWorkingDay, reason, parseExitType(exitType));
     }
 
@@ -672,6 +690,7 @@ public class WorkforceController {
                                           @RequestParam LocalDate lastWorkingDay,
                                           @RequestParam(required = false) String reason,
                                           @RequestParam(required = false) String exitType) {
+        RecordCompanyGuard.checkEmployee(recordGuard, id);
         return employees.exit(id, lastWorkingDay, reason, parseExitType(exitType));
     }
 
@@ -694,6 +713,7 @@ public class WorkforceController {
     @PostMapping("/employees/{id}/cancel-notice")
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public WorkforceEmployeeResponse cancelNotice(@PathVariable UUID id) {
+        RecordCompanyGuard.checkEmployee(recordGuard, id);
         return employees.cancelNotice(id);
     }
 
@@ -717,6 +737,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.contractor.write')")
     public void archiveContractor(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CONTRACTOR, id);
         contractors.archive(id);
     }
 
@@ -740,6 +761,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public void archiveClassification(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.CLASSIFICATION, id);
         classifications.archive(id);
     }
 
@@ -767,6 +789,7 @@ public class WorkforceController {
     @PutMapping("/grades/{id}")
     @PreAuthorize("hasAuthority('hrms.grade.write')")
     public GradeResponse updateGrade(@PathVariable UUID id, @Valid @RequestBody Grade grade) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.GRADE, id);
         boolean bands = MasterDataController.holds(GRADE_BAND_READ);
         return GradeService.toResponse(grades.update(id, grade, bands), bands);
     }
@@ -775,6 +798,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.grade.write')")
     public void archiveGrade(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.GRADE, id);
         grades.archive(id);
     }
 
@@ -797,6 +821,7 @@ public class WorkforceController {
     @PutMapping("/employment-types/{id}")
     @PreAuthorize("@perm.check('hrms.employment-type.write')")
     public EmploymentType updateEmploymentType(@PathVariable UUID id, @Valid @RequestBody EmploymentType type) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EMPLOYMENT_TYPE, id);
         return employmentTypes.update(id, type);
     }
 
@@ -804,6 +829,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("@perm.check('hrms.employment-type.write')")
     public void archiveEmploymentType(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.EMPLOYMENT_TYPE, id);
         employmentTypes.archive(id);
     }
 
@@ -824,6 +850,7 @@ public class WorkforceController {
     @PutMapping("/shifts/{id}")
     @PreAuthorize("@perm.check('hrms.shift.write')")
     public Shift updateShift(@PathVariable UUID id, @Valid @RequestBody Shift shift) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.SHIFT, id);
         return shifts.update(id, shift);
     }
 
@@ -831,6 +858,7 @@ public class WorkforceController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("@perm.check('hrms.shift.write')")
     public void archiveShift(@PathVariable UUID id) {
+        RecordCompanyGuard.check(recordGuard, RecordCompanyGuard.Kind.SHIFT, id);
         shifts.archive(id);
     }
 }
