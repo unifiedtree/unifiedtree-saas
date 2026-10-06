@@ -72,6 +72,35 @@ public class PhoneLookupService {
      * <p>Returns {@code Optional.empty()} when no employee is found in any
      * tenant.
      */
+    /**
+     * The same match, but only inside one business (the web's business login page, contract §5b
+     * with the HRMS lane): a number that is also on file in another business never signs the person
+     * in there. {@code tenantId == null} = today's lookup across businesses (the mobile app).
+     */
+    @Transactional
+    public Optional<Match> findByPhone(String phone, UUID tenantId) {
+        if (tenantId == null) return findByPhone(phone);
+        String last10 = last10(phone);
+        return last10 == null ? Optional.empty() : matchInTenant(tenantId, last10);
+    }
+
+    /** Sentinel for "a business was named but doesn't exist": matches nothing. */
+    static final UUID NO_SUCH_BUSINESS = new UUID(0L, 0L);
+
+    /** An active business by its subdomain; {@link #NO_SUCH_BUSINESS} when there is none. */
+    public UUID businessBySubdomain(String subdomain) {
+        List<UUID> ids = jdbc.queryForList(
+                "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?) AND status = 'ACTIVE'",
+                UUID.class, subdomain);
+        return ids.isEmpty() ? NO_SUCH_BUSINESS : ids.get(0);
+    }
+
+    private static String last10(String phone) {
+        if (phone == null || phone.isBlank()) return null;
+        String digits = phone.replaceAll("\\D", "");
+        return digits.length() < 10 ? null : digits.substring(digits.length() - 10);
+    }
+
     @Transactional
     public Optional<Match> findByPhone(String phone) {
         if (phone == null || phone.isBlank()) return Optional.empty();
@@ -108,35 +137,37 @@ public class PhoneLookupService {
         }
 
         for (UUID t : tenantIds) {
-            try {
-                jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)",
-                        String.class, t.toString());
-
-                List<Map<String, Object>> emp = jdbc.queryForList(
-                        "SELECT id, email FROM hrms.employees "
-                                + "WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ? "
-                                + "  AND (employment_status IS NULL OR employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')) "
-                                + "LIMIT 1",
-                        last10);
-                if (emp.isEmpty()) continue;
-
-                UUID employeeId = (UUID) emp.get(0).get("id");
-                String email = (String) emp.get(0).get("email");
-
-                List<UUID> userIds = jdbc.queryForList(
-                        "SELECT id FROM auth.user_credentials "
-                                + "WHERE employee_id = ? AND is_active = true LIMIT 1",
-                        UUID.class, employeeId);
-                if (userIds.isEmpty()) {
-                    log.debug("phone lookup: employee {} in tenant {} has no active user_credentials",
-                            employeeId, t);
-                    continue;
-                }
-                return Optional.of(new Match(t, userIds.get(0), employeeId, email));
-            } catch (Exception ignored) {
-                // Unreadable tenant (schema drift, permission oddity) — skip.
-            }
+            Optional<Match> m = matchInTenant(t, last10);
+            if (m.isPresent()) return m;
         }
         return Optional.empty();
+    }
+
+    /** One business: its active employee with this number and an active login (RLS: tenant bound first). */
+    private Optional<Match> matchInTenant(UUID t, String last10) {
+        try {
+            jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)", String.class, t.toString());
+            List<Map<String, Object>> emp = jdbc.queryForList(
+                    "SELECT id, email FROM hrms.employees "
+                            + "WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ? "
+                            + "  AND tenant_id = ? "
+                            + "  AND (employment_status IS NULL OR employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')) "
+                            + "LIMIT 1",
+                    last10, t);
+            if (emp.isEmpty()) return Optional.empty();
+            UUID employeeId = (UUID) emp.get(0).get("id");
+            String email = (String) emp.get(0).get("email");
+            List<UUID> userIds = jdbc.queryForList(
+                    "SELECT id FROM auth.user_credentials WHERE employee_id = ? AND tenant_id = ? AND is_active = true LIMIT 1",
+                    UUID.class, employeeId, t);
+            if (userIds.isEmpty()) {
+                log.debug("phone lookup: employee {} in tenant {} has no active user_credentials", employeeId, t);
+                return Optional.empty();
+            }
+            return Optional.of(new Match(t, userIds.get(0), employeeId, email));
+        } catch (Exception ignored) {
+            // Unreadable tenant (schema drift, permission oddity) — skip.
+            return Optional.empty();
+        }
     }
 }

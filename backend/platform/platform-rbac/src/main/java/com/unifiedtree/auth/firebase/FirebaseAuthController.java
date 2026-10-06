@@ -115,7 +115,7 @@ public class FirebaseAuthController {
         // findByPhone normalises to last-10-digit lookup across all
         // tenants — same match logic the /firebase-verify path uses on
         // the phone_number claim, so a hit here guarantees a hit there.
-        boolean registered = phoneLookup.findByPhone(phone).isPresent();
+        boolean registered = phoneLookup.findByPhone(phone, businessFrom(http)).isPresent();
         log.info("phone/check: phone(last-10)={} registered={}",
                 phone.length() > 10 ? phone.substring(phone.length() - 10) : phone,
                 registered);
@@ -169,7 +169,9 @@ public class FirebaseAuthController {
 
         // ── Look up the employee across tenants (RLS-safe scan, see
         // FirebasePhoneLookupService).
-        Optional<PhoneLookupService.Match> maybe = phoneLookup.findByPhone(phone);
+        // On a business's own login page the web says which business (X-Tenant-Subdomain):
+        // the match stays inside it. The mobile app sends none: matched across businesses, as before.
+        Optional<PhoneLookupService.Match> maybe = phoneLookup.findByPhone(phone, businessFrom(http));
         if (maybe.isEmpty()) {
             log.info("firebase-verify: no employee found for phone (last 10 digits) — uid={}",
                     decoded.getUid());
@@ -197,6 +199,12 @@ public class FirebaseAuthController {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /** The business named by X-Tenant-Subdomain; null when the header is absent (the mobile app). */
+    private UUID businessFrom(HttpServletRequest http) {
+        String sub = http == null ? null : http.getHeader("X-Tenant-Subdomain");
+        return sub == null || sub.isBlank() ? null : phoneLookup.businessBySubdomain(sub.trim());
+    }
 
     /**
      * Firebase surfaces the phone number as a top-level claim on the decoded
