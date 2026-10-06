@@ -310,8 +310,9 @@ const WorkspaceRuleSection: React.FC<{ draft: MfaPolicy | null; setDraft: (p: Mf
   )
 }
 
-export const SecuritySettings: React.FC<{ crumb: string; title: string; subtitle: string }> = ({ crumb, title, subtitle }) => {
-  const canManage = usePermission('workspace.security.manage')
+/** `personal`: only the person's own sign-in (password, two-factor, sessions), as on My profile; the workspace rule stays in Settings. */
+export const SecuritySettings: React.FC<{ crumb: string; title: string; subtitle: string; personal?: boolean }> = ({ crumb, title, subtitle, personal = false }) => {
+  const canManage = usePermission('workspace.security.manage') && !personal
   const status = useMfaStatus()
   const ws = useWorkspaceSecurity(canManage)
   const setPolicy = useWorkspaceSecurityActions().setPolicy

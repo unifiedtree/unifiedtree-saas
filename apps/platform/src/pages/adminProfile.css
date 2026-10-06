@@ -1,0 +1,19 @@
+/* My profile for an administrator (AdminProfile.tsx): the role card, the business card and small
+   bits around them. Tokens only (var(--u-*, light fallback)), so dark mode follows. */
+.ap-roles { display: flex; flex-direction: column; gap: 12px; }
+.ap-role { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 14px; background: var(--u-brs, #E8F3EE); }
+.ap-role__t { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ap-role__name { font-size: 15px; font-weight: 600; color: var(--u-brt, #0F6E56); }
+.ap-role__words { font-size: 13.5px; line-height: 1.5; color: var(--u-ink2, #4A5A54); text-wrap: pretty; }
+.ap-areas { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.ap-areas__k { font-size: 12.5px; font-weight: 500; color: var(--u-ink3, #6A7A73); }
+.ap-biz { display: flex; flex-direction: column; gap: 12px; }
+.ap-biz__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ap-biz__logo { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; background: var(--u-sf2, #F7F9F8); border: 1px solid var(--u-ln, #E3E9E6); flex-shrink: 0; }
+.ap-biz__t { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-biz__name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.ap-biz__sub { font-size: 12.5px; color: var(--u-ink3, #6A7A73); overflow-wrap: anywhere; }
+.ap-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--u-brt, #0F6E56); cursor: pointer; }
+.ap-link:hover { text-decoration: underline; }
+.ap-link:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); border-radius: 4px; }
+.ap-when { font-size: 12.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; }

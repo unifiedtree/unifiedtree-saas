@@ -47,7 +47,7 @@ export interface AuditFilters {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useAuditEvents(filters: AuditFilters = {}) {
+export function useAuditEvents(filters: AuditFilters = {}, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['audit', 'events', filters],
     queryFn: () => {
@@ -64,5 +64,6 @@ export function useAuditEvents(filters: AuditFilters = {}) {
       return apiJson<AuditPage>(`/v1/audit/events${qs ? `?${qs}` : ''}`)
     },
     staleTime: 30_000,
+    enabled: opts?.enabled ?? true,
   })
 }
