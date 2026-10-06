@@ -16,6 +16,7 @@ import com.unifiedtree.rbac.entity.UserRole;
 import com.unifiedtree.rbac.repository.RolePermissionRepository;
 import com.unifiedtree.rbac.repository.RoleRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
+import com.unifiedtree.security.tenant.CompanyContext;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -553,6 +554,15 @@ public class AuthService {
             ? List.of()
             : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds);
         List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId(), userId);
+        // In a company the caller reaches through a grant (X-Company-Id), /me
+        // reports their roles and permissions THERE, the set this request's
+        // checks use (CompanyAccessFilter). No header / home company: unchanged.
+        CompanyContext.Scope scope = CompanyContext.getScope();
+        if (scope != null) {
+            roleIds = List.copyOf(scope.roleIds());
+            roleCodes = scope.roleCodes().stream().sorted().toList();
+            permissions = scope.permissions().stream().sorted().toList();
+        }
         // ACTIVE modules come straight from platform.tenant_modules — the source
         // of truth for what the workspace selected/activated — NOT derived from
         // permissions. Same query pattern as WorkspaceAccessService.activeModuleKeys

@@ -97,6 +97,9 @@ public class WorkforceController {
     private com.unifiedtree.rbac.security.PermissionChecker permissionChecker;
     @Autowired(required = false)
     private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    /** Company access (V143.93): company-scoped people list only the companies they may access. */
+    @Autowired(required = false)
+    private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
 
     public WorkforceController(CompanyService companies,
                                @Qualifier("workforceBranchService") BranchService branches,
@@ -128,7 +131,9 @@ public class WorkforceController {
     public List<CompanyResponse> listCompanies(@RequestParam(defaultValue = "false") boolean includeArchived) {
         // includeArchived: archived companies too (active=false), for the
         // Companies & Branches "Inactive" filter. Pickers leave it off.
-        return companies.list(includeArchived);
+        List<CompanyResponse> all = companies.list(includeArchived);
+        java.util.Set<UUID> allowed = companyAccess == null ? null : companyAccess.accessibleCompanyIds();
+        return allowed == null ? all : all.stream().filter(c -> allowed.contains(c.id())).toList();
     }
 
     @PostMapping("/companies")
