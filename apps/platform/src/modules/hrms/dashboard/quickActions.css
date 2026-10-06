@@ -1,0 +1,11 @@
+/* Customise quick actions (G-59): the list of actions in the dialog. Tokens only, so dark mode follows the theme. */
+.qa-cust__count { margin: 0 0 10px; font-size: 13px; color: var(--u-ink3, #6B7280); }
+.qa-cust__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.qa-cust__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px;
+  padding: 4px 6px 4px 12px; border-radius: 10px; border: 1px solid var(--u-ln, #E5E7EB); background: var(--u-sf, #FFFFFF);
+}
+.qa-cust__row[data-on] { border-color: var(--u-brl, #A7D7C5); background: var(--u-brs, #EAF5F0); }
+.qa-cust__row > :first-child { flex: 1 1 auto; min-width: 0; }
+.qa-cust__move { display: inline-flex; gap: 2px; flex-shrink: 0; }
+.qa-cust__up { display: inline-flex; transform: rotate(180deg); }

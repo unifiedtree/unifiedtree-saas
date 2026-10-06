@@ -63,7 +63,7 @@ public class TenantModuleGuard implements HandlerInterceptor {
             //   /v1/approvals  the caller's recent decisions (approval Undo)
             //   /v1/ess        self-service reads and the timesheet (/v1/ess/timesheets)
             //   /v1/timesheets timesheet week approvals
-            //   /v1/me/dashboard, /v1/me/approvers  quick-action preferences, who a
+            //   /v1/me/dashboard, /v1/me/quick-actions, /v1/me/approvers  quick-action preferences, who a
             //                  request goes to (other /v1/me paths stay open: they are
             //                  the person's own account settings)
             Map.entry("/v1/team",        "hrms"),
@@ -72,6 +72,7 @@ public class TenantModuleGuard implements HandlerInterceptor {
             Map.entry("/v1/timesheets",  "hrms"),
             Map.entry("/v1/me/dashboard", "hrms"),
             Map.entry("/v1/me/approvers", "hrms"),
+            Map.entry("/v1/me/quick-actions", "hrms"),
             // Attendance module
             Map.entry("/v1/attendance",  "attendance"),
             Map.entry("/v1/wfh",         "attendance"),

@@ -8,7 +8,7 @@
 // as before. Seats have no history: they say "As of today".
 //
 // Release 1 is frontend only on today's backend. Design pieces that need a new endpoint are left out until it
-// exists (never faked): Customise / most-used quick actions (BW-112), the Total employees sparkline and "joined
+// exists (never faked): "most used first" quick actions (BW-112; Customise is in QuickActionsSection), the Total employees sparkline and "joined
 // this month" today (BW-113), the performers' average (BW-114), onboarding department and joining date (BW-115),
 // hiring "this quarter" and conversion (BW-116 / BW-66), project owner / due / health (BW-117), notice event
 // date (BW-118), approval Undo (BW-06) and Remind (BW-10).

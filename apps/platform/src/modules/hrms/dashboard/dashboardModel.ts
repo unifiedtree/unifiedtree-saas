@@ -260,7 +260,7 @@ export const monthName = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} 
 
 // ── Quick actions ────────────────────────────────────────────────────────────
 export interface QuickAction { key: string; label: string; path: string }
-/** Today's six tiles, in today's order, kept only when allowed. (Customise and "most used first" wait for BW-112.) */
+/** Today's six tiles, in today's order, kept only when allowed (the default set; Customise reorders them in QuickActionsSection). */
 export function quickActions(all: readonly (QuickAction & { allowed: boolean })[]): QuickAction[] {
   return all.filter((q) => q.allowed).slice(0, 6).map(({ key, label, path }) => ({ key, label, path }))
 }

@@ -9,7 +9,7 @@ import { P, useAnyPermission, usePermission, useAuthStore as useSdkStore } from 
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson } from '@/core/api/client'
 import {
-  Button, PageFrame, PageHeader, QuickActionGrid, QuickActionTile, SectionHeading, StatCard, StatGrid, type QuickIconKind, type StatCardProps,
+  Button, PageFrame, PageHeader, StatCard, StatGrid, type QuickIconKind, type StatCardProps,
 } from '@/design/kit/display'
 import { DateChip } from '@/design/kit/data'
 import { useToast } from '@/design/kit/overlays'
@@ -31,6 +31,7 @@ import { useTeamTimeOff } from '../../api/shared/useTeamTimeOff'
 import type { ApprovalsInbox, InboxTab } from '../../api/shared/contracts'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../../attendance/attendanceBuckets'
 import { clockIst, workingWindow } from '../../dashboard/dashboardModel'
+import { QuickActionsSection } from '../../dashboard/QuickActionsSection'
 import { WebPunchDialog } from '../../attendance/webpunch/WebPunchDialog'
 import { AssistedPunchDialog } from '../../attendance/webpunch/AssistedPunchDialog'
 import { AttendanceHistory } from '../AttendanceHistory'
@@ -213,7 +214,7 @@ export function HomePage() {
       ? <><b style={{ fontWeight: 500 }}>{hm(active)}</b> into your day, and {n > 0 ? needLine : <>nothing needs you today.</>}</>
       : needLine
 
-  // ── quick actions (Customise and "Most used first" wait for BW-112) ──
+  // ── quick actions (Customise: QuickActionsSection, surface=home; "Most used first" waits for BW-112) ──
   const missed = needItems.filter((x) => x.kind === 'MISSED_PUNCH_OUT')
   const shiftHint = myDay?.shift ? [myDay.shift.name, myDay.shift.start && myDay.shift.end ? `${myDay.shift.start}–${myDay.shift.end}` : ''].filter(Boolean).join(' · ') : undefined
   const tiles: { key: string; label: string; hint?: string; kind: QuickIconKind; badge?: number; path?: string; onClick?: () => void }[] = team ? [
@@ -308,17 +309,10 @@ export function HomePage() {
 
       {statCards.length > 0 && <StatGrid min={230} label={team ? 'Your team today' : 'Your month at a glance'}>{statCards}</StatGrid>}
 
-      {tiles.length > 0 && (
-        <section aria-label="Quick actions" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <SectionHeading title="Quick actions" level={2} />
-          <QuickActionGrid>
-            {tiles.map((t, i) => (
-              <QuickActionTile key={t.key} index={i} label={t.label} hint={t.hint} kind={t.kind} badge={t.badge || null}
-                badgeLabel={t.badge ? `${t.badge} waiting` : undefined} onClick={t.onClick ?? (() => go(t.path as string))} />
-            ))}
-          </QuickActionGrid>
-        </section>
-      )}
+      <QuickActionsSection surface="home" tiles={tiles.map((t) => ({
+        key: t.key, label: t.label, hint: t.hint, kind: t.kind, badge: t.badge || null,
+        badgeLabel: t.badge ? `${t.badge} waiting` : undefined, onClick: t.onClick ?? (() => go(t.path as string)),
+      }))} />
 
       {myDay && (
         <YourDay day={myDay} active={active} target={target} now={now} onBreak={webPunch ? onBreak : undefined} breakBusy={brk.isPending} />
