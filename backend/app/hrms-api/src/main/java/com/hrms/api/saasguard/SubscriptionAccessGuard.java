@@ -49,7 +49,20 @@ import java.util.stream.Collectors;
  * still sign in and see the "your subscription has lapsed, please pay to
  * restore" screen (rendered by the workspace app when it sees 402).
  *
- * <p>402 body shape (frontend-detectable):
+ * <p><b>Only the unpaid modules pause (owner rule, 6 Oct 2026; contract §2 with the HRMS lane).</b>
+ * Once a subscription is past its grace (HALTED past grace_until, or PAST_DUE 7 days after the due
+ * date once V144_1 is applied), only API calls to that subscription's modules ({@code modules[]},
+ * mapped by {@link TenantModuleGuard#moduleForPath}) answer 402 {@code MODULE_PAUSED}; everything
+ * else — sign-in, /me, business settings, billing, notifications — keeps working so the owner can
+ * pay. Cancelled / expired subscriptions follow the same per-module rule.
+ *
+ * <p>402 body for a paused module: {@code code} "MODULE_PAUSED", {@code moduleKey}, {@code companyId}
+ * (null until subscriptions are per company), {@code dueAmountInr}, {@code dueSince},
+ * {@code graceEndedOn}, {@code canPay} (the caller holds workspace.billing.manage) and {@code message},
+ * plus the older {@code error}/{@code status}/{@code graceExpiredAt} so older clients still show
+ * their lapsed screen.
+ *
+ * <p>Older 402 body shape (still sent for a missing ledger row):
  * <pre>{
  *   "error": "subscription_lapsed",
  *   "status": "HALTED",
@@ -103,6 +116,8 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
      *  tests / older build wiring don't have to provide them). */
     private final RazorpayClient razorpay;
     private final SubscriptionStateReconciler reconciler;
+    /** Whether V144_1 (past_due_since) is applied; until then PAST_DUE never pauses (as before). */
+    private final com.unifiedtree.saas.billing.BillingReminderSchema dueDateSchema;
 
     /** B1 FIX (audit 2026-08-15): fail-closed grandfather list. Any tenant whose
      *  UUID is on this list AND has no subscription row is granted access — that
@@ -127,6 +142,7 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.reconciler = reconciler;
+        this.dueDateSchema = new com.unifiedtree.saas.billing.BillingReminderSchema(jdbc);
         this.grandfatheredTenantIds = parseGrandfatherList(grandfatherCsv);
         if (!this.grandfatheredTenantIds.isEmpty()) {
             log.info("SubscriptionAccessGuard grandfather list loaded ({} tenant(s)): {}",
@@ -227,21 +243,46 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
             }
         }
 
-        log.info("subscription-guard BLOCK  tenant={} status={} graceUntil={} path={}",
-                tenantId, sub.status(), sub.graceUntil(), path);
+        // Only the unpaid modules pause: a call that needs no module (sign-in, /me, settings,
+        // users, notifications…) or a module this subscription doesn't cover goes through.
+        String moduleKey = TenantModuleGuard.moduleForPath(path);
+        if (!pauses(sub, moduleKey)) return true;
+
+        log.info("subscription-guard MODULE_PAUSED  tenant={} status={} module={} graceUntil={} path={}",
+                tenantId, sub.status(), moduleKey, sub.graceUntil(), path);
 
         response.setStatus(HttpStatus.PAYMENT_REQUIRED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        // Escape every string interpolated into the JSON body — status is a
-        // controlled DB enum today, but future refactors mustn't create a
-        // silent JSON-injection foot-cannon by echoing a fresh field raw.
-        response.getWriter().write(
-                "{\"error\":\"subscription_lapsed\",\"status\":\"" + escape(sub.status()) + "\","
-                        + (sub.graceUntil() == null
-                            ? "\"graceExpiredAt\":null,"
-                            : "\"graceExpiredAt\":\"" + escape(sub.graceUntil().toString()) + "\",")
-                        + "\"message\":\"" + escape(d.reason()) + "\"}");
+        response.getWriter().write(pausedBody(sub, d, moduleKey, now, canPay(auth)));
         return false;
+    }
+
+    /** Whether this subscription's lapse pauses this module (no module = never; no module list = all). */
+    static boolean pauses(SubStatus sub, String moduleKey) {
+        if (moduleKey == null) return false;
+        return sub.modules() == null || sub.modules().isEmpty() || sub.modules().contains(moduleKey);
+    }
+
+    private static boolean canPay(Authentication auth) {
+        return auth.getAuthorities().stream().map(a -> a.getAuthority())
+                .anyMatch(a -> "workspace.billing.manage".equals(a) || "*".equals(a));
+    }
+
+    /** The 402 MODULE_PAUSED body (escapes every string it interpolates). */
+    static String pausedBody(SubStatus sub, AccessDecision d, String moduleKey, Instant now, boolean canPay) {
+        java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
+        Instant graceEnd = sub.graceUntil() != null ? sub.graceUntil()
+                : sub.pastDueSince() != null ? sub.pastDueSince().plus(GRACE) : null;
+        return "{\"code\":\"MODULE_PAUSED\",\"error\":\"subscription_lapsed\","
+                + "\"status\":\"" + escape(sub.status()) + "\","
+                + "\"graceExpiredAt\":" + (graceEnd == null ? "null" : "\"" + escape(graceEnd.toString()) + "\"") + ","
+                + "\"moduleKey\":\"" + escape(moduleKey) + "\","
+                + "\"companyId\":null,"
+                + "\"dueAmountInr\":" + (sub.amountInr() == null ? "null" : sub.amountInr().stripTrailingZeros().toPlainString()) + ","
+                + "\"dueSince\":" + (sub.pastDueSince() == null ? "null" : "\"" + sub.pastDueSince().atZone(ist).toLocalDate() + "\"") + ","
+                + "\"graceEndedOn\":" + (graceEnd == null ? "null" : "\"" + graceEnd.atZone(ist).toLocalDate() + "\"") + ","
+                + "\"canPay\":" + canPay + ","
+                + "\"message\":\"" + escape(d.reason()) + "\"}";
     }
 
     private boolean recentlyChecked(UUID tenantId, Instant now) {
@@ -251,17 +292,28 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
 
     // -- decision -------------------------------------------------------------
 
+    /** Grace after the due date (owner rule, 6 Oct 2026). */
+    static final java.time.Duration GRACE = java.time.Duration.ofDays(7);
+
     static AccessDecision evaluate(SubStatus sub, Instant now) {
         return switch (sub.status()) {
-            case "TRIALING", "ACTIVE", "PAST_DUE", "PAUSED", "GRACE" ->
+            case "PAST_DUE" -> {
+                // Razorpay is still retrying; pause once 7 days have passed since the due date.
+                if (sub.pastDueSince() != null && !sub.pastDueSince().plus(GRACE).isAfter(now)) {
+                    yield AccessDecision.deny("The payment due on this subscription wasn't received within 7 days. "
+                            + "Pay to continue; sign-in stays open.");
+                }
+                yield AccessDecision.allow();
+            }
+            case "TRIALING", "ACTIVE", "PAUSED", "GRACE" ->
                     AccessDecision.allow();
             case "HALTED" -> {
                 if (sub.graceUntil() != null && sub.graceUntil().isAfter(now)) {
                     yield AccessDecision.allow();       // still inside grace
                 }
                 yield AccessDecision.deny(
-                        "Your subscription payment failed and the 7-day grace period ended. "
-                      + "Renew your mandate to restore access.");
+                        "The payment wasn't received and the 7-day grace period has ended. "
+                      + "Pay to continue; sign-in stays open.");
             }
             case "CANCELLED", "EXPIRED", "COMPLETED" -> {
                 // Honour whatever period the customer paid for. onCancelled
@@ -291,19 +343,28 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         // subscription per tenant — but be safe on ORDER BY).
         // razorpay_subscription_id included so the guard can double-check
         // with Razorpay before locking out a HALTED-past-grace customer.
+        boolean dueDates = dueDateSchema.ready();
         try {
             return jdbc.queryForObject("""
-                    SELECT status, grace_until, razorpay_subscription_id
+                    SELECT status, grace_until, razorpay_subscription_id, modules, amount_inr,
+                           """ + (dueDates ? "past_due_since" : "NULL::timestamptz AS past_due_since") + """
+
                       FROM platform.subscriptions
                      WHERE tenant_id = ?
                      ORDER BY updated_at DESC NULLS LAST, created_at DESC
                      LIMIT 1
                     """, (rs, n) -> {
                 Timestamp t = rs.getTimestamp("grace_until");
+                Timestamp due = rs.getTimestamp("past_due_since");
+                java.sql.Array arr = rs.getArray("modules");
+                List<String> modules = arr == null ? List.of() : Arrays.asList((String[]) arr.getArray());
                 return new SubStatus(
                         rs.getString("status"),
                         t == null ? null : t.toInstant(),
-                        rs.getString("razorpay_subscription_id"));
+                        rs.getString("razorpay_subscription_id"),
+                        modules,
+                        rs.getBigDecimal("amount_inr"),
+                        due == null ? null : due.toInstant());
             }, tenantId);
         } catch (EmptyResultDataAccessException e) {
             return null;
@@ -335,9 +396,10 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
 
     // -- records --------------------------------------------------------------
 
-    public record SubStatus(String status, Instant graceUntil, String razorpaySubscriptionId) {
+    public record SubStatus(String status, Instant graceUntil, String razorpaySubscriptionId,
+                            List<String> modules, java.math.BigDecimal amountInr, Instant pastDueSince) {
         /** Convenience for tests that only care about status + grace. */
-        public SubStatus(String status, Instant graceUntil) { this(status, graceUntil, null); }
+        public SubStatus(String status, Instant graceUntil) { this(status, graceUntil, null, List.of(), null, null); }
     }
 
     public record AccessDecision(boolean allowed, String reason) {
