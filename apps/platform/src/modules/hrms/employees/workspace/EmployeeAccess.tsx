@@ -155,7 +155,8 @@ function UserAccess({ user, name, links }: { user: WorkspaceUser; name: string; 
   })
   const onGive = (r: AssignableRole) => { if (isRisky(r.riskLevel)) setConfirmGrant(r); else give(r) }
   // A new role made here is given through the list of roles you may give (read again after it is made).
-  const startCreateRole = () => { setRoleDraft(roleDraftFor('create')); roleCreate.start() }
+  // The role panel takes the place of Give a role (a side panel can't open over another one).
+  const startCreateRole = () => { setPicking(false); setRoleDraft(roleDraftFor('create')); roleCreate.start() }
   const saveRole = () => void roleCreate.save(async (): Promise<CreatedRolePick> => {
     const missing = roleDraftProblem(roleDraft, true)
     if (missing) throw new Error(missing)

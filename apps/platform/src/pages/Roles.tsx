@@ -224,7 +224,8 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
   const { data: companies = [] } = useCompanies()
   const multi = companies.length > 1
   const canEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
-  const { data: grants = [] } = useCompanyGrants(multi)
+  const canUsersRead = usePermission(P.WORKSPACE_USERS_READ)
+  const { data: grants = [] } = useCompanyGrants(multi && canUsersRead)
   const homes = useHomeCompanies(users.map((u) => u.employeeId).filter((id): id is string => !!id), multi && canEmployees)
   const [companyId, setCompanyId] = useState('')
   const companyName = useMemo(() => new Map(companies.map((c) => [c.id, c.name])), [companies])

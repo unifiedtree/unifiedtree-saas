@@ -48,7 +48,7 @@ async function login(email) {
 
 const browser = await chromium.launch()
 const errors = [], failed = []
-let companyB = null, mgrUser = null, createdRoleId = null
+let companyB = null, mgrUser = null, createdRoleId = null, currentPage = null
 try {
   const owner = await login('owner@unifiedtree.demo')
   const mgr = await login('mgr@unifiedtree.demo')
@@ -59,18 +59,29 @@ try {
 
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
   const page = await ctx.newPage()
+  currentPage = page
   page.on('pageerror', (e) => errors.push(String(e.message || e)))
   page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400 && !r.url().includes('/canonical-auth/refresh')) failed.push(`${r.status()} ${r.request().method()} ${r.url().split('/api')[1]}`) })
   const settle = async () => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(700) }
-  await page.goto(base + '/login')
+  page.setDefaultTimeout(60_000); page.setDefaultNavigationTimeout(120_000)
+  // The owner is asked to check in with their face after signing in: carry on without it.
+  const later = async () => {
+    const btn = page.getByRole('button', { name: 'Continue without checking in' })
+    if (await btn.isVisible().catch(() => false)) { await btn.click().catch(() => {}); await page.waitForTimeout(400) }
+  }
+  const open = async (path) => { await page.goto(base + path); await settle(); await later() }
+  // The first load compiles the app in vite: give it time.
+  await page.goto(base + '/login', { timeout: 180_000 })
   await page.locator('input[type=email]').fill('owner@unifiedtree.demo')
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 120_000 })
+  await page.getByRole('button', { name: 'Continue without checking in' }).waitFor({ timeout: 20_000 }).catch(() => {})
+  await later()
   errors.length = 0; failed.length = 0
 
   // ── Access tab: roles ──
-  await page.goto(`${base}/hrms/employees/${mgr.employeeId}?tab=access`); await settle()
+  await open(`/hrms/employees/${mgr.employeeId}?tab=access`)
   const rolesList = page.getByRole('list', { name: /’s roles$/ })
   check('access tab: shows their roles', (await rolesList.getByText('Dept Manager', { exact: true }).count()) === 1)
   await page.getByRole('button', { name: 'Give a role', exact: true }).click()
@@ -111,7 +122,7 @@ try {
   check('company access: shows in the tab', (await page.getByRole('list', { name: /’s companies$/ }).getByText(companyName).count()) >= 1)
 
   // ── Roles & permissions: who has what per company ──
-  await page.goto(`${base}/roles?view=assignments`); await settle()
+  await open('/roles?view=assignments')
   await page.getByRole('button', { name: /^Company/ }).first().click()
   await page.getByRole('option', { name: companyName }).click()
   await settle()
@@ -121,7 +132,7 @@ try {
   await page.screenshot({ path: `${shots}/w30-roles-assignments-1440.png`, fullPage: true })
 
   // ── remove the company access and the new role from the tab ──
-  await page.goto(`${base}/hrms/employees/${mgr.employeeId}?tab=access`); await settle()
+  await open(`/hrms/employees/${mgr.employeeId}?tab=access`)
   await page.getByRole('button', { name: `Remove Employee in ${companyName}` }).click()
   const dlg = page.getByRole('dialog', { name: `Remove access to ${companyName}?` })
   await dlg.getByRole('button', { name: 'Remove', exact: true }).click()
@@ -141,7 +152,8 @@ try {
 
   check('no refused API calls or page errors', !failed.length && !errors.length, failed[0] || errors[0] || '')
 } catch (e) {
-  check('run finished', false, String(e.message || e).slice(0, 300))
+  check('run finished', false, String(e.message || e).slice(0, 1500))
+  await currentPage?.screenshot({ path: `${shots}/w30-roles-failure.png`, fullPage: true }).catch(() => {})
 } finally {
   try {
     const owner = await login('owner@unifiedtree.demo')
