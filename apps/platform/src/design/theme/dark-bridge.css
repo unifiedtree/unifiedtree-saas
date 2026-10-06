@@ -724,3 +724,9 @@
     --tf: color-mix(in oklab, var(--ts) 55%, #fff) !important;
   }
 }
+
+/* w43: the Master "Add a …" card's hover fill was the light mint (rgba(236,253,245,.6)), a pale grey slab with
+   unreadable green text in dark; use the dark brand tint. */
+[data-theme='dark'] .utm .add-card:hover {
+  background-color: var(--u-brs, #14261E);
+}

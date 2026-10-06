@@ -14,7 +14,7 @@
 //
 //   node e2e/recovery/live-w3-w43-workforce.mjs
 //   env: RECOVERY_APP_URL, RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev), RECOVERY_PASSWORD
-/* global process, console, fetch, Blob, FormData */
+/* global process, console, fetch, Blob, FormData, Buffer, URL, localStorage */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'

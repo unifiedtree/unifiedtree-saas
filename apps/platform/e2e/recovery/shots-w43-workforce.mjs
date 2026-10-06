@@ -1,4 +1,4 @@
-/* global console, process */
+/* global console, process, localStorage */
 // Screenshots of every Workforce page (w43, 6 Oct 2026) at 1440 and 390, light and dark, for the
 // icon-alignment pass. Read-only: nothing is created. Saves to SHOTS/w43-<tag>-<page>-<w>-<theme>.png.
 // Run from apps/platform (inside live-slot.sh):  TAG=before node e2e/recovery/shots-w43-workforce.mjs
