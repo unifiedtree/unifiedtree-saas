@@ -30,6 +30,7 @@ const CATALOG: Record<string, string> = {
   PERFORMANCE_REVIEW_REMINDER: 'Performance', TEAM_MESSAGE: 'Team', WELCOME: 'People', RETIREMENT_DUE: 'People', PROBATION_TEAM_DECISION: 'People',
   PUNCH_IN_ALERT: 'Attendance', CELEBRATION_WISH: 'People',
   LETTER_SIGNATURE_REQUESTED: 'Letters', SUBSCRIPTION_HALTED: 'Billing', BILLING_OVER_CAP: 'Billing', TRIAL_ENDING_SOON: 'Billing', TRIAL_EXPIRED: 'Billing',
+  PAYMENT_DUE_SOON: 'Billing', PAYMENT_OVERDUE: 'Billing',
   GENERAL: 'Other',
 }
 

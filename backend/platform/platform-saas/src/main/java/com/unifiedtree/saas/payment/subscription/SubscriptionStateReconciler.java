@@ -46,6 +46,8 @@ public class SubscriptionStateReconciler {
      *  grace on. Nullable so unit tests / older wiring don't have to
      *  provide it; if absent, the SQL falls back to a 3-day courtesy grace. */
     private final com.unifiedtree.saas.payment.RazorpayClient razorpay;
+    /** Whether V144_1 (past_due_since) is applied; until it is, the due-date bookkeeping is skipped. */
+    private final com.unifiedtree.saas.billing.BillingReminderSchema dueDateSchema;
 
     // @Autowired is REQUIRED with multiple public ctors on a Spring bean —
     // otherwise Spring picks the no-arg heuristic and fails with
@@ -57,6 +59,7 @@ public class SubscriptionStateReconciler {
         this.jdbc = jdbc;
         this.events = events;
         this.razorpay = razorpayProvider == null ? null : razorpayProvider.getIfAvailable();
+        this.dueDateSchema = new com.unifiedtree.saas.billing.BillingReminderSchema(jdbc);
     }
 
     /** Test / legacy 2-arg constructor. No Razorpay fallback available. */
@@ -64,6 +67,7 @@ public class SubscriptionStateReconciler {
         this.jdbc = jdbc;
         this.events = events;
         this.razorpay = null;
+        this.dueDateSchema = new com.unifiedtree.saas.billing.BillingReminderSchema(jdbc);
     }
 
     // -- state mutators --------------------------------------------------------
@@ -104,6 +108,7 @@ public class SubscriptionStateReconciler {
         if (rows == 0) {
             log.info("onActive({}) — no ledger row (or already terminal); noop", subscriptionId);
         } else {
+            clearPastDue(subscriptionId);
             log.info("Subscription {} -> ACTIVE (nextCharge={}, method={}, grace cleared)",
                     subscriptionId, chargeAt, method);
         }
@@ -111,6 +116,7 @@ public class SubscriptionStateReconciler {
 
     public void onPending(String subscriptionId, JsonNode subNode) {
         Long chargeAt = optLong(subNode, "charge_at");
+        markPastDue(subscriptionId);   // before next_charge_at moves to Razorpay's retry date
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'PAST_DUE',
@@ -127,8 +133,9 @@ public class SubscriptionStateReconciler {
     }
 
     /**
-     * Razorpay exhausted its own retries. Set HALTED and START the 7-day
-     * grace window. Grace is set unconditionally here (not COALESCE) — a
+     * Razorpay exhausted its own retries. Set HALTED and start the grace
+     * window: 7 days after the due date of the failed charge once V144_1 is
+     * applied ({@link #graceFromDueDate}), else 7 days from now as before. Grace is set unconditionally here (not COALESCE) — a
      * bouncing subscription that goes ACTIVE (grace cleared) then HALTED
      * again gets a fresh 7-day window each time.
      *
@@ -139,6 +146,7 @@ public class SubscriptionStateReconciler {
      * re-fire the notification every sweep.
      */
     public boolean onHalted(String subscriptionId) {
+        markPastDue(subscriptionId);
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'HALTED',
@@ -154,7 +162,8 @@ public class SubscriptionStateReconciler {
                                                                     )
                 """, subscriptionId);
         if (rows > 0) {
-            log.warn("Subscription {} -> HALTED (7-day grace started)", subscriptionId);
+            graceFromDueDate(subscriptionId);
+            log.warn("Subscription {} -> HALTED (grace: 7 days after the due date)", subscriptionId);
             // Publish SubscriptionHaltedEvent so the admin gets an email +
             // in-app notification. Gated on rows>0 which means this call is
             // the one that actually transitioned the row — later reconciler
@@ -162,6 +171,38 @@ public class SubscriptionStateReconciler {
             publishHalted(subscriptionId);
         }
         return rows > 0;
+    }
+
+    // -- due date & grace (owner rule, 6 Oct 2026: grace is 7 days after the due date) --
+
+    /** First failed charge: remember when it was due (kept while Razorpay retries). */
+    private void markPastDue(String subscriptionId) {
+        if (!dueDateSchema.ready()) return;
+        jdbc.update("""
+                UPDATE platform.subscriptions
+                   SET past_due_since = COALESCE(past_due_since, LEAST(next_charge_at, now()), now())
+                 WHERE razorpay_subscription_id = ?
+                   AND status NOT IN (""" + TERMINAL_STATUSES_SQL_LIST + """
+                                    )
+                """, subscriptionId);
+    }
+
+    /** A charge went through: no longer past due. */
+    private void clearPastDue(String subscriptionId) {
+        if (!dueDateSchema.ready()) return;
+        jdbc.update("UPDATE platform.subscriptions SET past_due_since = NULL WHERE razorpay_subscription_id = ?",
+                subscriptionId);
+    }
+
+    /** Grace runs 7 days from the due date, not from when Razorpay gave up retrying. */
+    private void graceFromDueDate(String subscriptionId) {
+        if (!dueDateSchema.ready()) return;
+        jdbc.update("""
+                UPDATE platform.subscriptions
+                   SET grace_until = past_due_since + interval '7 days'
+                 WHERE razorpay_subscription_id = ?
+                   AND past_due_since IS NOT NULL
+                """, subscriptionId);
     }
 
     /** Read tenant/subdomain/grace_until for the halted row and fire the event. */

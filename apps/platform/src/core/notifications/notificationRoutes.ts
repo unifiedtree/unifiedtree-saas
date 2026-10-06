@@ -30,6 +30,7 @@ export const NOTIFICATION_TYPES = [
   'INTERVIEW_SCHEDULED', 'INTERVIEW_RESCHEDULED', 'INTERVIEW_CANCELLED',
   'SKILL_ASSESSMENT_SUBMITTED', 'SKILL_ASSESSMENT_APPROVED', 'SKILL_ASSESSMENT_REJECTED',
   'WELCOME', 'TRIAL_ENDING_SOON', 'TRIAL_EXPIRED', 'SUBSCRIPTION_HALTED', 'BILLING_OVER_CAP',
+  'PAYMENT_DUE_SOON', 'PAYMENT_OVERDUE',
   'RETIREMENT_DUE',
   // The redesign's 13 (CONTRACTS.md, C0); OVERTIME_REQUESTED above is P-ATT-PLAN's.
   'DECISION_UNDONE', 'CHECKIN_REMINDER', 'PERFORMANCE_REVIEW_REMINDER', 'TEAM_MESSAGE', 'ASSET_ISSUE_REPORTED',
@@ -63,7 +64,7 @@ export function groupFor(type: string): string {
   if (type === 'TEAM_MESSAGE') return 'Team'
   if (type === 'WELCOME' || type === 'RETIREMENT_DUE' || type === 'PROBATION_TEAM_DECISION' || type === 'CELEBRATION_WISH') return 'People'
   if (type === 'LETTER_SIGNATURE_REQUESTED') return 'Letters'
-  if (type.startsWith('TRIAL_') || type === 'SUBSCRIPTION_HALTED' || type === 'BILLING_OVER_CAP') return 'Billing'
+  if (type.startsWith('TRIAL_') || type.startsWith('PAYMENT_') || type === 'SUBSCRIPTION_HALTED' || type === 'BILLING_OVER_CAP') return 'Billing'
   return 'Other'
 }
 
@@ -212,7 +213,8 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
     // A colleague wished you: the Celebrations page, with "Your wishes" (the route sent is the app's).
     case 'CELEBRATION_WISH': return '/me/celebrations'
     // Billing: the plan page explains each case.
-    case 'TRIAL_ENDING_SOON': case 'TRIAL_EXPIRED': case 'SUBSCRIPTION_HALTED': case 'BILLING_OVER_CAP': return '/plan'
+    case 'TRIAL_ENDING_SOON': case 'TRIAL_EXPIRED': case 'SUBSCRIPTION_HALTED': case 'BILLING_OVER_CAP':
+    case 'PAYMENT_DUE_SOON': case 'PAYMENT_OVERDUE': return '/plan'
     case 'WELCOME': return '/'
   }
   if (type.startsWith('LEAVE_')) return '/hrms/leave?tab=my'
@@ -224,8 +226,8 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
 /** Severity (the dead NotificationPanel's tone). */
 export function severityFor(type: string): 'success' | 'warning' | 'error' | 'info' {
   if (type.endsWith('_APPROVED') || type === 'FACE_ENROLLMENT_COMPLETE' || type === 'WELCOME') return 'success'
-  if (type.endsWith('_REJECTED') || type === 'FACE_ENROLLMENT_FAILED' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED') return 'error'
-  if (type.endsWith('_SUBMITTED') || type === 'TRIAL_ENDING_SOON' || type === 'BILLING_OVER_CAP' || type === 'FACE_ENROLLMENT_RESET') return 'warning'
+  if (type.endsWith('_REJECTED') || type === 'FACE_ENROLLMENT_FAILED' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED' || type === 'PAYMENT_OVERDUE') return 'error'
+  if (type.endsWith('_SUBMITTED') || type === 'TRIAL_ENDING_SOON' || type === 'PAYMENT_DUE_SOON' || type === 'BILLING_OVER_CAP' || type === 'FACE_ENROLLMENT_RESET') return 'warning'
   return 'info'
 }
 
