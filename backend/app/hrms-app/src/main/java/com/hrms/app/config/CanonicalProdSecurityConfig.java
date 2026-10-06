@@ -152,6 +152,10 @@ public class CanonicalProdSecurityConfig {
                     // (PublicBrandingController). Returns nothing else.
                     "/v1/public/workspace-branding",
                     "/v1/public/workspace-branding/*/*",
+                    // Employee photos, branch and agency logos (V143.102,
+                    // PublicRecordImageController): one image by tenant + a
+                    // random token that changes on every upload. Nothing else.
+                    "/v1/public/images/*/*",
                     // "/v1/public/module-request" REMOVED from permitAll
                     // 2026-08-14 (Bundle B4 D4). Anonymous access here was a
                     // tenant-poisoning surface: any caller could POST an
