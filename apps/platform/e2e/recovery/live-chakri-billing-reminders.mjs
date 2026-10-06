@@ -14,13 +14,12 @@
 //  - Web: the owner sees the reminder in the notification panel; it opens the plan page.
 // The planted subscriptions are dated 2000-01-01 so they are never the "newest" row the access
 // guard reads. Everything planted is removed at the end.
-/* global process, console, fetch, setTimeout */
+/* global process, console, setTimeout, crypto, URL */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 
 const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3002'
-const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const db = process.env.RECOVERY_DB || 'ut_w3_dev'
 const shots = process.env.W3_SHOTS || 'C:/REACT/ut-wt/_results/shots'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'

@@ -8,7 +8,7 @@
 //  - GET /v1/workspace/seats/usage then reports overBy 1, extraBilledAtCycleEnd true, seatsBought = the cap,
 //    seatsUsed = the count, and still carries the old fields (purchased, current, currentExcludingAdmin, remaining).
 // The seats are put back and the employee is removed at the end.
-/* global process, console, fetch */
+/* global crypto, process, console, fetch */
 import { execFileSync } from 'node:child_process'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'

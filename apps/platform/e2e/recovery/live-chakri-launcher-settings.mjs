@@ -9,7 +9,7 @@
 //  - Finance lead (fin@): only the cards their permissions open — never Billing & plan (owner/super admin only).
 //  - Phone (390 wide): the cards stack; no page errors anywhere. Searching apps hides the section.
 // Read-only: nothing is created.
-/* global process, console */
+/* global process, console, URL */
 import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 
