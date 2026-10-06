@@ -17,6 +17,7 @@ import { DocumentTypesTab } from './SettingsDocumentTypes'
 import { NotificationChoiceSections, useNotificationChoices, type NotificationChoicesState } from './NotificationChoices'
 import { BrandingTab } from './branding/BrandingTab'
 import { WorkspaceProfileSettings } from './SettingsWorkspaceProfile'
+import { BillingByCompany } from './billing/BillingByCompany'
 import { SecuritySettings } from './SettingsSecurity'
 import { DangerZoneSettings } from './SettingsDangerZone'
 
@@ -151,7 +152,8 @@ const BillingTab: React.FC = () => {
               )}
         <div><HrButton onClick={() => navigate('/plan')}>{subs && subs.length === 0 && !failed ? 'Choose modules' : 'Manage plan'}</HrButton></div>
       </SettingsSection>
-      <SettingsSection id="invoices" icon="receipt" title="Invoices" summary="Razorpay emails an invoice to your registered address after every successful charge. Downloading past invoices here is coming soon." soon />
+      {subs && subs.length > 0 && !failed && <BillingByCompany />}
+      <SettingsSection id="invoices" icon="receipt" title="Invoices" summary="Razorpay emails the invoice for each charge to your registered address. Downloading past invoices here is coming soon." soon />
     </>
   )
 }
