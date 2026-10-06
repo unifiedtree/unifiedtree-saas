@@ -78,6 +78,51 @@ class DashboardSummaryStatsTest {
         assertEquals(1L, stats.get("leftInMonth"));
     }
 
+    @Test void aRangeEndingOnAPastDaySendsThatDaysHeadcountAndThePeriodsJoinersAndLeavers() {
+        LocalDate end = LocalDate.now(DashboardAsOf.IST).minusDays(10), from = end.minusDays(5);
+        when(history.moves(tenant, company, from, end, true)).thenReturn(new DashboardAsOf.Moves(3, 2));
+        Map<String, Object> stats = controller.stats(company, end, from, holding("org.company.read", "hrms.employee.read"));
+
+        // The end day's headcount, exactly as for that one day…
+        verify(history).headcount(tenant, company, end, true);
+        assertEquals(11L, stats.get("headcount"));
+        assertEquals(2L, stats.get("joinedInMonth"));
+        // …and the period's joiners and leavers, counted with the past-day rule.
+        assertEquals(3L, stats.get("joinedInPeriod"));
+        assertEquals(2L, stats.get("leftInPeriod"));
+        assertEquals(from.toString(), stats.get("periodFrom"));
+        assertEquals(end.toString(), stats.get("periodTo"));
+    }
+
+    @Test void aRangeEndingTodayIsTodaysSummaryWithThePeriodsMoves() {
+        LocalDate today = LocalDate.now(DashboardAsOf.IST), from = today.minusDays(6);
+        when(history.moves(tenant, company, from, today, false)).thenReturn(new DashboardAsOf.Moves(1, 0));
+        Map<String, Object> stats = controller.stats(company, null, from, holding("org.company.read", "hrms.employee.read"));
+
+        verify(history).headcount(tenant, company, today);
+        assertFalse(stats.containsKey("joinedInMonth"));
+        assertEquals(1L, stats.get("joinedInPeriod"));
+        assertEquals(0L, stats.get("leftInPeriod"));
+        assertEquals(today.toString(), stats.get("periodTo"));
+    }
+
+    @Test void aStartOnOrAfterTheEndIsOneDaysSummary() {
+        LocalDate end = LocalDate.now(DashboardAsOf.IST).minusDays(3);
+        Map<String, Object> same = controller.stats(company, end, end, holding("org.company.read", "hrms.employee.read"));
+        Map<String, Object> later = controller.stats(company, end, end.plusDays(1), holding("org.company.read", "hrms.employee.read"));
+        verify(history, never()).moves(any(), any(), any(), any(), anyBoolean());
+        assertFalse(same.containsKey("joinedInPeriod"));
+        assertFalse(later.containsKey("joinedInPeriod"));
+    }
+
+    @Test void aRangeWithoutEmployeeReadHasNoPeopleFigures() {
+        LocalDate today = LocalDate.now(DashboardAsOf.IST);
+        Map<String, Object> stats = controller.stats(company, null, today.minusDays(6), holding("org.company.read"));
+        verifyNoInteractions(history);
+        assertFalse(stats.containsKey("joinedInPeriod"));
+        assertFalse(stats.containsKey("headcount"));
+    }
+
     @Test void withoutEmployeeReadThereAreNoPeopleFigures() {
         Map<String, Object> stats = controller.stats(company, null, holding("org.company.read"));
 

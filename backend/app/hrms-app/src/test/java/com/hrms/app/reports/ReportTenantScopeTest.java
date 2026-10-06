@@ -87,14 +87,46 @@ class ReportTenantScopeTest {
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).queryForList(sql.capture(), args.capture());
         assertTenantScoped(sql.getValue(), args.getValue());
-        assertThat(sql.getValue()).contains(ReportService.STATUS_ON).contains(ReportService.EMPLOYED_ON);
+        // D is a past date: a leaver counts through their last working day, as on the dashboard (6 Oct).
+        assertThat(sql.getValue()).contains(ReportService.STATUS_ON).contains(ReportService.EMPLOYED_THROUGH);
         assertWellJoined(sql.getValue());
         assertThat(args.getValue()).containsExactly(TENANT, D, TENANT, D, D, TENANT, TENANT, CO, D, D);
     }
 
+    @Test
+    void headcountForTodayKeepsTodaysRule() {
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        reports.headcountReport(CO, today);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).queryForList(sql.capture(), args.capture());
+        assertThat(sql.getValue()).contains(ReportService.EMPLOYED_ON).doesNotContain(ReportService.EMPLOYED_THROUGH)
+                .contains("AND e.date_of_joining <= ?");
+        assertTenantScoped(sql.getValue(), args.getValue());
+        assertThat(args.getValue()).containsExactly(TENANT, today, TENANT, today, today, TENANT, TENANT, CO, today, today);
+    }
+
+    @Test
+    void aPastDateCountsALeaverThroughTheirLastWorkingDay() {
+        // The dashboard's rule (DashboardAsOf.employedThrough): joined by then, a missing joining date is the
+        // day the record was created, and a leaver is gone only after their last working day (strictly before).
+        assertThat(ReportService.employedOn(D)).isEqualTo(ReportService.EMPLOYED_THROUGH);
+        assertThat(ReportService.employedOn(D.minusYears(3))).isEqualTo(ReportService.EMPLOYED_THROUGH);
+        assertThat(ReportService.EMPLOYED_THROUGH)
+                .contains("COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= ?")
+                .contains("COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') < ?")
+                .contains("e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')");
+        // Today (and later) keeps today's rule: the last working day counts as gone, as today's roster.
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        assertThat(ReportService.employedOn(today)).isEqualTo(ReportService.EMPLOYED_ON);
+        assertThat(ReportService.employedOn(today.plusDays(5))).isEqualTo(ReportService.EMPLOYED_ON);
+        assertThat(ReportService.EMPLOYED_ON).contains("<= ?");
+    }
+
     /** The shared fragments join with a space: no keyword runs into the next word (a text block drops trailing spaces). */
     private static void assertWellJoined(String sql) {
-        assertThat(sql).contains("AND e.date_of_joining <= ?").doesNotContainPattern("(?i)\\b(AND|WITH)(e\\.|status_on)");
+        assertThat(sql).containsPattern("AND (e\\.date_of_joining <= \\?|COALESCE\\(e\\.date_of_joining, )")
+                .doesNotContainPattern("(?i)\\b(AND|WITH)(e\\.|status_on|COALESCE)");
     }
 
     @Test
@@ -106,7 +138,7 @@ class ReportTenantScopeTest {
         String q = sql.getValue();
         assertTenantScoped(q, args.getValue());
         // Same status-history CTEs and the same "employed on" rule as the headcount report…
-        assertThat(q).contains(ReportService.STATUS_ON).contains(ReportService.EMPLOYED_ON);
+        assertThat(q).contains(ReportService.STATUS_ON).contains(ReportService.employedOn(D));
         assertWellJoined(q);
         assertThat(q).contains("hrms.employee_status_history");
         // …and exactly its active + on notice + probation people (suspended and others are not counted).

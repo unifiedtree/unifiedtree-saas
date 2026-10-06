@@ -124,6 +124,24 @@ public final class DashboardAsOf {
         return new Headcount(total, active, probation, notice, joined, left);
     }
 
+    /** Joiners and leavers of a period (the dashboard's date range). */
+    public record Moves(int joined, int left) {}
+
+    /**
+     * Joiners (joining date) and leavers (last working day, else termination
+     * date) from {@code from} to {@code to}, both included: the counts the
+     * month's ones are, over any period.
+     */
+    public static Moves moves(List<Person> people, LocalDate from, LocalDate to) {
+        int joined = 0, left = 0;
+        for (Person p : people) {
+            if (p.joined() != null && !p.joined().isBefore(from) && !p.joined().isAfter(to)) joined++;
+            LocalDate l = leftOn(p);
+            if (l != null && !l.isBefore(from) && !l.isAfter(to)) left++;
+        }
+        return new Moves(joined, left);
+    }
+
     /** Still employed on {@code date} for attendance: a leaver works their last working day. */
     public static boolean workedOn(LocalDate lastDay, LocalDate date) {
         return lastDay == null || !lastDay.isBefore(date);

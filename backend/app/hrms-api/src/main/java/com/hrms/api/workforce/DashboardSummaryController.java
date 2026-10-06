@@ -24,10 +24,32 @@ public class DashboardSummaryController {
  private boolean allowed(Authentication auth,String permission){return auth.getAuthorities().stream().anyMatch(a->a.getAuthority().equals(permission));}
  /** A date before today (IST) asks for the history view. No date, today or a later date: today's live view, unchanged. */
  static LocalDate pastDate(LocalDate date){return date!=null&&date.isBefore(LocalDate.now(DashboardAsOf.IST))?date:null;}
+ /** One day's summary (no range). */
+ public Map<String,Object> stats(UUID companyId,LocalDate date,Authentication auth){
+  return stats(companyId,date,null,auth);
+ }
+ /**
+  * {@code from} (optional): the first day of the dashboard's date range, which ends on {@code date} (today when
+  * none). The summary is the end day's, as for one day, plus the period's joiners and leavers
+  * ({@code joinedInPeriod}, {@code leftInPeriod}, {@code periodFrom}, {@code periodTo}). Without it, or on or
+  * after the end day: one day's summary, unchanged.
+  */
  @GetMapping("/stats")
  @PreAuthorize("hasAuthority('org.company.read')")
  @Transactional(readOnly=true)
- public Map<String,Object> stats(@RequestParam UUID companyId,@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date,Authentication auth){
+ public Map<String,Object> stats(@RequestParam UUID companyId,@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date,
+                                 @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,Authentication auth){
+  Map<String,Object> result=day(companyId,date,auth);
+  LocalDate past=pastDate(date),end=past!=null?past:LocalDate.now(DashboardAsOf.IST);
+  if(from!=null&&from.isBefore(end)&&allowed(auth,"hrms.employee.read")){
+   // A past end day counts leavers on their last working day, as its headcount does.
+   DashboardAsOf.Moves m=history.moves(TenantContext.requireTenantId(),companyId,from,end,past!=null);
+   result.put("joinedInPeriod",(long)m.joined());result.put("leftInPeriod",(long)m.left());
+   result.put("periodFrom",from.toString());result.put("periodTo",end.toString());
+  }
+  return result;
+ }
+ private Map<String,Object> day(UUID companyId,LocalDate date,Authentication auth){
   LocalDate past=pastDate(date);
   if(past!=null)return statsOn(companyId,past,auth);
   UUID tenant=TenantContext.requireTenantId();LocalDate today=LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));

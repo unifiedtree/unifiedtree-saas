@@ -73,6 +73,17 @@ class ReportPdfServiceTest {
         assertThat(t).contains("Headcount report", "Acme <Retail> & Co", "Engineering", "No department", "Downloaded by Asha Rao", "1 Sep 2026");
         assertThat(t).contains("14"); // total headcount
         assertThat(t.toLowerCase()).doesNotContain("unifiedtree").doesNotContain("unified tree");
+        // A past date says leavers count through their last working day, as the dashboard counts them.
+        assertThat(t.replaceAll("\\s+", " ")).contains("Someone who left counts through their last working day.");
+    }
+
+    @Test
+    void headcountPdfForTodaySaysLeaversAreNotCounted() throws Exception {
+        LocalDate today = LocalDate.now(ReportPdfService.IST);
+        when(reports.headcountReport(CO, today)).thenReturn(List.of(
+                row("department_id", ENG, "department", "Engineering", "total", 3L, "active", 3L, "on_notice", 0L, "probation", 0L)));
+        String t = text(service.render(ReportKind.HEADCOUNT, new ReportPdfService.Params(CO, null, null, today, null), Set.of("hrms.report.headcount"), null).bytes());
+        assertThat(t.replaceAll("\\s+", " ")).contains("People who have left by that date are not counted.");
     }
 
     @Test

@@ -15,7 +15,7 @@ import java.util.UUID;
 
 /**
  * Loads the rows behind {@link WorkforceBreakdown}: the headcount report's
- * people on a date (the same STATUS_ON and EMPLOYED_ON SQL as
+ * people on a date (the same STATUS_ON and employedOn SQL as
  * {@link ReportService#headcountReport}, so the breakdowns add up to it) and
  * the joining dates of a period. Read-only; every table is filtered by the
  * request's tenant, bound as a parameter (RLS is the second wall), and every
@@ -48,7 +48,7 @@ public class WorkforceBreakdownService {
                   LEFT JOIN hrms.designations g ON g.id = e.designation_id AND g.tenant_id = ?
                  WHERE e.tenant_id = ?
                    AND e.company_id = ?
-                   AND""" + ReportService.EMPLOYED_ON;
+                   AND""" + ReportService.employedOn(asOf);
         UUID t = ReportService.tenant();
         List<WorkforceBreakdown.Person> people = jdbc.query(sql, WorkforceBreakdownService::person,
                 t, asOf, t, asOf, asOf, t, t, t, companyId, asOf, asOf);

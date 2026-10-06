@@ -101,6 +101,37 @@ public class ReportService {
             """;
 
     /**
+     * Who is employed on a past asOf (owner decision, 6 Oct 2026, the admin
+     * dashboard's rule, DashboardAsOf.employedThrough): joined by then (no
+     * joining date: the day the record was created), and a leaver still works
+     * their last working day (else termination date), so the dashboard, the
+     * headcount report, its PDF and the headcount workbook count the same people
+     * on a past date. Takes two parameters: asOf, asOf. Starts with a space,
+     * like EMPLOYED_ON.
+     */
+    static final String EMPLOYED_THROUGH = " " + """
+            COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= ?
+                  AND NOT (
+                        e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
+                    AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') < ?
+                  )
+            """;
+
+    /**
+     * The "employed on asOf" rule for a date: a day before today (India) is a
+     * past date, {@link #EMPLOYED_THROUGH}; today or later, {@link #EMPLOYED_ON}
+     * (by then the exit is recorded and today's roster has left the leaver out
+     * too, as the dashboard's today view). Two parameters either way.
+     */
+    static String employedOn(LocalDate asOf) {
+        return isPast(asOf) ? EMPLOYED_THROUGH : EMPLOYED_ON;
+    }
+
+    static boolean isPast(LocalDate asOf) {
+        return asOf != null && asOf.isBefore(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+    }
+
+    /**
      * Who is on the attendance roll on some day of a range: joined by its last
      * day (no joining date: the day the record was created, the day the
      * effective-status service starts tracking them from), and not gone before
@@ -143,6 +174,8 @@ public class ReportService {
         // An exit only ends employment once the status says so: someone on
         // notice with a future last day is still here; a last working day on or
         // before asOf counts as gone (the status already says they left).
+        // A past asOf counts a leaver through their last working day instead,
+        // as the dashboard does (employedOn, owner decision 6 Oct 2026).
         // department_id lets a click open that department's people. (Gender
         // stays in the diversity report, behind its own permission.)
         //
@@ -165,7 +198,7 @@ public class ReportService {
                 LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
                 WHERE e.tenant_id = ?
                   AND e.company_id = ?
-                  AND """ + EMPLOYED_ON + """
+                  AND """ + employedOn(asOf) + """
                 GROUP BY d.id, d.name
                 ORDER BY total DESC
                 """;
@@ -487,7 +520,7 @@ public class ReportService {
                 LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = ?
                 WHERE e.tenant_id = ?
                   AND e.company_id = ?
-                  AND """ + EMPLOYED_ON + """
+                  AND """ + employedOn(asOf) + """
                   AND (l.employee_id IS NOT NULL
                        OR COALESCE(s.status, e.employment_status)
                           IN ('ACTIVE', 'PROBATION', 'NOTICE_PERIOD', 'EXITED', 'TERMINATED', 'RESIGNED'))

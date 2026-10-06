@@ -161,9 +161,10 @@ class WorkforceBreakdownTest {
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).query(sql.capture(), any(RowMapper.class), args.capture());
         String q = sql.getValue();
-        assertThat(q).contains(ReportService.STATUS_ON).contains(ReportService.EMPLOYED_ON)
+        // The headcount report's own "employed on" rule for the date (a past date: through the last working day).
+        assertThat(q).contains(ReportService.STATUS_ON).contains(ReportService.employedOn(AS_OF))
                 .contains("e.tenant_id = ?").contains("e.company_id = ?").contains("b.tenant_id = ?").contains("g.tenant_id = ?")
-                .contains("AND e.date_of_joining <= ?");
+                .containsPattern("AND (e\\.date_of_joining <= \\?|COALESCE\\(e\\.date_of_joining, )");
         long tenantClauses = q.split("tenant_id = \\?", -1).length - 1;
         assertThat(Arrays.stream(args.getValue()).filter(TENANT::equals).count()).isEqualTo(tenantClauses);
         assertThat(args.getValue()).containsExactly(TENANT, AS_OF, TENANT, AS_OF, AS_OF, TENANT, TENANT, TENANT, CO, AS_OF, AS_OF);
