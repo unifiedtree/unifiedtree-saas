@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
+// Line endings normalised: a Windows checkout (core.autocrlf) stores the CSS with CRLF.
+const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8').replace(/\r\n/g, '\n')
 const tokens = read('./tokens.css')
 const display = read('../kit/display.css')
 const dashboard = read('../../modules/hrms/dashboard/dashboard.css')
