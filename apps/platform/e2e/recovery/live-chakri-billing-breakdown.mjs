@@ -7,6 +7,9 @@
 //    403 for an employee (reader@).
 //  - Web, owner: Settings → Billing shows "Billing by company" with a row per company (name, employees,
 //    amount) and "Print or save as PDF"; no page errors and no API 4xx/5xx. Phone width too.
+// Local data: GET /v1/workspace/plan/current answers 403 here (the demo business has no account link — the
+// same on main), and the Billing tab only shows the breakdown under a loaded plan. So the browser gets one
+// ACTIVE subscription for that call only; the breakdown itself comes from the real backend.
 // Read-only: nothing is created.
 /* global process, console, fetch, URL */
 import { chromium } from '@playwright/test'
@@ -49,6 +52,10 @@ try {
   const bad = []
   for (const width of [1440, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } })
+    await page.route('**/api/v1/workspace/plan/current', (route) => route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ subscriptions: [{ primaryPlanKey: 'hr-employees', planKeys: ['hr-employees'], seats: b.seatsBought ?? 100, billingCycle: 'MONTHLY',
+        unitPriceInr: 40, amountInr: 4000, status: 'ACTIVE', nextChargeAt: new Date(Date.now() + 15 * 86400000).toISOString(), graceUntil: null,
+        razorpaySubscriptionId: 'sub_local_stub', billed: true }] }) }))
     page.on('pageerror', (e) => errors.push(`${width}: ${e.message}`))
     page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400) bad.push(`${width}: ${r.status()} ${new URL(r.url()).pathname}`) })
     await page.goto(base + '/login', { waitUntil: 'domcontentloaded', timeout: 120000 })
