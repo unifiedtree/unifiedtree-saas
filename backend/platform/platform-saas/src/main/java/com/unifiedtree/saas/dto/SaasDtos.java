@@ -42,7 +42,10 @@ public final class SaasDtos {
             // "PAID" (default, requires payment when paywall active) or "TRIAL"
             // (skips payment; workspace created with a fixed-length trial
             // subscription per platform.billing_settings). Null == PAID.
-            String mode
+            String mode,
+            // Name of the first HRMS company. Optional: blank means the
+            // company takes the business name (companyName above), as before.
+            @Size(max = 150) String firstCompanyName
     ) {
         public record PaymentProof(
                 String razorpayOrderId,

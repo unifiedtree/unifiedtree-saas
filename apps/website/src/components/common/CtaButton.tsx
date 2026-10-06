@@ -34,7 +34,7 @@ interface Props {
 export function CtaButton({
   className = '',
   trialLabel = 'Start free trial',
-  paidLabel = 'Create workspace',
+  paidLabel = 'Open your business',
   subline,
   icon = <ArrowRight size={18} />,
   onClick,

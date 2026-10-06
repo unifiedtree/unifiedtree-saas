@@ -39,7 +39,10 @@ const GOOGLE_OAUTH_START_URL =
 // because zod .refine can't cheaply read the auth store.
 const signupSchema = z.object({
   adminName: z.string().min(2, 'Name is required'),
-  companyName: z.string().min(2, 'Company name is required'),
+  // companyName is the BUSINESS name (the backend field keeps its old name).
+  companyName: z.string().min(2, 'Business name is required'),
+  // The first HRMS company (trial sign-up only; more are added inside).
+  firstCompanyName: z.string().optional(),
   subdomain: z.string()
     .min(3, 'At least 3 chars')
     .regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers, and hyphens only'),
@@ -133,13 +136,9 @@ export function UnifiedSignupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountToken])
 
-  // Global rule: signed-in visitor with ≥1 workspace is NEVER on trial.
-  // Force mode=paid regardless of URL.
-  useEffect(() => {
-    if (accountToken && workspaces.length >= 1 && mode === 'trial') {
-      setMode('paid')
-    }
-  }, [accountToken, workspaces.length, mode])
+  // One business per account (owner decision, 6 Oct 2026): a signed-in
+  // visitor who already has one is sent to it instead of a sign-up form.
+  const alreadyHasBusiness = !!accountToken && workspaces.length >= 1
 
   // -- pricing store ------------------------------------------------------
   const selectedPlanKeys = usePricingStore((s) => s.selectedPlanKeys)
@@ -180,6 +179,13 @@ export function UnifiedSignupPage() {
   const subdomainValue = watch('subdomain')
   const availability   = useSubdomainAvailability(subdomainValue)
   const seats          = Number(watch('seats')) || 1
+
+  // The first company mirrors the business name until the user edits it.
+  const firstCompanyTouched = useRef(false)
+  useEffect(() => {
+    if (firstCompanyTouched.current) return
+    setValue('firstCompanyName', companyName || '')
+  }, [companyName, setValue])
 
   // Auto-derive subdomain from company name until the user takes over.
   const subdomainTouched = useRef(false)
@@ -245,10 +251,15 @@ export function UnifiedSignupPage() {
       // Synchronous POST to /v1/public/free-signup — no Razorpay round-trip,
       // no mandate, no polling. Workspace is created with ZERO active
       // modules; the admin unlocks + pays inside the workspace on the
-      // /plan page. Multiple free workspaces per account allowed.
+      // /plan page. One business per account (the backend answers 409).
       if (mode === 'trial') {
+        if (!data.firstCompanyName || data.firstCompanyName.trim().length < 2) {
+          setError('Company name is required.')
+          return
+        }
         const body = {
           companyName: data.companyName,
+          firstCompanyName: data.firstCompanyName.trim(),
           subdomain:   data.subdomain,
           adminName:   data.adminName,
           adminEmail:  data.adminEmail,
@@ -588,11 +599,38 @@ export function UnifiedSignupPage() {
     )
   }
 
+  if (alreadyHasBusiness) {
+    return (
+      <div className="min-h-screen bg-bg">
+        <Navbar tone="light" />
+        <section className="pt-32 pb-24 max-w-2xl mx-auto px-4 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-6">
+            <Building size={22} className="text-primary" />
+          </div>
+          <h1 className="font-heading font-extrabold text-text-primary mb-3"
+              style={{ fontSize: 'clamp(1.5rem, 3vw, 2.2rem)', letterSpacing: '-0.02em' }}>
+            You already have a business
+          </h1>
+          <p className="text-base text-text-secondary max-w-md mx-auto mb-8">
+            Each account has one business. To add another company, open your business
+            and create it inside HRMS.
+          </p>
+          <Link
+            to="/workspaces"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 font-body font-semibold text-white shadow-md hover:bg-primary-dark"
+          >
+            Open your business <ArrowRight size={16} />
+          </Link>
+        </section>
+      </div>
+    )
+  }
+
   // Value proposition for the dark panel — copy only.
   const panelPoints = mode === 'trial'
     ? [
-        'Your workspace is live in seconds — no card, no sales call.',
-        `Pick your modules and start the ${TRIAL_DAYS}-day trial from inside.`,
+        'Your business is set up in seconds — no sales call.',
+        `Set up autopay inside to start your ${TRIAL_DAYS}-day free trial. Billing starts on day ${TRIAL_DAYS + 1}.`,
         'HR, attendance, payroll, accounting, inventory and CRM on one core.',
       ]
     : [
@@ -769,7 +807,7 @@ export function UnifiedSignupPage() {
               </div>
 
               <div className="absolute inset-x-0 bottom-0 z-10 p-6 lg:p-8">
-                <Eyebrow>{mode === 'trial' ? 'Free workspace' : 'Paid workspace'}</Eyebrow>
+                <Eyebrow>{mode === 'trial' ? '7-day free trial' : 'Paid plan'}</Eyebrow>
 
                 {/* opsz tracks the rendered size — Bricolage is an optical-size
                     variable font and .font-heading otherwise pins it at 96. */}
@@ -805,7 +843,7 @@ export function UnifiedSignupPage() {
 
                 <p className="mt-4 hidden text-[12px] leading-snug text-white/55 lg:block">
                   {mode === 'trial'
-                    ? 'Free workspace, no card required. Add paid modules and set up autopay inside your workspace when you\'re ready.'
+                    ? `Creating your business is free. Your ${TRIAL_DAYS}-day trial starts when you set up autopay inside; the first charge is on day ${TRIAL_DAYS + 1}.`
                     : 'Payments and autopay mandates are handled by Razorpay. We never see your card.'}
                 </p>
               </div>
@@ -823,13 +861,13 @@ export function UnifiedSignupPage() {
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
               <div>
                 <h2 className="opsz-24 font-heading text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-text-primary sm:text-[26px]">
-                  {mode === 'trial' ? 'Create your free workspace' : 'Create your workspace'}
+                  Create your business
                 </h2>
                 {/* Hidden from lg up: the dark panel already carries this
                     message there, and the card needs the vertical room. */}
                 <p className="mt-1.5 text-[13px] leading-snug text-text-secondary lg:hidden">
                   {mode === 'trial'
-                    ? 'Instant setup, no card required.'
+                    ? `Instant setup. Your ${TRIAL_DAYS}-day trial starts when you set up autopay.`
                     : 'Choose your team size and pay securely to activate instantly.'}
                 </p>
               </div>
@@ -887,10 +925,22 @@ export function UnifiedSignupPage() {
                   <input {...register('adminName')} placeholder="Your full name" className={inputCls(!!errors.adminName)} />
                 </Field>
 
-                <Field label="Company Name" required icon={<Building size={15} />} error={errors.companyName?.message}>
-                  <input {...register('companyName')} placeholder="Your company name" className={inputCls(!!errors.companyName)} />
+                <Field label="Business Name" required icon={<Building size={15} />} error={errors.companyName?.message}>
+                  <input {...register('companyName')} placeholder="Your business name" className={inputCls(!!errors.companyName)} />
                 </Field>
               </div>
+
+              {/* The first HRMS company. Mirrors the business name until edited;
+                  more companies are added inside the business later. */}
+              {mode === 'trial' && (
+                <Field label="Company Name" required icon={<Building size={15} />} error={errors.firstCompanyName?.message}>
+                  <input
+                    {...register('firstCompanyName', { onChange: () => { firstCompanyTouched.current = true } })}
+                    placeholder="Your first company (you can add more later)"
+                    className={inputCls(!!errors.firstCompanyName)}
+                  />
+                </Field>
+              )}
 
               {/* Email + Phone */}
               <div className="grid grid-cols-1 gap-x-4 gap-y-5 lg:grid-cols-2">
@@ -1027,7 +1077,7 @@ export function UnifiedSignupPage() {
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
                   {mode === 'trial'
-                    ? (loading ? 'Creating your workspace…' : 'Create Free Workspace')
+                    ? (loading ? 'Creating your business…' : 'Create my business')
                     : (loading ? 'Opening Razorpay…' : `Pay ₹${chargeTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} & Create Workspace`)}
                   {!loading && <ArrowRight size={16} />}
                 </button>
@@ -1035,12 +1085,12 @@ export function UnifiedSignupPage() {
                   By continuing you accept our <a href="/terms" className="font-semibold underline">Subscription Agreement</a> and{' '}
                   <a href="/privacy" className="font-semibold underline">Privacy Policy</a>.
                   {mode === 'trial'
-                    ? ` No card required — your ${TRIAL_DAYS}-day trial starts when you unlock modules inside the workspace.`
+                    ? ` Your ${TRIAL_DAYS}-day free trial starts when you set up autopay inside your business; billing starts on day ${TRIAL_DAYS + 1}.`
                     : ' Autopay activates today with immediate first charge. Secured by Razorpay.'}
                 </p>
                 <p className="text-center text-[12.5px] text-text-secondary mt-2">
                   {accountToken
-                    ? <>Adding a workspace to your account? <Link to="/workspaces" className="font-semibold text-primary">See your workspaces</Link></>
+                    ? <>Signed in as {account?.email}. <Link to="/workspaces" className="font-semibold text-primary">Your account</Link></>
                     : <>Already have an account? <Link to="/login" className="font-semibold text-primary">Sign in</Link></>}
                 </p>
               </div>

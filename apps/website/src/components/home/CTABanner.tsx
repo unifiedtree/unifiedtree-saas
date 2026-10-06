@@ -169,7 +169,7 @@ export function CTABanner() {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <CtaButton
               trialLabel="Start Free Trial"
-              paidLabel="Create Workspace"
+              paidLabel="Open your business"
               className="!h-[52px] !bg-white !px-7 !text-[15px] !font-bold !text-[#04503A] shadow-lg transition-colors hover:!bg-[#ECFDF5]"
             />
             {/* Secondary CTA — solid deep-emerald fill with a crisp white border

@@ -277,7 +277,8 @@ public class SaasService {
                 null,                    // primaryInterest (removed from public signup)
                 planKeys,
                 null,                    // payment proof: not used for autopay path
-                null);                   // mode: not used for autopay path
+                null,                    // mode: not used for autopay path
+                null);                   // first company: takes the business name
         // publishWorkspaceCreated=false — the webhook path
         // (MandateProvisioningService) fires the WorkspaceCreatedEvent itself,
         // AFTER the downstream subscription-ledger INSERT + markProvisioned
@@ -331,7 +332,8 @@ public class SaasService {
                 req.primaryInterest(),
                 req.requestedModules(),
                 null,     // payment: not applicable for existing-account flow
-                null);    // mode: PAID (default)
+                null,     // mode: PAID (default)
+                null);    // first company: takes the business name
         // publishWorkspaceCreated=true — this path is a single synchronous
         // request from an authenticated account; there's no separate provisioning
         // step downstream, so firing the welcome email inline is the whole
@@ -347,9 +349,14 @@ public class SaasService {
      * {@code /plan} page (which sets up autopay and starts the per-workspace
      * 7-day trial at mandate authentication).
      *
-     * <p>Multiple free workspaces per account are supported. The account row
-     * is reused when email + password match; a new UUID is minted otherwise.
-     * Signed-in callers pass their existing accountId + null passwordHash.
+     * <p>One business per account: an account that already has one gets a
+     * 409 from {@link #createWorkspace}. The account row is reused when
+     * email + password match (e.g. a Google-only account with no business
+     * yet); a new UUID is minted otherwise. Signed-in callers pass their
+     * existing accountId + null passwordHash.
+     *
+     * @param firstCompanyName name of the first HRMS company; null/blank
+     *                         means it takes the business name
      */
     public SignupResponse createFreeWorkspace(
             UUID accountIdOrNull,
@@ -361,7 +368,8 @@ public class SaasService {
             String adminMobile,
             String country,
             String timezone,
-            String currency) {
+            String currency,
+            String firstCompanyName) {
 
         UUID accountId = accountIdOrNull != null ? accountIdOrNull : UUID.randomUUID();
         // 2026-09-09 fix. Signed-in callers arrive with passwordHashOrNull == null
@@ -403,7 +411,8 @@ public class SaasService {
                 null,                    // primaryInterest
                 java.util.List.of(),     // no modules requested
                 null,                    // payment proof: not applicable
-                null);                   // mode: not applicable
+                null,                    // mode: not applicable
+                firstCompanyName);
 
         // publishWorkspaceCreated=true — this path is a single synchronous
         // request; no separate provisioning step downstream.
@@ -424,6 +433,13 @@ public class SaasService {
                                            List<String> modulesToActivate,
                                            boolean publishWorkspaceCreated,
                                            boolean allowEmptyModules) {
+        // One business per account (owner decision, 6 Oct 2026). Every path
+        // that creates a workspace ends here: free sign-up, paid provisioning
+        // and POST /v1/accounts/workspaces. Accounts that already hold several
+        // workspaces (test data) keep them; they just cannot add another.
+        if (accountHasBusiness(accountId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ONE_BUSINESS_PER_ACCOUNT);
+        }
         String subdomain = normalizeSubdomain(req.subdomain());
         if (subdomain.length() < 3) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workspace address too short");
@@ -494,6 +510,22 @@ public class SaasService {
                 requestedModules,
                 "OWNER",
                 "Workspace created and instantly activated.");
+    }
+
+    /** Shown to the person as-is (the website prints the 409 message). */
+    public static final String ONE_BUSINESS_PER_ACCOUNT =
+            "This account already has a business. Sign in to open it.";
+
+    /** True when the account already owns or belongs to an active business. */
+    public boolean accountHasBusiness(UUID accountId) {
+        if (accountId == null) return false;
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM platform.account_workspaces
+                     WHERE account_id = ?
+                       AND status = 'ACTIVE'
+                )
+                """, Boolean.class, accountId));
     }
 
     private AccountForWorkspace loadAccountForWorkspace(UUID accountId) {

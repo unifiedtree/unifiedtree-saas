@@ -277,7 +277,7 @@ export function PricingCalculator() {
                   <div className="[&>div]:w-full">
                     <CtaButton
                       trialLabel="Start free trial"
-                      paidLabel={`Pay ₹${dueTotal.toLocaleString('en-IN')}${dueSuffix}`}
+                      paidLabel="Open your business to subscribe"
                       size="md"
                       className="w-full justify-center !py-3"
                     />

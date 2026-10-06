@@ -184,7 +184,11 @@ public class SaasWriter {
                                          UUID departmentId,
                                          UUID designationId,
                                          SignupRequest req) {
-        String companyName = req.companyName().trim();
+        // companyName is the business (tenant) name; the first HRMS company
+        // gets its own name when the sign-up form gave one.
+        String companyName = req.firstCompanyName() != null && !req.firstCompanyName().isBlank()
+                ? req.firstCompanyName().trim()
+                : req.companyName().trim();
         String country = defaultText(req.country(), "India");
         String timezone = defaultText(req.timezone(), "Asia/Kolkata");
         String currency = defaultText(req.currency(), "INR");

@@ -210,16 +210,16 @@ export function WorkspacesPage() {
                   <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 shadow-inner">
                     <Building2 className="h-8 w-8 text-primary" />
                   </div>
-                  <h3 className="font-heading text-xl font-bold text-text-primary">No workspaces yet</h3>
+                  <h3 className="font-heading text-xl font-bold text-text-primary">No business yet</h3>
                   <p className="mx-auto mt-2 max-w-sm font-body text-[15px] text-text-secondary/90">
-                    Create your first workspace to start managing your organization's HR and operations.
+                    Create your business to start managing your organization's HR and operations.
                   </p>
                   <button
-                    onClick={() => navigate('/pricing')}
+                    onClick={() => navigate('/signup?mode=trial')}
                     className="mt-8 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-emerald-600 px-7 py-3 font-body text-[15px] font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl hover:from-primary hover:to-emerald-500"
                   >
                     <Plus size={18} />
-                    Create your first Workspace
+                    Create your business
                   </button>
                 </div>
               ) : (
@@ -290,18 +290,8 @@ export function WorkspacesPage() {
                       ))}
                     </ul>
                   </div>
-
-                  <button
-                    onClick={() => navigate('/pricing')}
-                    className="group mt-5 flex items-center gap-3.5 self-start rounded-2xl p-1.5 pr-4 text-left transition-all hover:bg-surface-2/50"
-                  >
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] border border-dashed border-border/80 bg-surface-2/40 text-text-secondary transition-colors group-hover:border-primary/40 group-hover:bg-primary/5 group-hover:text-primary">
-                      <Plus size={20} />
-                    </span>
-                    <span className="font-body text-[15px] font-semibold text-text-secondary transition-colors group-hover:text-primary">
-                      Create new workspace
-                    </span>
-                  </button>
+                  {/* No "Create new workspace": one business per account (6 Oct 2026).
+                      More companies are added inside the business, in HRMS. */}
                 </>
               )}
             </div>

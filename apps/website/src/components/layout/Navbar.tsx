@@ -248,7 +248,7 @@ export function Navbar({ tone }: Props) {
                   </Link>
                   <CtaButton
                     trialLabel="Start free trial"
-                    paidLabel="Create workspace"
+                    paidLabel="Open your business"
                     size="md"
                     icon={<ArrowRight size={15} />}
                     className={ctaCls}
@@ -434,7 +434,7 @@ export function Navbar({ tone }: Props) {
                     <div className="w-full [&>div]:w-full" onClick={() => setMenuOpen(false)}>
                       <CtaButton
                         trialLabel="Start free trial"
-                        paidLabel="Create workspace"
+                        paidLabel="Open your business"
                         className="w-full justify-center !rounded-xl !bg-white !py-3.5 !text-[15px] !text-[#04503A] hover:!bg-[#ECFDF5] font-bold"
                       />
                     </div>

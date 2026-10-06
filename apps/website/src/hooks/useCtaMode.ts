@@ -7,7 +7,9 @@ import { useAuthStore } from '../store/authStore'
  *
  *   not signed in                      -> TRIAL
  *   signed in, 0 workspaces            -> TRIAL
- *   signed in, >= 1 workspace          -> PAID
+ *   signed in, >= 1 workspace          -> PAID  (= "open your business":
+ *                                         one business per account, so the
+ *                                         CTA goes to /workspaces, not sign-up)
  *
  * `ready` is false during the brief window when the caller is signed in
  * but their workspace list hasn't loaded yet — CTAs should render a
@@ -22,7 +24,7 @@ export type CtaMode = 'trial' | 'paid'
 
 export interface CtaModeResult {
   mode: CtaMode
-  href: string           // /signup?mode=trial   OR   /signup?mode=paid
+  href: string           // /signup?mode=trial   OR   /workspaces
   ready: boolean         // false = still resolving; hide/skeleton
   signedIn: boolean
   workspaceCount: number
@@ -85,7 +87,7 @@ export function useCtaMode(): CtaModeResult {
   const ready = !signedIn || (!isLoading && (workspaces.length > 0 || hasFetched))
 
   const mode: CtaMode = !signedIn || workspaceCount === 0 ? 'trial' : 'paid'
-  const href = mode === 'trial' ? '/signup?mode=trial' : '/signup?mode=paid'
+  const href = mode === 'trial' ? '/signup?mode=trial' : '/workspaces'
 
   return { mode, href, ready, signedIn, workspaceCount }
 }
