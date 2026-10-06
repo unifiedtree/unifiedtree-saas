@@ -1,0 +1,93 @@
+/* Face station (StationPage.tsx, FaceStationsPage.tsx). Tokens only (var(--u-*, light fallback)),
+   so it reads right in light and dark; the camera pieces come from webPunch.css. */
+.ufs {
+  min-height: 100vh; min-height: 100dvh; box-sizing: border-box; padding: 16px 16px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  background: var(--u-bg, #F4F7F5); color: var(--u-ink, #0E1B16);
+  font-family: var(--u-font, 'Inter', system-ui, sans-serif); font-variant-numeric: tabular-nums;
+}
+.ufs-top { width: 100%; max-width: 880px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ufs-name { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--u-ink, #0E1B16); }
+.ufs-name svg { color: var(--u-br, #0F6E56); }
+.ufs-branch { margin: 2px 0 0; font-size: 13px; color: var(--u-ink3, #6A7A73); }
+.ufs-clock { margin: 0; white-space: nowrap; font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+.ufs-card {
+  width: 100%; max-width: 880px; box-sizing: border-box; padding: 28px; display: grid; gap: 16px;
+  background: var(--u-sf, #fff); border: 1px solid var(--u-ln, #E3E9E6); border-radius: 18px;
+  box-shadow: var(--u-shc, 0 1px 2px rgba(14, 27, 22, .05));
+}
+.ufs-center { justify-items: center; text-align: center; padding: 40px 28px; }
+.ufs-icon {
+  width: 96px; height: 96px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+}
+.ufs-icon[data-tone="bad"] { background: var(--u-rds, #FCEDEB); color: var(--u-rdt, #B42318); }
+.ufs-hero { margin: 0; font-size: 30px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; }
+.ufs-title { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 600; }
+.ufs-lead { margin: 0; font-size: 16px; line-height: 1.55; color: var(--u-ink2, #4A5A54); max-width: 560px; }
+.ufs-fine { margin: 0; font-size: 13px; line-height: 1.5; color: var(--u-ink3, #6A7A73); }
+.ufs-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ufs-big { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 16px; margin-top: 8px; }
+.ufs-bigbtn {
+  min-height: 140px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  font: inherit; font-size: 20px; font-weight: 600; cursor: pointer;
+  background: var(--u-sf, #fff); color: var(--u-brt, #0F6E56); border: 2px solid var(--u-br, #0F6E56);
+  transition: transform .15s, box-shadow .15s;
+}
+.ufs-bigbtn[data-tone="solid"] { background: var(--u-br, #0F6E56); color: var(--u-onbr, #fff); }
+.ufs-bigbtn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(14, 27, 22, .12); }
+.ufs-bigbtn:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--u-brs, #E8F3EE); }
+.ufs-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 52vh; overflow-y: auto; }
+.ufs-person {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 60px;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 12px; background: var(--u-sf, #fff); color: var(--u-ink, #0E1B16);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.ufs-person:hover { background: var(--u-hv, #F0F4F2); }
+.ufs-person:focus-visible { outline: none; border-color: var(--u-br, #0F6E56); box-shadow: 0 0 0 3px var(--u-brs, #E8F3EE); }
+.ufs-person[data-dim] { opacity: .6; }
+.ufs-person__text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ufs-person__text strong { font-size: 16px; font-weight: 600; }
+.ufs-person__text span { font-size: 13px; color: var(--u-ink3, #6A7A73); }
+.ufs-avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); font-weight: 700;
+}
+.ufs-split { grid-template-columns: minmax(0, 340px) minmax(0, 1fr); align-items: center; gap: 28px; }
+.ufs-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ufs-photo {
+  position: relative; width: 156px; height: 156px; border-radius: 50%; padding: 4px; box-sizing: border-box;
+  border: 4px solid var(--u-br, #0F6E56); background: var(--u-brs, #E8F3EE);
+  display: inline-flex; align-items: center; justify-content: center; color: var(--u-brt, #0F6E56);
+}
+.ufs-photo[data-wait] { border-color: var(--u-gd, #C98A1B); }
+.ufs-photo img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; transform: scaleX(-1); }
+.ufs-tick {
+  position: absolute; right: 2px; bottom: 2px; width: 36px; height: 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--u-br, #0F6E56); color: var(--u-onbr, #fff); border: 3px solid var(--u-sf, #fff);
+}
+.ufs-photo[data-wait] .ufs-tick { background: var(--u-gd, #C98A1B); }
+.ufs-note { margin: 0; font-size: 16px; line-height: 1.5; color: var(--u-ink2, #4A5A54); max-width: 560px; }
+.ufs-note[data-wait] { color: var(--u-gdt, #8A5A10); }
+.ufs-facts { margin: 0; width: 100%; max-width: 560px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; text-align: left; }
+.ufs-facts div { padding: 10px 12px; border-radius: 12px; background: var(--u-sf2, #F7F9F8); min-width: 0; }
+.ufs-facts dt { font-size: 12px; color: var(--u-ink3, #6A7A73); }
+.ufs-facts dd { margin: 2px 0 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Setup page (Attendance → Face stations). */
+.ufs-how { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; line-height: 1.5; color: var(--u-ink2, #4A5A54); }
+.ufs-trail { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.ufs-wait { padding: 0; border: 0; background: none; cursor: pointer; }
+
+@media (max-width: 640px) {
+  .ufs-card { padding: 20px 16px; }
+  .ufs-center { padding: 28px 16px; }
+  .ufs-hero { font-size: 24px; }
+  .ufs-clock { font-size: 22px; }
+  .ufs-big { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .ufs-bigbtn { min-height: 96px; }
+  .ufs-split { grid-template-columns: minmax(0, 1fr); }
+  .ufs-split .uwp-cam { max-width: 260px; margin: 0 auto; }
+  .ufs-facts { grid-template-columns: minmax(0, 1fr); }
+}
