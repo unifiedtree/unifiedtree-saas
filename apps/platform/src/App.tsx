@@ -103,6 +103,9 @@ function PoliciesRoute() {
 const DirectoryRoute = lazyPage(() => import('@/modules/hrms/workforce/DirectoryRoute').then(m => ({ default: m.DirectoryRoute })))
 const AnalyticsRoute = lazyPage(() => import('@/modules/hrms/attendance/AnalyticsRoute').then(m => ({ default: m.AnalyticsRoute })))
 const ShiftsRoute = lazyPage(() => import('@/modules/hrms/attendance/ShiftsRoute').then(m => ({ default: m.ShiftsRoute })))
+// Face station (V143.95): the setup page, and the station itself (its own sign-in, outside the shell).
+const FaceStationsPage = lazyPage(() => import('@/modules/hrms/attendance/station/FaceStationsPage').then(m => ({ default: m.FaceStationsPage })))
+const StationPage = lazyPage(() => import('@/modules/hrms/attendance/station/StationPage').then(m => ({ default: m.StationPage })))
 const PliRoute = lazyPage(() => import('@/modules/hrms/payroll/PliRoute').then(m => ({ default: m.PliRoute })))
 const AdvancesRoute = lazyPage(() => import('@/modules/hrms/advance/AdvancesRoute').then(m => ({ default: m.AdvancesRoute })))
 const Integrations = lazyPage(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
@@ -209,6 +212,8 @@ export const ROUTE_TREE = (
       <Route path="/accept-invite"    element={<AcceptInvite />} />
       <Route path="/forgot-password"  element={<ForgotPassword />} />
       <Route path="/reset-password"   element={<ResetPassword />} />
+      {/* A face station's punch screen: runs on the station's own sign-in, never a person's. */}
+      <Route path="/station"          element={<StationPage />} />
 
       {/* Module-workspace showcase. Rendered OUTSIDE <PlatformShell> on purpose:
           the page brings its own chrome (dark icon rail + top bar + sub-tab row),
@@ -429,6 +434,15 @@ export const ROUTE_TREE = (
             branch (Companies & Branches → branch → Geofence). Old links and
             bookmarks land there. */}
         <Route path="/hrms/attendance/geofencing" element={<Navigate to="/hrms/companies" replace />} />
+        {/* Face stations: the page also checks attendance.assisted_punch.any (both are needed, as on the server). */}
+        <Route
+          path="/hrms/attendance/stations"
+          element={
+            <RouteGuard anyOf={['attendance.policy.manage']}>
+              <ModuleGate moduleKey="hrms"><FaceStationsPage /></ModuleGate>
+            </RouteGuard>
+          }
+        />
         <Route
           path="/hrms/leave"
           element={

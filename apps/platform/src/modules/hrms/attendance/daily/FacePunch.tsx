@@ -8,6 +8,8 @@
 //      (GET /face/admin/events, attendance.face.admin.read; keyed by login, shown by the person's
 //      name and code, else the login's email on servers that don't send them).
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { usePermission } from '@unifiedtree/sdk'
 import {
   Button, CellActions, CellPerson, MonthCalendar, PageHeader, Section, StatusPill, Table,
   type CalendarDay, type StatusTone, type TableColumn,
@@ -68,6 +70,11 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
   // The team on any day: people on their weekly off are listed too, so a Sunday's picker isn't empty.
   const roster = useTeamDashboard(today, undefined, perms.team, false, { includeWeeklyOff: true })
   const decide = useDecideFacePunch()
+  // Face stations (shared punch devices) are set up by whoever holds both permissions the server asks for.
+  const navigate = useNavigate()
+  const stationPolicy = usePermission('attendance.policy.manage')
+  const stationAnyone = usePermission('attendance.assisted_punch.any')
+  const canStations = stationPolicy && stationAnyone
   const [busy, setBusy] = useState<string | null>(null)
   const [target, setTarget] = useState<StatusTarget | null>(null)
 
@@ -162,7 +169,8 @@ export function FacePunch({ perms }: { perms: DailyPerms }) {
   return (
     <>
       <PageHeader eyebrow="Attendance & time · Daily tracking" title="Face Punch"
-        sub="Every check-in made with a face. When the camera isn’t sure it’s the right person, it asks you to take a look." />
+        sub="Every check-in made with a face. When the camera isn’t sure it’s the right person, it asks you to take a look."
+        actions={canStations ? <Button icon="tablet" onClick={() => navigate('/hrms/attendance/stations')}>Face stations</Button> : undefined} />
 
       {(recent.isLoading || toCheck.length > 0 || recent.isError) && (
         <Section title="To check" count={toCheck.length || null} countTone="gold" variant="section" body="flush"
