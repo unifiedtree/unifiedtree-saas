@@ -3,7 +3,7 @@
 // acceptance against the local recovery runtime. The tab used to render two
 // hard-coded rows; it now reads GET /v1/attendance/face/admin/events.
 // The recovery DB has no face events, so this inserts three throw-away events
-// (+ one enrollment row so the email resolves), checks the table against the
+// (+ one enrollment row), checks the table against the
 // API and the server-side employee filter, then removes the fixtures and checks
 // the empty state. Also checks an employee login gets the permission state and
 // never calls the admin endpoints.
@@ -106,7 +106,10 @@ try {
     check(`row ${idx + 1} shows ${e.result} as "${e.label}"`, idx >= 0 && rowsText[idx]?.includes(e.label), rowsText[idx]?.replace(/\s+/g, ' ').slice(0, 140))
   }
   const ownerRowIdx = firstPageIds.indexOf(events[0].id)
-  check('employee resolves to the enrolled email', rowsText[ownerRowIdx]?.includes('owner@unifiedtree.demo'))
+  // Since 5 Oct (3017df18) a row names the employee record behind the login (name and code), not the login's email.
+  const [ownerCode, ownerName] = sql(`SELECT per.employee_code || '|' || per.first_name || ' ' || per.last_name FROM auth.user_credentials who JOIN hrms.employees per ON per.id = who.employee_id AND per.tenant_id = who.tenant_id WHERE who.id='${OWNER_USER}' AND who.tenant_id='${tenant}'`).split('|')
+  check('employee resolves to the linked employee (name and code)', Boolean(ownerCode) && rowsText[ownerRowIdx]?.includes(ownerCode) && rowsText[ownerRowIdx]?.includes(ownerName),
+    `expected ${ownerName} ${ownerCode}; row: ${rowsText[ownerRowIdx]?.replace(/\s+/g, ' ').slice(0, 80)}`)
   check('match confidence bucket shown (High / Below threshold)', rowsText[ownerRowIdx]?.includes('High') && rowsText[firstPageIds.indexOf(events[1].id)]?.includes('Below threshold'))
   check('the old hard-coded rows are gone', (await page.getByText('Rajesh Kumar').count()) === 0 && (await page.getByText('Kiosk-Pune-01').count()) === 0)
   check('header count matches the API', (await page.getByText(`${apiAll.length} face verification ${apiAll.length === 1 ? 'event' : 'events'}, newest first.`).count()) === 1)

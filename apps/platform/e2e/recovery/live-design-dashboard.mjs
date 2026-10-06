@@ -28,10 +28,15 @@ try {
   await page.waitForLoadState('networkidle')
   const heading = page.locator('h1', { hasText: /^Good (morning|afternoon|evening), / })
   check('greeting header renders', await heading.count() > 0, (await heading.first().textContent().catch(() => '')) || '')
+  // The stat cards can paint a moment after the greeting (seen on 6 Oct): wait for them before counting.
+  await page.getByRole('button', { name: /Total employees/i }).first().waitFor({ timeout: 15000 }).catch(() => {})
   check('Live Overview tiles render', await page.getByRole('button', { name: /Total employees/i }).count() > 0)
-  // Company summary's active employees now sit in the Total employees note (AUDIT §5.5).
-  await page.getByRole('button', { name: /Total employees/i }).first().locator('.uk-stat__note', { hasText: / active/ }).waitFor({ timeout: 15000 }).catch(() => {})
-  check('Company summary renders', await page.getByRole('button', { name: /Total employees/i }).first().locator('.uk-stat__note', { hasText: / active/ }).count() > 0)
+  // Company summary sits in the Total employees note. Since 5 Oct today's note splits the headcount into confirmed,
+  // on probation and on notice (dashboardModel.rollNote); a past day's note gives that month's joiners and leavers.
+  const totalNote = page.getByRole('button', { name: /Total employees/i }).first().locator('.uk-stat__note')
+  const TODAY_NOTE = /^\d+ (confirmed|on probation|on notice)( · \d+ (on probation|on notice))*$/
+  await totalNote.filter({ hasText: TODAY_NOTE }).waitFor({ timeout: 15000 }).catch(() => {})
+  check('Company summary renders (confirmed · on probation · on notice)', await totalNote.filter({ hasText: TODAY_NOTE }).count() > 0, (await totalNote.textContent().catch(() => '')) || 'no note')
 
   // Date calendar: pick yesterday, apply, banner appears, back to today.
   await page.getByRole('button', { name: /change the dashboard date/ }).first().click()
@@ -43,6 +48,9 @@ try {
   await page.waitForLoadState('networkidle')
   const banner = page.getByRole('status').filter({ hasText: 'Viewing' })
   check('past-date banner shows after choosing yesterday', await banner.count() > 0)
+  const PAST_NOTE = /^\d+ joined · \d+ left, \d+.+\d{4}$/
+  await totalNote.filter({ hasText: PAST_NOTE }).waitFor({ timeout: 15000 }).catch(() => {})
+  check('Company summary for yesterday: "N joined · N left, <dates>"', await totalNote.filter({ hasText: PAST_NOTE }).count() > 0, (await totalNote.textContent().catch(() => '')) || 'no note')
   await page.getByRole('button', { name: 'Back to today' }).click()
   check('back to today clears the banner', (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0)
 

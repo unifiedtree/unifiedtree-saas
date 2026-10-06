@@ -1,7 +1,7 @@
 /* global process, console */
 // Live check of the redesigned Performance page (/hrms/performance):
-//  - owner: Review cycles, Employee reviews, Goals & KPIs, People, My reviews, My goals,
-//    each once (the old page listed the three admin views twice). Redesign (P-GROW): the
+//  - owner: Review cycles, Employee reviews, Goals & KPIs, People (personal views are off for
+//    owners by default since 5 Oct), each once (the old page listed the three admin views twice). Redesign (P-GROW): the
 //    views are inline pills; "New cycle" / "Add goal" replace "Create cycle" / "Create KPI";
 //    adding a goal and saving its progress happen in side panels.
 //  - department manager (performance.read, no write): admin views read-only
@@ -39,13 +39,14 @@ try {
   const o = await session('owner@unifiedtree.demo')
   await o.page.goto(base + '/hrms/performance'); await settle(o.page)
   const ov = await viewNames(o.page)
-  check('owner: six views, each once', JSON.stringify(ov) === JSON.stringify(['Review cycles', 'Employee reviews', 'Goals & KPIs', 'People', 'My reviews', 'My goals']), ov.join(' | '))
+  // My reviews / My goals are personal pages, off for owners and admins by default since 5 Oct (usePersonalPages).
+  check('owner: four admin views, each once (no personal views)', JSON.stringify(ov) === JSON.stringify(['Review cycles', 'Employee reviews', 'Goals & KPIs', 'People']), ov.join(' | '))
   for (const old of ['Employee Performance', 'Appraisals & 360 Feedback', 'KPI Tracking']) check(`owner: duplicate "${old}" is gone`, (await o.page.getByText(old, { exact: true }).count()) === 0)
   check('owner: can create a cycle', (await o.page.getByRole('button', { name: /New cycle/ }).count()) === 1)
-  for (const v of ['Employee reviews', 'Goals & KPIs', 'My reviews', 'My goals']) {
+  for (const v of ['Employee reviews', 'Goals & KPIs', 'People']) {
     await o.page.locator('[aria-label="Performance views"]').getByRole('button', { name: new RegExp(`^${v}`) }).click(); await settle(o.page)
   }
-  check('owner: view kept in the URL', o.page.url().includes('view=my-goals'))
+  check('owner: view kept in the URL', o.page.url().includes('view=people'))
   await o.page.goto(base + '/hrms/performance?view=kpis'); await settle(o.page)
   check('owner: KPIs view opens from a link, with "Add goal"', (await o.page.getByRole('button', { name: 'Add goal', exact: true }).count()) === 1)
   check('owner: no refused API calls or page errors', !o.failed.length && !o.errors.length, o.failed[0] || o.errors[0] || '')

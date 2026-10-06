@@ -144,9 +144,11 @@ try {
   })
 
   // ── 4. Expense claim item date and the reimbursement batch cutoff ──
+  // Since 5 Oct an owner's personal pages (Submit a claim) are off by default (usePersonalPages), so the owner's
+  // item date is the same DateField on "Claim on behalf" (Expense.tsx ClaimOnBehalfTab, labelled "Line 1 date").
   await screen('Expense claim', async () => {
-    await page.goto(base + '/hrms/expenses?tab=submit')
-    const d = page.getByRole('combobox', { name: 'Date', exact: true }).first()
+    await page.goto(base + '/hrms/expenses?tab=behalf')
+    const d = page.getByRole('combobox', { name: 'Line 1 date', exact: true }).first()
     await d.waitFor({ timeout: 20000 })
     check('expense item: defaults to today', (await text(d)).includes(short(today)), await text(d))
     await d.click()
@@ -254,8 +256,8 @@ try {
   // ── 9. Phone width: the calendar is a sheet inside the viewport ──
   await page.setViewportSize({ width: 390, height: 844 })
   await screen('Phone: expense item', async () => {
-    await page.goto(base + '/hrms/expenses?tab=submit')
-    const d = page.getByRole('combobox', { name: 'Date', exact: true }).first()
+    await page.goto(base + '/hrms/expenses?tab=behalf')
+    const d = page.getByRole('combobox', { name: 'Line 1 date', exact: true }).first()
     await d.waitFor({ timeout: 20000 })
     await pickViaYear(d, py, 12, 28)
     check('390px: expense item date shows in full', !(await isCut(d)), await text(d))

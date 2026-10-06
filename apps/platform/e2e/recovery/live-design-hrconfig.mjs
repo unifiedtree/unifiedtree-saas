@@ -45,8 +45,12 @@ try {
     await page.goto(base + '/hrms/settings'); await settle(page)
     await page.getByRole('heading', { name: 'HR Configuration' }).waitFor({ timeout: 30_000 })
     const toc = page.getByRole('navigation', { name: 'On this page' })
-    check('"On this page" lists the seven sections', (await toc.getByRole('link').count()) === 7)
-    for (const h of ['Employee IDs', 'Probation', 'Notice & retirement', 'Work week', 'Late arrival', 'Attendance rules', 'Fiscal year']) {
+    // Punch-in alerts (4 Oct) and Celebrations (5 Oct) joined the original seven sections (HrConfigurationPage nav).
+    const TOC = ['Employee IDs', 'Probation', 'Notice & exit', 'Celebrations', 'Work week', 'Late arrival', 'Attendance rules', 'Punch-in alerts', 'Fiscal year']
+    await toc.getByRole('link', { name: 'Punch-in alerts' }).waitFor({ timeout: 15_000 }).catch(() => {})
+    const tocLabels = (await toc.getByRole('link').allInnerTexts()).map((t) => t.replace(/\s+\d+$/, '').trim())
+    check('"On this page" lists the nine sections in order', JSON.stringify(tocLabels) === JSON.stringify(TOC), tocLabels.join(' | '))
+    for (const h of ['Employee IDs', 'Probation', 'Notice & retirement', 'Celebrations', 'Work week', 'Late arrival', 'Attendance rules', 'Punch-in alerts', 'Fiscal year']) {
       check(`section "${h}" renders`, (await page.getByRole('heading', { name: h, exact: true }).count()) === 1)
     }
     check('next employee code preview uses the real settings', (await page.getByText(/next: EMP-\d{4}/).count()) > 0)
