@@ -21,6 +21,7 @@ import {
   ACCEPT_ATTR, ImageCheckError, centredCrop, clampCrop, cropPreviewUrl, exportPng, exportSize, loadSource, processed,
   type Crop, type Source,
 } from './brandingImage'
+import { LetterheadSection } from './LetterheadSection'
 
 type Show = (kind: 'ok' | 'error', title: string, msg?: string) => void
 type Kind = 'mark' | 'logo'
@@ -182,6 +183,8 @@ export const BrandingTab: React.FC<{ show: Show }> = ({ show }) => {
           ? <BrandingEditor name={name} letter={letter} onSaved={onSaved} show={show} />
           : <SettingsNote>Only workspace admins can change the logo. Ask your admin if it needs updating.</SettingsNote>}
       </SettingsSection>
+
+      {dto !== null && <LetterheadSection dto={dto} name={name} logo={logoUrl || markUrl} canEdit={canEdit} show={show} onSaved={onSaved} />}
 
       <Modal open={confirmRemove !== null} onOpenChange={(o: boolean) => { if (!o && !busy) setConfirmRemove(null) }}
         title={confirmRemove === 'mark' ? 'Remove the square mark?' : 'Remove the wide logo?'}

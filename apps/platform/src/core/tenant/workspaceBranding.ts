@@ -28,6 +28,10 @@ export interface BrandingDto {
   markWidth?: number | null
   markHeight?: number | null
   updatedAt?: string | null
+  /** The letterhead banner (V143_100); absent on a server that doesn't know letterheads yet. */
+  letterheadUrl?: string | null
+  letterheadWidth?: number | null
+  letterheadHeight?: number | null
 }
 
 export interface WorkspaceBranding {

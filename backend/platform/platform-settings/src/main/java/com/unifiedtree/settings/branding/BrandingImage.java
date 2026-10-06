@@ -35,13 +35,16 @@ public final class BrandingImage {
         /** Wide logo: sign-in page and document headers. */
         LOGO,
         /** Square mark: app rail, splash, browser tab icon. */
-        MARK;
+        MARK,
+        /** Letterhead banner: the top of generated letters, payslips and registers, in place of logo + name (V143_100). */
+        LETTERHEAD;
 
         public static Kind parse(String s) {
             if (s == null) throw bad(HttpStatus.NOT_FOUND, "Unknown branding image");
             return switch (s.trim().toLowerCase(java.util.Locale.ROOT)) {
                 case "logo" -> LOGO;
                 case "mark" -> MARK;
+                case "letterhead" -> LETTERHEAD;
                 default -> throw bad(HttpStatus.NOT_FOUND, "Unknown branding image");
             };
         }
@@ -94,6 +97,10 @@ public final class BrandingImage {
         if (kind == Kind.MARK && Math.abs(w - h) > Math.max(2, Math.round(Math.max(w, h) * 0.02f))) {
             throw bad(HttpStatus.UNPROCESSABLE_ENTITY,
                     "The square mark must be square (it is " + w + " × " + h + " px). Crop it to a square first");
+        }
+        if (kind == Kind.LETTERHEAD && w < 2 * h) {
+            throw bad(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "The letterhead must be at least twice as wide as it is tall (it is " + w + " × " + h + " px): it runs across the top of the page");
         }
         String ext = switch (type) {
             case "image/png" -> "png";

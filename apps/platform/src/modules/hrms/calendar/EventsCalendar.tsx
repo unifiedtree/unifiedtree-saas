@@ -63,7 +63,7 @@ export function EventsCalendar({ today, companyId, canLeave: canLeaveProp, title
   const [range, setRange] = useState<{ from: string; to: string } | null>(null)
   const [picking, setPicking] = useState(false)
   const [filter, setFilter] = useState<CalFilter>('all')
-  const [typeId, setTypeId] = useState<string | null>(null)
+  const [pickedType, setTypeId] = useState<string | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
   const span = monthSpan(month)
@@ -74,10 +74,12 @@ export function EventsCalendar({ today, companyId, canLeave: canLeaveProp, title
   const off = useMemo(() => jsWeekendDays(weekend.data?.weekendDays), [weekend.data])
 
   const all = useMemo(() => onlyPeople(grid.events, people), [grid.events, people])
+  const types = useMemo(() => leaveTypesIn(all), [all])
+  // A leave type picked in another month that this month doesn't have: back to all types.
+  const typeId = types.some((t) => t.id === pickedType) ? pickedType : null
   const shown = useMemo(() => applyFilter(all, filter, typeId), [all, filter, typeId])
   const days = useMemo(() => byDay(shown), [shown])
   const counts = useMemo(() => filterCounts(applyFilter(all, 'all', typeId)), [all, typeId])
-  const types = useMemo(() => leaveTypesIn(all), [all])
   const workCal = useMemo<WorkCalendar>(() => ({
     off, holidays: new Map(all.filter((e) => e.kind === 'holiday').map((e) => [e.date, e.title])),
   }), [off, all])

@@ -69,4 +69,36 @@ class WorkspaceLetterheadTest {
         assertEquals("Acme Works", lh.senderName(TENANT, null));
         assertTrue(lh.decorate("<p>Dear A,</p>", TENANT, "Acme Retail").endsWith("<p>Dear A,</p>"));
     }
+
+    // ── V143_100: an uploaded letterhead banner ────────────────────────────────
+
+    @Test void anUploadedBannerReplacesTheLogoAndName() {
+        JdbcTemplate jdbc = new JdbcTemplate() {
+            @SuppressWarnings("unchecked")
+            @Override public <T> T query(String sql, ResultSetExtractor<T> rse, Object... args) {
+                return sql.contains("platform.tenants") ? (T) "Acme Works" : null;
+            }
+        };
+        BrandingService branding = new BrandingService(jdbc, new R2Storage("", "", "", "", "")) {
+            @Override public Optional<String> pdfImageDataUri(UUID tenantId) { return Optional.of("data:image/png;base64,LOGO"); }
+            @Override public Optional<String> pdfLetterheadDataUri(UUID tenantId) { return Optional.of("data:image/png;base64,BANNER"); }
+        };
+        String h = new WorkspaceLetterhead(branding, jdbc).headerHtml(TENANT, "Acme Retail Pvt Ltd");
+        assertTrue(h.contains("src=\"data:image/png;base64,BANNER\""));
+        assertFalse(h.contains("LOGO"), "the banner stands in for the logo");
+        assertFalse(h.contains("Acme Retail Pvt Ltd"), "the banner carries the name itself");
+    }
+
+    @Test void withoutABannerTheHeaderIsAsBefore() {
+        // The letterhead columns can't be read here (no database): the banner is "none", never an error.
+        String h = letterhead("data:image/png;base64,AAAA").headerHtml(TENANT, "Acme Retail Pvt Ltd");
+        assertTrue(h.contains("Acme Retail Pvt Ltd"));
+        assertTrue(h.contains("base64,AAAA"));
+    }
+
+    @Test void onlyImageDataUrisBecomeABanner() {
+        assertEquals("", WorkspaceLetterhead.bannerBlock("javascript:alert(1)"));
+        assertEquals("", WorkspaceLetterhead.bannerBlock(null));
+        assertTrue(WorkspaceLetterhead.bannerBlock("data:image/jpeg;base64,X").contains("width:100%"));
+    }
 }
