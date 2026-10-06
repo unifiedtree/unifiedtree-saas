@@ -1,4 +1,4 @@
-package com.hrms.api.images;
+package com.hrms.api.workforce.images;
 
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;

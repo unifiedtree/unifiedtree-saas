@@ -1,4 +1,4 @@
-package com.hrms.api.images;
+package com.hrms.api.workforce.images;
 
 import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.api.workforce.WorkforceAccess;

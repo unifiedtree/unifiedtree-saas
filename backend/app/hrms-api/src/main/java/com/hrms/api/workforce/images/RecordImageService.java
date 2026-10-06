@@ -1,4 +1,4 @@
-package com.hrms.api.images;
+package com.hrms.api.workforce.images;
 
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;

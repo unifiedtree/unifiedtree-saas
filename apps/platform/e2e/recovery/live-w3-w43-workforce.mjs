@@ -109,6 +109,7 @@ try {
   check('a non-image (SVG with script) is refused with a plain reason', bad.status === 422 && /Only JPG and PNG/.test(bad.json?.message || ''), `${bad.status} ${JSON.stringify(bad.json)}`)
   const big = await owner.upload(`/v1/hrms/employees/${otherId}/photo`, Buffer.concat([PHOTO, Buffer.alloc(2 * 1024 * 1024)]))
   check('a file over 2 MB is refused', big.status === 422 && /2 MB/.test(big.json?.message || ''), `${big.status} ${JSON.stringify(big.json)}`)
+  if (!own.json?.url) throw new Error('the photo upload gave no address; the rest depends on it')
   const pub = await fetch(api + own.json.url)
   const pubType = pub.headers.get('content-type') || ''
   const pubBytes = Buffer.from(await pub.arrayBuffer())

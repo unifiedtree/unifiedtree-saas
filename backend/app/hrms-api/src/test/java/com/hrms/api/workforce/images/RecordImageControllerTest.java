@@ -1,4 +1,4 @@
-package com.hrms.api.images;
+package com.hrms.api.workforce.images;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

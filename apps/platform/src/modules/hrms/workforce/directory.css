@@ -8,9 +8,10 @@
 
 .wf-card { padding: 0; overflow: hidden; min-width: 0; }
 .wf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 18px 12px; }
-.wf-search { flex: 1 1 260px; min-width: 0; max-width: 380px; }
-.wf-filter { flex: 0 1 190px; min-width: 150px; }
-.wf-filter--wide { flex-basis: 230px; }
+/* Five filters and the search fit one row at 1440 (w43 added Designation): narrower bases that grow to fill. */
+.wf-search { flex: 1 1 220px; min-width: 0; max-width: 360px; }
+.wf-filter { flex: 1 1 150px; min-width: 140px; max-width: 210px; }
+.wf-filter--wide { flex-basis: 180px; max-width: 260px; }
 .wf-filter .uko-dd-trigger { height: 40px; border-radius: 11px; font-size: 13.5px; }
 .wf-count { margin-left: auto; font-size: 13px; color: var(--u-ink3, #6A7A73); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wf-pills { padding: 0 18px 12px; min-width: 0; }
