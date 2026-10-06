@@ -13,6 +13,8 @@ public interface EmploymentTypeRepository extends JpaRepository<EmploymentType, 
 
     List<EmploymentType> findByCompanyIdAndActiveTrueOrderByNameAsc(UUID companyId);
 
+    List<EmploymentType> findByCompanyIdOrderByNameAsc(UUID companyId);
+
     Optional<EmploymentType> findByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);

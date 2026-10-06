@@ -52,7 +52,7 @@ export function SelfJob({ me, record, recordMissing }: { me: MeBasics; record?: 
             { label: 'Employee code', value: me.employeeCode || '—' },
             { label: 'Designation', value: record?.designationName || '—' },
             { label: 'Department', value: record?.departmentName || '—' },
-            { label: 'Employment type', value: TYPE_LABEL[me.employmentType || ''] || me.employmentType || '—' },
+            { label: 'Employment type', value: TYPE_LABEL[me.employmentType || ''] || (me.employmentType ? me.employmentType.charAt(0) + me.employmentType.slice(1).toLowerCase().replaceAll('_', ' ') : '—') },
             { label: 'Work location', value: me.workLocation || '—' },
             { label: 'Joining date', value: fmtDate(record?.dateOfJoining ?? me.dateOfJoining) },
             { label: 'Probation', value: probation },

@@ -5,7 +5,6 @@ import com.hrms.employee.dto.CreateEmployeeRequest;
 import com.hrms.employee.dto.EmployeeResponse;
 import com.hrms.employee.dto.EmployeeSummaryResponse;
 import com.hrms.employee.entity.Employee;
-import com.hrms.employee.enums.EmploymentType;
 import com.hrms.employee.enums.Gender;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -46,7 +45,7 @@ public class EmployeeMapperImpl implements EmployeeMapper {
         String weeklyOffDays = null;
         UUID managerId = null;
         String jobTitle = null;
-        EmploymentType employmentType = null;
+        String employmentType = null;
         EmploymentStatus employmentStatus = null;
         LocalDate dateOfJoining = null;
         String workLocation = null;
@@ -151,7 +150,7 @@ public class EmployeeMapperImpl implements EmployeeMapper {
         employee.setBranchId( request.branchId() );
         employee.setManagerId( request.managerId() );
         employee.setJobTitle( request.jobTitle() );
-        employee.setEmploymentType( request.employmentType() );
+        employee.setEmploymentType( request.employmentType() == null ? null : request.employmentType().name() );
         employee.setDateOfJoining( request.dateOfJoining() );
         employee.setNoticePeriodDays( request.noticePeriodDays() );
         employee.setWorkLocation( request.workLocation() );

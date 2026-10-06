@@ -70,21 +70,18 @@ export function catchSave(db: Record<string, Rec[]>, box: { current: CaughtSave 
   }
 }
 
-const orList = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`)
-
 /** What the employee form sets once the new item is saved: [field, value] pairs, or a note on why nothing was selected. */
 export interface Selection { set: [string, unknown][]; note?: string }
 
 /**
- * `typeLabel` maps an employment-type code to the form's label (masterData TYPE_LABEL):
- * an employee record can only hold one of those types.
+ * `typeLabel` maps a default employment-type code to the form's label (masterData TYPE_LABEL); a
+ * company's own type is shown, and selected, by its name (6 Oct 2026: people can be given it).
  */
 export function selectionAfterCreate(kind: CreateKind, rec: Rec, id: string | null, values: Rec, typeLabel: Record<string, string>): Selection {
   const name = String(rec.name || '').trim() || 'It'
   if (kind === 'classes') {
-    const label = typeLabel[String(rec.code || '')]
-    return label ? { set: [['type', label]] }
-      : { set: [], note: `${name} was added, but new people can only be given ${orList(Object.values(typeLabel))} for now, so it isn’t selected.` }
+    const label = typeLabel[String(rec.code || '').trim().toUpperCase()] || String(rec.name || '').trim()
+    return label ? { set: [['type', label]] } : { set: [], note: `${name} was added. Pick it from the list.` }
   }
   if (!id) return { set: [], note: `${name} was added. Pick it from the list.` }
   // A title belongs to a department: when it was added under another one, the form moves to that department first.

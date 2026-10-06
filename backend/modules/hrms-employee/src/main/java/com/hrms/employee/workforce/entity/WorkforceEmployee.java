@@ -82,9 +82,13 @@ public class WorkforceEmployee extends BaseEntity {
     @Column(name = "weekly_off_days", length = 20) private String weeklyOffDays;
     @Column(name = "reporting_manager_id") private UUID reportingManagerId;
 
-    @Enumerated(EnumType.STRING)
+    /**
+     * The code of one of the company's employment types (org.employment_types.code): one of the five
+     * defaults ({@link EmploymentType}) or the company's own (decision 6 Oct 2026). A plain string, so a
+     * company's own code loads; WorkforceEmployeeService checks it against the company's active types.
+     */
     @Column(name = "employment_type", nullable = false, length = 30)
-    private EmploymentType employmentType = EmploymentType.FULL_TIME;
+    private String employmentType = EmploymentType.FULL_TIME.name();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "employment_status", nullable = false, length = 30)
@@ -159,6 +163,7 @@ public class WorkforceEmployee extends BaseEntity {
     private boolean active = true;
 
     public enum Gender { MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY }
+    /** The five default employment type codes (every company has them; companies may add their own). */
     public enum EmploymentType { FULL_TIME, PART_TIME, CONTRACT, INTERN, CONSULTANT }
     public enum EmploymentStatus { PROBATION, ACTIVE, NOTICE_PERIOD, SUSPENDED, EXITED, TERMINATED }
     /** Mirrors ck_employees_exit_type (V143.13). */

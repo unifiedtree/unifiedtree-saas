@@ -93,10 +93,8 @@ describe('selectionAfterCreate', () => {
   it('an employment type is selected by its label when an employee can hold it', () => {
     expect(selectionAfterCreate('classes', { name: 'Consultants', code: 'CONSULTANT' }, 't-new', halfFilled, TYPE_LABEL)).toEqual({ set: [['type', 'Consultant']] })
   })
-  it('says why an employment type an employee can’t hold isn’t selected', () => {
-    const s = selectionAfterCreate('classes', { name: 'Apprentice', code: 'APPRENTICE' }, 't-new', halfFilled, TYPE_LABEL)
-    expect(s.set).toEqual([])
-    expect(s.note).toBe('Apprentice was added, but new people can only be given Full-time, Part-time, Intern, Contract or Consultant for now, so it isn’t selected.')
+  it('a company’s own employment type is selected by its name (6 Oct 2026: people can be given it)', () => {
+    expect(selectionAfterCreate('classes', { name: 'Apprentice', code: 'APPRENTICE' }, 't-new', halfFilled, TYPE_LABEL)).toEqual({ set: [['type', 'Apprentice']] })
   })
   it('without an id from the server it says so instead of guessing', () => {
     expect(selectionAfterCreate('shifts', { name: 'Late' }, null, halfFilled, TYPE_LABEL)).toEqual({ set: [], note: 'Late was added. Pick it from the list.' })
@@ -116,8 +114,8 @@ describe('the half-filled employee form', () => {
     const after = applySelection(halfFilled, selectionAfterCreate('desigs', { name: 'Analyst', dept: 'd-data' }, 'ds-new', halfFilled, TYPE_LABEL).set)
     expect(after).toEqual({ ...halfFilled, dept: 'd-data', desig: 'ds-new' })
   })
-  it('a type that isn’t selected changes nothing', () => {
+  it('a new company type only changes the type', () => {
     const after = applySelection(halfFilled, selectionAfterCreate('classes', { name: 'Apprentice', code: 'APPRENTICE' }, 't', halfFilled, TYPE_LABEL).set)
-    expect(after).toEqual(halfFilled)
+    expect(after).toEqual({ ...halfFilled, type: 'Apprentice' })
   })
 })

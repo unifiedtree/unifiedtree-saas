@@ -1,7 +1,5 @@
 package com.hrms.employee.dto;
 
-import com.hrms.employee.enums.EmploymentType;
-
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -14,7 +12,7 @@ public record UpdateEmployeeRequest(
         UUID geoFenceZoneId,
         UUID managerId,
         String jobTitle,
-        EmploymentType employmentType,
+        String employmentType,      // a default code or the company's own type's code (6 Oct 2026)
         String workLocation,
         String salaryFrequency,
         BigDecimal monthlySalary,

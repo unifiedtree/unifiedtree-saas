@@ -109,8 +109,6 @@ const STEPS: { key: FormStep; label: string }[] = [
   { key: 'review', label: 'Review' },
 ]
 
-const EMPLOYMENT_TYPE_ENUM = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'] as const
-
 function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
     <div>
@@ -1337,17 +1335,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               </div>
 
               <Field label="Employment Type">
-                {/* Only org types whose code is a real backend enum value are offered —
-                    the API field is a fixed enum, so a custom/lookup code (or a UUID
-                    fallback) would 400 at deserialization. Mobile parity: hardcode
-                    the 4 canonical types when no org lookup exists. */}
+                {/* The company's active types: the five defaults and its own (6 Oct 2026 —
+                    the server checks the code against the company's types). The 4
+                    canonical types when the company's list hasn't loaded. */}
                 <ChipGroup
                   value={form.employmentType}
                   onChange={(v) => set('employmentType', v)}
                   options={
-                    employmentTypes.filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code)).length > 0
+                    employmentTypes.filter((t) => t.active && t.code).length > 0
                       ? employmentTypes
-                          .filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code))
+                          .filter((t) => t.active && t.code)
                           .map((t) => ({ value: t.code!, label: t.name }))
                       : [
                           { value: 'FULL_TIME', label: 'Full Time' },

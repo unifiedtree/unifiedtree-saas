@@ -31,6 +31,8 @@ export interface SyncEnv {
   warn: (msg: string) => void
   /** Told the id of each record the server creates (Add employee → "Create" selects it in the form). */
   created?: (id: string | undefined) => void
+  /** The code of a company's employment type shown as `label` (a company's own type, 6 Oct 2026). */
+  typeCodeOf?: (label: string, co: string) => string | undefined
 }
 
 /** Compare records by `_key`. A record without one (or a second copy of one) is new. */
@@ -60,6 +62,9 @@ async function each<T>(items: T[], fn: (x: T) => Promise<unknown>, noun: string)
 }
 const hhmm = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 const changedAny = (o: Rec, r: Rec, keys: string[]) => keys.some((k) => JSON.stringify(o[k] ?? null) !== JSON.stringify(r[k] ?? null))
+/** A person's `type` (its label) → the employment type code: a default's, else the company's own type of that name. */
+export const typeCodeOf = (label: unknown, co: string | undefined, env: SyncEnv) =>
+  TYPE_CODE[String(label ?? '')] || (label && env.typeCodeOf?.(String(label), co || env.defaultCo)) || undefined
 
 // ── employees ────────────────────────────────────────────────────────────────
 async function saveEmployee(o: Rec, r: Rec, env: SyncEnv) {
@@ -67,7 +72,7 @@ async function saveEmployee(o: Rec, r: Rec, env: SyncEnv) {
   const map: [string, string, (v: any) => unknown][] = [
     ['first', 'firstName', (v) => String(v || '').trim()], ['last', 'lastName', (v) => String(v || '').trim()], ['email', 'email', (v) => String(v || '').trim()],
     ['phone', 'phone', (v) => String(v || '').trim()], ['dept', 'departmentId', (v) => v || undefined], ['desig', 'designationId', (v) => v || undefined],
-    ['branch', 'branchId', (v) => v || undefined], ['type', 'employmentType', (v) => TYPE_CODE[v] || undefined], ['joined', 'dateOfJoining', (v) => v || undefined],
+    ['branch', 'branchId', (v) => v || undefined], ['type', 'employmentType', (v) => typeCodeOf(v, r.co, env)], ['joined', 'dateOfJoining', (v) => v || undefined],
   ]
   const patch: Record<string, unknown> = {}
   for (const [k, api, f] of map) if ((o[k] ?? '') !== (r[k] ?? '')) patch[api] = f(r[k])
@@ -97,7 +102,7 @@ async function employees({ added, changed }: Diff, env: SyncEnv) {
     const body = {
       companyId: r.co, firstName: String(r.first || '').trim(), lastName: blank(r.last), email: blank(r.email), phone: blank(r.phone),
       departmentId: r.dept || undefined, designationId: r.desig || undefined, branchId: r.branch || undefined,
-      employmentType: TYPE_CODE[r.type] || 'FULL_TIME', dateOfJoining: r.joined || undefined,
+      employmentType: typeCodeOf(r.type, r.co, env) || 'FULL_TIME', dateOfJoining: r.joined || undefined,
       // The backend still needs a role on create; access is raised later in Users & Access (as in the Add Employee wizard).
       roleCode: 'EMPLOYEE',
     }
@@ -240,7 +245,8 @@ async function classes({ added, changed }: Diff, env: SyncEnv) {
   }
   await each(changed, async ([o, r]) => {
     if (!changedAny(o, r, ['name', 'code', 'status'])) return
-    if (r._raw?.system) throw new Error('Built-in employment types can’t be changed')
+    // A default keeps its name and code and stays on; switching one back on (an older workspace) is allowed.
+    if (r.system && (changedAny(o, r, ['name', 'code']) || r.status !== 'Active')) throw new Error('The default employment types can’t be changed')
     await apiJson(`/v1/hrms/employment-types/${r._key}`, json('PUT', { companyId: r._raw?.companyId, name: String(r.name).trim(), code: String(r.code || '').trim().toUpperCase(), payrollEligible: r._raw?.payrollEligible ?? true, active: r.status === 'Active' }))
   }, 'classifications')
   return [['hrms', 'org', 'employment-types']]

@@ -1,7 +1,6 @@
 package com.hrms.employee.dto;
 
 import com.hrms.core.enums.EmploymentStatus;
-import com.hrms.employee.enums.EmploymentType;
 import com.hrms.employee.enums.Gender;
 
 import java.time.Instant;
@@ -26,7 +25,7 @@ public record EmployeeResponse(
         String weeklyOffDays,
         UUID managerId,
         String jobTitle,
-        EmploymentType employmentType,
+        String employmentType,
         EmploymentStatus employmentStatus,
         LocalDate dateOfJoining,
         String workLocation,

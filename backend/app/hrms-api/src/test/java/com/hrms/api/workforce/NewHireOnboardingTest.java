@@ -55,7 +55,7 @@ class NewHireOnboardingTest {
 
     private WorkforceEmployeeResponse employee() {
         return new WorkforceEmployeeResponse(employeeId, UUID.randomUUID(), "EMP-9", "Asha", null, "Rao", "asha@example.com",
-                null, null, null, UUID.randomUUID(), null, null, null, null, WorkforceEmployee.EmploymentType.FULL_TIME,
+                null, null, null, UUID.randomUUID(), null, null, null, null, WorkforceEmployee.EmploymentType.FULL_TIME.name(),
                 WorkforceEmployee.EmploymentStatus.PROBATION, LocalDate.of(2026, 10, 1), null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, List.of(6, 7), null, false, false, true);
     }

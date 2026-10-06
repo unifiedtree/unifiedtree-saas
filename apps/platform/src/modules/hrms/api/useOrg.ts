@@ -523,6 +523,8 @@ export interface EmploymentTypeRecord {
   payrollEligible: boolean
   system: boolean
   active: boolean
+  /** One of the five defaults every company has (by code, 6 Oct 2026): can't be removed, renamed or switched off. Older servers: absent. */
+  builtIn?: boolean
 }
 
 export interface EmploymentTypePayload {

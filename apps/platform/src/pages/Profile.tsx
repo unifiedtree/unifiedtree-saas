@@ -346,7 +346,8 @@ export const Profile: React.FC = () => {
   const employment = [
     { label: 'Designation', value: rec?.designationName || emp?.jobTitle || '—' },
     { label: 'Department', value: rec?.departmentName || '—' },
-    { label: 'Employment type', value: TYPE_LABEL[emp?.employmentType || ''] || emp?.employmentType || '—' },
+    // A company's own type (6 Oct 2026) shows its code tidied: "SEASONAL_STAFF" → "Seasonal staff".
+    { label: 'Employment type', value: TYPE_LABEL[emp?.employmentType || ''] || (emp?.employmentType ? emp.employmentType.charAt(0) + emp.employmentType.slice(1).toLowerCase().replaceAll('_', ' ') : '—') },
     { label: 'Employee code', value: emp?.employeeCode || '—' },
     { label: 'Work location', value: emp?.workLocation || '—' },
     { label: 'Joined', value: emp?.dateOfJoining ? [fmtDate(emp.dateOfJoining), tenure(emp.dateOfJoining, today)].filter(Boolean).join(' · ') : '—' },

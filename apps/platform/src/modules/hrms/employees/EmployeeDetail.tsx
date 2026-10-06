@@ -68,6 +68,9 @@ const STATUS: Record<string, [string, StatusTone]> = {
   SUSPENDED: ['Suspended', 'danger'], EXITED: ['Exited', 'muted'], TERMINATED: ['Terminated', 'danger'],
 }
 const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full time', PART_TIME: 'Part time', INTERN: 'Intern', CONTRACT: 'Contract', CONSULTANT: 'Consultant' }
+/** A company's own employment type (6 Oct 2026): its name when known, else its code tidied ("SEASONAL_STAFF" → "Seasonal staff"). */
+const typeText = (code: string | null | undefined, types: { code?: string; name: string }[]) =>
+  (!code ? '' : TYPE_LABEL[code] || types.find((t) => t.code === code)?.name || code.charAt(0) + code.slice(1).toLowerCase().replaceAll('_', ' '))
 const humanize = (k: string) => k.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase())
 const hm = (t?: string | null) => (t ? t.slice(0, 5) : '')
 
@@ -203,7 +206,7 @@ export function EmployeeDetail() {
     const employment = [
       { label: 'Designation', value: desig?.title || '—' },
       { label: 'Department', value: dept?.name || '—' },
-      { label: 'Employment type', value: TYPE_LABEL[emp.employmentType || ''] || emp.employmentType || '—' },
+      { label: 'Employment type', value: typeText(emp.employmentType, types) || '—' },
       { label: 'Company', value: company?.name || '—' },
       { label: 'Work location', value: branch?.name || '—' },
       { label: 'Joined', value: fmtDate(emp.dateOfJoining) },
@@ -300,8 +303,9 @@ export function EmployeeDetail() {
     }
 
     // ── Edit panel ──
-    const typeOpts = (types.length ? types.filter((t) => t.code && TYPE_LABEL[t.code]).map((t) => ({ value: t.code!, label: t.name })) : Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label })))
-    const withCur = (opts: { value: string; label: string }[], cur?: string | null) => (cur && !opts.some((o) => o.value === cur) ? [...opts, { value: cur, label: TYPE_LABEL[cur] || cur }] : opts)
+    // The company's active types: the five defaults and its own (6 Oct 2026).
+    const typeOpts = (types.length ? types.filter((t) => t.code && t.active !== false).map((t) => ({ value: t.code!, label: t.name })) : Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label })))
+    const withCur = (opts: { value: string; label: string }[], cur?: string | null) => (cur && !opts.some((o) => o.value === cur) ? [...opts, { value: cur, label: typeText(cur, types) }] : opts)
     const basic: EditField[] = [
       { key: 'firstName', label: 'First name', value: emp.firstName || '', required: true },
       { key: 'lastName', label: 'Last name', value: emp.lastName || '' },

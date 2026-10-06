@@ -3,7 +3,8 @@ import { apiJson } from '@/core/api/client'
 
 // Must match backend WorkforceEmployee.EmploymentStatus exactly (@Enumerated(STRING)).
 export type EmploymentStatus = 'PROBATION' | 'ACTIVE' | 'NOTICE_PERIOD' | 'SUSPENDED' | 'EXITED' | 'TERMINATED'
-export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN' | 'CONSULTANT'
+/** The five default codes, or a company's own employment type code (6 Oct 2026). */
+export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN' | 'CONSULTANT' | (string & {})
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY'
 /** Why someone left. Must match WorkforceEmployee.ExitType / ck_employees_exit_type (V143.13). */
 export type ExitType = 'RESIGNATION' | 'TERMINATION' | 'RETIREMENT' | 'END_OF_CONTRACT' | 'ABSCONDING' | 'DEATH' | 'OTHER'

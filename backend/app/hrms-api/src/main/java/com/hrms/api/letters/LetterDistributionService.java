@@ -244,12 +244,14 @@ public class LetterDistributionService {
         }
     }
 
-    private static List<WorkforceEmployee.EmploymentType> toEmploymentTypes(List<String> values) {
-        try {
-            return values.stream().map(WorkforceEmployee.EmploymentType::valueOf).toList();
-        } catch (IllegalArgumentException ex) {
+    /** Employment type codes: the five defaults or a company's own (6 Oct 2026), so any non-blank code. */
+    private static List<String> toEmploymentTypes(List<String> values) {
+        List<String> codes = values.stream()
+                .map(v -> v == null ? "" : v.trim().toUpperCase(java.util.Locale.ROOT)).toList();
+        if (codes.stream().anyMatch(c -> c.isEmpty() || c.length() > 30)) {
             throw new HrmsException("Unknown employment type in recipient filter",
                     HttpStatus.BAD_REQUEST, "BAD_EMPLOYMENT_TYPE");
         }
+        return codes;
     }
 }

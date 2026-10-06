@@ -25,7 +25,7 @@ import type { SalaryComponent, PayrollSettings, PtSlab } from '../api/usePayroll
 import type { HrConfigResponse, NextEmployeeCodePreview } from '../api/useSettings'
 import {
   employeeRec, companyRec, branchRec, deptRec, desigRec, gradeRec, agencyRec, classRec, shiftRec, leaveRec, policyRec, componentRec, statutoryRecs,
-  TYPE_LABEL, type Contractor, type Rec,
+  type Contractor, type Rec,
 } from './masterData'
 import { SYNC, diff, type SyncEnv } from './masterSync'
 import { MasterAccessStep } from './MasterAccessStep'
@@ -228,7 +228,8 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
   const depts = useQueries(perCo<Department>(['hrms', 'departments'], (c) => `/v1/hrms/departments?companyId=${c}`, canDeptRead && (want('depts') || want('employees'))))
   const desigs = useQueries({ queries: scopeIds.map((cid) => ({ queryKey: ['hrms', 'designations', cid, 'all'], queryFn: () => apiJson<Designation[]>(`/v1/hrms/designations?companyId=${cid}`), enabled: canDesRead && (want('desigs') || want('employees')), ...opt })), combine: listOf as (rs: UseQueryResult<Designation[]>[]) => Coll<Designation> })
   const grades = useQueries(perCo<Grade>(['hrms', 'org', 'grades'], (c) => `/v1/hrms/grades?companyId=${c}`, want('grades') || want('employees')))
-  const types = useQueries(perCo<EmploymentTypeRecord>(['hrms', 'org', 'employment-types'], (c) => `/v1/hrms/employment-types?companyId=${c}`, want('classes') || want('leaves')))
+  // Switched-off types too (6 Oct 2026), so Classification Rules can switch them on again; pickers use the active ones.
+  const types = useQueries(perCo<EmploymentTypeRecord>(['hrms', 'org', 'employment-types', 'all'], (c) => `/v1/hrms/employment-types?companyId=${c}&includeInactive=true`, want('classes') || want('leaves')))
   // Ended agencies too: they show as inactive with "Reactivate".
   const contractors = useQueries(perCo<Contractor>(['master', 'contractors'], (c) => `/v1/hrms/contractors?companyId=${c}&includeArchived=true`, canContrRead && want('agencies')))
   const shiftsL = useQueries(perCo<ShiftPolicy>(['hrms', 'shift-policies'], (c) => `/v1/shifts?companyId=${c}`, want('shifts') || want('employees')))
@@ -275,7 +276,10 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     const shiftByName = new Map(shiftList.map((s) => [s.name, s.id]))
     const shiftOf = new Map((schedQ.data ?? []).filter((r) => r.shiftName && shiftByName.has(r.shiftName)).map((r) => [r.employeeId, shiftByName.get(r.shiftName!)!]))
     const agencyOf = new Map(contractors.data.flatMap((a) => (a.workerIds ?? []).map((w): [string, string] => [w, a.id])))
-    const employees = (empQ.data ?? []).map((e): Rec => ({ ...employeeRec(e, gradeOfDesig, shiftOf), agency: agencyOf.get(e.id) || '' }))
+    // A company's own employment type shows by its name (6 Oct 2026); the defaults by their labels.
+    const typeNames = new Map(typeList.map((t) => [`${t.companyId}|${t.code || ''}`, t.name]))
+    const typeName = (co: string, code: string) => typeNames.get(`${co}|${code}`)
+    const employees = (empQ.data ?? []).map((e): Rec => ({ ...employeeRec(e, gradeOfDesig, shiftOf, typeName), agency: agencyOf.get(e.id) || '' }))
     const nameOf = new Map(employees.map((e) => [e.id, e.name as string]))
     const hr = new Map(hrQs.map((h, i) => [scopeIds[i], h]))
     const many = companies.length > 1, coName = new Map(companies.map((c) => [c.id, c.name]))
@@ -319,6 +323,7 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     today: TODAY_ISO, defaultCo, coOfDept: (id) => db.depts.find((x) => x.id === id)?.co, branches: db.branches, settings: setQ.data ?? null,
     nextGradeLevel: Math.max(0, ...grades.data.map((g) => g.level || 0)) + 1, canInvite, canAssignShift: canShiftAdmin, warn: (m) => show(m, 'info'),
     canBands, gradeIdOf: (code, co) => (code ? db.grades.find((g) => g.id === code && g.co === co)?._key : undefined),
+    typeCodeOf: (label, co) => db.classes.find((x) => x.co === co && x.type === label)?.code || undefined,
   }
   const writableRef = useRef(writable); writableRef.current = writable
   /** Saves started by the handler that is running now; its success toast waits for them. */
@@ -408,12 +413,12 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     },
     /**
      * The employment types someone can be given in a company (`co`, default the top bar's): that company's
-     * active types (Classification Rules) whose code an employee record can hold. From the data only — the
-     * old fixed fallback (Full-time / Part-time / Intern) is gone (w43: testers saw "only 3 options").
+     * active types (Classification Rules) — the five defaults and the company's own (6 Oct 2026). From the
+     * data only — the old fixed fallback (Full-time / Part-time / Intern) is gone (w43: testers saw "only 3 options").
      */
     typeOptions: (cur?: string, co?: string) => {
       const c = co || defaultCo
-      const list = db.classes.filter((x) => x.status === 'Active' && x.co === c && TYPE_LABEL[x.code]).map((x) => x.type as string)
+      const list = db.classes.filter((x) => x.status === 'Active' && x.co === c).map((x) => x.type as string)
       return cur && !list.includes(cur) ? list.concat([cur]) : list
     },
     /** Upload a branch / agency logo (V143.102): org.company.write / hrms.contractor.write. */
