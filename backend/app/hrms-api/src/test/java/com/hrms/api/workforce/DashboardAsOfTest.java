@@ -87,6 +87,13 @@ class DashboardAsOfTest {
         assertEquals(1, DashboardAsOf.headcount(people, Map.of(), MAR_14_2025, false).total());
     }
 
+    @Test void onAPastDayNoJoiningDateCountsFromTheRecordsCreation() {
+        LocalDate created = LocalDate.of(2025, 3, 10);
+        assertEquals(created, DashboardHistory.joinedOrCreated(null, created, true), "as that day's attendance roster");
+        assertNull(DashboardHistory.joinedOrCreated(null, created, false), "today's view: unchanged");
+        assertEquals(MAR_14_2025, DashboardHistory.joinedOrCreated(MAR_14_2025, created, true));
+    }
+
     @Test void aLeaverWithNoRecordedDatesCountsAsGone() {
         var p = new DashboardAsOf.Person(UUID.randomUUID(), LocalDate.of(2024, 1, 1), "EXITED", null, null);
         assertFalse(DashboardAsOf.onRoll(p, MAR_14_2025));

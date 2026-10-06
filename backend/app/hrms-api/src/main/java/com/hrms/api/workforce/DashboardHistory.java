@@ -37,10 +37,14 @@ public class DashboardHistory {
 
     /** {@link #headcount(UUID, UUID, LocalDate)}; {@code throughLastDay}: see {@link DashboardAsOf#headcount(List, Map, LocalDate, boolean)}. */
     public DashboardAsOf.Headcount headcount(UUID tenant, UUID companyId, LocalDate date, boolean throughLastDay) {
+        // A past day: someone without a joining date counts from the day their record was created, as that
+        // day's attendance roster counts them (leftOnOrAfter, ReportService.ON_ROLL_DURING).
         List<DashboardAsOf.Person> people = jdbc.query("""
-                SELECT id, date_of_joining, employment_status, last_working_day, date_of_termination
+                SELECT id, date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date AS created_on,
+                       employment_status, last_working_day, date_of_termination
                   FROM hrms.employees WHERE tenant_id = ? AND company_id = ?
-                """, (rs, i) -> new DashboardAsOf.Person(rs.getObject("id", UUID.class), day(rs.getDate("date_of_joining")),
+                """, (rs, i) -> new DashboardAsOf.Person(rs.getObject("id", UUID.class),
+                joinedOrCreated(day(rs.getDate("date_of_joining")), day(rs.getDate("created_on")), throughLastDay),
                 rs.getString("employment_status"), day(rs.getDate("last_working_day")), day(rs.getDate("date_of_termination"))),
                 tenant, companyId);
         Map<UUID, List<DashboardAsOf.Change>> history = jdbc.query("""
@@ -101,6 +105,11 @@ public class DashboardHistory {
                    AND COALESCE(last_working_day, date_of_termination) IS NOT NULL
                    AND id IN (""" + in + ")", rs -> { out.put(rs.getObject("id", UUID.class), rs.getDate("last_day").toLocalDate()); }, args);
         return out;
+    }
+
+    /** The joining date; on a past day ({@code throughLastDay}) without one, the day the record was created. */
+    static LocalDate joinedOrCreated(LocalDate joined, LocalDate created, boolean throughLastDay) {
+        return joined != null || !throughLastDay ? joined : created;
     }
 
     private static LocalDate day(Date d) { return d == null ? null : d.toLocalDate(); }
