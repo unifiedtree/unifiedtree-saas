@@ -97,7 +97,8 @@ try {
   if (await later.isVisible().catch(() => false)) await later.click().catch(() => {})
   await page.getByRole('button', { name: /notifications/i }).first().click()
   const item = page.getByText('Payment of ₹4,000 due in 2 days').first()
-  await item.waitFor({ timeout: 20000 }).catch(() => {})
+  // The list is read when the panel opens (two requests); on a loaded machine that took over 20 s on 6 Oct.
+  await item.waitFor({ timeout: 45000 }).catch(() => {})
   check('web: the owner sees the reminder in the notification panel', await item.isVisible().catch(() => false))
   await page.screenshot({ path: `${shots}/chakri-billing-reminder-panel.png` })
   await item.click().catch(() => {})
