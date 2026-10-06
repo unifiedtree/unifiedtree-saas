@@ -22,7 +22,7 @@ export function PaySettingsView({ v }: { v: any }) {
           </div>
           {v.showSide ? (
             <>
-              <nav aria-label="On this page" style={{flex: "0 0 176px", alignSelf: "flex-start", position: "sticky", top: "88px", display: "grid", gap: "2px", minWidth: "0", boxSizing: "border-box", padding: "14px 8px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+              <nav aria-label="On this page" style={{flex: "0 0 176px", alignSelf: "flex-start", position: "sticky", top: "88px", display: "grid", gap: "2px", minWidth: "0", boxSizing: "border-box", padding: "14px 8px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
                 <p style={{margin: "0 0 6px", padding: "0 12px", fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
                   {"On this page"}
                 </p>
@@ -179,7 +179,7 @@ export function PaySettingsView({ v }: { v: any }) {
             ) : null}
             {v.readOnly ? (
               <>
-                <div role="note" style={{display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "14px", background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <div role="note" style={{display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "14px", background: "#fff", border: "1px solid #e2e8f0"}}>
                   <span aria-hidden="true" style={{flex: "0 0 auto", width: "32px", height: "32px", borderRadius: "10px", background: "#f1f5f9", color: "#475569", display: "inline-flex", alignItems: "center", justifyContent: "center"}}>
                     {txt(v.icLock)}
                   </span>
@@ -199,7 +199,7 @@ export function PaySettingsView({ v }: { v: any }) {
                 <div role="status" aria-label="Loading payroll settings" style={{display: "grid", gap: "16px"}}>
                   {arr(v.skCards).map((k: any, $index: number) => (
                     <Fragment key={$index}>
-                      <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                      <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
                         <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                           <SkeletonBlock {...(v.sk?.icon || {})} />
                           <div style={{flex: "1 1 auto", display: "grid", gap: "8px", minWidth: "0"}}>
@@ -230,21 +230,21 @@ export function PaySettingsView({ v }: { v: any }) {
             ) : null}
             {v.isError ? (
               <>
-                <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
                   <EmptyState icon={v.errIcon} title="Couldn’t load payroll settings" description="Something went wrong while loading. Nothing was changed — try again." action={v.retryAction} />
                 </div>
               </>
             ) : null}
             {v.noAccess ? (
               <>
-                <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px"}}>
                   <EmptyState icon={v.lockIcon} title="Access restricted" description="Payroll settings are only open to finance admins. Ask one of them if you need access." action={v.accessAction} />
                 </div>
               </>
             ) : null}
             {v.live ? (
               <>
-                <section id="ps-pf" aria-labelledby="ps-pf-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", minWidth: "0"}}>
+                <section id="ps-pf" aria-labelledby="ps-pf-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", minWidth: "0"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                     {v.pf?.on ? (
                       <>
@@ -348,7 +348,7 @@ export function PaySettingsView({ v }: { v: any }) {
                     </>
                   ) : null}
                 </section>
-                <section id="ps-esi" aria-labelledby="ps-esi-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", minWidth: "0"}}>
+                <section id="ps-esi" aria-labelledby="ps-esi-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", minWidth: "0"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                     {v.esi?.on ? (
                       <>
@@ -441,7 +441,7 @@ export function PaySettingsView({ v }: { v: any }) {
                     </>
                   ) : null}
                 </section>
-                <section id="ps-pt" aria-labelledby="ps-pt-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", minWidth: "0"}}>
+                <section id="ps-pt" aria-labelledby="ps-pt-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", minWidth: "0"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                     {v.pt?.on ? (
                       <>
@@ -556,7 +556,7 @@ export function PaySettingsView({ v }: { v: any }) {
                     </>
                   ) : null}
                 </section>
-                <section id="ps-lwf" aria-labelledby="ps-lwf-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", minWidth: "0"}}>
+                <section id="ps-lwf" aria-labelledby="ps-lwf-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", minWidth: "0"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                     {v.lwf?.on ? (
                       <>
@@ -644,7 +644,7 @@ export function PaySettingsView({ v }: { v: any }) {
                     </>
                   ) : null}
                 </section>
-                <section id="ps-cycle" aria-labelledby="ps-cycle-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", minWidth: "0"}}>
+                <section id="ps-cycle" aria-labelledby="ps-cycle-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", minWidth: "0"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                     {v.cycle?.on ? (
                       <>
@@ -810,7 +810,7 @@ export function PaySettingsView({ v }: { v: any }) {
                     </>
                   ) : null}
                 </section>
-                <section id="ps-tds" aria-labelledby="ps-tds-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", minWidth: "0"}}>
+                <section id="ps-tds" aria-labelledby="ps-tds-h" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", minWidth: "0"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px"}}>
                     <span aria-hidden="true" style={{flex: "0 0 auto", width: "40px", height: "40px", boxSizing: "border-box", borderRadius: "12px", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8"}}>
                       {txt(v.icTds)}

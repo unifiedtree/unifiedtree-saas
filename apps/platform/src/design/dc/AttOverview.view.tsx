@@ -69,7 +69,7 @@ export function AttOverviewView({ v }: { v: any }) {
                 ))}
               </div>
               <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "stretch"}}>
-                <article style={{flex: "1.25 1 400px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <article style={{flex: "1.25 1 400px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
                   <div>
                     <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                       {txt(v.mixTitle)}
@@ -147,7 +147,7 @@ export function AttOverviewView({ v }: { v: any }) {
                     </ul>
                   </div>
                 </article>
-                <article style={{flex: "1 1 320px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <article style={{flex: "1 1 320px", minWidth: "0", display: "grid", gap: "16px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
                   <div>
                     <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                       {"How people checked in"}
@@ -195,7 +195,7 @@ export function AttOverviewView({ v }: { v: any }) {
                 </span>
               </div>
               <div style={{display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "stretch"}}>
-                <article style={{flex: "1.7 1 460px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <article style={{flex: "1.7 1 460px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
                   <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: "10px 16px"}}>
                     <div>
                       <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
@@ -245,7 +245,7 @@ export function AttOverviewView({ v }: { v: any }) {
                     ))}
                   </svg>
                 </article>
-                <article style={{flex: "1 1 300px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)"}}>
+                <article style={{flex: "1 1 300px", minWidth: "0", display: "grid", gap: "14px", alignContent: "start", padding: "20px 22px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px"}}>
                   <div>
                     <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                       {"Late most often"}
@@ -272,7 +272,7 @@ export function AttOverviewView({ v }: { v: any }) {
                   </div>
                 </article>
               </div>
-              <article style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", overflow: "hidden"}}>
+              <article style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", overflow: "hidden"}}>
                 <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px 16px", padding: "18px 22px 14px"}}>
                   <div>
                     <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>

@@ -15,27 +15,27 @@ export function ProcessPipelineView({ v }: { v: any }) {
               <li style={{position: "relative", display: "grid", minWidth: "0", borderRadius: "16px", transition: "transform .15s ease,box-shadow .15s ease"}} className="dc-process-pipeline-0">
                 {t?.fGray ? (
                   <>
-                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #e2e8f0", background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,.04)", pointerEvents: "none"}} />
+                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #e2e8f0", background: "#fff", pointerEvents: "none"}} />
                   </>
                 ) : null}
                 {t?.fBlue ? (
                   <>
-                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #bfdbfe", background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,.04)", pointerEvents: "none"}} />
+                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #bfdbfe", background: "#fff", pointerEvents: "none"}} />
                   </>
                 ) : null}
                 {t?.fTeal ? (
                   <>
-                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #99f6e4", background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,.04)", pointerEvents: "none"}} />
+                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #99f6e4", background: "#fff", pointerEvents: "none"}} />
                   </>
                 ) : null}
                 {t?.fGreen ? (
                   <>
-                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #a7f3d0", background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,.04)", pointerEvents: "none"}} />
+                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #a7f3d0", background: "#fff", pointerEvents: "none"}} />
                   </>
                 ) : null}
                 {t?.fRed ? (
                   <>
-                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #fecdd3", background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,.04)", pointerEvents: "none"}} />
+                    <span aria-hidden="true" style={{position: "absolute", inset: "0", borderRadius: "16px", border: "1px solid #fecdd3", background: "#fff", pointerEvents: "none"}} />
                   </>
                 ) : null}
                 {t?.fAside ? (

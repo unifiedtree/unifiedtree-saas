@@ -107,7 +107,7 @@ export function ShiftOvertimeView({ v }: { v: any }) {
                 </Fragment>
               ))}
             </div>
-            <section aria-labelledby="ot-month" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", overflow: "hidden"}}>
+            <section aria-labelledby="ot-month" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "18px", overflow: "hidden"}}>
               <div style={{padding: "18px 20px 12px"}}>
                 <h3 id="ot-month" style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "800"}}>
                   {"Overtime · "}{txt(v.monthLabel)}

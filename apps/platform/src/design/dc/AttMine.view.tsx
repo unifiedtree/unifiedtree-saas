@@ -22,7 +22,7 @@ export function AttMineView({ v }: { v: any }) {
             ))}
           </div>
         </section>
-        <section style={{flex: "1.6 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 20px", display: "grid", gap: "12px"}}>
+        <section style={{flex: "1.6 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px 20px", display: "grid", gap: "12px"}}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
             <h3 style={{margin: "0", fontFamily: "var(--u-font)", fontSize: "16px", fontWeight: "700"}}>
               {"Daily log"}

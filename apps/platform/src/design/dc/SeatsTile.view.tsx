@@ -47,7 +47,7 @@ export function SeatsTileView({ v }: { v: any }) {
       ) : null}
       {v.isLow ? (
         <>
-          <div style={{height: "100%", boxSizing: "border-box", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: "16px", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "0 10px 24px -16px rgba(217,119,6,.6)"}}>
+          <div style={{height: "100%", boxSizing: "border-box", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: "16px", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
               <span style={{display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#92400e"}}>
                 <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#fef3c7", color: "#b45309", alignItems: "center", justifyContent: "center"}}>
@@ -87,7 +87,7 @@ export function SeatsTileView({ v }: { v: any }) {
       ) : null}
       {v.isCritical ? (
         <>
-          <div style={{height: "100%", boxSizing: "border-box", background: "#fff7ed", border: "1.5px solid #fb923c", borderRadius: "16px", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "0 0 0 4px #ffedd5,0 12px 28px -16px rgba(234,88,12,.7)"}}>
+          <div style={{height: "100%", boxSizing: "border-box", background: "#fff7ed", border: "1.5px solid #fb923c", borderRadius: "16px", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
               <span style={{display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#9a3412"}}>
                 <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ffedd5", color: "#ea580c", alignItems: "center", justifyContent: "center"}}>
@@ -130,7 +130,7 @@ export function SeatsTileView({ v }: { v: any }) {
       ) : null}
       {v.isExhausted ? (
         <>
-          <div role="alert" style={{height: "100%", boxSizing: "border-box", background: "#fff1f2", border: "1.5px solid #f43f5e", borderRadius: "16px", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "0 0 0 4px #ffe4e6,0 14px 30px -16px rgba(225,29,72,.75)"}}>
+          <div role="alert" style={{height: "100%", boxSizing: "border-box", background: "#fff1f2", border: "1.5px solid #f43f5e", borderRadius: "16px", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
               <span style={{display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#9f1239"}}>
                 <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ffe4e6", color: "#e11d48", alignItems: "center", justifyContent: "center"}}>
