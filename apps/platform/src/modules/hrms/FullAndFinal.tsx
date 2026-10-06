@@ -9,6 +9,7 @@ import { ModulePage, Views, StatRow, State, Panel, Note, Facts } from '@/design/
 import { DataTable } from '@/shared/components/DataTable'
 import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { useEmployeeDirectory, useWorkforceEmployee, type WorkforceEmployee } from './api/useWorkforce'
 import { FNF_PAGE_SIZE, inr, useApproveSettlement, useCancelSettlement, useFnfSettlement, useFnfSettlements, usePaySettlement, useProcessSettlement, type FnfComponentType, type FnfSettlement, type FnfStatus } from './api/useFnf'
 
@@ -130,7 +131,11 @@ type DraftComponent = { label: string; type: FnfComponentType; amount: string }
 const isSeparated = (item: WorkforceEmployee) => item.employmentStatus === 'EXITED' || item.employmentStatus === 'TERMINATED'
 function CreateSettlement({ initialEmployeeId, onCreated }: { initialEmployeeId?: string; onCreated: (id: string) => void }) {
   const companies = useCompanies()
-  const [companyId, setCompanyId] = useState('')
+  // Two or more companies: the leavers of the company the top bar's selector is on. One company: the
+  // filter as before.
+  const { companyId: currentCompanyId, multi } = useCurrentCompany()
+  const [pickedCompanyId, setCompanyId] = useState('')
+  const companyId = multi ? currentCompanyId : pickedCompanyId
   const [status, setStatus] = useState<'EXITED' | 'TERMINATED'>('EXITED')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -170,7 +175,7 @@ function CreateSettlement({ initialEmployeeId, onCreated }: { initialEmployeeId?
   }
   return <div style={{ display: 'grid', gap: 16, maxWidth: 900 }}>
     <Panel title="Choose a separated employee" sub="Record the employee's exit first. The settlement uses the last working day saved in their employee record.">
-      <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Company<select className="ut-select mt-1" value={companyId} onChange={event => { setCompanyId(event.target.value); setPage(0) }}><option value="">All companies</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="text-sm font-medium">Exit status<select className="ut-select mt-1" value={status} onChange={event => { setStatus(event.target.value as 'EXITED' | 'TERMINATED'); setPage(0) }}><option value="EXITED">Exited</option><option value="TERMINATED">Terminated</option></select></label></div>
+      <div className="grid gap-3 sm:grid-cols-2">{!multi && <label className="text-sm font-medium">Company<select className="ut-select mt-1" value={companyId} onChange={event => { setCompanyId(event.target.value); setPage(0) }}><option value="">All companies</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>}<label className="text-sm font-medium">Exit status<select className="ut-select mt-1" value={status} onChange={event => { setStatus(event.target.value as 'EXITED' | 'TERMINATED'); setPage(0) }}><option value="EXITED">Exited</option><option value="TERMINATED">Terminated</option></select></label></div>
       {companies.isError && <Failure error={companies.error} retry={() => companies.refetch()} />}
       <label className="block text-sm font-medium">Find employee<input type="search" className="ut-input mt-1" placeholder="Search name, code or email" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} /></label>
       {linked.isError && <Failure error={linked.error} retry={() => linked.refetch()} />}

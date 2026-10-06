@@ -23,7 +23,7 @@ import { addDays, fmtLong, fmtShort, fmtWd, istToday } from '@/design/dc/dates'
 import { dashIcon } from '@/design/dc/icons'
 import { apiBlob } from '@/core/api/client'
 import { saveServerFile } from '@/shared/export/fileExport'
-import { useCompanies } from '../../api/useOrg'
+import { useCurrentCompany } from '../../company/CurrentCompany'
 import { useTeamDashboard, type StaffStatusResponse } from '../../api/useAttendance'
 import { useChangeDayStatus, useReviewExceptions, statusLabel } from '../../api/useAttendanceReview'
 import { useAssistedPunches, punchedByMap } from '../../api/useAssistedPunches'
@@ -84,8 +84,7 @@ export function DailyLogs({ perms }: { perms: DailyPerms }) {
   const [exporting, setExporting] = useState(false)
 
   // ── data ──
-  const { data: companies = [] } = useCompanies()
-  const companyId: string = companies[0]?.id ?? ''
+  const { companyId } = useCurrentCompany()
   // includeSelf: a company-wide viewer is on the list like everyone else, as on the admin dashboard, so a card
   // there opens a list with the same people and counts (a manager's team never includes the manager).
   const team = useTeamDashboard(date, undefined, perms.team, !isToday, { includeWeeklyOff: true, includeSelf: true })

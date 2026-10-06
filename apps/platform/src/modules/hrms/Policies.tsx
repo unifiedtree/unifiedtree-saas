@@ -14,7 +14,7 @@ import {
   HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone,
 } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import {
   usePolicies, useMyAcknowledgements, useAcknowledgePolicy, usePolicyAcknowledgements,
   useCreatePolicy, useUpdatePolicy, useArchivePolicy, useUnarchivePolicy,
@@ -175,9 +175,8 @@ const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : '')
 
 function ShiftRulesTab() {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
 
   const { data: shifts = [], isLoading } = useShiftPolicies(activeCompany)
   const create = useCreateShiftPolicy()
@@ -275,12 +274,6 @@ function ShiftRulesTab() {
 
   return (
     <div className="space-y-5">
-      {companies.length > 1 && !editingId && (
-        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm w-auto">
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      )}
-
       <div className="flex items-start gap-2.5 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3">
         <Timer size={16} className="mt-0.5 shrink-0 text-[#2563EB]" />
         <p className="text-xs leading-relaxed text-[#1E40AF]">
@@ -444,15 +437,8 @@ function ShiftRulesTab() {
  * Two forms writing the same fields would drift within a release.
  */
 function LeaveRulesTab() {
-  // 2026-09-10: Shift Rules and Manage both render a company <select> when
-  // there are multiple companies. Leave Rules didn't, so LeaveTypes silently
-  // read and wrote only the FIRST company's leave types — with no control to
-  // switch and no indication which company was in effect. Mirror the pattern
-  // used by the other tabs here rather than in the shared LeaveTypes widget,
-  // so the /hrms/leave-types standalone page is untouched.
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompanyId = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompanyId = useCurrentCompany().companyId
 
   return (
     <div className="space-y-5">
@@ -464,20 +450,6 @@ function LeaveRulesTab() {
           (on/off plus a maximum number of days) recorded against the leave type.
         </p>
       </div>
-      {companies.length > 1 && (
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-text-secondary">Company</label>
-          <select
-            value={activeCompanyId}
-            onChange={(e) => setCompanyId(e.target.value)}
-            className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
-          >
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
       <LeaveTypes
         crumb="Rules & Policies"
         subtitle="Entitlement, paid status and carry-forward allowance per leave type"
@@ -646,9 +618,8 @@ const emptyDraft = (): DraftPolicy => ({
 
 function ManageTab({ canWrite }: { canWrite: boolean }) {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // New policies go to the company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
 
   // Which lifecycle state the table is showing. Defaults to ACTIVE, which is
   // what this table always showed — the difference is that ARCHIVED is now
@@ -765,12 +736,6 @@ function ManageTab({ canWrite }: { canWrite: boolean }) {
 
   return (
     <div className="space-y-5">
-      {companies.length > 1 && !editingId && (
-        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm w-auto">
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      )}
-
       <div className="ut-card ut-card-lg p-5">
         <h3 className="mb-4 text-[15px] font-semibold text-text-primary">{editingId ? 'Edit policy' : 'Publish a policy'}</h3>
         <div className="grid grid-cols-2 gap-x-4 gap-y-5">

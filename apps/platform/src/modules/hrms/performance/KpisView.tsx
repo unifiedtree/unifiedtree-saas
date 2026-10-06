@@ -14,6 +14,7 @@ import { Pager, SectionCell, SectionGrid } from '@/design/kit/data'
 import { DateInput, FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { stamp } from '@/design/module/ModuleKit'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import type { EmployeeKpiRow } from '../api/usePerformance'
 import {
   useAdminKpis, useCompanyKpis, useDropKpi, useKpiHistory, useKpiSummary, useRecordKpiProgress, useSaveCompanyKpi, useSaveKpi,
@@ -299,7 +300,9 @@ function CompanyKpiPanel({ existing, onClose }: { existing?: CompanyKpi; onClose
   const [dueDate, setDueDate] = useState(existing?.dueDate || '')
   const [status, setStatus] = useState(existing?.status || 'ACTIVE')
   const [error, setError] = useState('')
-  const company = companyId || (list.length === 1 ? list[0].id : '')
+  // A new KPI starts on the company the top bar's selector is on (its only company, with one).
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  const company = companyId || (list.length === 1 ? list[0].id : existing ? '' : currentCompanyId)
   const submit = async () => {
     if (!title.trim()) { setError('Give the KPI a title.'); return }
     if (!existing && !company) { setError('Choose the company.'); return }

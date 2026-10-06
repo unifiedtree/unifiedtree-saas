@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
-import { useCompanies } from '../../api/useOrg'
+import { useCurrentCompany } from '../../company/CurrentCompany'
 import { useTeamDashboard, useAttendanceTrend, useAttendanceSources, type AttendanceSourceBreakdown } from '../../api/useAttendance'
 import { useHolidays } from '../../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../../api/useReports'
@@ -27,8 +27,7 @@ export interface MonthCounts { total: number; present: number; regular: number; 
 export function useAnalyticsData(m: { month: string; past: boolean; from: string; to: string }, today: string) {
   const canTeam = usePermission(P.ATTENDANCE_TEAM_READ)
   const canReport = usePermission(P.HRMS_REPORT_ATTENDANCE)
-  const { data: companies = [] } = useCompanies()
-  const companyId: string = companies[0]?.id ?? ''
+  const { companyId } = useCurrentCompany()
 
   // People on their weekly off are listed (as "Day off"), so "Who's where today" counts everyone on a Sunday too.
   const teamToday = useTeamDashboard(today, undefined, canTeam, false, { includeWeeklyOff: true })

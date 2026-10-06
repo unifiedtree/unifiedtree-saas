@@ -1,11 +1,13 @@
 // The org chart's own page, for every role (route /hrms/org-chart; the lead
 // wires the route and the registry entry). Also shown as the "Org chart"
 // sub-tab of Organization Setup (master/MasterContainer).
-//   ?co=<companyId>     the company to show (people with hrms.employee.read)
+//   ?co=<companyId>     the company to show (people with hrms.employee.read); without it, the company
+//                       the top bar's selector is on (2+ companies) or the server's default
 //   ?focus=<employeeId> open the chart on this person ("View in org chart" links)
 import { useCallback, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageFrame, PageHeader } from '@/design/kit/display'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { OrgChartView } from './OrgChartView'
 import { plural } from './orgTree'
 import type { OrgChartData } from './useOrgChart'
@@ -26,7 +28,8 @@ export function orgChartSubline(data: OrgChartData | null): string {
 /** The chart with the page's own address: the company and the person to open on. */
 export function useOrgChartParams() {
   const [params, setParams] = useSearchParams()
-  const companyId = params.get('co') || null
+  const current = useCurrentCompany()
+  const companyId = params.get('co') || (current.multi && current.companyId) || null
   const focusId = params.get('focus') || null
   const setCompany = useCallback((id: string) => setParams((cur) => {
     const n = new URLSearchParams(cur)

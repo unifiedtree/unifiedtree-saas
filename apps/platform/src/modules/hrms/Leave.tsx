@@ -36,7 +36,7 @@ import {
   type DecidedStatus, type LeaveApprovalStatus, type LeaveDuration, type LeaveRequestResponse,
 } from './api/useLeave'
 import { usePendingWfhApprovals, useWfhDecision } from './api/useWfh'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { useWeekendDays, jsWeekendDays, useHolidays } from './api/useSettings'
 import { useRecentDecisions } from './api/shared/useRecentDecisions'
 import { useDecisionUndo } from './api/shared/useDecisionUndo'
@@ -123,9 +123,11 @@ function MyLeave({ toast }: { toast: (m: string, err?: boolean, d?: string) => v
 // ── Apply (self) ────────────────────────────────────────────────────────────
 const REASON_MAX = 500
 function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?: boolean, d?: string) => void }) {
-  const { data: companies = [] } = useCompanies()
+  const { companyId: currentCompanyId } = useCurrentCompany()
   const { data: me } = useCurrentUser()
-  const companyId = companies[0]?.id ?? me?.companyId ?? ''
+  // Your own leave is in your own company (its leave types, weekly offs and holidays), whichever
+  // company the top bar is on; a login with no employee record uses that company.
+  const companyId = me?.companyId || currentCompanyId || ''
   const types = useLeaveTypes(companyId)
   const mine = useMyLeaves(0)
   const bal = useMyBalances(new Date().getFullYear())

@@ -18,6 +18,8 @@ import { litRail, railViaOn, railViaTo, readRailVia, saveRailVia, type RailVia }
 import { AppRail, type RailGroupView, type RailItem } from '@/design/shell/AppRail'
 import { ModuleTabs } from '@/design/shell/ModuleTabs'
 import { TopBar } from '@/design/shell/TopBar'
+import { CompanySwitcher } from '@/design/shell/CompanySwitcher'
+import { useCurrentCompany } from '@/modules/hrms/company/CurrentCompany'
 import { MorePanel, type MoreSection } from '@/design/shell/MorePanel'
 import { HelpPanel, useHelpContacts } from '@/design/shell/HelpPanel'
 import { DesignTooltip, MobileDrawer, WorkspaceTile, type DrawerPages } from '@/design/shell/ShellChrome'
@@ -91,6 +93,8 @@ export function PlatformShell() {
   const [listH, setListH] = useState(0)
   // Bumped to show a page again from scratch (after its "?q=" filter is cleared).
   const [outletKey, setOutletKey] = useState(0)
+  // Goes up when the person switches company (CurrentCompany): the page is shown again from scratch.
+  const companyVersion = useCurrentCompany().version
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
@@ -305,6 +309,7 @@ export function PlatformShell() {
             tabs={topTabs}
             pill={topTabs ? null : pillFor()}
             chip={chip}
+            company={<CompanySwitcher />}
             search={
               <TopBarSearch
                 onOpen={(path) => openInApp(navigate, path)}
@@ -326,7 +331,7 @@ export function PlatformShell() {
             {/* The shell stays put between pages: a broken page is contained here, and a page whose
                 code is still arriving shows its own outline instead of blanking the app. */}
             <RouteErrorBoundary resetKey={pathname} routeLabel={pathname}>
-              <React.Suspense fallback={<PageSkeleton path={pathname} />}><Outlet key={outletKey} /></React.Suspense>
+              <React.Suspense fallback={<PageSkeleton path={pathname} />}><Outlet key={`${outletKey}:${companyVersion}`} /></React.Suspense>
             </RouteErrorBoundary>
           </div>
         </main>

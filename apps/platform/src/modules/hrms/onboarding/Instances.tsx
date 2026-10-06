@@ -24,7 +24,8 @@ import {
   type OnboardingInstanceStatus, type OnboardingOverview, type OnboardingOverviewRow,
 } from './api/useOnboarding'
 import { useEmployeesByIds } from '../api/useWorkforce'
-import { useCompanies, useDepartments } from '../api/useOrg'
+import { useDepartments } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   RUN_STATUS, RUN_STATUS_KEYS, fullDate, joiningText, progressOf, rowsFromInstances, runPill, runStatusKey, runStatusLabel, runStatusTone,
   tasksText, type RunStatusKey,
@@ -121,8 +122,7 @@ function LegacyHires() {
   const runs = useInstances(undefined, true)
   const ids = useMemo(() => (runs.data ?? []).map((r) => r.employeeId).filter((id): id is string => !!id), [runs.data])
   const people = useEmployeesByIds(ids, { enabled: canReadEmployees })
-  const { data: companies = [] } = useCompanies()
-  const { data: departments = [] } = useDepartments(companies[0]?.id ?? '')
+  const { data: departments = [] } = useDepartments(useCurrentCompany().companyId)
   const templates = useTemplates(undefined, { enabled: canReadTemplates })
   const data: OnboardingOverview | undefined = useMemo(() => {
     if (!runs.data) return undefined

@@ -11,7 +11,7 @@ import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { dashIcon } from '@/design/dc/icons'
 import { ModulePage, Views, useView, StatRow, State, RowList, Row, Panel, Note, DecisionCard, SubHeading, useDesignToast, dmy, Facts } from '@/design/module/ModuleKit'
 import { AdvanceAdmin, AdvanceDecisionActions, advanceLabel } from './advance/AdvanceAdmin'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import {
   useMyAdvances, usePendingAdvanceApprovals, useRequestAdvance, inr, type AdvanceStatus,
   useMyAdvancesSummary, useMyAdvancePreview,
@@ -26,11 +26,8 @@ export const Advance: React.FC = () => {
   const canRequest = usePermission('hrms.advance.request.self') && personal
   const canApprove = usePermission('hrms.advance.approve')
   const canDisburse = usePermission('hrms.advance.disburse')
-  const { data: companies = [] } = useCompanies()
-  // Single-company tenants pin the dept filter to the one company; a
-  // multi-company tenant currently sees all departments across companies,
-  // which matches today's directory behaviour.
-  const singleCompanyId = companies.length === 1 ? companies[0].id : undefined
+  // The department filter lists the departments of the company the top bar's selector is on.
+  const currentCompanyId = useCurrentCompany().companyId || undefined
   const { show, node } = useDesignToast()
   const views = [
     ...(canApprove || canDisburse ? [{ key: 'approvals', label: 'Approvals', icon: 'inbox' }] : []),
@@ -47,7 +44,7 @@ export const Advance: React.FC = () => {
         {tab === 'approvals' && <ApprovalsTab />}
         {tab === 'my' && <MyAdvancesTab />}
         {tab === 'request' && <RequestTab onSubmitted={() => setTab('my')} toast={show} />}
-        {tab === 'company' && <AdvanceAdmin companyWide={canDisburse} companyId={singleCompanyId} />}
+        {tab === 'company' && <AdvanceAdmin companyWide={canDisburse} companyId={currentCompanyId} />}
       </div>
       {node}
     </ModulePage>

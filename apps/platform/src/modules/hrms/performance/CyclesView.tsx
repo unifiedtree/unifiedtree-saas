@@ -14,6 +14,7 @@ import { SectionCell, SectionGrid } from '@/design/kit/data'
 import { Checkbox, DateInput, Dialog, FieldGrid, Input, PanelButton, Select, SidePanel, Toggle, useToast } from '@/design/kit/overlays'
 import { istToday } from '@/design/dc/dates'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useEmployeesByIds } from '../api/useWorkforce'
 import { useCreateCycle, useReviewCycles, type CycleMilestones, type ReviewCycle } from '../api/usePerformance'
 import {
@@ -147,7 +148,9 @@ function NewCyclePanel({ datesReady, onClose }: { datesReady: boolean; onClose: 
   const [error, setError] = useState('')
   const busy = create.isPending || saveDates.isPending
   const list = companies.data ?? []
-  const selectedCompany = companyId || (list.length === 1 ? list[0].id : '')
+  // Starts on the company the top bar's selector is on (its only company, with one).
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  const selectedCompany = companyId || (list.length === 1 ? list[0].id : currentCompanyId)
   const submit = async () => {
     if (!selectedCompany || !name.trim() || !periodStart || !periodEnd) { setError('Choose a company, name the cycle, and set both period dates.'); return }
     if (periodEnd < periodStart) { setError('The period end must be on or after the start.'); return }

@@ -15,8 +15,9 @@ import { Toggle as KitToggle, useToast as useKitToast } from '@/design/kit/overl
 import { DateField } from '@/shared/components/calendar'
 import './onboarding.css'
 import {
-  useBranches, useCompanies, useDepartments, useDesignations, useEmploymentTypes,
+  useBranches, useDepartments, useDesignations, useEmploymentTypes,
 } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   useCreateWorkforceEmployee, useEmployeeDirectory, useUpdateWorkforceEmployee, useWorkforceEmployee,
   type CreateWorkforceEmployeePayload, type WorkforceEmployee,
@@ -449,8 +450,7 @@ export const OnboardingForm: React.FC = () => {
   // ── Project data sources ───────────────────────────────────────────────────
   // Every dropdown below is the tenant's own reference data, not invented
   // strings, so a hire created here lands on the same ids the rest of HRMS uses.
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id || ''
+  const { companyId } = useCurrentCompany()
   const { data: departments = [] } = useDepartments(companyId)
   const { data: branches = [] } = useBranches(companyId || undefined)
   const designationQuery = useDesignations(companyId, form.departmentId || undefined)

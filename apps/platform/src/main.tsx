@@ -13,6 +13,7 @@ import { QueryProvider } from './providers/QueryProvider'
 import { AuthProvider } from './providers/AuthProvider'
 import { NotificationProvider } from './core/notifications/NotificationProvider'
 import { ConfirmDialogProvider } from './shared/components/ConfirmDialog'
+import { CurrentCompanyProvider } from './modules/hrms/company/CurrentCompany'
 import App from './App'
 
 // In production builds import.meta.env.DEV is a static `false`, so Vite/Rollup
@@ -37,7 +38,10 @@ enableMocking().then(() => {
             <AuthProvider>
               <NotificationProvider>
                 <ConfirmDialogProvider>
-                  <App />
+                  {/* The HRMS's current company (the top bar's company selector). */}
+                  <CurrentCompanyProvider>
+                    <App />
+                  </CurrentCompanyProvider>
                   <Toaster richColors position="top-right" />
                 </ConfirmDialogProvider>
               </NotificationProvider>

@@ -18,7 +18,7 @@ import { Button, Callout, CellPerson, PageFrame, PageHeader, Section, Table, typ
 import { Input, Select, Textarea, useToast } from '@/design/kit/overlays'
 import { fmtWd, istToday } from '@/design/dc/dates'
 import { useDebounce } from '@/shared/hooks/useDebounce'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
 import { useManualEntry, useTeamDashboard } from '../api/useAttendance'
 import { useChangeDayStatus } from '../api/useAttendanceReview'
@@ -41,8 +41,7 @@ export function ManualEntry() {
   const today = istToday()
   const prefillEmployeeId = params.get('employeeId') ?? ''
   const askedDate = params.get('date') ?? ''
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id
+  const companyId = useCurrentCompany().companyId || undefined
   const canReadDirectory = usePermission(P.HRMS_EMPLOYEE_READ)
   const canSave = usePermission('attendance.workforce.admin')
   const canOverride = usePermission('attendance.status.override')

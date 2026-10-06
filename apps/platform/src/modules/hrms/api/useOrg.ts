@@ -171,10 +171,10 @@ export function companiesQuery(canList: boolean, qc: QueryClient, api: ApiFetch 
  * lacks the permission (employees and managers in production). They now skip
  * the list call entirely (see {@link companiesQuery}).
  */
-export function useCompanies() {
+export function useCompanies(opts?: { enabled?: boolean }) {
   const qc = useQueryClient()
   const canList = useAnyPermission(COMPANY_LIST_PERMISSIONS)
-  return useQuery(companiesQuery(canList, qc))
+  return useQuery({ ...companiesQuery(canList, qc), enabled: opts?.enabled ?? true })
 }
 
 export function useCreateCompany() {

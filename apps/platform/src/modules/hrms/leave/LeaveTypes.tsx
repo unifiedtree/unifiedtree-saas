@@ -9,7 +9,7 @@ import {
   useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, useLeaveTypeApplyPreview, useApplyLeaveTypeToAll,
   type LeaveTypeResponse,
 } from '../api/useLeave'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { HrPageHeader, HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
 import { SubHeading, Note, Facts, State, days } from '@/design/module/ModuleKit'
 
@@ -369,7 +369,7 @@ function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEd
 // ── Main Component ────────────────────────────────────────────────────────────
 
 /**
- * Mounts standalone — it resolves its own company via `useCompanies()` and
+ * Mounts standalone — it follows the current company (useCurrentCompany) and
  * needs no props. Rendered both as the "Leave Types" tab of /hrms/leave and as
  * the "Leave Rules" tab of /hrms/policies; the two optional header props let
  * the host page re-crumb it without forking the form.
@@ -379,8 +379,8 @@ interface LeaveTypesProps {
   subtitle?: string
   /**
    * 2026-09-10: added so a multi-company host page (Policies → Leave Rules) can
-   * scope this widget to its own selection. When omitted, we still self-resolve
-   * to the first company for standalone use (the /hrms/leave-types page).
+   * scope this widget to its own selection. When omitted, it is the current
+   * company (the top bar's company selector).
    *
    * Previously hardcoded to companies[0]?.id, so in a multi-company tenant the
    * Policies embed silently read and wrote only the first company's leave
@@ -397,8 +397,8 @@ export function LeaveTypes({
   embedded,
 }: LeaveTypesProps & { /** Inside another page's view tabs: a slim heading instead of a page header. */ embedded?: boolean } = {}) {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const companyId = companyIdProp ?? companies[0]?.id ?? ''
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  const companyId = companyIdProp ?? currentCompanyId
   const { data: types = [], isLoading } = useLeaveTypes(companyId)
   const canWrite = usePermission(P.LEAVE_TYPE_WRITE)
   const create = useCreateLeaveType()

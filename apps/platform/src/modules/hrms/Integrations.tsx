@@ -10,7 +10,7 @@ import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { ModulePage, StatRow, State, Panel, Note, useDesignToast, dmy } from '@/design/module/ModuleKit'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { useIntegrationConnections, useCreateConnection, useToggleConnection, useDeleteConnection, type IntegrationStatus } from './api/useIntegration'
 
 const STATUS: Record<IntegrationStatus, [string, PillTone]> = { CONNECTED: ['Marked configured', 'ok'], DISCONNECTED: ['Not configured', 'gray'], ERROR: ['Needs attention', 'red'] }
@@ -20,9 +20,8 @@ export const Integrations: React.FC = () => {
   const { show, node } = useDesignToast()
   const confirm = useConfirmDialog()
   const canWrite = usePermission('hrms.integration.write')
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
   const [page, setPage] = useState(0)
   const { data, isLoading, error, refetch } = useIntegrationConnections(activeCompany || undefined, page)
   const create = useCreateConnection()
@@ -54,12 +53,7 @@ export const Integrations: React.FC = () => {
   }
 
   return (
-    <ModulePage crumb="HR setup" title="Integrations" subtitle="A record of the outside services your company uses."
-      actions={companies.length > 1 ? (
-        <select aria-label="Company" value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-56">
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      ) : undefined}>
+    <ModulePage crumb="HR setup" title="Integrations" subtitle="A record of the outside services your company uses.">
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
         <Note tone="amber">Status is set by hand. Adding a service here doesn’t connect to it, authorise it or sync any data.</Note>
         {isLoading ? <State kind="loading" height={96} /> : !error && <StatRow tiles={[

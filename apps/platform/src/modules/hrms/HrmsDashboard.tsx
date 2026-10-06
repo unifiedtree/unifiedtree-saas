@@ -12,7 +12,7 @@ import {
 import { HrStatusPill, HrAvatar } from '@/shared/components/hr'
 import { SkeletonCardGrid } from '@/shared/components/SkeletonCard'
 import { useEmployeeDirectory } from './api/useWorkforce'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { useLeaveOverview } from './api/useLeave'
 import { usePendingWfhApprovals } from './api/useWfh'
 import { useCorrectionApprovals } from './api/useAttendance'
@@ -151,8 +151,7 @@ function useLiveClock() {
  */
 export const RoleDashboard: React.FC = () => {
   const navigate = useNavigate()
-  const { data: companies = [] } = useCompanies()
-  const activeCompany = companies[0]
+  const activeCompany = useCurrentCompany().company
   // Same source the shell header uses for the workspace name (PlatformShell
   // `tenantName`), populated at login. The subtitle used to hard-code "Ionora".
   const tenantName = useLocalAuthStore((s) => s.tenant?.name)

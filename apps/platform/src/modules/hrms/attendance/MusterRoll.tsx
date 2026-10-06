@@ -18,7 +18,8 @@ import { Input, Select, useToast } from '@/design/kit/overlays'
 import { addDays, fmtLong, istToday } from '@/design/dc/dates'
 import { apiBlob, HttpError } from '@/core/api/client'
 import { saveServerFile } from '@/shared/export/fileExport'
-import { useCompanies, useDepartments } from '../api/useOrg'
+import { useDepartments } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useTeamDashboard, useAttendanceLogs, type StaffStatusResponse } from '../api/useAttendance'
 import { hhmmIst, hm, rowStatus, statusOnDay, workedMinutes } from './daily/dailyModel'
@@ -55,8 +56,7 @@ export function MusterRoll() {
   const [exporting, setExporting] = useState(false)
   const canExport = usePermission(P.HRMS_REPORT_ATTENDANCE)
   const canManual = usePermission('attendance.workforce.admin')
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id ?? ''
+  const { companyId } = useCurrentCompany()
   const { data: departments = [] } = useDepartments(companyId)
   const { data: me } = useCurrentUser()
   const dash = useTeamDashboard(date, deptId || undefined, true, false, REGISTER)

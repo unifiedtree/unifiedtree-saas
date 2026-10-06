@@ -26,7 +26,7 @@ import { useAccessContext } from '@/shared/navigation/useAccess'
 import { useToast } from '@/design/kit/overlays'
 import { istToday, istHour, addDays, fmtShort } from '@/design/dc/dates'
 import { HOLIDAYS_PATH } from '@/design/dc/milestoneRange'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useTeamDashboard, useAttendanceTrend, type TeamDashboardResponse, type DailyAttendanceCounts } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useHeadcountReport, fetchHeadcountWorkbook } from '../api/useReports'
@@ -139,8 +139,9 @@ export function AdminDashboardContainer() {
   const greetName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
 
   // ── data (query keys as before) ────────────────────────────────────────────
-  const { data: companies = [], isLoading: companiesLoading } = useCompanies()
-  const companyId = companies[0]?.id as string | undefined
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const { company, isLoading: companiesLoading } = useCurrentCompany()
+  const companyId = company?.id
   // Attendance: today's view keeps its hooks; a past day asks for the team as it was then
   // (includeLeavers: people who have left since count on the days they worked) and a trend ending on it.
   // includeSelf: a company-wide viewer is on the roster and the trend like everyone else, so Total employees and
@@ -315,7 +316,7 @@ export function AdminDashboardContainer() {
       quick: qa.map((q) => ({ ...q, hint: hint[q.key], kind: kind[q.key] })),
       seats: canBilling && seatsData && seatsData.total > 0 ? seatsData : null,
       addEmployee: canAddEmployee ? { disabledReason: seatsFull ? `All ${seatsData!.total} seats are in use. Add seats to add employees.` : null } : null,
-      canExport, exporting, exportName: headcountFileName(companies[0]?.name as string | undefined, sel),
+      canExport, exporting, exportName: headcountFileName(company?.name, sel),
       punch: punchMode,
       // ── needs your action / today's attendance ──
       inbox, canAtt: canReadTeam, canFix: canApproveCorrections, canLeave: canApproveLeave, canWfh: canApproveWfh,
@@ -357,7 +358,7 @@ export function AdminDashboardContainer() {
   }, [team.data, team.isLoading, team.error, trend.data, trend.isLoading, trend.error, directory.data, directory.isLoading, stats.data, stats.isLoading, alerts.data, seats.data, holidays.data, headcount.data, headcount.isLoading, headcount.error,
     performers.data, performers.isLoading, performers.error, onboarding.data, onboarding.isLoading, onboarding.error, hiring.data, hiring.isLoading, hiring.error, projects.data, projects.isLoading, projects.error,
     runs.data, runs.isLoading, runs.error, activity.data, activity.isLoading, activity.error, notices.data, notices.isLoading, notices.isError, probations.data, probations.isLoading, probations.error,
-    inbox, sel, today, greetName, isPast, noticePage, noticePages, ctx, exporting, companies, companiesLoading, punchMode])
+    inbox, sel, today, greetName, isPast, noticePage, noticePages, ctx, exporting, company, companiesLoading, punchMode])
 
   const refetch = {
     live: () => { team.refetch(); trend.refetch(); directory.refetch() }, trend: () => trend.refetch(), notices: () => notices.refetch(), probations: () => probations.refetch(),

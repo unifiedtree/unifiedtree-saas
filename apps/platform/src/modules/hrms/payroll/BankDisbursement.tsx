@@ -11,6 +11,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
 import { ModulePage, StatRow } from '@/design/module/ModuleKit'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import {
   useRuns, useRunEmployees, MONTHS, inr, type RunStatus,
 } from '../api/usePayrollRuns'
@@ -69,7 +70,10 @@ export const BankDisbursement: React.FC = () => {
   const canManageProfile = usePermission('hrms.bank_profile.manage')
 
   const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
+  // Two or more companies: the company the top bar's selector is on. One company: the filter as before.
+  const { companyId: currentCompanyId, multi } = useCurrentCompany()
+  const [pickedCompanyId, setCompanyId] = useState('')
+  const companyId = multi ? currentCompanyId : pickedCompanyId
 
   const { data: runs = [], isLoading: runsLoading } = useRuns(companyId ? { companyId } : {})
   const [runId, setRunId] = useState('')
@@ -393,7 +397,7 @@ export const BankDisbursement: React.FC = () => {
 
       {/* ── Selectors ─────────────────────────────────────────────── */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex flex-col gap-1">
+        {!multi && <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Company</label>
           <select
             value={companyId}
@@ -405,7 +409,7 @@ export const BankDisbursement: React.FC = () => {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-        </div>
+        </div>}
 
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Payroll run</label>

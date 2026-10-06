@@ -7,7 +7,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
 import { MonthField } from '@/shared/components/calendar'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useAllAwards, useMyIncentives, useCreateAward, usePliDecision, usePayAward,
@@ -184,9 +184,8 @@ export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
 
 function CreateAwardForm() {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // People of the company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
   const { data: directory } = useEmployeeDirectory({ companyId: activeCompany, pageSize: 200 }, { enabled: !!activeCompany })
   const employees = directory?.content ?? []
   const create = useCreateAward()
@@ -231,14 +230,6 @@ function CreateAwardForm() {
         <h3 className="text-[15px] font-semibold text-text-primary">Propose Incentive Award</h3>
       </div>
       <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
-        {companies.length > 1 && (
-          <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Company</label>
-            <select value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setEmployeeId('') }} className="ut-select">
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee *</label>
           <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">

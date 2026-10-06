@@ -90,6 +90,12 @@ export interface AuthState {
    */
   personalPages: boolean | null;
   hydrate: () => Promise<void>;
+  /**
+   * The roles, permissions and personal-pages answer for the company the person is working in:
+   * GET /v1/canonical-auth/me asked with X-Company-Id (company-access contract §1). Replaces only
+   * those; the session, workspace and modules stay. Ignored when not signed in.
+   */
+  applyCompanyAccess: (me: { roles?: string[]; permissions?: Array<string | PermissionGrant>; personalPages?: boolean | null; scopes?: ScopeContext }) => void;
   /** Set authenticated state directly from credential login response — bypasses /auth/me. */
   loginWithCredentials: (params: LoginWithCredentialsParams) => void;
   loginWithOtp: (otpToken: string) => Promise<void>;

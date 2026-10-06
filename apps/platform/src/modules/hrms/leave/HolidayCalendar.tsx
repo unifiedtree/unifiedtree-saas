@@ -8,7 +8,7 @@ import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/co
 import { SubHeading } from '@/design/module/ModuleKit'
 import { DateField } from '@/shared/components/calendar'
 import { useHolidays, useCreateHoliday, useDeleteHoliday, type HolidayType, type HolidayResponse } from '../api/useSettings'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useUpdateHoliday } from '../api/useLeave'
 
 const HOLIDAY_TYPE_LABELS: Record<HolidayType, string> = {
@@ -186,8 +186,7 @@ export function HolidayCalendar({ canEdit, embedded }: HolidayCalendarProps & { 
   const [year, setYear] = useState(currentYear)
   // Null = no drawer, 'new' = Add, otherwise the id of the row being edited.
   const [drawer, setDrawer] = useState<'new' | string | null>(null)
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id ?? ''
+  const { companyId } = useCurrentCompany()
   const { data: holidays = [], isLoading } = useHolidays(companyId, year)
   const deleteHoliday = useDeleteHoliday()
   const canEditFromPerm = usePermission(P.SETTINGS_HOLIDAYS_WRITE)

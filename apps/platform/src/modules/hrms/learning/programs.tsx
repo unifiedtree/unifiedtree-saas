@@ -9,6 +9,7 @@ import {
 } from '@/design/kit/display'
 import { Checkbox, DateInput, Dialog, FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import {
   useAdminDropEnrollment, useBulkEnroll, useCompleteEnrollment, useCreateProgram, useProgramCategories, useProgramEnrollments, useProgramsSummary,
@@ -59,7 +60,9 @@ export function ProgramFormPanel({ program, onClose, onSaved }: { program?: Trai
   })
   const [error, setError] = useState('')
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }))
-  const companyId = f.companyId || (companies.length === 1 ? companies[0].id : '')
+  // A new program starts in the company the top bar's selector is on (its only company, with one).
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  const companyId = f.companyId || (companies.length === 1 ? companies[0].id : currentCompanyId)
   const busy = create.isPending || update.isPending
   const submit = async () => {
     const title = f.title.trim()

@@ -8,7 +8,7 @@ import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
 import {
-  HrButton, HrStatusPill, TableCard, HrDrawer, HrSelect, type PillTone,
+  HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone,
 } from '@/shared/components/hr'
 import { DateField } from '@/shared/components/calendar'
 import { ModulePage, Views, useView, StatRow, SubHeading, State, DecisionCard, Panel, Note, todayIso } from '@/design/module/ModuleKit'
@@ -16,6 +16,7 @@ import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { DataTable } from '@/shared/components/DataTable'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { ReimbursementBatches } from './expense/ReimbursementBatches'
 import { EXPENSE_STATUS_LABEL } from './expense/expenseStatus'
 import {
@@ -466,9 +467,8 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
 // uploadReceiptForEmployee in useExpense.ts.
 function ClaimOnBehalfTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onSubmitted: () => void }) {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // People of the company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
   const dir = useEmployeeDirectory({ companyId: activeCompany || undefined, pageSize: 200, status: 'ACTIVE' },
     { enabled: !!activeCompany })
   const employees = dir.data?.content ?? []
@@ -551,14 +551,6 @@ function ClaimOnBehalfTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boole
   return (
     <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
       <Panel title="Claim on behalf" sub="Raise an expense claim for an active employee. It is routed to their usual approver, who is told it was raised for them.">
-        {companies.length > 1 && (
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Company</label>
-            <select value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setEmployeeId('') }} className="ut-select">
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">For employee *</label>
           <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select" aria-label="For employee">
@@ -964,9 +956,8 @@ export function ClaimDetailPanel({ claimId, allowAttach }: { claimId: string; al
 
 function PoliciesTab({ canWrite }: { canWrite: boolean }) {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
   const { data: policies = [], isLoading } = useExpensePolicies(activeCompany)
   const create = useCreatePolicy()
   const update = useUpdatePolicy()
@@ -1040,9 +1031,6 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
 
   return (
     <div className="space-y-4">
-      {companies.length > 1 && (
-        <div className="w-64"><HrSelect value={activeCompany} onChange={setCompanyId} options={companies.map((c) => ({ value: c.id, label: c.name }))} size="sm" /></div>
-      )}
       <Note>A claim is checked against the tightest active limit for each category it includes (the total per category, not each line).</Note>
 
       {canWrite && (

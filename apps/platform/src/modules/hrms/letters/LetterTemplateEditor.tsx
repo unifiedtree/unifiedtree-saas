@@ -13,7 +13,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { Button, EmptyState, ErrorState, PageFrame, PageHeader, Section, SkeletonBlock } from '@/design/kit/display'
 import { FieldGrid, Input, Select, useToast } from '@/design/kit/overlays'
-import { useCompanies } from '@/modules/hrms/api/useOrg'
+import { useCurrentCompany } from '@/modules/hrms/company/CurrentCompany'
 import {
   useLetterTemplate,
   useCreateTemplate,
@@ -109,7 +109,7 @@ export const LetterTemplateEditor: React.FC = () => {
   const canSave = usePermission(isNew ? P.HRMS_LETTERS_TEMPLATE_CREATE : P.HRMS_LETTERS_TEMPLATE_UPDATE)
 
   const { data: existing, isLoading, error, refetch } = useLetterTemplate(isNew ? '' : (id ?? ''))
-  const { data: companies = [] } = useCompanies()
+  const { companyId: currentCompanyId } = useCurrentCompany()
   const createMut = useCreateTemplate()
   const updateMut = useUpdateTemplate(isNew ? '' : (id ?? ''))
   const saving = createMut.isPending || updateMut.isPending
@@ -142,7 +142,7 @@ export const LetterTemplateEditor: React.FC = () => {
     editor?.commands.setContent(existing.bodyHtml ?? '')
   }, [existing, isNew, editor])
 
-  const companyId = existing?.companyId ?? companies[0]?.id
+  const companyId = existing?.companyId ?? (currentCompanyId || undefined)
   const nameError = tried && !name.trim() ? 'Template name is required' : undefined
 
   const handleSave = async () => {

@@ -10,7 +10,7 @@ import { HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone } from '@/sh
 import { DateField } from '@/shared/components/calendar'
 import { ModulePage, Views, useView, StatRow, State, Note, dmy, todayIso } from '@/design/module/ModuleKit'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
-import { useCompanies } from './api/useOrg'
+import { useCurrentCompany } from './company/CurrentCompany'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useComplianceItems, useCreateComplianceItem, useMarkComplianceDone,
@@ -43,9 +43,8 @@ export const Compliance: React.FC = () => {
   const canPosh = usePermission('hrms.compliance.posh')
   const canInspectorRead = usePermission('hrms.compliance.inspector.read')
 
-  const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState('')
-  const activeCompany = companyId || companies[0]?.id || ''
+  // The company the top bar's selector is on (one-company workspaces: their company).
+  const activeCompany = useCurrentCompany().companyId
 
   // 2026-09-10: gate the Calendar and Filings tabs on hrms.compliance.read
   // (the permission their data endpoints enforce). The route admits anyOf
@@ -80,11 +79,6 @@ export const Compliance: React.FC = () => {
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           {tabs.length > 1 ? <Views items={tabs} active={activeTab} onChange={(k) => { setTab(k); setAdding(null) }} label="Compliance views" /> : <span />}
-          {companies.length > 1 && (
-            <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm w-56" aria-label="Company">
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          )}
         </div>
         {tabs.length === 0 && <State kind="empty" icon="lock" title="No compliance access" description="Ask an admin if you look after statutory compliance." />}
         {activeTab === 'calendar' && <CalendarTab companyId={activeCompany} canWrite={canWrite} adding={adding === 'calendar'} onAddClose={closeAdd} />}

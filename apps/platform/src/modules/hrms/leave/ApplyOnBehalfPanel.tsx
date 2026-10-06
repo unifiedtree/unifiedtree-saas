@@ -11,7 +11,7 @@ import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit
 import { useApplyLeaveOnBehalf } from '../api/shared/useApplyLeaveOnBehalf'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import { useEmployeeLeaveBalances, useLeaveTypes, useLeavePreview, type LeaveDuration } from '../api/useLeave'
-import { useCompanies } from '../api/useOrg'
+import { useCurrentCompany } from '../company/CurrentCompany'
 import { useHolidays, useWeekendDays, jsWeekendDays } from '../api/useSettings'
 import { days, todayIso } from '@/design/module/ModuleKit'
 
@@ -27,8 +27,9 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
   })
 
   // The directory call pages 50 at a time; Dropdown's own search filters this
-  // list client-side. Only run while open.
-  const dir = useEmployeeDirectory({ status: 'ACTIVE', pageSize: 50, page: 0 }, { enabled: open })
+  // list client-side. Only run while open. The people of the company the top bar is on.
+  const { companyId: currentCompanyId } = useCurrentCompany()
+  const dir = useEmployeeDirectory({ status: 'ACTIVE', pageSize: 50, page: 0, companyId: currentCompanyId || undefined }, { enabled: open })
   const options = useMemo(() => {
     const rows = dir.data?.content ?? []
     return rows.map((e) => ({
@@ -40,9 +41,8 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
     }))
   }, [dir.data])
 
-  const { data: companies = [] } = useCompanies()
   const chosen = (dir.data?.content ?? []).find((e) => e.id === picked)
-  const companyId = chosen?.companyId ?? companies[0]?.id ?? ''
+  const companyId = chosen?.companyId ?? currentCompanyId
   const types = useLeaveTypes(companyId)
   const bal = useEmployeeLeaveBalances(picked, new Date().getFullYear(), !!picked)
   const active = (types.data ?? []).filter((t) => t.isActive)
