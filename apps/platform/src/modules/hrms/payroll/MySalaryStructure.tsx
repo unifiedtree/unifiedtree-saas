@@ -97,7 +97,7 @@ function History({ hide }: { hide: boolean }) {
           const prev = rows[i + 1]
           const change = prev?.ctcAnnual && r.ctcAnnual != null ? ((Number(r.ctcAnnual) - Number(prev.ctcAnnual)) / Number(prev.ctcAnnual)) * 100 : null
           return (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', boxShadow: 'inset 0 -1px 0 var(--u-ln2,#EDF1EF)' }}>
+            <div key={r.structureId || `${r.effectiveFrom}-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', boxShadow: 'inset 0 -1px 0 var(--u-ln2,#EDF1EF)' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>
                   <AmountMask value={r.ctcAnnual != null ? `${inr(Number(r.ctcAnnual))} a year` : '—'} hidden={hide} /> {r.current && <StatusPill tone="success">Current</StatusPill>}

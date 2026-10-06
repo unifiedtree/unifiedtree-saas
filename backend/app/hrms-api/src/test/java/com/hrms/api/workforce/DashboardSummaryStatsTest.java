@@ -37,6 +37,7 @@ class DashboardSummaryStatsTest {
     @BeforeEach void tenant() {
         TenantContext.setTenantId(tenant);
         when(history.headcount(eq(tenant), eq(company), any(LocalDate.class))).thenReturn(roll);
+        when(history.headcount(eq(tenant), eq(company), any(LocalDate.class), eq(true))).thenReturn(roll);
     }
     @AfterEach void clear() { TenantContext.clear(); }
 
@@ -67,7 +68,8 @@ class DashboardSummaryStatsTest {
         LocalDate past = LocalDate.now(DashboardAsOf.IST).minusDays(10);
         Map<String, Object> stats = controller.stats(company, past, holding("org.company.read", "hrms.employee.read"));
 
-        verify(history).headcount(tenant, company, past);
+        // A past day counts leavers on their last working day, as that day's attendance roster (6 Oct).
+        verify(history).headcount(tenant, company, past, true);
         assertEquals(11L, stats.get("headcount"));
         assertEquals(1L, stats.get("activeEmployees"));
         assertEquals(9L, stats.get("probation"));

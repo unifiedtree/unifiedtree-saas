@@ -31,7 +31,7 @@ import { useTeamDashboard, useAttendanceTrend, type TeamDashboardResponse, type 
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useHeadcountReport, fetchHeadcountWorkbook } from '../api/useReports'
 import { useActivityFeed, activityActor, ACTIVITY_FEED_EXCLUDE, type AuditPageResponse } from '../api/useActivity'
-import { useSeatsUsage } from '../api/useSeats'
+import { overageText, seatsView, useSeatsUsage } from '../api/useSeats'
 import { useHolidays } from '../api/useSettings'
 import { useUpcomingProbations, type UpcomingProbation } from '../api/useProbation'
 import { useRuns } from '../api/usePayrollRuns'
@@ -262,8 +262,11 @@ export function AdminDashboardContainer() {
     const kind: Record<string, DashboardVm['quick'][number]['kind']> = { att: 'clock', shift: 'swap', off: 'calendar', pay: 'coins', rep: 'chart', org: undefined }
 
     const needN = inbox.total
-    const seatsData = seats.data ? { used: seats.data.current, total: seats.data.purchased } : null
-    const seatsFull = !!seatsData && seatsData.total > 0 && seatsData.used >= seatsData.total
+    // A server with the soft seat limit lets people be added over the seats (billed at the cycle's end):
+    // Add employee stays on and the line says how many extra users will be billed. An old server: as before.
+    const sv = seatsView(seats.data)
+    const seatsData = sv ? { used: sv.used, total: sv.total, soft: sv.soft, overNote: sv.overBy > 0 ? overageText(sv, fmtShort) : null } : null
+    const seatsFull = !!sv && !sv.soft && sv.total > 0 && sv.used >= sv.total
 
     const sections: Record<DashSection, boolean> = {
       overview: true,

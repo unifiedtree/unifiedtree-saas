@@ -613,16 +613,17 @@ export function useStructuresList(filters: StructuresListFilters = {}, opts?: { 
   })
 }
 
+/** One row of GET /v1/payroll/structures/me/history (SalaryStructureListService.SalaryHistoryDto). */
 export interface MyStructureRevision {
-  id: string
+  structureId: string
   effectiveFrom: string
+  effectiveTo?: string | null
   ctcAnnual: number | null
   ctcMonthly: number | null
-  grossMonthly: number | null
-  netMonthly: number | null
+  changePercent?: number | null
   current: boolean
   reason: string | null
-  revisionBatchId: string | null
+  taxRegime?: string | null
 }
 
 export function useMyStructureHistory(opts?: { enabled?: boolean }) {

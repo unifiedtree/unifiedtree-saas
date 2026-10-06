@@ -31,6 +31,10 @@ const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'S
 const DAY_NAME: Record<number, string> = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' }
 const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER']
 const title = (m: string) => m.charAt(0) + m.slice(1).toLowerCase()
+// TODO(owner 6 Oct): auto-extension kept for later. Nothing extends a probation on its own yet, so the
+// "Extend automatically" switch is hidden; the stored setting (autoExtendEnabled / autoExtendDays) is kept
+// and saved back unchanged. Set to true to show the switch again once the feature is built.
+const SHOW_AUTO_EXTEND = false
 
 interface Form {
   prefix: string; next: string
@@ -92,7 +96,7 @@ export function HrConfigurationPage() {
   const canProbRead = usePermission(P.HRMS_PROBATION_CONFIG_READ), canProbWrite = usePermission(P.HRMS_PROBATION_CONFIG_UPDATE), canReminders = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
   const canPolicy = usePermission('attendance.policy.manage')
   // The company the top bar's selector is on (one-company workspaces: their company).
-  const { companyId: co, company, multi } = useCurrentCompany()
+  const { companyId: co, company, multi, isLoading: coLoading } = useCurrentCompany()
   const hrQ = useHrConfig(co)
   const probQ = useProbationConfig(canProbRead || canProbWrite)
   const reminders = useProbationReminders(canReminders)
@@ -150,7 +154,7 @@ export function HrConfigurationPage() {
   }
   if (probEdit) {
     if (!(num(f.reminderDays) >= 1 && num(f.reminderDays) <= 90)) E.reminderDays = 'Between 1 and 90 days'
-    if (f.autoExtend && !(num(f.autoExtendDays) >= 1 && num(f.autoExtendDays) <= 365)) E.autoExtendDays = 'Between 1 and 365 days'
+    if (SHOW_AUTO_EXTEND && f.autoExtend && !(num(f.autoExtendDays) >= 1 && num(f.autoExtendDays) <= 365)) E.autoExtendDays = 'Between 1 and 365 days'
   }
   const changed = (Object.keys(f) as (keyof Form)[]).filter((k) => JSON.stringify(f[k]) !== JSON.stringify(saved[k]))
   const dirty = !!edit && changed.length > 0
@@ -214,7 +218,9 @@ export function HrConfigurationPage() {
 
   const readableHr = canHrWrite || canSettingsRead || !!hrQ.data
   const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit || webEdit || alertEdit || celEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
-  const status: 'loading' | 'error' | 'live' = (co && (hrQ.isLoading || policyQ.isLoading)) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
+  // Until the company is known nothing has loaded yet: showing the sections then would flash them
+  // empty, hide them while the company's settings load, and show them again.
+  const status: 'loading' | 'error' | 'live' = (!co && coLoading) || (co && (hrQ.isLoading || policyQ.isLoading)) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
   const preview = !E.prefix && !E.next ? `${f.prefix.toUpperCase()}-${f.next}` : '—'
   const weekendText = f.weekend.length ? f.weekend.map((d) => DAY_NAME[d]).join(' & ') : 'None'
   const nav: SettingsNavItem[] = [
@@ -262,13 +268,13 @@ export function HrConfigurationPage() {
           <SettingsNote>Only people added after you save get the new format. If a higher code is already in use, the next code skips past it.</SettingsNote>
         </SettingsSection>
 
-        <SettingsSection id="probation" icon="calendarClock" title="Probation" summary={`${f.probationMonths || '—'} months by default · reminders ${f.reminderDays || '—'} days before it ends${f.autoExtend ? ` · auto-extends by ${f.autoExtendDays} days` : ''}`}>
+        <SettingsSection id="probation" icon="calendarClock" title="Probation" summary={`${f.probationMonths || '—'} months by default · reminders ${f.reminderDays || '—'} days before it ends${SHOW_AUTO_EXTEND && f.autoExtend ? ` · auto-extends by ${f.autoExtendDays} days` : ''}`}>
           <SettingsGrid>
             <SettingsInput label="Default probation" value={f.probationMonths} onChange={(v) => set('probationMonths', digits(2)(v))} readOnly={ro} error={shown('probationMonths')} suffix="months" inputMode="numeric" />
             {(canProbRead || probEdit) && <SettingsInput label="Remind managers and HR" value={f.reminderDays} onChange={(v) => set('reminderDays', digits(2)(v))} readOnly={pro} error={shown('reminderDays')} suffix="days before" inputMode="numeric" />}
           </SettingsGrid>
-          {(canProbRead || probEdit) && <SettingsToggleRow label="Extend automatically" detail="If nobody confirms a person by the end date, their probation is extended." on={f.autoExtend} onToggle={() => set('autoExtend', !f.autoExtend)} readOnly={pro} />}
-          {f.autoExtend && (canProbRead || probEdit) && <SettingsGrid><SettingsInput label="Extend by" value={f.autoExtendDays} onChange={(v) => set('autoExtendDays', digits(3)(v))} readOnly={pro} error={shown('autoExtendDays')} suffix="days" inputMode="numeric" /></SettingsGrid>}
+          {SHOW_AUTO_EXTEND && (canProbRead || probEdit) && <SettingsToggleRow label="Extend automatically" detail="If nobody confirms a person by the end date, their probation is extended." on={f.autoExtend} onToggle={() => set('autoExtend', !f.autoExtend)} readOnly={pro} />}
+          {SHOW_AUTO_EXTEND && f.autoExtend && (canProbRead || probEdit) && <SettingsGrid><SettingsInput label="Extend by" value={f.autoExtendDays} onChange={(v) => set('autoExtendDays', digits(3)(v))} readOnly={pro} error={shown('autoExtendDays')} suffix="days" inputMode="numeric" /></SettingsGrid>}
           <SettingsNote>People added from now on get a probation end date of their joining date plus this many months. Changing it doesn’t move the dates of people already hired; use Extend on their page for that.</SettingsNote>
           {f.probationMonths === '0' && <SettingsNote tone="amber">With 0 months, new hires start confirmed on their joining date, with no probation and no probation reminders.</SettingsNote>}
           {canReminders && (

@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router-dom'
 import type { EmployeeSalaryStructure } from '../api/usePayroll'
 
 let structure: Partial<EmployeeSalaryStructure> | undefined
+let history: unknown[] = []
 vi.mock('@unifiedtree/sdk', async () => ({
   ...(await vi.importActual<object>('@unifiedtree/sdk')),
   usePermission: () => true,
@@ -18,7 +19,7 @@ vi.mock('../api/usePayroll', () => ({
 }))
 vi.mock('../api/usePayrollRuns', async () => ({
   ...(await vi.importActual<object>('../api/usePayrollRuns')),
-  useMyStructureHistory: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
+  useMyStructureHistory: () => ({ data: history, isLoading: false, error: null, refetch: () => {} }),
 }))
 
 import { MySalaryStructure } from './MySalaryStructure'
@@ -41,6 +42,24 @@ const rowAmount = (html: string, label: string) => {
 }
 
 describe('My salary', () => {
+  it('Salary history: one row per revision, keyed by the structureId the server sends (no React key warning)', () => {
+    // GET /v1/payroll/structures/me/history rows (SalaryHistoryDto): structureId, not id.
+    history = [
+      { structureId: 's2', effectiveFrom: '2026-04-01', effectiveTo: null, ctcAnnual: 360000, ctcMonthly: 30000, changePercent: 20, reason: 'Annual revision', current: true, taxRegime: 'NEW' },
+      { structureId: 's1', effectiveFrom: '2025-04-01', effectiveTo: '2026-03-31', ctcAnnual: 300000, ctcMonthly: 25000, changePercent: null, reason: null, current: false, taxRegime: 'NEW' },
+    ]
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const html = render(base)
+      expect(html).toContain('Annual revision')
+      expect(html).toContain('+20.0%')
+      expect(err.mock.calls.map((c) => String(c[0])).filter((m) => /unique "key"|key prop/.test(m))).toEqual([])
+    } finally {
+      err.mockRestore()
+      history = []
+    }
+  })
+
   it('sits in the self-service page frame', () => {
     const html = render(base)
     expect(html).toContain('class="uk-page uk-page--narrow"')

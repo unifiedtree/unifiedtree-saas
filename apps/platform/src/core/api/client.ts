@@ -1,4 +1,5 @@
 import { getAccessToken, setAccessToken, useAuthStore } from '@unifiedtree/sdk'
+import { asModulePaused, reportModulePaused } from '@/core/billing/modulePaused'
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ||
@@ -216,6 +217,9 @@ async function jsonRequest<T>(path: string, init: RequestInit, alreadyRetried: b
   const data = text ? JSON.parse(text) : null
 
   if (!response.ok) {
+    // 402 MODULE_PAUSED: the shell shows "Payment needed" (core/billing/modulePaused.ts).
+    const paused = asModulePaused(response.status, data)
+    if (paused) reportModulePaused(paused)
     const message = data?.message || data?.error || data?.detail || `Request failed with status ${response.status}`
     throw new HttpError(message, response.status, data)
   }

@@ -136,7 +136,7 @@ export class PayRuns extends DCLogic {
       retryAction: { label: 'Retry', onClick: () => p.onRetry && p.onRetry() },
       emptyDesc: canManage ? 'Create your first run to begin processing payroll.' : 'Runs appear here once a payroll admin creates the first one.',
       emptyAction: canManage ? { label: '+ New run', onClick: openModal } : undefined,
-      modalOpen: s.modalOpen && canManage, companies,
+      modalOpen: s.modalOpen && canManage, companies, companyNote: p.companyNote,
       takenRuns: all.map((r) => ({ id: r.id, company: r.companyId, year: r.year, month: r.month, label: r.label, status: r.status, statusLabel: r.statusLabel })),
       closeModal: () => this.setState({ modalOpen: false }),
       createRun: async (q: { companyId: string; year: number; month: number }) => {

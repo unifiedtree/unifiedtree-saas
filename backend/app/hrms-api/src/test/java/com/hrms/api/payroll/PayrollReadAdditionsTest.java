@@ -102,4 +102,31 @@ class PayrollReadAdditionsTest {
         JdbcTemplate none = mock(JdbcTemplate.class);
         assertEquals(BigDecimal.ZERO, new PayrollDashboardService(none).kpis(TENANT).pendingDisbursalAmount());
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void kpisForOneCompanyAddItsFilterToEveryQueryAndNoneWithoutIt() {
+        UUID company = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(contains("SUM(r.total_net)"), eq(BigDecimal.class), any(Object[].class)))
+                .thenReturn(new BigDecimal("12000.00"));
+        PayrollDashboardService.KpisDto kpis = new PayrollDashboardService(jdbc).kpis(TENANT, company);
+        assertEquals(new BigDecimal("12000.00"), kpis.pendingDisbursalAmount());
+        // The latest period, the period's cost / people / TDS, and the pending runs: each one company's.
+        verify(jdbc).query(contains("WHERE r.company_id = ?"), any(org.springframework.jdbc.core.ResultSetExtractor.class), eq(company));
+        // No run found: the period is this month.
+        int pm = java.time.YearMonth.now().getMonthValue(), py = java.time.YearMonth.now().getYear();
+        verify(jdbc).queryForObject(contains("AND r.company_id = ?"), eq(BigDecimal.class), eq(pm), eq(py), eq(company));
+        verify(jdbc).queryForObject(contains("AND r.company_id = ?"), eq(BigDecimal.class), eq(pm), eq(py), eq("TDS"), eq(company));
+        verify(jdbc).queryForObject(contains("AND r.company_id = ?"), eq(Integer.class), eq(pm), eq(py), eq(company));
+        verify(jdbc).queryForObject(contains("NOT EXISTS"), eq(Integer.class), eq("PROCESSING"), eq("LOCKED"), eq(company));
+        verify(jdbc).queryForObject(contains("NOT EXISTS"), eq(BigDecimal.class), eq(TENANT), eq("PROCESSING"), eq("LOCKED"), eq(company));
+
+        // Without a company: the same queries as before, with no company condition.
+        JdbcTemplate all = mock(JdbcTemplate.class);
+        new PayrollDashboardService(all).kpis(TENANT, null);
+        verify(all, never()).queryForObject(contains("company_id"), any(Class.class), any(Object[].class));
+        verify(all, never()).query(contains("company_id"), any(org.springframework.jdbc.core.ResultSetExtractor.class), any(Object[].class));
+        verify(all).queryForObject(contains("NOT EXISTS"), eq(Integer.class), eq("PROCESSING"), eq("LOCKED"));
+    }
 }

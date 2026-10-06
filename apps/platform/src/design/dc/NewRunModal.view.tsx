@@ -20,7 +20,7 @@ export function NewRunModalView({ v }: { v: any }) {
             {v.single ? (
               <>
                 <span style={{fontSize: "12px", color: "#64748b"}}>
-                  {"Selected for you — it’s the only company in this workspace."}
+                  {v.singleText}
                 </span>
               </>
             ) : null}

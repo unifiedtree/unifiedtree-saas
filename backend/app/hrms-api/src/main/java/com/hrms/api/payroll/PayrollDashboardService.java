@@ -79,14 +79,26 @@ public class PayrollDashboardService {
      */
     @Transactional
     public KpisDto kpis(UUID tenantId) {
-        bindTenant(tenantId);
+        return kpis(tenantId, null);
+    }
 
-        Map<String, Object> current = jdbc.query("""
-                SELECT r.period_month AS pm, r.period_year AS py
-                  FROM payroll.runs r
-                 ORDER BY r.period_year DESC, r.period_month DESC
-                 LIMIT 1
-                """, rs -> rs.next() ? Map.of("pm", rs.getInt("pm"), "py", rs.getInt("py")) : null);
+    /**
+     * {@link #kpis(UUID)} for one company's runs only (the Payroll dashboard
+     * follows the company chosen at the top of the page, owner decision 6 Oct).
+     * {@code null} = every company, exactly as before (same SQL, same binds).
+     */
+    @Transactional
+    public KpisDto kpis(UUID tenantId, UUID companyId) {
+        bindTenant(tenantId);
+        // One extra condition (and bind) per query when a company is given; none otherwise.
+        String co = companyId == null ? "" : " AND r.company_id = ?";
+        Object[] coArg = companyId == null ? new Object[0] : new Object[]{companyId};
+
+        Map<String, Object> current = jdbc.query(
+                "SELECT r.period_month AS pm, r.period_year AS py FROM payroll.runs r"
+              + (companyId == null ? "" : " WHERE r.company_id = ?")
+              + " ORDER BY r.period_year DESC, r.period_month DESC LIMIT 1",
+                rs -> rs.next() ? Map.of("pm", rs.getInt("pm"), "py", rs.getInt("py")) : null, coArg);
 
         int pm, py;
         if (current == null) {
@@ -109,14 +121,14 @@ public class PayrollDashboardService {
                   FROM payroll.runs r
                   JOIN payroll.payslip_lines l ON l.run_id = r.id
                  WHERE r.period_month = ? AND r.period_year = ?
-                """, BigDecimal.class, pm, py);
+                """ + co, BigDecimal.class, args(new Object[]{pm, py}, coArg));
 
         Integer empCount = jdbc.queryForObject("""
                 SELECT COUNT(DISTINCT l.employee_id)
                   FROM payroll.runs r
                   JOIN payroll.payslip_lines l ON l.run_id = r.id
                  WHERE r.period_month = ? AND r.period_year = ?
-                """, Integer.class, pm, py);
+                """ + co, Integer.class, args(new Object[]{pm, py}, coArg));
         empCount = empCount == null ? 0 : empCount;
 
         BigDecimal avg = empCount == 0
@@ -129,7 +141,7 @@ public class PayrollDashboardService {
                   JOIN payroll.payslip_lines l ON l.run_id = r.id
                  WHERE r.period_month = ? AND r.period_year = ?
                    AND l.component_code = ?
-                """, BigDecimal.class, pm, py, TDS_COMPONENT_CODE);
+                """ + co, BigDecimal.class, args(new Object[]{pm, py, TDS_COMPONENT_CODE}, coArg));
 
         // Pending disbursals = runs that are PROCESSING or LOCKED and DO NOT
         // yet have a POSTED or PAID batch in payroll.disbursement_batches.
@@ -155,9 +167,9 @@ public class PayrollDashboardService {
               + "  AND NOT EXISTS ("
               + "        SELECT 1 FROM payroll.disbursement_batches b"
               + "         WHERE b.run_id = r.id"
-              + "           AND b.status IN ('POSTED','PAID'))",
+              + "           AND b.status IN ('POSTED','PAID'))" + co,
                 Integer.class,
-                PENDING_DISBURSAL_STATUSES.toArray());
+                args(PENDING_DISBURSAL_STATUSES.toArray(), coArg));
         pending = pending == null ? 0 : pending;
 
         // BW-54: the same runs as the count above, as an amount (their net pay).
@@ -167,9 +179,9 @@ public class PayrollDashboardService {
               + "  AND NOT EXISTS ("
               + "        SELECT 1 FROM payroll.disbursement_batches b"
               + "         WHERE b.run_id = r.id"
-              + "           AND b.status IN ('POSTED','PAID'))",
+              + "           AND b.status IN ('POSTED','PAID'))" + co,
                 BigDecimal.class,
-                pendingArgs(tenantId));
+                args(pendingArgs(tenantId), coArg));
 
         return new KpisDto(totalCost, avg, pending, tds,
                 periodLabel(pm, py), pm, py, pendingAmount == null ? BigDecimal.ZERO : pendingAmount);
@@ -233,6 +245,14 @@ public class PayrollDashboardService {
     }
 
     // ── helpers (mirror PayrollRunService verbatim so behaviour matches) ─────
+
+    /** {@code a} then {@code b}: a query's own binds, then the company's (when there is one). */
+    private static Object[] args(Object[] a, Object[] b) {
+        if (b.length == 0) return a;
+        Object[] out = java.util.Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
 
     /** The tenant, then one bind per pending status (see the note on IN lists above). */
     private static Object[] pendingArgs(UUID tenantId) {

@@ -14,6 +14,8 @@ export interface MasterRoute { p: string; q: string; status: string; co: string;
 export interface MasterNavGroup { id: string; l: string; items: { id: string; l: string }[] }
 
 export interface MasterAct {
+  /** The top bar's company when there are two or more ('' with one): the directory lists its people. */
+  globalCo: string
   defaultCo: string
   canAssignShift: boolean
   canBands: boolean

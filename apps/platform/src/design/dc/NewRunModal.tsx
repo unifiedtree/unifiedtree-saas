@@ -11,6 +11,8 @@ export interface TakenRun { id: string; company: string; year: number; month: nu
 
 export class NewRunModal extends DCLogic<{
   open: boolean; companies: { id: string; name: string }[]; runs: TakenRun[]; thisYear?: number
+  /** The line under a company picked for the person (default: it's the workspace's only company). */
+  singleNote?: string
   onClose: () => void; onCreate: (q: { companyId: string; year: number; month: number }) => Promise<boolean> | boolean; onOpenRun: (id: string) => void
 }> {
   state: any = { company: null, year: '', month: null, busy: false }
@@ -50,7 +52,7 @@ export class NewRunModal extends DCLogic<{
     }
     const spin = createElement('span', { key: 's', 'aria-hidden': true, style: { width: 14, height: 14, boxSizing: 'border-box', borderRadius: '50%', border: '2px solid rgba(255,255,255,.45)', borderTopColor: '#fff', display: 'inline-block', animation: 'ut-spin .8s linear infinite' } })
     return {
-      isOpen: !!p.open, busy, single, company, year,
+      isOpen: !!p.open, busy, single, company, year, singleText: p.singleNote || 'Selected for you — it’s the only company in this workspace.',
       companyOptions: companies.map((c) => ({ value: c.id, label: c.name })),
       // The design lists years from 2020; runs further ahead than next year aren't useful.
       yearOptions: Array.from({ length: Math.max(1, thisYear + 2 - 2020) }, (_, i) => { const v = String(2020 + i); return { value: v, label: v } }),

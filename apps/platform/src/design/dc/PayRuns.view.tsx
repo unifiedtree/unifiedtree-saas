@@ -274,7 +274,7 @@ export function PayRunsView({ v }: { v: any }) {
             </>
           ) : null}
         </section>
-        <NewRunModal open={v.modalOpen} companies={v.companies} runs={v.takenRuns} onClose={v.closeModal} onCreate={v.createRun} onOpenRun={v.openExisting} />
+        <NewRunModal open={v.modalOpen} companies={v.companies} singleNote={v.companyNote} runs={v.takenRuns} onClose={v.closeModal} onCreate={v.createRun} onOpenRun={v.openExisting} />
       </div>
     </>
   )
