@@ -373,25 +373,29 @@ public class EmployeeController {
         UUID tenantId = TenantContext.getTenantId();
         UUID actorId = UUID.fromString(jwt.getSubject());
 
-        // Step 1: revoke any of the four mutable roles the employee currently holds.
         List<String> existing = jdbcTemplate.queryForList(
                 "SELECT r.code FROM rbac.user_roles ur JOIN rbac.roles r ON r.id = ur.role_id "
                         + "WHERE ur.user_id = ?",
                 String.class, userId);
-        for (String code : List.of("DEPT_MANAGER", "HR_MANAGER", "COMPANY_ADMIN")) {
-            if (existing.contains(code)) {
-                try { accessService.revokeRole(tenantId, userId, code, actorId); }
-                catch (Exception ignored) { /* tolerate already-removed */ }
-            }
+        // Step 1: give the requested elevated role FIRST (no-op for EMPLOYEE). assignRole applies
+        // the levels rules: never your own access, an owner's only by an owner, and only a role
+        // whose permissions you hold yourself (so an Admin, who has no billing since V143_88,
+        // can't hand out more than they have). A refusal now leaves the person exactly as they
+        // were; it used to take their other roles away first and then fail (6 Oct).
+        if (!"EMPLOYEE".equals(role)) {
+            accessService.assignRole(tenantId, userId, role, actorId);
         }
         // Always keep EMPLOYEE so login still works; assignRole is idempotent.
         if (!existing.contains("EMPLOYEE")) {
             try { accessService.assignRole(tenantId, userId, "EMPLOYEE", actorId); }
             catch (Exception ignored) { /* tolerate */ }
         }
-        // Step 2: assign the requested elevated role (no-op for EMPLOYEE).
-        if (!"EMPLOYEE".equals(role)) {
-            accessService.assignRole(tenantId, userId, role, actorId);
+        // Step 2: take away the other elevated roles. revokeRole is a no-op for a role already
+        // gone; a refusal (your own roles, an owner's) is reported, never swallowed into a 200.
+        for (String code : List.of("DEPT_MANAGER", "HR_MANAGER", "COMPANY_ADMIN")) {
+            if (!code.equals(role) && existing.contains(code)) {
+                accessService.revokeRole(tenantId, userId, code, actorId);
+            }
         }
         // Step 3: if promoting to DEPT_MANAGER with an explicit department,
         // set that department's head to this employee. Skipped for other

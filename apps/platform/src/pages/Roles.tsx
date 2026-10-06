@@ -17,6 +17,10 @@ import { useWorkspaceUsers, useAssignableRoles, workspaceUserDisplayName } from 
 import { RoleFields, newRoleBody, roleDraftFor, roleDraftProblem, type RoleDraft } from '@/modules/rbac/components/RoleFields'
 import { NewPermissionsNotice, NewPermissionsReview } from '@/modules/rbac/components/NewPermissionsReview'
 import { PersonalPagesSwitch } from '@/modules/rbac/components/PersonalPagesSwitch'
+import { CompanyAccessSection } from '@/modules/rbac/components/CompanyAccessSection'
+import { WORKSPACE_WIDE, accessLabel, rolesInCompany, useCompanyGrants, useHomeCompanies, type CompanyGrantRow } from '@/modules/rbac/api/useCompanyAccess'
+import { useCompanies } from '@/modules/hrms/api/useOrg'
+import { Dropdown } from '@/design/kit/overlays'
 
 type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
@@ -215,6 +219,34 @@ function PermissionsDrawer({
 function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
   const { data: users = [], isLoading: usersLoading } = useWorkspaceUsers()
   const [search, setSearch] = useState('')
+  // Per company (6 Oct): who can work in a company and their role(s) there — their roles in their
+  // main company, a grant's role in another one, or roles that cover every company.
+  const { data: companies = [] } = useCompanies()
+  const multi = companies.length > 1
+  const canEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
+  const { data: grants = [] } = useCompanyGrants(multi)
+  const homes = useHomeCompanies(users.map((u) => u.employeeId).filter((id): id is string => !!id), multi && canEmployees)
+  const [companyId, setCompanyId] = useState('')
+  const companyName = useMemo(() => new Map(companies.map((c) => [c.id, c.name])), [companies])
+  const grantsByUser = useMemo(() => {
+    const m = new Map<string, CompanyGrantRow[]>()
+    for (const g of grants) m.set(g.userId, [...(m.get(g.userId) ?? []), g])
+    return m
+  }, [grants])
+  // null = no employee record (every company); undefined = not known.
+  const homeOf = (u: { employeeId: string | null }) => (!u.employeeId ? null : homes.map.get(u.employeeId))
+  const lineFor = (u: (typeof users)[number], cid: string) => rolesInCompany(u, homeOf(u), grantsByUser.get(u.userId) ?? [], cid)
+  const companyLine = (u: (typeof users)[number]): string | null => {
+    if (!multi) return null
+    if (companyId) {
+      const l = lineFor(u, companyId)
+      return l ? `${accessLabel(l.via)}${l.roles.length ? ` · ${l.roles.join(', ')}` : ''}` : null
+    }
+    const home = homeOf(u)
+    if (home === null || u.roles.some((r) => WORKSPACE_WIDE.has(r.roleCode))) return 'Every company'
+    const more = new Set((grantsByUser.get(u.userId) ?? []).map((g) => g.companyId)).size
+    return [home ? companyName.get(home) : null, more ? `+${more} ${more === 1 ? 'company' : 'companies'}` : null].filter(Boolean).join(' · ') || null
+  }
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const { data: userRoles, isLoading: userRolesLoading } = useUserRoles(selectedUserId)
   const grant = useGrantRole()
@@ -226,11 +258,14 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return users
-    return users.filter(
+    const inCompany = multi && companyId ? users.filter((u) => !!lineFor(u, companyId)) : users
+    if (!q) return inCompany
+    return inCompany.filter(
       (u) => u.email.toLowerCase().includes(q) || workspaceUserDisplayName(u).toLowerCase().includes(q),
     )
-  }, [users, search])
+    // lineFor reads grantsByUser and the main companies (homes.map, rebuilt each render: its size stands in).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, search, multi, companyId, grantsByUser, homes.map.size])
 
   const selectedUser = users.find((u) => u.userId === selectedUserId)
   const assignedRoleIds = new Set((userRoles?.roles ?? []).map((r) => r.id))
@@ -267,11 +302,19 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
             className="ut-input ut-input-sm w-full pl-8"
           />
         </div>
+        {multi && (
+          <div className="border-b border-border-default p-2.5">
+            <Dropdown label="Company" value={companyId}
+              options={[{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: c.id, label: c.name }))]}
+              onChange={(v) => setCompanyId(v)} />
+            {companyId && homes.error && <p className="mt-1.5 text-xs text-text-tertiary">Main companies couldn’t be loaded, so only company access given to people is shown.</p>}
+          </div>
+        )}
         <div className="max-h-[60vh] overflow-y-auto">
           {usersLoading ? (
             <div className="p-4 text-sm text-text-tertiary">Loading users…</div>
           ) : filtered.length === 0 ? (
-            <div className="p-4 text-sm text-text-tertiary">No users match “{search}”.</div>
+            <div className="p-4 text-sm text-text-tertiary">{search.trim() ? <>No users match “{search}”.</> : 'Nobody has access to this company.'}</div>
           ) : (
             filtered.map((u) => (
               <button
@@ -283,6 +326,7 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
               >
                 <p className="truncate text-sm font-medium text-text-primary">{workspaceUserDisplayName(u)}</p>
                 <p className="truncate text-xs text-text-tertiary">{u.email}</p>
+                {companyLine(u) && <p className="truncate text-xs text-text-secondary" data-company-line="">{companyLine(u)}</p>}
               </button>
             ))
           )}
@@ -357,6 +401,9 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
                 <p className="mt-1.5 text-xs text-text-tertiary">Greyed-out roles include permissions you don’t hold, or can only be given by the workspace owner.</p>
               )}
             </section>
+
+            {/* Companies: their role in each company */}
+            {multi && <CompanyAccessSection userId={selectedUser.userId} name={workspaceUserDisplayName(selectedUser)} />}
 
             {/* Effective permissions */}
             <section>
