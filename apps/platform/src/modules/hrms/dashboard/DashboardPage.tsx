@@ -10,7 +10,7 @@
 // tighter (the client: it felt too spacious): the same content and order, with less space (dashboard.css).
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
-  Button, PageFrame, PageHeader, PillTabs, QuickActionGrid, QuickActionTile, SectionHeading, StatCard, type QuickIconKind,
+  Button, PageFrame, PageHeader, PillTabs, SectionHeading, StatCard, type QuickIconKind,
 } from '@/design/kit/display'
 import { SidePanel } from '@/design/kit/overlays'
 import { MilestonesCard } from '@/design/dc/MilestonesCard'
@@ -26,6 +26,7 @@ import { ProbationCard } from './ProbationCard'
 import { ActivityCard, DeptCard, OnboardingCard, PayrollCard, PerformersCard, PipelineCard, ProjectsCard } from './InsightBlocks'
 import { ProjectProductivity } from './ProjectProductivity'
 import { EventsCalendar } from '../calendar/EventsCalendar'
+import { QuickActionsSection } from './QuickActionsSection'
 import { sectionPills, type DashSection, type PayMonth, type TrendColumn } from './dashboardModel'
 import { useSectionSpy } from './useSectionSpy'
 import './dashboard.css'
@@ -184,16 +185,8 @@ export function DashboardPage({ vm, refetch, onNavigate: go, onDate, onPunch, on
               {pairs.map((p, i) => <div key={i} className="ud-pair">{p}</div>)}
             </div>
           )}
-          {vm.quick.length > 0 && (
-            <section aria-label="Quick actions" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <SectionHeading title="Quick actions" level={2} />
-              <QuickActionGrid>
-                {vm.quick.map((q, i) => (
-                  <QuickActionTile key={q.key} index={i} label={q.label} hint={q.hint} kind={q.kind} icon={q.kind ? undefined : 'building'} onClick={() => go(q.path)} />
-                ))}
-              </QuickActionGrid>
-            </section>
-          )}
+          {/* Quick actions, with Customise (G-59): the person's own picks, saved per person. */}
+          <QuickActionsSection surface="dashboard" tiles={vm.quick.map((q) => ({ ...q, onClick: () => go(q.path) }))} />
           {vm.seats && <SeatsStrip used={vm.seats.used} total={vm.seats.total} isPast={isPast} onAdd={() => go('/settings/billing')} />}
           {(showInbox || vm.canAtt) && (
             <div className="ud-row">
