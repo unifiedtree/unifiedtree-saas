@@ -3,22 +3,18 @@
 // without exits. Exits are split into resigned, terminated and other from the
 // exit type HR records on Start notice / Mark exited (V143.13); exits recorded
 // before the type existed count as other.
-import { useSearchParams } from 'react-router-dom'
 import { useAttritionReport } from '@/modules/hrms/api/useReports'
 import { lineSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, monthStartIso, ReportPage, KpiRow, KPI_ICON, ReportSection, TrendChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
+import { useReportRange, ReportRangeFilter, monthStartIso, ReportPage, KpiRow, KPI_ICON, ReportSection, TrendChart, ReportTable, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const label = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ${y}` }
 const short = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ’${String(y).slice(2)}` }
 
 export function AttritionReport() {
-  const [params, setParams] = useSearchParams()
   const co = useReportCompany()
-  const TODAY = todayIso()
-  const from = params.get('from') ?? monthStartIso(11), to = params.get('to') ?? TODAY
-  const set = (k: string, v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set(k, v); return n }, { replace: true })
+  const { from, to, setRange, TODAY } = useReportRange(monthStartIso(11))
   const q = useAttritionReport(co.company || null, from, to)
 
   const rows = (q.data ?? []).map((r) => ({
@@ -47,7 +43,7 @@ export function AttritionReport() {
 
   return (
     <ReportPage title="Attrition report" subtitle="Monthly exits, resignations, terminations and attrition rate" report="attrition" co={co} skeleton="line"
-      filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
+      filters={<ReportRangeFilter from={from} to={to} max={TODAY} onChange={setRange} />}
       note={range && `Showing ${range}`}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{

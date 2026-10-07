@@ -7,8 +7,9 @@
 //     this month (/v1/reports/headcount/change) and the breakdown by branch,
 //     designation, employment type, gender, age or time with us (?by=,
 //     /v1/reports/headcount/breakdown: the same people, so it adds up).
-//   Attrition: a period (?period=: this financial year from /v1/reports/fiscal-year,
-//     the last 12 months, the year so far or last calendar year), exits, the
+//   Attrition: a period picked on the start / end calendar (?from=&to=; an older ?period= link still works),
+//     quick picks for this financial year (/v1/reports/fiscal-year), the last 12 months, the year so far,
+//     last calendar year and recent months; exits, the
 //     annualised rate, the split, joiners and leavers (/v1/reports/attrition/joiners),
 //     exits per month and the monthly trend.
 //   Diversity: today's gender split company-wide and women by department.
@@ -35,6 +36,8 @@ import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany, slug } from '@/modules/hrms/reports/useReportCompany'
 import { CompanyFilter, DateFilter, ExportMenu, SERIES_COLORS } from '@/modules/hrms/reports/ReportKit'
 import '@/modules/hrms/reports/reports.css'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { historyPresets, rangeWords } from '@/design/kit/rangeFilterModel'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -86,7 +89,14 @@ export function WorkforceAnalytics() {
   const asOf = /^\d{4}-\d{2}-\d{2}$/.test(rawAsOf) && rawAsOf <= todayIso ? rawAsOf : todayIso
   const fy = useFiscalYear(company, { enabled: canAttr && tab === 'attrition' })
   const periods = periodsFor(today, fy.data)
-  const period = periods.find((p) => p.value === params.get('period')) ?? (fy.isLoading ? null : periods[0])
+  // The period: a start / end picked on the calendar (?from=&to=), else an older ?period= link, else this financial year.
+  const [picked, setPicked] = useRangeParam({ max: todayIso, resetKeys: ['period'] })
+  const period = picked ? { value: `${picked.from}_${picked.to}`, label: rangeWords(picked), short: rangeWords(picked), from: picked.from, to: picked.to }
+    : periods.find((p) => p.value === params.get('period')) ?? (fy.isLoading ? null : periods[0])
+  const periodPicks = [
+    ...periods.map((p) => ({ key: p.value, label: p.short, from: p.from, to: p.to })),
+    ...historyPresets(todayIso, { max: todayIso }).filter((p) => ['thisMonth', 'lastMonth', 'last3Months'].includes(p.key)),
+  ]
 
   const head = useHeadcountReport(company, asOf, { enabled: canHead && tab === 'headcount' })
   const trend = useHeadcountTrend(company, 6, asOf === todayIso ? null : asOf, { enabled: canHead && tab === 'headcount' })
@@ -235,9 +245,8 @@ export function WorkforceAnalytics() {
         <CompanyFilter co={co} />
         {tab === 'headcount' && <DateFilter label="As of" value={asOf} max={todayIso} onChange={(v) => setParam('asOf', v === todayIso ? null : v)} />}
         {tab === 'attrition' && period && (
-          <div style={{ flex: '0 1 300px', minWidth: 0 }}>
-            <Select aria-label="Period" size="md" value={period.value} options={periods.map((p) => ({ value: p.value, label: p.label }))} onChange={(e) => setParam('period', e.target.value)} />
-          </div>
+          <RangeFilter value={{ from: period.from, to: period.to }} max={todayIso} presets={periodPicks} label="Period" filterKey="period" size="md"
+            onChange={setPicked} />
         )}
         <span className="rp-note">{tab === 'attrition' ? (range ? `Showing ${range}` : '') : `Data as of ${longDate(tab === 'headcount' ? asOf : todayIso)}`}</span>
       </div>
