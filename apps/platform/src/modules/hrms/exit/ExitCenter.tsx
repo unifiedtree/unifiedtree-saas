@@ -185,7 +185,7 @@ export function ExitCenter() {
       <Section title={current.label} body="flush" error={list.error} onRetry={() => list.refetch()}
         actions={<div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 8 }}>
           {canWrite && <RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Last working day" filterKey="exit-dates" align="end" size="md" />}
-          <div style={{ width: 'min(100%, 300px)' }}><Input label={`Search ${current.label.toLowerCase()}`} type="search" value={search} placeholder="Name, code or department"
+          <div style={{ width: 300, maxWidth: '100%' }}><Input label={`Search ${current.label.toLowerCase()}`} type="search" value={search} placeholder="Name, code or department"
             onChange={(e) => { setSearch(e.target.value); setPage(0) }} /></div>
         </div>}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="people" /> : undefined}>
