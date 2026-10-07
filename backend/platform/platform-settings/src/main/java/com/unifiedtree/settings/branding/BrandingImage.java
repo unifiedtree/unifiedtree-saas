@@ -29,6 +29,8 @@ public final class BrandingImage {
     public static final long MAX_BYTES = 2L * 1024 * 1024;
     public static final int MIN_SIDE = 128;
     public static final int MAX_SIDE = 4096;
+    /** The sign-in picture fills half a large screen. */
+    public static final int LOGIN_MIN_SIDE = 600;
 
     /** Which slot the image fills. */
     public enum Kind {
@@ -37,7 +39,9 @@ public final class BrandingImage {
         /** Square mark: app rail, splash, browser tab icon. */
         MARK,
         /** Letterhead banner: the top of generated letters, payslips and registers, in place of logo + name (V143_100). */
-        LETTERHEAD;
+        LETTERHEAD,
+        /** Sign-in picture: the large picture beside the business's own sign-in page, one per business (V144_3). */
+        LOGIN;
 
         public static Kind parse(String s) {
             if (s == null) throw bad(HttpStatus.NOT_FOUND, "Unknown branding image");
@@ -45,6 +49,7 @@ public final class BrandingImage {
                 case "logo" -> LOGO;
                 case "mark" -> MARK;
                 case "letterhead" -> LETTERHEAD;
+                case "login" -> LOGIN;
                 default -> throw bad(HttpStatus.NOT_FOUND, "Unknown branding image");
             };
         }
@@ -97,6 +102,11 @@ public final class BrandingImage {
         if (kind == Kind.MARK && Math.abs(w - h) > Math.max(2, Math.round(Math.max(w, h) * 0.02f))) {
             throw bad(HttpStatus.UNPROCESSABLE_ENTITY,
                     "The square mark must be square (it is " + w + " × " + h + " px). Crop it to a square first");
+        }
+        if (kind == Kind.LOGIN && Math.min(w, h) < LOGIN_MIN_SIDE) {
+            throw bad(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "The sign-in picture is " + w + " × " + h + " px. It must be at least " + LOGIN_MIN_SIDE
+                            + " px on its shortest side so it stays sharp on a large screen");
         }
         if (kind == Kind.LETTERHEAD && w < 2 * h) {
             throw bad(HttpStatus.UNPROCESSABLE_ENTITY,

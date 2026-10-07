@@ -74,7 +74,7 @@ public class BrandingService {
                   FROM platform.tenant_branding WHERE tenant_id = ?
                 """,
                 rs -> {
-                    if (!rs.next()) return new View(name, BrandingImage.monogram(name), null, null, null, null, null, null, null, null, null, null);
+                    if (!rs.next()) return new View(name, BrandingImage.monogram(name), null, null, null, null, null, null, null, null, null, null, null);
                     String logo = displayUrl(tenantId, Kind.LOGO, rs.getBoolean("has_logo"), rs.getString("logo_version"),
                             rs.getString("logo_r2_key"), rs.getString("logo_url"));
                     String mark = displayUrl(tenantId, Kind.MARK, rs.getBoolean("has_mark"), rs.getString("mark_version"),
@@ -82,7 +82,7 @@ public class BrandingService {
                     return new View(name, BrandingImage.monogram(name), logo, mark,
                             intOrNull(rs, "logo_width"), intOrNull(rs, "logo_height"),
                             intOrNull(rs, "mark_width"), intOrNull(rs, "mark_height"),
-                            rs.getObject("updated_at", OffsetDateTime.class), null, null, null);
+                            rs.getObject("updated_at", OffsetDateTime.class), null, null, null, null);
                 }, tenantId);
     }
 
@@ -90,19 +90,19 @@ public class BrandingService {
     @Transactional(readOnly = true)
     public View viewWithLetterhead(UUID tenantId) {
         View v = view(tenantId);
-        if (!letterheadColumns()) return v;
+        if (!letterheadColumns()) return withLogin(tenantId, v);
         return jdbc.query("""
                 SELECT letterhead_url, letterhead_r2_key, letterhead_version, letterhead_width, letterhead_height,
                        letterhead_bytes IS NOT NULL AS has_lh
                   FROM platform.tenant_branding WHERE tenant_id = ?
                 """,
                 rs -> {
-                    if (!rs.next()) return v;
+                    if (!rs.next()) return withLogin(tenantId, v);
                     String url = displayUrl(tenantId, Kind.LETTERHEAD, rs.getBoolean("has_lh"), rs.getString("letterhead_version"),
                             rs.getString("letterhead_r2_key"), rs.getString("letterhead_url"));
-                    return new View(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(), v.logoWidth(), v.logoHeight(),
+                    return withLogin(tenantId, new View(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(), v.logoWidth(), v.logoHeight(),
                             v.markWidth(), v.markHeight(), v.updatedAt(), url,
-                            url == null ? null : intOrNull(rs, "letterhead_width"), url == null ? null : intOrNull(rs, "letterhead_height"));
+                            url == null ? null : intOrNull(rs, "letterhead_width"), url == null ? null : intOrNull(rs, "letterhead_height"), null));
                 }, tenantId);
     }
 
@@ -130,7 +130,49 @@ public class BrandingService {
 
     private volatile boolean letterheadReady;
 
+    /** {@code v} with the sign-in picture's address (V144_3), when its columns exist and one is uploaded. */
+    private View withLogin(UUID tenantId, View v) {
+        String url = loginUrl(tenantId);
+        if (url == null) return v;
+        return new View(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(), v.logoWidth(), v.logoHeight(),
+                v.markWidth(), v.markHeight(), v.updatedAt(), v.letterheadUrl(), v.letterheadWidth(), v.letterheadHeight(), url);
+    }
+
+    private String loginUrl(UUID tenantId) {
+        if (!loginColumns()) return null;
+        return jdbc.query("""
+                SELECT login_url, login_r2_key, login_version, login_bytes IS NOT NULL AS has_login
+                  FROM platform.tenant_branding WHERE tenant_id = ?
+                """, rs -> rs.next()
+                ? displayUrl(tenantId, Kind.LOGIN, rs.getBoolean("has_login"), rs.getString("login_version"),
+                        rs.getString("login_r2_key"), rs.getString("login_url"))
+                : null, tenantId);
+    }
+
+    /** Whether the sign-in picture columns (V144_3) exist; same approach as {@link #letterheadColumns}. */
+    boolean loginColumns() {
+        if (loginReady) return true;
+        try {
+            Boolean ok = jdbc.queryForObject("""
+                    SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = 'platform' AND table_name = 'tenant_branding'
+                                      AND column_name = 'login_version')
+                    """, Boolean.class);
+            loginReady = Boolean.TRUE.equals(ok);
+        } catch (Exception e) {
+            log.warn("Sign-in picture column check failed: {}", e.getMessage());
+            return false;
+        }
+        return loginReady;
+    }
+
+    private volatile boolean loginReady;
+
     private void requireSlot(Kind kind) {
+        if (kind == Kind.LOGIN && !loginColumns()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Sign-in picture uploads aren't switched on yet. Try again after the next update");
+        }
         if (kind == Kind.LETTERHEAD && !letterheadColumns()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Letterhead uploads aren't switched on yet. Try again after the next update");
@@ -149,7 +191,7 @@ public class BrandingService {
                 subdomain.trim().toLowerCase(Locale.ROOT));
         if (tenantId == null) return Optional.empty();
         View v = view(tenantId);
-        return Optional.of(new PublicView(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl()));
+        return Optional.of(new PublicView(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(), loginUrl(tenantId)));
     }
 
     /**
@@ -159,6 +201,7 @@ public class BrandingService {
     @Transactional(readOnly = true)
     public Optional<Asset> asset(UUID tenantId, Kind kind) {
         if (kind == Kind.LETTERHEAD && !letterheadColumns()) return Optional.empty();
+        if (kind == Kind.LOGIN && !loginColumns()) return Optional.empty();
         String p = kind.key();
         return jdbc.query(
                 "SELECT " + p + "_bytes AS bytes, " + p + "_content_type AS ct, " + p + "_version AS ver, "
@@ -332,10 +375,14 @@ public class BrandingService {
                        Integer logoWidth, Integer logoHeight, Integer markWidth, Integer markHeight,
                        OffsetDateTime updatedAt,
                        /* V143_100: the letterhead banner (null when none, or before the migration). */
-                       String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight) {}
+                       String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight,
+                       /* V144_3: the sign-in picture (null when none, or before the migration). */
+                       String loginUrl) {}
 
     /** What the public sign-in lookup returns: name and images only. */
-    public record PublicView(String workspaceName, String monogram, String logoUrl, String markUrl) {}
+    public record PublicView(String workspaceName, String monogram, String logoUrl, String markUrl,
+                             /* V144_3: the business's sign-in picture, or null for the brand default. */
+                             String loginUrl) {}
 
     /** One stored image. */
     public record Asset(byte[] bytes, String contentType, String version) {}

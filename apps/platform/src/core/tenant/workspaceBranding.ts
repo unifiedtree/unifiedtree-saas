@@ -32,6 +32,8 @@ export interface BrandingDto {
   letterheadUrl?: string | null
   letterheadWidth?: number | null
   letterheadHeight?: number | null
+  /** The business's sign-in picture (V144_3); absent on an older server. */
+  loginUrl?: string | null
 }
 
 export interface WorkspaceBranding {
@@ -43,6 +45,8 @@ export interface WorkspaceBranding {
   markUrl: string | null
   logoSize: { w: number; h: number } | null
   markSize: { w: number; h: number } | null
+  /** The business's sign-in picture, or null for the standard panel. */
+  loginUrl: string | null
   loaded: boolean
 }
 
@@ -165,6 +169,7 @@ export function useWorkspaceBranding(): WorkspaceBranding {
     markUrl: resolveAssetUrl(current?.markUrl),
     logoSize: current?.logoWidth && current?.logoHeight ? { w: current.logoWidth, h: current.logoHeight } : null,
     markSize: current?.markWidth && current?.markHeight ? { w: current.markWidth, h: current.markHeight } : null,
+    loginUrl: resolveAssetUrl(current?.loginUrl),
     loaded: storeKey === key && (status === 'ready' || status === 'error'),
   }
 }

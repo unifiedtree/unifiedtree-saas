@@ -259,6 +259,11 @@ export const LoginPage: React.FC = () => {
       {/* ── The business's picture (large screens). One per business; until a
           business uploads its own, its name on the emerald brand field. ───── */}
       <aside aria-hidden className="relative hidden flex-1 overflow-hidden lg:block">
+        {!needsWorkspace && brand.loginUrl && failedImage !== brand.loginUrl ? (
+          /* The business's own sign-in picture (Settings → Branding, V144_3). */
+          <img src={brand.loginUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={() => setFailedImage(brand.loginUrl)} />
+        ) : (
+        <>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(155deg, #0A4D3C 0%, #0F6E56 48%, #15876B 100%)' }} />
         <div className="absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-white/10 blur-3xl" />
         <div className="absolute -bottom-32 right-[-6rem] h-[520px] w-[520px] rounded-full bg-black/10 blur-3xl" />
@@ -267,6 +272,8 @@ export const LoginPage: React.FC = () => {
             <p className="text-[34px] font-black leading-tight tracking-tight">{brand.workspaceName}</p>
             <p className="mt-2 max-w-md text-[15px] font-medium text-white/75">People, attendance, leave and payroll in one place.</p>
           </div>
+        )}
+        </>
         )}
       </aside>
 

@@ -104,11 +104,13 @@ public class BrandingController {
                               Integer markWidth, Integer markHeight,
                               OffsetDateTime updatedAt,
                               String faviconUrl, String primaryColor,
-                              String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight) {
+                              String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight,
+                              /* V144_3: the sign-in picture beside the business's sign-in page. */
+                              String loginUrl) {
         static BrandingDto of(BrandingService.View v) {
             return new BrandingDto(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(),
                     v.logoWidth(), v.logoHeight(), v.markWidth(), v.markHeight(), v.updatedAt(),
-                    v.markUrl(), null, v.letterheadUrl(), v.letterheadWidth(), v.letterheadHeight());
+                    v.markUrl(), null, v.letterheadUrl(), v.letterheadWidth(), v.letterheadHeight(), v.loginUrl());
         }
     }
 }
