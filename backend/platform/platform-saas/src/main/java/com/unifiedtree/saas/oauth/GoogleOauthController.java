@@ -77,7 +77,11 @@ public class GoogleOauthController {
     private final GoogleOauthService oauth;
     private final PublicEndpointRateLimiter rateLimiter;
 
-    public GoogleOauthController(GoogleOauthService oauth, PublicEndpointRateLimiter rateLimiter) {
+    private final BusinessGoogleSignIn business;
+
+    public GoogleOauthController(GoogleOauthService oauth, PublicEndpointRateLimiter rateLimiter,
+                                 BusinessGoogleSignIn business) {
+        this.business = business;
         this.oauth = oauth;
         this.rateLimiter = rateLimiter;
     }
@@ -87,9 +91,20 @@ public class GoogleOauthController {
     @GetMapping("/start")
     public void start(@RequestParam(value = "return_to", required = false) String returnTo,
                       @RequestParam(value = "prompt", required = false) String prompt,
+                      @RequestParam(value = "business", required = false) String businessSubdomain,
                       HttpServletRequest req,
                       HttpServletResponse res) throws IOException {
         rateLimiter.checkPerIp("accounts-auth-google-start", clientIp(req), START_PER_MIN);
+        // ?business=<subdomain>: "Continue with Google" on that business's own login page.
+        if (businessSubdomain != null && !businessSubdomain.isBlank()) {
+            returnTo = BusinessGoogleSignIn.returnToFor(businessSubdomain);
+            if (returnTo == null) {
+                res.setStatus(HttpStatus.BAD_REQUEST.value());
+                res.setContentType("application/json");
+                res.getWriter().write("{\"error\":\"business_invalid\"}");
+                return;
+            }
+        }
         GoogleOauthService.AuthorizeStart start;
         try {
             start = oauth.startAuthorizeUrl(returnTo, prompt, clientIp(req), req.getHeader("User-Agent"));
@@ -121,6 +136,12 @@ public class GoogleOauthController {
         try {
             GoogleOauthService.CallbackResult result = oauth.completeCallback(
                     state, cookieState, code, googleError, ip, ua);
+            String sub = BusinessGoogleSignIn.businessOf(result.returnTo());
+            if (sub != null) {
+                clearStateCookie(res);
+                businessCallback(res, sub, result.businessEmail());
+                return;
+            }
             // Success. Mint the refresh cookie (same shape as password login).
             AccountLoginResponse loginResponse = result.loginResponse();
             if (loginResponse != null && loginResponse.account() != null) {
@@ -133,13 +154,38 @@ public class GoogleOauthController {
             String returnTo = e.returnTo();  // not exposed on error redirect but tracked for reference
             log.info("google oauth callback failed: code={} return_to={}", e.errorCode(), returnTo);
             String errorParam = urlEncode(e.errorCode());
-            redirect(res, oauth.webBaseUrl() + "/login?error=" + errorParam);
+            String sub = BusinessGoogleSignIn.businessOf(returnTo);
+            redirect(res, (sub != null ? business.businessUrl(sub) : oauth.webBaseUrl()) + "/login?error=" + errorParam);
         } catch (RuntimeException e) {
             // Never leak a stack trace or Google error text into the URL.
             clearStateCookie(res);
             log.warn("google oauth callback errored: {}", e.toString());
             redirect(res, oauth.webBaseUrl() + "/login?error=oauth_google_error");
         }
+    }
+
+    /** Business sign-in: the business session + its refresh cookie, then into the business. */
+    private void businessCallback(HttpServletResponse res, String sub, String email) {
+        String base = business.businessUrl(sub);
+        try {
+            BusinessGoogleSignIn.Result r = business.signIn(sub, email);
+            writeBusinessRefreshCookie(res, r.tenantId(), r.session().refreshToken());
+            redirect(res, base + "/?token=" + urlEncode(r.session().accessToken()));
+        } catch (BusinessGoogleSignIn.Refused e) {
+            log.info("google business sign-in refused: business={} code={}", sub, e.code());
+            redirect(res, base + "/login?error=" + urlEncode(e.code()));
+        }
+    }
+
+    /** Same cookie as password / phone sign-in (ut_rt_<tenantId>), so a reload keeps the session. */
+    private static void writeBusinessRefreshCookie(HttpServletResponse res, UUID tenantId, String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank() || tenantId == null) return;
+        res.addHeader("Set-Cookie", String.join("; ",
+                "ut_rt_" + tenantId.toString().replace("-", "") + "=" + refreshToken,
+                "Max-Age=" + (7 * 24 * 60 * 60),
+                "Path=/",
+                "Domain=.unifiedtree.com",
+                "HttpOnly", "Secure", "SameSite=Lax"));
     }
 
     // ── cookie plumbing ─────────────────────────────────────────────────────
