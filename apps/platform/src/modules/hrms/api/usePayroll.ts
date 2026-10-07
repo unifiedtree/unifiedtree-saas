@@ -112,19 +112,28 @@ export interface CreateStructurePayload {
 
 const KEY = ['hrms', 'payroll'] as const
 
-export function usePayrollSettings() {
+/**
+ * Payroll settings are per company (V143.105, 7 Oct 2026): GET/PUT name the company. Without one the
+ * server uses the company chosen at the top of the page (X-Company-Id), as an older server ignores it.
+ */
+export const payrollSettingsUrl = (companyId?: string | null) =>
+  `/v1/payroll/settings${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`
+/** One cache entry per company; `[...KEY, 'settings']` still matches them all (invalidation after a save). */
+export const payrollSettingsKey = (companyId?: string | null) => [...KEY, 'settings', companyId || 'current'] as const
+
+export function usePayrollSettings(companyId?: string | null) {
   return useQuery({
-    queryKey: [...KEY, 'settings'],
-    queryFn: () => apiJson<PayrollSettings>('/v1/payroll/settings'),
+    queryKey: payrollSettingsKey(companyId),
+    queryFn: () => apiJson<PayrollSettings>(payrollSettingsUrl(companyId)),
     staleTime: 60_000,
   })
 }
 
-export function useUpdatePayrollSettings() {
+export function useUpdatePayrollSettings(companyId?: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: Partial<PayrollSettings>) =>
-      apiJson<PayrollSettings>('/v1/payroll/settings', { method: 'PUT', body: JSON.stringify(data) }),
+      apiJson<PayrollSettings>(payrollSettingsUrl(companyId), { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'settings'] }),
   })
 }

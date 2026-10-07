@@ -17,7 +17,7 @@ export function PaySettingsView({ v }: { v: any }) {
         <div style={{display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", gap: "24px 32px", minWidth: "0"}}>
           <div style={{flex: "0 0 100%", minWidth: "0", display: "flex", justifyContent: "center", marginBottom: "-32px"}}>
             <div style={{flex: "1 1 auto", maxWidth: "976px", minWidth: "0"}}>
-              <HrPageHeader crumb="Payroll" title="Payroll Settings" subtitle="Statutory deductions and payroll cycle used by every payroll run." />
+              <HrPageHeader crumb="Payroll" title={v.title} subtitle={v.subtitle} />
             </div>
           </div>
           {v.showSide ? (
