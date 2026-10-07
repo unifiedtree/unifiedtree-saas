@@ -1,6 +1,7 @@
 package com.hrms.api.invitation;
 
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.core.exception.HrmsException;
 import com.hrms.employee.service.EmailAlreadyUsedException;
 import com.hrms.employee.service.EmployeeContactGuard;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
@@ -20,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -115,9 +117,9 @@ public class InvitationService {
             throw new EmailAlreadyUsedException(EmployeeContactGuard.GENERIC_EMAIL_MESSAGE);
         }
         // One business per person (owner decision, 6 Oct 2026): a NEW login is not made for
-        // an email that already signs in to another business. Re-inviting someone who
-        // already has a login here is unaffected.
-        if (found.isEmpty()) assertNotInAnotherBusiness(email, tenantId);
+        // an email that already signs in to another business, and a login here that was never
+        // activated is not re-invited (re-send) either. Someone already signed in here is unaffected.
+        if (found.isEmpty() || !found.get().isActive()) assertNotInAnotherBusiness(email, tenantId);
         UserCredentials creds = found.orElseGet(() -> {
             UserCredentials c = new UserCredentials();
             // Do NOT set id — BaseEntity uses @GeneratedValue(UUID). Assigning it
@@ -220,20 +222,21 @@ public class InvitationService {
     }
 
     /** Shown to the admin as-is. */
-    static final String IN_ANOTHER_BUSINESS_MESSAGE =
+    public static final String IN_ANOTHER_BUSINESS_MESSAGE =
             "This email already signs in to another business. A person can belong to one business only; use a different email.";
 
     /**
-     * Refuses an email that already signs in to another business (V144_2's
-     * auth.email_signs_in_elsewhere). Skipped until that function exists in the database.
+     * Refuses (409 EMAIL_IN_ANOTHER_BUSINESS) an email that already signs in to another business
+     * (V144_2's auth.email_signs_in_elsewhere). Skipped until that function exists in the database.
+     * Every path that makes or invites a login calls this (here and Users &amp; access).
      */
-    void assertNotInAnotherBusiness(String email, UUID tenantId) {
+    public void assertNotInAnotherBusiness(String email, UUID tenantId) {
         Boolean ready = jdbc.queryForObject(
                 "SELECT to_regprocedure('auth.email_signs_in_elsewhere(text,uuid)') IS NOT NULL", Boolean.class);
         if (!Boolean.TRUE.equals(ready)) return;
         Boolean elsewhere = jdbc.queryForObject("SELECT auth.email_signs_in_elsewhere(?, ?)", Boolean.class, email, tenantId);
         if (Boolean.TRUE.equals(elsewhere)) {
-            throw new BusinessRuleException(IN_ANOTHER_BUSINESS_MESSAGE, "EMAIL_IN_ANOTHER_BUSINESS");
+            throw new HrmsException(IN_ANOTHER_BUSINESS_MESSAGE, HttpStatus.CONFLICT, "EMAIL_IN_ANOTHER_BUSINESS");
         }
     }
 
@@ -257,6 +260,9 @@ public class InvitationService {
 
         UserCredentials creds = credRepo.findById(userId)
             .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
+        // One business per person: a login that was never activated is not (re-)invited
+        // while its email signs in to another business.
+        if (!creds.isActive()) assertNotInAnotherBusiness(creds.getEmail(), tenantId);
 
         String firstName  = creds.getEmail().split("@")[0];
         String tenantName = loadTenantName(tenantId);
