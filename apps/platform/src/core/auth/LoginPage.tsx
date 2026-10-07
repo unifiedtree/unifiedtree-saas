@@ -19,8 +19,8 @@ type MfaSetupInfo = { secret: string; qrSvg: string; issuer: string }
  * /v1/accounts/auth/google/start?business=; mobile goes to the SMS step on the website
  * ({@link mobileSignInUrl}), which hands the session back to this page's business.
  */
-const GOOGLE_SIGN_IN = false
-const MOBILE_SIGN_IN = false
+const GOOGLE_SIGN_IN = true
+const MOBILE_SIGN_IN = true
 
 /** What a refused Google sign-in comes back with (/login?error=…), in plain words. */
 const SIGN_IN_ERRORS: Record<string, string> = {
