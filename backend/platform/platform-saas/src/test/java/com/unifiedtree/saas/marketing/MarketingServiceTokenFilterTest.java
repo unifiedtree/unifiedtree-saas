@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** The gate in front of /v1/internal/**: fails closed, constant-time token check. */
+/** The gate in front of /v1/internal/marketing/**: fails closed, constant-time token check, decoded path. */
 class MarketingServiceTokenFilterTest {
 
     static final String TOKEN = "s3rv1ce-t0ken-for-tests-0123456789abcdef";
@@ -62,6 +62,28 @@ class MarketingServiceTokenFilterTest {
         Outcome o = call("short", "/v1/internal/marketing/access", "short");
         assertThat(o.passed()).isFalse();
         assertThat(o.status()).isEqualTo(503);
+    }
+
+    @Test
+    void anEncodedPathCannotSkipTheCheck() throws Exception {
+        // Routing decodes %72 to 'r' — the filter must decide on the same path (regression: this used to pass)
+        for (String path : new String[] {"/v1/inte%72nal/marketing/principals", "/v1/%69nternal/marketing/access",
+                                         "/v1/internal/%6Darketing/usage", "/v1/internal/marketing;x=1/access"}) {
+            Outcome o = call(TOKEN, path, null);
+            assertThat(o.passed()).as(path).isFalse();
+            assertThat(o.status()).as(path).isEqualTo(401);
+        }
+    }
+
+    @Test
+    void theSecurityChainRuleUsesTheSameTokenCheck() {
+        MarketingServiceTokenFilter filter = new MarketingServiceTokenFilter(TOKEN);
+        MockHttpServletRequest withToken = new MockHttpServletRequest("GET", "/api/v1/internal/marketing/access");
+        withToken.addHeader(MarketingServiceTokenFilter.HEADER, TOKEN);
+        MockHttpServletRequest without = new MockHttpServletRequest("GET", "/api/v1/internal/marketing/access");
+        assertThat(filter.hasValidToken(withToken)).isTrue();
+        assertThat(filter.hasValidToken(without)).isFalse();
+        assertThat(new MarketingServiceTokenFilter("").hasValidToken(withToken)).isFalse();
     }
 
     @Test

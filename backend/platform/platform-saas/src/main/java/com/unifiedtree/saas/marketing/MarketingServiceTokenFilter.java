@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,7 +18,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 
 /**
- * Guards {@code /v1/internal/**}: the server-to-server API that Marketing Automation
+ * Guards {@code /v1/internal/marketing/**}: the server-to-server API that Marketing Automation
  * (Node) calls for platform decisions — redeem an SSO ticket, check a company's
  * access and entitlement, record identity mappings, audit and usage.
  *
@@ -28,17 +29,23 @@ import java.time.Instant;
  * <p>Fails closed: if {@code unifiedtree.marketing.service-token}
  * ({@code UNIFIEDTREE_MARKETING_SERVICE_TOKEN}) is unset or shorter than 32
  * characters, every internal request is refused with 503. Compared in constant time.
- * The security chain lets {@code /v1/internal/**} through without a JWT; this filter
- * (registered after the chain) is the gate.
+ *
+ * <p>Two layers, both on the DECODED path (the one Spring Security and Spring MVC route on):
+ * the security chain requires {@link #hasValidToken} for {@code /v1/internal/marketing/**},
+ * and this filter (registered after the chain) answers the precise 401/503. Deciding on the
+ * raw request URI alone let {@code /v1/inte%72nal/...} skip the check while still routing to
+ * the controller.
  */
 @Component
 public class MarketingServiceTokenFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-UnifiedTree-Service-Token";
-    static final String PREFIX = "/v1/internal/";
+    static final String PREFIX = "/v1/internal/marketing/";
     static final int MIN_LENGTH = 32;
 
     private static final Logger log = LoggerFactory.getLogger(MarketingServiceTokenFilter.class);
+    /** Decodes %-escapes and drops ;path-parameters, like request routing does */
+    private static final UrlPathHelper PATHS = new UrlPathHelper();
 
     private final byte[] expected;
 
@@ -47,13 +54,21 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
         this.expected = t.length() >= MIN_LENGTH ? t.getBytes(StandardCharsets.UTF_8) : null;
         if (this.expected == null) {
             log.warn("UNIFIEDTREE_MARKETING_SERVICE_TOKEN is not set (or shorter than {} characters): "
-                    + "every /v1/internal/** request will be refused", MIN_LENGTH);
+                    + "every /v1/internal/marketing/** request will be refused", MIN_LENGTH);
         }
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !path(request).startsWith(PREFIX);
+        // Internal when either the decoded or the raw path is under the prefix
+        return !path(request).startsWith(PREFIX) && !rawPath(request).startsWith(PREFIX);
+    }
+
+    /** Whether the request carries the configured service token. Also the security chain's rule for the prefix. */
+    public boolean hasValidToken(HttpServletRequest request) {
+        if (expected == null) return false;
+        String presented = request.getHeader(HEADER);
+        return presented != null && MessageDigest.isEqual(expected, presented.trim().getBytes(StandardCharsets.UTF_8));
     }
 
     @Override
@@ -63,8 +78,7 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
             deny(response, 503, "SERVICE_TOKEN_NOT_CONFIGURED", "Internal API is not configured on this server");
             return;
         }
-        String presented = request.getHeader(HEADER);
-        if (presented == null || !MessageDigest.isEqual(expected, presented.trim().getBytes(StandardCharsets.UTF_8))) {
+        if (!hasValidToken(request)) {
             log.warn("Refused internal API call to {} from {}: bad or missing service token", path(request),
                     request.getRemoteAddr());
             deny(response, 401, "INVALID_SERVICE_TOKEN", "A valid service token is required");
@@ -73,7 +87,12 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
+    /** The decoded path within the application (context path removed): what routing and the security chain see */
     static String path(HttpServletRequest request) {
+        return PATHS.getPathWithinApplication(request);
+    }
+
+    static String rawPath(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String ctx = request.getContextPath();
         return ctx != null && !ctx.isEmpty() && uri.startsWith(ctx) ? uri.substring(ctx.length()) : uri;

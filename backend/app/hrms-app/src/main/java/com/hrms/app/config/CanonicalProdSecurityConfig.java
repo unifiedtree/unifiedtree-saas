@@ -1,6 +1,7 @@
 package com.hrms.app.config;
 
 import com.unifiedtree.auth.service.JwtService;
+import com.unifiedtree.saas.marketing.MarketingServiceTokenFilter;
 import com.unifiedtree.security.web.TenantContextFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
@@ -77,13 +79,17 @@ public class CanonicalProdSecurityConfig {
      */
     private final boolean allowCredentials;
 
+    private final MarketingServiceTokenFilter marketingServiceToken;
+
     public CanonicalProdSecurityConfig(TenantContextFilter tenantContextFilter,
                                        JwtService jwtService,
+                                       MarketingServiceTokenFilter marketingServiceToken,
                                        @Value("${unifiedtree.cors.allowed-origins:}") String allowedOriginsRaw,
                                        @Value("${unifiedtree.cors.allowed-origin-patterns:}") String allowedOriginPatternsRaw,
                                        @Value("${unifiedtree.cors.allow-credentials:false}") boolean allowCredentials) {
         this.tenantContextFilter = tenantContextFilter;
         this.jwtService = jwtService;
+        this.marketingServiceToken = marketingServiceToken;
         this.allowedOriginsRaw = allowedOriginsRaw;
         this.allowedOriginPatternsRaw = allowedOriginPatternsRaw;
         this.allowCredentials = allowCredentials;
@@ -228,11 +234,13 @@ public class CanonicalProdSecurityConfig {
                     "/v1/accounts/auth/google/callback",
                     "/v1/platform/auth/login"
                 ).permitAll()
-                // Server-to-server API for Marketing Automation (Node). It has no user
-                // JWT; MarketingServiceTokenFilter, which runs after this chain, refuses
-                // every request without the shared service token (and fails closed when
-                // none is configured). Not unprotected — gated one layer further in.
-                .requestMatchers("/v1/internal/**").permitAll()
+                // Server-to-server API for Marketing Automation (Node): no user JWT, the
+                // shared service token instead. Checked HERE, with the same (decoded-path)
+                // matcher that routes the request, so no encoding of the path can skip it;
+                // MarketingServiceTokenFilter, after this chain, answers the precise 401/503.
+                .requestMatchers("/v1/internal/marketing/**")
+                    .access((authentication, context) ->
+                            new AuthorizationDecision(marketingServiceToken.hasValidToken(context.getRequest())))
                 // The UnifiedTree admin console (admin.unifiedtree.com). Outer layer;
                 // every controller method also checks @platformAdmin (platform-tenant
                 // token) and its own platform.* permission.
