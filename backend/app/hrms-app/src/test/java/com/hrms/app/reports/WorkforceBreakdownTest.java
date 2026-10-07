@@ -179,7 +179,10 @@ class WorkforceBreakdownTest {
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).query(sql.capture(), any(RowMapper.class), args.capture());
-        assertThat(sql.getValue()).contains("e.tenant_id = ?").contains("e.company_id = ?");
+        assertThat(sql.getValue()).contains("e.tenant_id = ?").contains("e.company_id = ?")
+                // No joining date: the day the record was created, as the headcount report (7 Oct 2026).
+                .contains("COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS joined")
+                .contains("j.joined BETWEEN ? AND ?");
         assertThat(args.getValue()).containsExactly(TENANT, CO, LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 31));
     }
 }

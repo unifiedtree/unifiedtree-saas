@@ -100,8 +100,12 @@ class ReportTenantScopeTest {
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).queryForList(sql.capture(), args.capture());
+        // Today's leaver rule (a last working day on or before today counts as gone); a missing joining
+        // date is the day the record was created, as on a past date (7 Oct 2026: it used to drop them).
         assertThat(sql.getValue()).contains(ReportService.EMPLOYED_ON).doesNotContain(ReportService.EMPLOYED_THROUGH)
-                .contains("AND e.date_of_joining <= ?");
+                .contains("AND COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= ?")
+                .contains("COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') <= ?")
+                .doesNotContain("AND e.date_of_joining <= ?");
         assertTenantScoped(sql.getValue(), args.getValue());
         assertThat(args.getValue()).containsExactly(TENANT, today, TENANT, today, today, TENANT, TENANT, CO, today, today);
     }
@@ -121,6 +125,20 @@ class ReportTenantScopeTest {
         assertThat(ReportService.employedOn(today)).isEqualTo(ReportService.EMPLOYED_ON);
         assertThat(ReportService.employedOn(today.plusDays(5))).isEqualTo(ReportService.EMPLOYED_ON);
         assertThat(ReportService.EMPLOYED_ON).contains("<= ?");
+    }
+
+    /** Someone without a joining date counts from the day their record was created: today, on a past date, during a range. */
+    @Test
+    void aMissingJoiningDateIsTheDayTheRecordWasCreatedEverywhere() {
+        String createdDay = "COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date)";
+        assertThat(ReportService.EMPLOYED_ON).contains(createdDay + " <= ?");
+        assertThat(ReportService.EMPLOYED_THROUGH).contains(createdDay + " <= ?");
+        assertThat(ReportService.ON_ROLL_DURING).contains(createdDay + " <= ?");
+        // The attrition report's opening and closing headcounts read joining dates the same way.
+        reports.attritionReport(CO, D.withDayOfMonth(1), D);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).queryForList(sql.capture(), any(Object[].class));
+        assertThat(sql.getValue()).contains("SELECT " + createdDay + " AS joined");
     }
 
     /** The shared fragments join with a space: no keyword runs into the next word (a text block drops trailing spaces). */

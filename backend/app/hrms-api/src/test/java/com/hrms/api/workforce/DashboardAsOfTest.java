@@ -87,11 +87,40 @@ class DashboardAsOfTest {
         assertEquals(1, DashboardAsOf.headcount(people, Map.of(), MAR_14_2025, false).total());
     }
 
-    @Test void onAPastDayNoJoiningDateCountsFromTheRecordsCreation() {
+    @Test void noJoiningDateCountsFromTheRecordsCreationOnAnyDay() {
         LocalDate created = LocalDate.of(2025, 3, 10);
-        assertEquals(created, DashboardHistory.joinedOrCreated(null, created, true), "as that day's attendance roster");
-        assertNull(DashboardHistory.joinedOrCreated(null, created, false), "today's view: unchanged");
-        assertEquals(MAR_14_2025, DashboardHistory.joinedOrCreated(MAR_14_2025, created, true));
+        assertEquals(created, DashboardHistory.joinedOrCreated(null, created), "as the day's attendance roster");
+        assertEquals(MAR_14_2025, DashboardHistory.joinedOrCreated(MAR_14_2025, created));
+    }
+
+    /**
+     * Production, 7 Oct 2026: three people without a joining date were on the day's roster ("18 scheduled")
+     * and on past days, but not in today's Total employees (15), and a range ending today counted fewer
+     * joiners than a shorter one ending yesterday. With the record's creation day standing in for the
+     * missing date, today, a past day and every range count them alike.
+     */
+    @Test void peopleWithoutAJoiningDateCountTheSameTodayOnAPastDayAndOverARange() {
+        LocalDate today = LocalDate.of(2026, 10, 7), yesterday = today.minusDays(1), created = LocalDate.of(2026, 10, 2);
+        var dated = person(LocalDate.of(2026, 1, 5), "ACTIVE", null);
+        var undated = person(DashboardHistory.joinedOrCreated(null, created), "PROBATION", null);
+        var undatedToo = person(DashboardHistory.joinedOrCreated(null, created), "ACTIVE", null);
+        var people = List.of(dated, undated, undatedToo);
+
+        var now = DashboardAsOf.headcount(people, Map.of(), today, false);
+        var past = DashboardAsOf.headcount(people, Map.of(), yesterday, true);
+        assertEquals(3, now.total(), "today's Total employees counts them");
+        assertEquals(now.total(), past.total(), "as yesterday's does: nobody joined or left in between");
+        assertEquals(2, now.active());
+        assertEquals(1, now.probation());
+        assertEquals(2, now.joined(), "this month's joiners: the two whose records were created on the 2nd");
+        // A longer range never has fewer joiners than a shorter one inside it.
+        int week = DashboardAsOf.moves(people, today.minusDays(6), today).joined();
+        int threeDays = DashboardAsOf.moves(people, yesterday.minusDays(2), yesterday).joined();
+        assertEquals(2, week);
+        assertEquals(0, threeDays);
+        assertTrue(week >= DashboardAsOf.moves(people, created, yesterday).joined());
+        // Before the record existed they are not on the roll.
+        assertEquals(1, DashboardAsOf.headcount(people, Map.of(), created.minusDays(1), true).total());
     }
 
     @Test void aLeaverWithNoRecordedDatesCountsAsGone() {

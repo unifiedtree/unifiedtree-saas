@@ -34,8 +34,11 @@ public class EmployeeStatsService {
     @Transactional(readOnly = true)
     public EmployeeStats.Response stats(UUID companyId, boolean attrition) {
         UUID tenant = TenantContext.getTenantId();
+        // No joining date: the day the record was created (India time), as the dashboard and the headcount report.
         List<EmployeeStats.Person> people = jdbc.query("""
-                SELECT id, employment_status, date_of_joining, last_working_day, date_of_termination,
+                SELECT id, employment_status,
+                       COALESCE(date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date) AS date_of_joining,
+                       last_working_day, date_of_termination,
                        notice_start_date, probation_end_date
                   FROM hrms.employees
                  WHERE tenant_id = ? AND is_active = TRUE

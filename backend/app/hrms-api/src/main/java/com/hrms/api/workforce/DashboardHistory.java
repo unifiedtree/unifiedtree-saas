@@ -37,7 +37,7 @@ public class DashboardHistory {
 
     /** {@link #headcount(UUID, UUID, LocalDate)}; {@code throughLastDay}: see {@link DashboardAsOf#headcount(List, Map, LocalDate, boolean)}. */
     public DashboardAsOf.Headcount headcount(UUID tenant, UUID companyId, LocalDate date, boolean throughLastDay) {
-        List<DashboardAsOf.Person> people = people(tenant, companyId, throughLastDay);
+        List<DashboardAsOf.Person> people = people(tenant, companyId);
         Map<UUID, List<DashboardAsOf.Change>> history = jdbc.query("""
                 SELECT h.employee_id, h.status, h.effective_on, h.recorded_at
                   FROM hrms.employee_status_history h
@@ -52,21 +52,25 @@ public class DashboardHistory {
     /**
      * The joiners and leavers of one company from {@code from} to {@code to}
      * (the dashboard's date range), by {@link DashboardAsOf#moves}; joining
-     * dates as {@link #headcount(UUID, UUID, LocalDate, boolean)} reads them.
+     * dates as {@link #headcount(UUID, UUID, LocalDate, boolean)} reads them
+     * ({@code throughLastDay} no longer changes them: today and a past day read
+     * a missing joining date the same way).
      */
     public DashboardAsOf.Moves moves(UUID tenant, UUID companyId, LocalDate from, LocalDate to, boolean throughLastDay) {
-        return DashboardAsOf.moves(people(tenant, companyId, throughLastDay), from, to);
+        return DashboardAsOf.moves(people(tenant, companyId), from, to);
     }
 
-    private List<DashboardAsOf.Person> people(UUID tenant, UUID companyId, boolean throughLastDay) {
-        // A past day: someone without a joining date counts from the day their record was created, as that
-        // day's attendance roster counts them (leftOnOrAfter, ReportService.ON_ROLL_DURING).
+    private List<DashboardAsOf.Person> people(UUID tenant, UUID companyId) {
+        // Someone without a joining date counts from the day their record was created (India time), today as on
+        // a past day, as the attendance roster counts them (AttendanceService.joiningDatesFor, leftOnOrAfter,
+        // ReportService.EMPLOYED_ON / ON_ROLL_DURING). Today's view used to drop them: "18 scheduled" beside
+        // "Total employees 15", and a longer range showing fewer joiners than a shorter one.
         return jdbc.query("""
                 SELECT id, date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date AS created_on,
                        employment_status, last_working_day, date_of_termination
                   FROM hrms.employees WHERE tenant_id = ? AND company_id = ?
                 """, (rs, i) -> new DashboardAsOf.Person(rs.getObject("id", UUID.class),
-                joinedOrCreated(day(rs.getDate("date_of_joining")), day(rs.getDate("created_on")), throughLastDay),
+                joinedOrCreated(day(rs.getDate("date_of_joining")), day(rs.getDate("created_on"))),
                 rs.getString("employment_status"), day(rs.getDate("last_working_day")), day(rs.getDate("date_of_termination"))),
                 tenant, companyId);
     }
@@ -120,9 +124,9 @@ public class DashboardHistory {
         return out;
     }
 
-    /** The joining date; on a past day ({@code throughLastDay}) without one, the day the record was created. */
-    static LocalDate joinedOrCreated(LocalDate joined, LocalDate created, boolean throughLastDay) {
-        return joined != null || !throughLastDay ? joined : created;
+    /** The joining date; without one, the day the record was created (India time), on any day. */
+    static LocalDate joinedOrCreated(LocalDate joined, LocalDate created) {
+        return joined != null ? joined : created;
     }
 
     private static LocalDate day(Date d) { return d == null ? null : d.toLocalDate(); }
