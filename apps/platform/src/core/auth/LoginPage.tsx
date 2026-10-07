@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Camera, Eye, EyeOff, Smartphone } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
-import { apiJson, AuthResponse, currentSubdomain, HttpError, WorkspaceStatus } from '@/core/api/client'
+import { API_BASE_URL, apiJson, AuthResponse, currentSubdomain, HttpError, WorkspaceStatus } from '@/core/api/client'
 import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
 import { usePageTitle, useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
 import { MonogramTile } from '@/shared/components/WorkspaceMark'
@@ -14,11 +14,22 @@ type MfaChallenge = { mfaRequired?: boolean; mfaSetupRequired?: boolean; mfaToke
 type MfaSetupInfo = { secret: string; qrSvg: string; issuer: string }
 
 /**
- * Google and mobile (SMS code) sign-in on the business page (owner, 6 Oct 2026). Off until the
- * backend can sign a person into THIS business with them — see CONTRACTS-PROPOSAL §5: today's
- * Google sign-in is account-only and the phone match is not scoped to the business.
+ * Google and mobile (SMS code) sign-in on the business page (owner, 6 Oct 2026). Each turns on once
+ * its backend is live: Google needs /v1/accounts/auth/google/start?business= (branch
+ * chakri/login-backend); mobile also needs the Firebase web sign-in step.
  */
-const EXTRA_SIGN_IN_METHODS = false
+const GOOGLE_SIGN_IN = false
+const MOBILE_SIGN_IN = false
+
+/** What a refused Google sign-in comes back with (/login?error=…), in plain words. */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  GOOGLE_NOT_REGISTERED: 'That Google account isn’t a login here. Use the email your administrator invited, or sign in with your password.',
+  USE_PASSWORD_FOR_TWO_FACTOR: 'Your account uses two-factor sign-in. Sign in with your email and password, then enter your code.',
+  ACCOUNT_INACTIVE: 'This login is switched off. Ask your administrator.',
+  ACCOUNT_LOCKED: 'This login is locked for a while after too many attempts. Try again later.',
+  BUSINESS_NOT_FOUND: 'This business isn’t available.',
+  oauth_cancelled: 'Google sign-in was cancelled.',
+}
 
 /** The UnifiedTree HRMS app on Google Play (Android only). */
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.unifiedtree.hrms'
@@ -59,7 +70,7 @@ export const LoginPage: React.FC = () => {
   const [workspace,   setWorkspace]   = useState(searchParams.get('workspace') || '')
   const [showPwd,     setShowPwd]     = useState(false)
   const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState('')
+  const [error,       setError]       = useState(() => SIGN_IN_ERRORS[searchParams.get('error') || ''] || (searchParams.get('error') ? 'Google sign-in didn’t work. Try again or use your password.' : ''))
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus | null>(null)
   // Two-factor step (after a correct password): the challenge, the code typed,
   // the QR when the workspace requires set-up, and the recovery codes shown
@@ -489,17 +500,25 @@ export const LoginPage: React.FC = () => {
         )}
 
         {/* Other ways in (outside the form: its one submit button stays "Log in"). */}
-        {!needsWorkspace && !mfa && !recovery && EXTRA_SIGN_IN_METHODS && (
+        {!needsWorkspace && !mfa && !recovery && (GOOGLE_SIGN_IN || MOBILE_SIGN_IN) && (
           <div className="mt-6 space-y-3">
             <div className="flex items-center gap-3 text-[12px] font-semibold uppercase tracking-wider text-gray-400">
               <span className="h-px flex-1 bg-gray-100" />or<span className="h-px flex-1 bg-gray-100" />
             </div>
-            <button type="button" className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50">
-              <Smartphone size={18} className="text-emerald-700" aria-hidden /> Continue with mobile
-            </button>
-            <button type="button" className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50">
-              <GoogleMark /> Continue with Google
-            </button>
+            {MOBILE_SIGN_IN && (
+              <button type="button" className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50">
+                <Smartphone size={18} className="text-emerald-700" aria-hidden /> Continue with mobile
+              </button>
+            )}
+            {GOOGLE_SIGN_IN && (
+              <button
+                type="button"
+                onClick={() => { window.location.href = `${API_BASE_URL}/v1/accounts/auth/google/start?business=${encodeURIComponent(subdomain)}` }}
+                className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50"
+              >
+                <GoogleMark /> Continue with Google
+              </button>
+            )}
           </div>
         )}
 
