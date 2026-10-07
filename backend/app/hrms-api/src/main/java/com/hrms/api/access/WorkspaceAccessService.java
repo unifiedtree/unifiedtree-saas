@@ -274,6 +274,11 @@ public class WorkspaceAccessService {
             }
             roles.add(role);
         }
+        // One business per person (owner decision, 6 Oct 2026): no login here for an email
+        // that already signs in to another business (409 EMAIL_IN_ANOTHER_BUSINESS), checked
+        // before anything is made. Someone already signed in here is unaffected.
+        boolean signedInHere = credRepo.findByEmailIgnoreCase(email).map(UserCredentials::isActive).orElse(false);
+        if (!signedInHere) invitationService.assertNotInAnotherBusiness(email, tenantId);
         if (!roles.isEmpty()) {
             audit.record(actorId, AccessAudit.PERMISSION_CHANGE, "USER", null,
                 "Invited " + email + " with the roles " + roles.stream().map(Role::getDisplayName).toList(),

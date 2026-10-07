@@ -5,7 +5,7 @@
 //
 // It plants a second ACTIVE business with one login (b4-elsewhere-<ts>@example.invalid), gives a demo
 // employee who has no login that email and asks for an invite (POST /v1/employees/{id}/invite as owner):
-//  - refused, 422 EMAIL_IN_ANOTHER_BUSINESS, and no login is made in demo;
+//  - refused, 409 EMAIL_IN_ANOTHER_BUSINESS (422 before fix/invite-and-business-settings), and no login is made in demo;
 //  - with a fresh email the same invite works (200) and makes the (inactive) login.
 // Everything planted or made is removed and the employee's email restored at the end.
 /* global process, console, fetch */
@@ -56,7 +56,7 @@ try {
   sql(`update hrms.employees set email='${elsewhere}' where id='${empId}'`)
   const refused = await invite()
   const body = JSON.stringify(refused.json)
-  check('an email that signs in to another business is refused (422 EMAIL_IN_ANOTHER_BUSINESS)', refused.status === 422 && body.includes('EMAIL_IN_ANOTHER_BUSINESS'), `${refused.status} ${body.slice(0, 200)}`)
+  check('an email that signs in to another business is refused (409 EMAIL_IN_ANOTHER_BUSINESS)', refused.status === 409 && body.includes('EMAIL_IN_ANOTHER_BUSINESS'), `${refused.status} ${body.slice(0, 200)}`)
   check('the refusal says why, in plain words', /another business/.test(body))
   check('no login was made in demo for it', sql(`select count(*) from auth.user_credentials where tenant_id='${tenant}' and lower(email)=lower('${elsewhere}')`) === '0')
 
