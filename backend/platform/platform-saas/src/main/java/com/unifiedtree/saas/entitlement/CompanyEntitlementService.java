@@ -2,8 +2,12 @@ package com.unifiedtree.saas.entitlement;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unifiedtree.saas.billing.BillingReminderSchema;
+import com.unifiedtree.saas.billing.SubscriptionStanding;
+import com.unifiedtree.saas.billing.SubscriptionStanding.Standing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -15,7 +19,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +42,13 @@ import java.util.UUID;
  *       This is how every product was granted before per-company billing, and how
  *       HRMS is still granted, so existing workspaces keep exactly what they have.</li>
  * </ol>
+ *
+ * <p>Steps 2 and 3 also have to be paid for: {@link SubscriptionStanding}, the same rule as the
+ * HRMS request guard, pauses a module whose subscription has lapsed past its grace (a company
+ * row: the subscription it points at; the workspace grant: the workspace's latest subscription,
+ * and no subscription at all unless the workspace is grandfathered). A paused product answers
+ * {@code entitled = false}, status {@value #STATUS_PAUSED}. An operator's MANUAL ACTIVE row is
+ * the deliberate override and is not paused.
  *
  * <p>Platform tables only ({@code platform.*} has no row-level security), so this
  * needs no workspace binding. It does NOT check that the company exists in the
@@ -58,14 +71,31 @@ public class CompanyEntitlementService {
     public static final String SOURCE_WORKSPACE = "WORKSPACE";
     public static final String SOURCE_NONE = "NONE";
 
+    /** Status of a product its subscription no longer pays for (see {@link SubscriptionStanding}). */
+    public static final String STATUS_PAUSED = "MODULE_PAUSED";
+
+    /** Marketing Automation's catalogue key. */
+    public static final String MARKETING_MODULE = "whatsapp";
+
+    /**
+     * Products an operator may switch on or off per company. Marketing only: HRMS modules stay
+     * per-workspace (tenant_modules + TenantModuleGuard) until per-company HRMS entitlements ship.
+     */
+    static final Set<String> MANUAL_MODULES = Set.of(MARKETING_MODULE);
+
     private static final Set<String> MANUAL_STATUSES = Set.of("ACTIVE", "SUSPENDED");
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
+    private final BillingReminderSchema dueDateSchema;
+    private final Set<UUID> grandfathered;
 
-    public CompanyEntitlementService(JdbcTemplate jdbc, ObjectMapper json) {
+    public CompanyEntitlementService(JdbcTemplate jdbc, ObjectMapper json, BillingReminderSchema dueDateSchema,
+                                     @Value("${unifiedtree.subscription.grandfather-tenant-ids:}") String grandfatherCsv) {
         this.jdbc = jdbc;
         this.json = json;
+        this.dueDateSchema = dueDateSchema;
+        this.grandfathered = SubscriptionStanding.parseGrandfathered(grandfatherCsv);
     }
 
     /** A company's product, as stored. */
@@ -87,6 +117,16 @@ public class CompanyEntitlementService {
                               String planKey, Map<String, Object> limits, String reason, String grantedBy,
                               long version) {}
 
+    /**
+     * What billing says, for one company's decision: the subscriptions its rows point at, the
+     * workspace's latest subscription (null = none) and whether the workspace is grandfathered.
+     */
+    public record Billing(Map<UUID, Standing> bySubscription, Standing workspaceLatest, boolean grandfathered) {
+        public Standing of(UUID subscriptionId) {
+            return subscriptionId == null || bySubscription == null ? null : bySubscription.get(subscriptionId);
+        }
+    }
+
     // ── Reads ───────────────────────────────────────────────────────────────
 
     /** Resolve one product for one company. */
@@ -94,7 +134,7 @@ public class CompanyEntitlementService {
     public Entitlement resolve(UUID tenantId, UUID companyId, String moduleKey) {
         List<CompanyModuleRow> rows = companyRows(List.of(companyId), moduleKey);
         Map<String, Object> workspaceRow = workspaceRow(tenantId, moduleKey);
-        return decide(moduleKey, rows, workspaceRow, Instant.now());
+        return decide(moduleKey, rows, workspaceRow, billing(tenantId, rows), Instant.now());
     }
 
     /** Every product's answer for one company (products it has a row or a workspace grant for). */
@@ -107,11 +147,12 @@ public class CompanyEntitlementService {
                 """, String.class, tenantId)) {
             if (!keys.contains(k)) keys.add(k);
         }
+        Billing billing = billing(tenantId, rows);
         Instant now = Instant.now();
         List<Entitlement> out = new ArrayList<>();
         for (String key : keys) {
             List<CompanyModuleRow> forKey = rows.stream().filter(r -> r.moduleKey().equals(key)).toList();
-            out.add(decide(key, forKey, workspaceRow(tenantId, key), now));
+            out.add(decide(key, forKey, workspaceRow(tenantId, key), billing, now));
         }
         return out;
     }
@@ -132,17 +173,23 @@ public class CompanyEntitlementService {
                      WHERE tenant_id = ? AND status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
                     """, String.class, tenantId));
         }
+        Map<UUID, Standing> bySubscription = standingsById(rows.stream().map(CompanyModuleRow::subscriptionId)
+                .filter(java.util.Objects::nonNull).distinct().toList());
+        Map<UUID, Standing> latest = latestStandings(workspaceKeys.keySet());
         Instant now = Instant.now();
         for (Map.Entry<UUID, UUID> e : companyToTenant.entrySet()) {
             UUID companyId = e.getKey();
             List<CompanyModuleRow> own = rows.stream().filter(r -> r.companyId().equals(companyId)).toList();
+            Billing billing = new Billing(bySubscription, latest.get(e.getValue()),
+                    grandfathered.contains(e.getValue()));
             List<String> keys = new ArrayList<>(own.stream().map(CompanyModuleRow::moduleKey).distinct().toList());
             for (String k : workspaceKeys.getOrDefault(e.getValue(), List.of())) if (!keys.contains(k)) keys.add(k);
             List<String> on = new ArrayList<>();
             for (String key : keys) {
                 Map<String, Object> ws = workspaceKeys.getOrDefault(e.getValue(), List.of()).contains(key)
                         ? Map.of("status", "ACTIVE") : null;
-                if (decide(key, own.stream().filter(r -> r.moduleKey().equals(key)).toList(), ws, now).entitled()) {
+                if (decide(key, own.stream().filter(r -> r.moduleKey().equals(key)).toList(), ws, billing, now)
+                        .entitled()) {
                     on.add(key);
                 }
             }
@@ -178,6 +225,10 @@ public class CompanyEntitlementService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endsAt must be in the future");
         }
         requireModule(moduleKey);
+        if (!MANUAL_MODULES.contains(moduleKey)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MANUAL_NOT_ALLOWED: Only Marketing ("
+                    + MARKETING_MODULE + ") can be switched per company; HRMS modules are per workspace");
+        }
         jdbc.update("""
                 INSERT INTO platform.company_modules
                        (tenant_id, company_id, module_key, status, source, starts_at, ends_at, reason, granted_by)
@@ -204,7 +255,7 @@ public class CompanyEntitlementService {
     // ── Internals ───────────────────────────────────────────────────────────
 
     static Entitlement decide(String moduleKey, List<CompanyModuleRow> rows, Map<String, Object> workspaceRow,
-                              Instant now) {
+                              Billing billing, Instant now) {
         long version = rows.stream().map(CompanyModuleRow::updatedAt)
                 .filter(java.util.Objects::nonNull).mapToLong(Instant::toEpochMilli).max().orElse(0L);
 
@@ -219,20 +270,70 @@ public class CompanyEntitlementService {
             CompanyModuleRow row = rows.stream()
                     .filter(r -> source.equals(r.source()) && r.liveAt(now)).findFirst().orElse(null);
             if (row != null) {
-                return new Entitlement(moduleKey, true, source, row.status(), row.startsAt(), row.endsAt(),
-                        row.subscriptionId(), row.seats(), null, row.limits(), row.reason(), row.grantedBy(), version);
+                Standing standing = billing.of(row.subscriptionId());
+                String paused = standing == null ? null : SubscriptionStanding.pausedReason(standing, moduleKey, now);
+                return new Entitlement(moduleKey, paused == null, source, paused == null ? row.status() : STATUS_PAUSED,
+                        row.startsAt(), row.endsAt(), row.subscriptionId(), row.seats(), null, row.limits(),
+                        paused == null ? row.reason() : paused, row.grantedBy(), version);
             }
         }
         if (workspaceRow != null && "ACTIVE".equals(workspaceRow.get("status"))) {
             Instant expires = workspaceRow.get("expires_at") instanceof Timestamp ts ? ts.toInstant() : null;
             if (expires == null || expires.isAfter(now)) {
                 Integer seats = workspaceRow.get("seats") instanceof Number n ? n.intValue() : null;
-                return new Entitlement(moduleKey, true, SOURCE_WORKSPACE, "ACTIVE", null, expires,
-                        null, seats, null, null, null, null, version);
+                Standing latest = billing.workspaceLatest();
+                String paused = latest != null ? SubscriptionStanding.pausedReason(latest, moduleKey, now)
+                        : billing.grandfathered() ? null
+                        : "No active subscription found for this workspace.";
+                return new Entitlement(moduleKey, paused == null, SOURCE_WORKSPACE,
+                        paused == null ? "ACTIVE" : STATUS_PAUSED, null, expires,
+                        latest == null ? null : latest.subscriptionId(), seats, null, null, paused, null, version);
             }
         }
         return new Entitlement(moduleKey, false, SOURCE_NONE, null, null, null, null, null, null, null, null,
                 null, version);
+    }
+
+    /** Billing for one workspace's decisions: the subscriptions its company rows point at plus its latest one. */
+    private Billing billing(UUID tenantId, List<CompanyModuleRow> rows) {
+        Map<UUID, Standing> bySubscription = standingsById(rows.stream().map(CompanyModuleRow::subscriptionId)
+                .filter(java.util.Objects::nonNull).distinct().toList());
+        return new Billing(bySubscription, latestStandings(List.of(tenantId)).get(tenantId),
+                grandfathered.contains(tenantId));
+    }
+
+    /** past_due_since exists once V144_1 is applied; until then PAST_DUE never pauses (as in the guard). */
+    private String standingColumns() {
+        return "id, status, grace_until, modules, "
+                + (dueDateSchema.ready() ? "past_due_since" : "NULL::timestamptz AS past_due_since");
+    }
+
+    private Map<UUID, Standing> standingsById(Collection<UUID> subscriptionIds) {
+        Map<UUID, Standing> out = new HashMap<>();
+        if (subscriptionIds.isEmpty()) return out;
+        String in = String.join(",", subscriptionIds.stream().map(x -> "?").toList());
+        jdbc.query("SELECT " + standingColumns() + " FROM platform.subscriptions WHERE id IN (" + in + ")",
+                rs -> { Standing st = standing(rs); out.put(st.subscriptionId(), st); }, subscriptionIds.toArray());
+        return out;
+    }
+
+    /** Each workspace's latest subscription, the row the HRMS guard reads (same ORDER BY). */
+    private Map<UUID, Standing> latestStandings(Collection<UUID> tenantIds) {
+        Map<UUID, Standing> out = new HashMap<>();
+        if (tenantIds.isEmpty()) return out;
+        String in = String.join(",", tenantIds.stream().map(x -> "?").toList());
+        jdbc.query("SELECT DISTINCT ON (tenant_id) tenant_id, " + standingColumns()
+                        + " FROM platform.subscriptions WHERE tenant_id IN (" + in + ")"
+                        + " ORDER BY tenant_id, updated_at DESC NULLS LAST, created_at DESC",
+                rs -> { out.put(rs.getObject("tenant_id", UUID.class), standing(rs)); }, tenantIds.toArray());
+        return out;
+    }
+
+    private static Standing standing(ResultSet rs) throws SQLException {
+        java.sql.Array arr = rs.getArray("modules");
+        List<String> modules = arr == null ? List.of() : Arrays.asList((String[]) arr.getArray());
+        return new Standing(rs.getObject("id", UUID.class), rs.getString("status"), instant(rs, "grace_until"),
+                instant(rs, "past_due_since"), modules);
     }
 
     private List<CompanyModuleRow> companyRows(Collection<UUID> companyIds, String moduleKey) {

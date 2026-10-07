@@ -1,5 +1,6 @@
 package com.hrms.api.saasguard;
 
+import com.unifiedtree.saas.billing.SubscriptionStanding;
 import com.unifiedtree.saas.payment.RazorpayClient;
 import com.unifiedtree.saas.payment.subscription.SubscriptionStateReconciler;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,12 +23,10 @@ import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Blocks workspace API access when the tenant's subscription is HALTED past
@@ -61,6 +60,11 @@ import java.util.stream.Collectors;
  * {@code graceEndedOn}, {@code canPay} (the caller holds workspace.billing.manage) and {@code message},
  * plus the older {@code error}/{@code status}/{@code graceExpiredAt} so older clients still show
  * their lapsed screen.
+ *
+ * <p>The rule itself ({@link #evaluate}, {@link #pauses}, {@link #GRACE}, the grandfather list) is
+ * {@link SubscriptionStanding} in platform-saas, which the company entitlement answer
+ * ({@code CompanyEntitlementService}) uses too: a lapsed subscription pauses the same modules in
+ * HRMS, in the admin console and in Marketing.
  *
  * <p>Older 402 body shape (still sent for a missing ledger row):
  * <pre>{
@@ -151,19 +155,7 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
     }
 
     private static Set<UUID> parseGrandfatherList(String csv) {
-        if (csv == null || csv.isBlank()) return Set.of();
-        return Arrays.stream(csv.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .map(s -> {
-                    try { return UUID.fromString(s); }
-                    catch (IllegalArgumentException e) {
-                        log.warn("SubscriptionAccessGuard grandfather list has invalid uuid '{}' — skipping", s);
-                        return null;
-                    }
-                })
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toCollection(HashSet::new));
+        return SubscriptionStanding.parseGrandfathered(csv);
     }
 
     @Override
@@ -259,8 +251,7 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
 
     /** Whether this subscription's lapse pauses this module (no module = never; no module list = all). */
     static boolean pauses(SubStatus sub, String moduleKey) {
-        if (moduleKey == null) return false;
-        return sub.modules() == null || sub.modules().isEmpty() || sub.modules().contains(moduleKey);
+        return SubscriptionStanding.pauses(sub.modules(), moduleKey);
     }
 
     private static boolean canPay(Authentication auth) {
@@ -292,48 +283,13 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
 
     // -- decision -------------------------------------------------------------
 
-    /** Grace after the due date (owner rule, 6 Oct 2026). */
-    static final java.time.Duration GRACE = java.time.Duration.ofDays(7);
+    /** Grace after the due date (owner rule, 6 Oct 2026) — {@link SubscriptionStanding#GRACE}. */
+    static final java.time.Duration GRACE = SubscriptionStanding.GRACE;
 
     static AccessDecision evaluate(SubStatus sub, Instant now) {
-        return switch (sub.status()) {
-            case "PAST_DUE" -> {
-                // Razorpay is still retrying; pause once 7 days have passed since the due date.
-                if (sub.pastDueSince() != null && !sub.pastDueSince().plus(GRACE).isAfter(now)) {
-                    yield AccessDecision.deny("The payment due on this subscription wasn't received within 7 days. "
-                            + "Pay to continue; sign-in stays open.");
-                }
-                yield AccessDecision.allow();
-            }
-            case "TRIALING", "ACTIVE", "PAUSED", "GRACE" ->
-                    AccessDecision.allow();
-            case "HALTED" -> {
-                if (sub.graceUntil() != null && sub.graceUntil().isAfter(now)) {
-                    yield AccessDecision.allow();       // still inside grace
-                }
-                yield AccessDecision.deny(
-                        "The payment wasn't received and the 7-day grace period has ended. "
-                      + "Pay to continue; sign-in stays open.");
-            }
-            case "CANCELLED", "EXPIRED", "COMPLETED" -> {
-                // Honour whatever period the customer paid for. onCancelled
-                // stamps grace_until = current_period_end (falls back to now+3d
-                // if there was no period end, e.g. mandate deleted mid-trial),
-                // so a cancel on day 20 of a paid month keeps working through
-                // the rest of that month.
-                if (sub.graceUntil() != null && sub.graceUntil().isAfter(now)) {
-                    yield AccessDecision.allow();
-                }
-                String msg = switch (sub.status()) {
-                    case "CANCELLED" -> "This subscription was cancelled and the paid period has ended. "
-                                      + "Start a new one to restore access.";
-                    case "EXPIRED"   -> "This subscription has expired. Start a new one to restore access.";
-                    default          -> "This subscription completed its billing cycles. Start a new one to continue.";
-                };
-                yield AccessDecision.deny(msg);
-            }
-            default          -> AccessDecision.allow();     // unknown status: fail-open (never worse than today)
-        };
+        SubscriptionStanding.Decision d =
+                SubscriptionStanding.evaluate(sub.status(), sub.graceUntil(), sub.pastDueSince(), now);
+        return new AccessDecision(d.allowed(), d.reason());
     }
 
     // -- DB -------------------------------------------------------------------
