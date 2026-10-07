@@ -380,6 +380,46 @@ public class RazorpayClient {
     }
 
     /**
+     * Add a one-time amount to a subscription's NEXT charge (Razorpay subscription add-on:
+     * {@code POST /subscriptions/:id/addons}). Used for extra users at the end of a cycle.
+     *
+     * @param unitAmountPaise price of one unit, in paise
+     * @param quantity        number of units (the extra users)
+     * @return Razorpay's add-on id
+     */
+    @SuppressWarnings("unchecked")
+    public String createSubscriptionAddon(String subscriptionId, String name, String description,
+                                         long unitAmountPaise, int quantity) {
+        if (!props.isConfigured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment gateway not configured");
+        }
+        Map<String, Object> item = new java.util.HashMap<>();
+        item.put("name", name);
+        item.put("amount", unitAmountPaise);
+        item.put("currency", "INR");
+        if (description != null) item.put("description", description);
+        try {
+            Map<String, Object> resp = http.post()
+                    .uri("/subscriptions/{id}/addons", subscriptionId)
+                    .header("Authorization", basicAuthHeader())
+                    .header("Content-Type", "application/json")
+                    .body(Map.of("item", item, "quantity", quantity))
+                    .retrieve()
+                    .body(Map.class);
+            Object id = resp == null ? null : resp.get("id");
+            if (id == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Razorpay returned no add-on");
+            }
+            return id.toString();
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Razorpay createSubscriptionAddon failed: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not add the extra users to the next charge");
+        }
+    }
+
+    /**
      * Cancel a Razorpay subscription. {@code cancelAtCycleEnd=true} lets the
      * customer finish out the period they've already paid for; false cancels
      * immediately.

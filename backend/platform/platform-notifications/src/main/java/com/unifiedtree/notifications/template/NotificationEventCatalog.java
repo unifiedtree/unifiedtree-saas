@@ -132,6 +132,11 @@ public final class NotificationEventCatalog {
             ph("when", "today, tomorrow or in N days"),
             ph("graceEndsOn", "The last day before unpaid modules pause, for example 13 Nov 2026"));
 
+    private static final List<Placeholder> EXTRA_USER_PLACEHOLDERS = List.of(
+            ph("extraUsers", "How many, for example 3 extra users"),
+            ph("dueDate", "The charge date, for example 6 Nov 2026"),
+            ph("amount", "The amount added, for example ₹1,200"));
+
     private static final Map<AppNotificationType, EventDef> BY_TYPE = new EnumMap<>(AppNotificationType.class);
 
     static {
@@ -557,6 +562,14 @@ public final class NotificationEventCatalog {
                 "The payment due on {{dueDate}} didn't go through. Pay by {{graceEndsOn}} to keep using your modules; sign-in stays open.",
                 "Payment of {{amount}} is overdue",
                 "The payment due on {{dueDate}} didn't go through. Pay by {{graceEndsOn}} to keep using your modules; sign-in stays open."));
+        add(new EventDef("billing.extra_users", AppNotificationType.PAYMENT_DUE_SOON, "Billing", "Extra users billed", "Admins",
+                "Sent to the owner and super admins 3 days before a charge when the business had more active employees than seats in the cycle. Always sent.",
+                EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH, DeliveryChannel.EMAIL), EnumSet.noneOf(DeliveryChannel.class),
+                true, false, true, EXTRA_USER_PLACEHOLDERS,
+                "{{extraUsers}} will be billed on {{dueDate}}",
+                "This cycle you had more active employees than seats bought. {{amount}} will be added to the autopay charge on {{dueDate}}. Settings → Billing shows which companies they came from.",
+                "{{extraUsers}} will be billed on {{dueDate}}",
+                "This cycle you had more active employees than seats bought. {{amount}} will be added to the autopay charge on {{dueDate}}. Settings → Billing shows which companies they came from."));
         add(fixed("billing.seat_limit", AppNotificationType.BILLING_OVER_CAP, "Billing", "More employees than paid seats", "Admins",
                 "Sent to admins when active employees exceed the paid seats. Always sent: adding people is blocked until it's fixed.",
                 EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH),

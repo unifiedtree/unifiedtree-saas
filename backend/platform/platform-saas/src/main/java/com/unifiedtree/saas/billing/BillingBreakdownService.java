@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -30,9 +32,11 @@ import java.util.UUID;
 public class BillingBreakdownService {
 
     private final JdbcTemplate jdbc;
+    private final ExtraUsersService extras;
 
-    public BillingBreakdownService(JdbcTemplate jdbc) {
+    public BillingBreakdownService(JdbcTemplate jdbc, ExtraUsersService extras) {
         this.jdbc = jdbc;
+        this.extras = extras;
     }
 
     public Breakdown forTenant(UUID tenantId) {
@@ -55,7 +59,54 @@ public class BillingBreakdownService {
                         instant(rs.getTimestamp("current_period_end")), instant(rs.getTimestamp("trial_ends_at"))) : null, tenantId);
 
         List<CompanyRow> rows = companies(tenantId);
-        return split(business, cycle, rows);
+        return split(business, cycle, rows).withExtraCharge(extraCharge(tenantId));
+    }
+
+    /**
+     * This cycle's extra users (owner, 7 Oct 2026; ExtraUsersJob): from the cycle's record once the
+     * notice has gone out (3 days before the charge), otherwise counted so far from the daily readings.
+     * Monthly plans only; null without V144_4, without a monthly paid subscription, or in the trial.
+     */
+    ExtraCharge extraCharge(UUID tenantId) {
+        if (!extras.ready()) return null;
+        List<Map<String, Object>> subs = jdbc.queryForList("""
+                SELECT id, seats, unit_price_inr, next_charge_at, trial_ends_at
+                  FROM platform.subscriptions
+                 WHERE tenant_id = ? AND billing_cycle = 'MONTHLY' AND status IN ('ACTIVE', 'PAST_DUE')
+                   AND next_charge_at IS NOT NULL AND razorpay_subscription_id IS NOT NULL
+                 ORDER BY ('hrms' = ANY(modules)) DESC, updated_at DESC NULLS LAST
+                 LIMIT 1
+                """, tenantId);
+        if (subs.isEmpty()) return null;
+        Map<String, Object> sub = subs.get(0);
+        Instant nextCharge = ((Timestamp) sub.get("next_charge_at")).toInstant();
+        Timestamp trial = (Timestamp) sub.get("trial_ends_at");
+        LocalDate cycleEnd = nextCharge.atZone(ExtraUsersService.IST).toLocalDate();
+
+        List<Map<String, Object>> recorded = jdbc.queryForList("""
+                SELECT extra_users, amount_inr, status, peak_active, peak_day, by_company::text AS by_company
+                  FROM platform.extra_user_charges WHERE subscription_id = ? AND cycle_end = ?
+                """, sub.get("id"), cycleEnd);
+        if (!recorded.isEmpty()) {
+            Map<String, Object> r = recorded.get(0);
+            return new ExtraCharge(cycleEnd, (String) r.get("status"), ((Number) r.get("extra_users")).intValue(),
+                    (BigDecimal) r.get("amount_inr"), ((Number) r.get("peak_active")).intValue(),
+                    r.get("peak_day") == null ? null : ((java.sql.Date) r.get("peak_day")).toLocalDate(),
+                    parseShares((String) r.get("by_company")));
+        }
+        LocalDate[] window = ExtraUsersService.cycle(nextCharge, trial == null ? null : trial.toInstant());
+        if (!window[0].isBefore(window[1])) return null;   // still in the free trial
+        ExtraUsers.Result r = ExtraUsers.compute(((Number) sub.get("seats")).intValue(), (BigDecimal) sub.get("unit_price_inr"),
+                extras.readings(tenantId, window[0], window[1]));
+        return new ExtraCharge(cycleEnd, "SO_FAR", r.extraUsers(), r.amountInr(), r.peakActive(), r.peakDay(), r.byCompany());
+    }
+
+    private static List<ExtraUsers.CompanyShare> parseShares(String json) {
+        try {
+            return List.of(new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, ExtraUsers.CompanyShare[].class));
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     /** The business's companies with their active employees (RLS: read with the tenant bound). */
@@ -170,5 +221,26 @@ public class BillingBreakdownService {
     public record Breakdown(Business business, String billingCycle, String status, Instant periodStart, Instant periodEnd,
                             BigDecimal pricePerSeatInr, int seatsBought, int seatsUsed, BigDecimal amountInr,
                             List<CompanyLine> companies, int unusedSeats, BigDecimal unusedSeatsAmountInr,
-                            int extraUsers, BigDecimal extraUsersAmountInr, String note) {}
+                            int extraUsers, BigDecimal extraUsersAmountInr, String note, ExtraCharge extraCharge) {
+        Breakdown(Business business, String billingCycle, String status, Instant periodStart, Instant periodEnd,
+                  BigDecimal pricePerSeatInr, int seatsBought, int seatsUsed, BigDecimal amountInr,
+                  List<CompanyLine> companies, int unusedSeats, BigDecimal unusedSeatsAmountInr,
+                  int extraUsers, BigDecimal extraUsersAmountInr, String note) {
+            this(business, billingCycle, status, periodStart, periodEnd, pricePerSeatInr, seatsBought, seatsUsed, amountInr,
+                    companies, unusedSeats, unusedSeatsAmountInr, extraUsers, extraUsersAmountInr, note, null);
+        }
+
+        Breakdown withExtraCharge(ExtraCharge e) {
+            return new Breakdown(business, billingCycle, status, periodStart, periodEnd, pricePerSeatInr, seatsBought, seatsUsed,
+                    amountInr, companies, unusedSeats, unusedSeatsAmountInr, extraUsers, extraUsersAmountInr, note, e);
+        }
+    }
+
+    /**
+     * This cycle's extra users: {@code status} SO_FAR (counted so far, before the notice), NOTIFIED (the
+     * owner was told; added just before the charge), ADDING / ADDED (on the charge on {@code chargeOn}),
+     * FAILED (being retried) or NONE.
+     */
+    public record ExtraCharge(LocalDate chargeOn, String status, int extraUsers, BigDecimal amountInr,
+                              int peakActive, LocalDate peakDay, List<ExtraUsers.CompanyShare> byCompany) {}
 }
