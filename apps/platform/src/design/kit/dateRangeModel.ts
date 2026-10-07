@@ -206,9 +206,8 @@ export function datePresets(
 
 /** A quick pick for a calendar that only SHOWS dates (no working-day rule). */
 export interface ViewPreset {
-  key: 'today' | 'thisWeek' | 'nextWeek' | 'thisMonth' | 'nextMonth' | 'next30'
-    // The admin dashboard's picks (modules/hrms/dashboard/dashboardRange.ts).
-    | 'yesterday' | 'lastWeek' | 'lastMonth'
+  /** 'today', 'thisWeek', 'lastMonth' … (dashboardRange.ts, rangeFilterModel.ts), or a page's own (e.g. 'fy'). */
+  key: string
   label: string
   from: string
   to: string

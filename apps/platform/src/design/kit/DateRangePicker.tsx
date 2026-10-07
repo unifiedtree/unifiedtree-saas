@@ -5,6 +5,9 @@
 // hover, today outlined, days outside the form's limits disabled, and a footer with the working
 // days the request is for — counted as the server counts a leave request (dateRangeModel.ts),
 // or the server's own count when the form passes it — and Done.
+// The month title opens a month grid (and its year, a year grid) to jump far quickly. A page with a
+// longest range (maxSpan) says so in plain words when a range is longer, instead of blocking days.
+// A list's start / end filter uses the same body in a popover: RangeFilter.tsx.
 //
 //   <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" onOpen={() => setPicking(true)} />
 //   <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end}
@@ -12,15 +15,16 @@
 //
 // Mobile app twin: components/ui/DateRangeSheet.tsx.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Dialog } from './Dialog'
 import { PanelButton } from './PanelButton'
 import { istToday } from '@/design/dc/dates'
 import {
-  WEEK_HEADS, allowed, countWorkingDays, datePresets, ddmmyyyy, inReach, isWeeklyOff, monthTitle, monthWeeks,
-  settled, shiftDay, shiftMonth, spanDays, tapDay, weekdayDdmmyyyy, workingDaysLabel,
+  WEEK_HEADS, allowed, countWorkingDays, datePresets, ddmmyyyy, isWeeklyOff, monthTitle, monthWeeks,
+  settled, shiftMonth, spanDays, tapDay, weekdayDdmmyyyy, workingDaysLabel,
   type DraftRange, type ViewPreset, type WorkCalendar,
 } from './dateRangeModel'
+import { dayKeyStep, monthCells, monthKeyStep, rangeProblem, yearCells, yearKeyStep, yearPageStart } from './rangeFilterModel'
 import './dateRange.css'
 
 export type { WorkCalendar } from './dateRangeModel'
@@ -58,13 +62,21 @@ export interface DateRangeDialogProps {
   footerText?: (range: { from: string; to: string } | null) => string
   /** The holiday / weekly off / today key under the month (on by default). */
   legend?: boolean
-  /** The longest range, in calendar days: once a start is tapped, days past it are disabled. */
+  /** The longest range, in calendar days: a longer one is said in plain words and can't be applied. */
   maxSpan?: number
   /** A Cancel button beside Done (a picker that isn't a dialog with its own close). */
   onCancel?: () => void
   /** Done's label ("Apply"). */
   doneLabel?: string
+  /** A Clear button: empties the picked days; with onClear, Clear does that instead (a filter goes back to all dates). */
+  clearable?: boolean
+  onClear?: () => void
+  /** Open on the month or year grid (tests; the month title opens them). */
+  initialView?: CalView
 }
+
+/** What the calendar shows: a month's days, a year's months (the month title), or 12 years (the year title). */
+export type CalView = 'days' | 'months' | 'years'
 
 export function DateRangeDialog(props: DateRangeDialogProps) {
   const single = props.mode === 'single'
@@ -78,7 +90,7 @@ export function DateRangeDialog(props: DateRangeDialogProps) {
 /** The dialog's content (exported for tests: it renders without a document). */
 export function DateRangeBody({
   mode = 'range', from, to, min, max, calendar, halfDay, onDone, onDraftChange, serverDays, noun = 'request', today: todayProp,
-  presets: ownPresets, footerText, legend = true, maxSpan, onCancel, doneLabel = 'Done',
+  presets: ownPresets, footerText, legend = true, maxSpan, onCancel, doneLabel = 'Done', clearable = false, onClear, initialView = 'days',
 }: Omit<DateRangeDialogProps, 'open' | 'onClose' | 'title'>) {
   const uid = useId()
   const today = todayProp ?? istToday()
@@ -91,11 +103,14 @@ export function DateRangeBody({
   const [month, setMonth] = useState(startMonth)
   const [cursor, setCursor] = useState(first ?? (allowed(today, min, max) ? today : `${startMonth}-01`))
   const [note, setNote] = useState<string | null>(null)
+  const [view, setView] = useState<CalView>(initialView)
+  // The month / year grids' cursor: a month 'yyyy-MM' and a year.
+  const [mCursor, setMCursor] = useState(startMonth)
+  const [yCursor, setYCursor] = useState(Number(startMonth.slice(0, 4)))
   const focusCursor = useRef(false)
   const gridRef = useRef<HTMLDivElement>(null)
 
-  // While the end is being picked, a day further than maxSpan from the start can't be.
-  const can = (day: string) => allowed(day, min, max) && inReach(day, draft, maxSpan)
+  const can = (day: string) => allowed(day, min, max)
   const range = settled(draft)
   const effective = range && half ? { from: range.from, to: range.from } : range
   const localDays = effective ? countWorkingDays(effective.from, effective.to, calendar, half) : 0
@@ -113,8 +128,9 @@ export function DateRangeBody({
   useEffect(() => {
     if (!focusCursor.current) return
     focusCursor.current = false
-    gridRef.current?.querySelector<HTMLElement>(`[data-day="${cursor}"]`)?.focus()
-  }, [cursor, month])
+    const sel = view === 'months' ? `[data-month="${mCursor}"]` : view === 'years' ? `[data-year="${yCursor}"]` : `[data-day="${cursor}"]`
+    gridRef.current?.querySelector<HTMLElement>(sel)?.focus()
+  }, [cursor, month, view, mCursor, yCursor])
 
   const presets = useMemo(() => ownPresets ?? datePresets(today, calendar, { min, max, single }), [ownPresets, today, calendar, min, max, single])
   const weeks = useMemo(() => monthWeeks(month), [month])
@@ -134,6 +150,48 @@ export function DateRangeBody({
     setCursor(`${m}-01`)
     setNote(null)
   }
+  // ── the month grid (a year's 12 months) and the year grid (12 years) ──
+  const mYear = Number(mCursor.slice(0, 4))
+  const months = useMemo(() => monthCells(mYear, min, max), [mYear, min, max])
+  const years = useMemo(() => yearCells(yCursor, min, max), [yCursor, min, max])
+  const yStart = yearPageStart(yCursor)
+  const minYear = min ? Number(min.slice(0, 4)) : -Infinity, maxYear = max ? Number(max.slice(0, 4)) : Infinity
+  const openMonths = () => { setMCursor(month); setView('months'); setNote(null); focusCursor.current = true }
+  const openYears = () => { setYCursor(mYear); setView('years'); focusCursor.current = true }
+  const pickMonth = (ym: string) => {
+    if (monthCells(Number(ym.slice(0, 4)), min, max).find((c) => c.ym === ym)?.disabled) return
+    setMonth(ym)
+    setCursor(min && min.slice(0, 7) === ym ? min : `${ym}-01`)
+    setView('days')
+    focusCursor.current = true
+  }
+  const pickYear = (y: number) => {
+    if (y < minYear || y > maxYear) return
+    setMCursor(`${y}-${mCursor.slice(5, 7)}`)
+    setView('months')
+    focusCursor.current = true
+  }
+  const goYear = (n: -1 | 1) => { const y = mYear + n; if (y >= minYear && y <= maxYear) setMCursor(`${y}-${mCursor.slice(5, 7)}`) }
+  const goYears = (n: -1 | 1) => { if (n < 0 ? yStart - 1 >= minYear : yStart + 12 <= maxYear) setYCursor(yCursor + n * 12) }
+  const onMonthKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickMonth(mCursor); return }
+    const n = monthKeyStep(e.key, mCursor)
+    if (!n) return
+    e.preventDefault()
+    const y = Number(n.slice(0, 4))
+    if (y < minYear || y > maxYear) return
+    focusCursor.current = true
+    setMCursor(n)
+  }
+  const onYearKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickYear(yCursor); return }
+    const n = yearKeyStep(e.key, yCursor)
+    if (n === null) return
+    e.preventDefault()
+    if (n < minYear || n > maxYear) return
+    focusCursor.current = true
+    setYCursor(n)
+  }
   const pick = (day: string) => {
     if (!can(day)) return
     setDraft(tapDay(draft, day, single || half))
@@ -151,15 +209,18 @@ export function DateRangeBody({
     setHalf(on)
     if (on && draft.from) setDraft({ from: draft.from, to: draft.from })
   }
-  const done = () => { if (effective) onDone({ from: effective.from, to: effective.to, halfDay: half }) }
+  const problem = single ? null : rangeProblem(effective, maxSpan)
+  const done = () => { if (effective && !problem) onDone({ from: effective.from, to: effective.to, halfDay: half }) }
+  const clear = () => {
+    if (onClear) { onClear(); return }
+    setDraft({ from: null, to: null })
+    setHalf(false)
+    setNote(null)
+  }
 
   const onGridKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }
-    let next: string | null = null
-    if (e.key in step) next = shiftDay(cursor, step[e.key])
-    else if (e.key === 'PageUp') next = `${shiftMonth(cursor.slice(0, 7), -1)}-01`
-    else if (e.key === 'PageDown') next = `${shiftMonth(cursor.slice(0, 7), 1)}-01`
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(cursor); return }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(cursor); return }
+    const next = dayKeyStep(e.key, cursor)
     if (!next) return
     e.preventDefault()
     if (!allowed(next, min, max)) return
@@ -171,11 +232,11 @@ export function DateRangeBody({
 
   const span = effective ? spanDays(effective.from, effective.to) : 0
   const allOff = !!effective && !single && days === 0
-  const footer = footerText ? footerText(effective) : !effective
+  const footer = problem ?? (footerText ? footerText(effective) : !effective
     ? (single ? 'Pick a day' : 'Pick the first day, then the last')
     : single ? `Selected date: ${weekdayDdmmyyyy(effective.from)}`
       : allOff ? 'These days are all weekly offs or holidays'
-        : `Your ${noun} is for ${workingDaysLabel(days)}`
+        : `Your ${noun} is for ${workingDaysLabel(days)}`)
   // The cursor must be a day of the month on screen, or nothing in the grid is focusable.
   const cursorShown = cursor.slice(0, 7) === month ? cursor : `${month}-01`
 
@@ -209,53 +270,107 @@ export function DateRangeBody({
         </label>
       )}
 
-      <div className="udr-month">
-        <button type="button" className="udr-arrow" aria-label="Previous month" disabled={!canPrev} onClick={() => go(-1)}><ChevronLeft size={18} aria-hidden="true" /></button>
-        <span className="udr-month-t" id={`${uid}-m`}>{monthTitle(month)}</span>
-        <button type="button" className="udr-arrow" aria-label="Next month" disabled={!canNext} onClick={() => go(1)}><ChevronRight size={18} aria-hidden="true" /></button>
-      </div>
-
-      <div ref={gridRef} role="grid" aria-labelledby={`${uid}-m`} className="udr-grid" onKeyDown={onGridKey}>
-        <div role="row" className="udr-row">
-          {WEEK_HEADS.map((w, i) => <span key={w} role="columnheader" className={`udr-wd${calendar.off.has((i + 1) % 7) ? ' is-off' : ''}`}>{w}</span>)}
+      {view === 'days' && (
+        <div className="udr-month">
+          <button type="button" className="udr-arrow" aria-label="Previous month" disabled={!canPrev} onClick={() => go(-1)}><ChevronLeft size={18} aria-hidden="true" /></button>
+          <button type="button" className="udr-month-t udr-title" id={`${uid}-m`} aria-label={`${monthTitle(month)}, choose a month`} onClick={openMonths}>
+            {monthTitle(month)}<ChevronDown size={15} aria-hidden="true" />
+          </button>
+          <button type="button" className="udr-arrow" aria-label="Next month" disabled={!canNext} onClick={() => go(1)}><ChevronRight size={18} aria-hidden="true" /></button>
         </div>
-        {weeks.map((week, wi) => (
-          <div role="row" className="udr-row" key={wi}>
-            {week.map((day, di) => {
-              if (!day) return <span key={`b${di}`} role="gridcell" className="udr-cell is-blank" />
-              const ok = can(day)
-              const hol = calendar.holidays.get(day)
-              const off = isWeeklyOff(day, calendar)
-              const inBand = !!effective && day >= effective.from && day <= effective.to
-              const edge = !!effective && (day === effective.from || day === effective.to)
-              const label = [
-                weekdayDdmmyyyy(day), hol ? `holiday, ${hol}` : off ? 'weekly off' : null, day === today ? 'today' : null,
-              ].filter(Boolean).join(', ')
-              const cls = ['udr-cell', inBand && 'in-band', edge && 'is-edge', day === effective?.from && 'is-from', day === effective?.to && 'is-to',
-                di === 0 && 'row-start', di === 6 && 'row-end'].filter(Boolean).join(' ')
-              return (
-                <span key={day} role="gridcell" className={cls} aria-selected={inBand}>
-                  <button
-                    type="button"
-                    data-day={day}
-                    tabIndex={day === cursorShown ? 0 : -1}
-                    className={['udr-day', (off || hol) && 'is-off', day === today && 'is-today'].filter(Boolean).join(' ')}
-                    disabled={!ok}
-                    aria-label={label}
-                    aria-pressed={edge}
-                    title={hol ?? (off ? 'Weekly off' : undefined)}
-                    onClick={() => pick(day)}
-                    onMouseEnter={hol ? () => setNote(describe(day)) : undefined}
-                  >
-                    {Number(day.slice(8))}
-                    {hol && <i className="udr-dot" aria-hidden="true" />}
-                  </button>
+      )}
+      {view === 'months' && (
+        <div className="udr-month">
+          <button type="button" className="udr-arrow" aria-label="Previous year" disabled={mYear - 1 < minYear} onClick={() => goYear(-1)}><ChevronLeft size={18} aria-hidden="true" /></button>
+          <button type="button" className="udr-month-t udr-title" id={`${uid}-m`} aria-label={`${mYear}, choose a year`} onClick={openYears}>
+            {mYear}<ChevronDown size={15} aria-hidden="true" />
+          </button>
+          <button type="button" className="udr-arrow" aria-label="Next year" disabled={mYear + 1 > maxYear} onClick={() => goYear(1)}><ChevronRight size={18} aria-hidden="true" /></button>
+        </div>
+      )}
+      {view === 'years' && (
+        <div className="udr-month">
+          <button type="button" className="udr-arrow" aria-label="Earlier years" disabled={yStart - 1 < minYear} onClick={() => goYears(-1)}><ChevronLeft size={18} aria-hidden="true" /></button>
+          <span className="udr-month-t" id={`${uid}-m`}>{yStart} – {yStart + 11}</span>
+          <button type="button" className="udr-arrow" aria-label="Later years" disabled={yStart + 12 > maxYear} onClick={() => goYears(1)}><ChevronRight size={18} aria-hidden="true" /></button>
+        </div>
+      )}
+
+      {view === 'months' && (
+        <div ref={gridRef} role="grid" aria-labelledby={`${uid}-m`} className="udr-mgrid" onKeyDown={onMonthKey}>
+          {[0, 3, 6, 9].map((r) => (
+            <div role="row" className="udr-mrow" key={r}>
+              {months.slice(r, r + 3).map((c) => {
+                const on = !!effective && effective.from.slice(0, 7) <= c.ym && effective.to.slice(0, 7) >= c.ym
+                return (
+                  <span role="gridcell" key={c.ym} aria-selected={on}>
+                    <button type="button" data-month={c.ym} className={['udr-mcell', on && 'is-on', c.ym === today.slice(0, 7) && 'is-today'].filter(Boolean).join(' ')}
+                      tabIndex={c.ym === mCursor ? 0 : -1} disabled={c.disabled} aria-label={c.name} onClick={() => pickMonth(c.ym)}>{c.label}</button>
+                  </span>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+      {view === 'years' && (
+        <div ref={gridRef} role="grid" aria-labelledby={`${uid}-m`} className="udr-mgrid" onKeyDown={onYearKey}>
+          {[0, 3, 6, 9].map((r) => (
+            <div role="row" className="udr-mrow" key={r}>
+              {years.slice(r, r + 3).map((c) => (
+                <span role="gridcell" key={c.year} aria-selected={c.year === mYear}>
+                  <button type="button" data-year={c.year} className={['udr-mcell', c.year === mYear && 'is-on', String(c.year) === today.slice(0, 4) && 'is-today'].filter(Boolean).join(' ')}
+                    tabIndex={c.year === yCursor ? 0 : -1} disabled={c.disabled} aria-label={String(c.year)} onClick={() => pickYear(c.year)}>{c.year}</button>
                 </span>
-              )
-            })}
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {view === 'days' && (
+        <div ref={gridRef} role="grid" aria-labelledby={`${uid}-m`} className="udr-grid" onKeyDown={onGridKey}>
+          <div role="row" className="udr-row">
+            {WEEK_HEADS.map((w, i) => <span key={w} role="columnheader" className={`udr-wd${calendar.off.has((i + 1) % 7) ? ' is-off' : ''}`}>{w}</span>)}
           </div>
-        ))}
-      </div>
+          {weeks.map((week, wi) => (
+            <div role="row" className="udr-row" key={wi}>
+              {week.map((day, di) => {
+                if (!day) return <span key={`b${di}`} role="gridcell" className="udr-cell is-blank" />
+                const ok = can(day)
+                const hol = calendar.holidays.get(day)
+                const off = isWeeklyOff(day, calendar)
+                const inBand = !!effective && day >= effective.from && day <= effective.to
+                const edge = !!effective && (day === effective.from || day === effective.to)
+                const label = [
+                  weekdayDdmmyyyy(day), hol ? `holiday, ${hol}` : off ? 'weekly off' : null, day === today ? 'today' : null,
+                ].filter(Boolean).join(', ')
+                const cls = ['udr-cell', inBand && 'in-band', edge && 'is-edge', day === effective?.from && 'is-from', day === effective?.to && 'is-to',
+                  di === 0 && 'row-start', di === 6 && 'row-end'].filter(Boolean).join(' ')
+                return (
+                  <span key={day} role="gridcell" className={cls} aria-selected={inBand}>
+                    <button
+                      type="button"
+                      data-day={day}
+                      tabIndex={day === cursorShown ? 0 : -1}
+                      className={['udr-day', (off || hol) && 'is-off', day === today && 'is-today'].filter(Boolean).join(' ')}
+                      disabled={!ok}
+                      aria-label={label}
+                      aria-pressed={edge}
+                      title={hol ?? (off ? 'Weekly off' : undefined)}
+                      onClick={() => pick(day)}
+                      onMouseEnter={hol ? () => setNote(describe(day)) : undefined}
+                    >
+                      {Number(day.slice(8))}
+                      {hol && <i className="udr-dot" aria-hidden="true" />}
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
 
       {legend && (
         <div className="udr-legend" aria-hidden="true">
@@ -266,9 +381,10 @@ export function DateRangeBody({
       )}
       {note && <p className="udr-note">{note}</p>}
       <div className="udr-footrow">
-        <span className={`udr-foot${allOff ? ' is-warn' : ''}`} aria-live="polite">{footer}</span>
+        <span className={`udr-foot${allOff || problem ? ' is-warn' : ''}`} role={problem ? 'alert' : undefined} aria-live="polite">{footer}</span>
+        {(clearable || onClear) && <button type="button" className="udr-clear" onClick={clear} disabled={!onClear && !draft.from}>Clear</button>}
         {onCancel && <PanelButton variant="secondary" onClick={onCancel}>Cancel</PanelButton>}
-        <PanelButton variant="primary" onClick={done} disabled={!effective}>{doneLabel}</PanelButton>
+        <PanelButton variant="primary" onClick={done} disabled={!effective || !!problem}>{doneLabel}</PanelButton>
       </div>
     </div>
   )

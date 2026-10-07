@@ -115,3 +115,51 @@ describe('DateRangeButton', () => {
     expect(s.match(/disabled=""/g)?.length).toBe(1)
   })
 })
+
+// 7 Oct 2026: a real calendar everywhere: the month title jumps to a month or a year, Clear, and the longest range
+// said in plain words instead of days quietly disabled.
+describe('DateRangeBody: jumping months and years, Clear, the longest range', () => {
+  const OCT = '2026-10-07'
+  it('the month title is a button that opens the month grid', () => {
+    const s = html(<DateRangeBody from="" calendar={CAL} today={OCT} legend={false} onDone={noop} />)
+    expect(s).toMatch(/<button[^>]*class="udr-month-t udr-title"[^>]*aria-label="October 2026, choose a month"/)
+  })
+  it('the month grid: the year’s 12 months, this one marked, months past the limit disabled; the year title opens the years', () => {
+    const s = html(<DateRangeBody from="" calendar={CAL} today={OCT} max={OCT} legend={false} initialView="months" onDone={noop} />)
+    for (const m of ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']) expect(s).toContain(`>${m}</button>`)
+    expect(s).toMatch(/data-month="2026-10"[^>]*class="udr-mcell is-today"/)
+    expect(s).toMatch(/<button[^>]*data-month="2026-11"[^>]*disabled=""/)
+    expect(s).not.toMatch(/<button[^>]*data-month="2026-09"[^>]*disabled=""/)
+    expect(s).toContain('aria-label="2026, choose a year"')
+    expect(s).toMatch(/aria-label="Next year" disabled=""/)
+    // The days aren't drawn while the months are.
+    expect(s).not.toContain('data-day=')
+  })
+  it('the year grid: 12 years, the year after the limit disabled', () => {
+    const s = html(<DateRangeBody from="" calendar={CAL} today={OCT} max={OCT} legend={false} initialView="years" onDone={noop} />)
+    expect(s).toContain('2016 – 2027')
+    expect(s).toMatch(/<button[^>]*data-year="2027"[^>]*disabled=""/)
+    expect(s).toMatch(/data-year="2026"[^>]*tabindex="0"/)
+  })
+  it('a picked range marks its months on the month grid', () => {
+    const s = html(<DateRangeBody from="2026-08-20" to="2026-10-02" calendar={CAL} today={OCT} legend={false} initialView="months" onDone={noop} />)
+    expect(s.match(/class="udr-mcell is-on/g)?.length).toBe(3)
+  })
+  it('Clear only when asked for; disabled with nothing picked unless the page clears its own filter', () => {
+    expect(html(<DateRangeBody from="" calendar={CAL} today={OCT} onDone={noop} />)).not.toContain('udr-clear')
+    expect(html(<DateRangeBody from="" calendar={CAL} today={OCT} clearable onDone={noop} />)).toMatch(/class="udr-clear" disabled=""/)
+    expect(html(<DateRangeBody from="" calendar={CAL} today={OCT} onClear={noop} onDone={noop} />)).toMatch(/class="udr-clear">Clear/)
+  })
+  it('a range longer than the page allows: every day stays clickable, a plain message, and Apply waits', () => {
+    const s = html(<DateRangeBody from="2026-08-01" to={OCT} max={OCT} calendar={CAL} today={OCT} legend={false} maxSpan={31} doneLabel="Apply" onDone={noop} />)
+    expect(s).toContain('Pick 31 days or fewer. This range is 68 days.')
+    expect(s).toContain('role="alert"')
+    expect(s).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Apply/)
+    expect(dayButton(s, '2026-10-01')).not.toContain('disabled=""')
+  })
+  it('within the longest range: no message, Apply ready', () => {
+    const s = html(<DateRangeBody from="2026-09-10" to={OCT} max={OCT} calendar={CAL} today={OCT} legend={false} maxSpan={31} doneLabel="Apply" onDone={noop} />)
+    expect(s).not.toContain('Pick 31 days or fewer')
+    expect(s).not.toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]{0,40}Apply/)
+  })
+})

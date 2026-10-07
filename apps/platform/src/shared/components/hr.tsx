@@ -3,6 +3,7 @@ import { clsx } from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { DateField } from './calendar'
+import { RangeFilter } from '@/design/kit/RangeFilter'
 import { SidePanel } from '@/design/kit/SidePanel'
 import { StatusPill, type StatusTone } from '@/design/kit/StatusPill'
 import { PageHeader } from '@/design/kit/PageHeader'
@@ -264,10 +265,21 @@ export interface FilterDef {
    * screen-specific bar would have put the product straight back to the
    * divergent filter rows this primitive exists to remove.
    */
-  type?: 'select' | 'text' | 'date'
+  type?: 'select' | 'text' | 'date' | 'range'
   /** Width hint in px for text/date inputs. Selects size themselves. */
   width?: number
+  /**
+   * `type: 'range'` (the start / end calendar, RangeFilter): `value` is "yyyy-MM-dd/yyyy-MM-dd" ('' = all dates)
+   * and onChange gets the same. The page's own earliest / latest day and longest range.
+   */
+  min?: string
+  max?: string
+  maxSpan?: number
 }
+
+/** A range filter's value: "from/to" ('' = none). */
+export const rangeValue = (r: { from: string; to: string } | null | undefined) => (r ? `${r.from}/${r.to}` : '')
+const parseRangeValue = (v: string) => { const [from, to] = v.split('/'); return from && to ? { from, to } : null }
 
 // The fields' colours as inline styles, so they follow the theme tokens (the
 // shared .ut-input/.ut-select rules carry a light fill), and an active filter
@@ -325,6 +337,13 @@ export function FilterBar({ filters, onClearAll }: {
               style={{ width: f.width ?? 150, ...(on ? FIELD_ACTIVE : FIELD_IDLE) }}
               className={clsx('ut-input ut-input-sm', tint)}
             />
+          )
+        }
+
+        if (f.type === 'range') {
+          return (
+            <RangeFilter key={f.key} filterKey={f.key} value={parseRangeValue(f.value)} label={f.ariaLabel ?? 'Dates'} placeholder={f.allLabel}
+              min={f.min} max={f.max} maxSpan={f.maxSpan} onChange={(r) => f.onChange(rangeValue(r))} />
           )
         }
 
