@@ -17,8 +17,55 @@
 -- (…0006), which V143_92 already confines to the platform tenant. No workspace
 -- role gains anything.
 --
--- Numbered 144.1: V143.70–V143.88 are reserved for the HRMS team. Idempotent.
--- Production has Flyway OFF: apply by hand.
+-- Numbered V144_101: V143_70–V143_88 and V144_1–V144_99 belong to the HRMS lane (V144_1 billing
+-- reminders, V144_2, next week's per-company billing from V144_4); V144_100–V144_199 are the admin /
+-- Marketing stream's. Idempotent.
+--
+-- ── Applying by hand (Flyway is OFF in production) ─────────────────────────────
+-- Order: strictly V144_101 → 102 → 103 → 104 → 105 → 106, BEFORE deploying the PR #12 revision
+-- (104 needs 103: invoice_lines → module_plan_prices; 105 needs 102: company_modules.limits;
+-- 106 needs 104: usage_ledger → invoice_lines; 102–106 need 102's uq_companies_id_tenant).
+-- V144_107 is applied AFTER the deploy. Each file is one transaction:
+--     psql -1 -v ON_ERROR_STOP=1 -f <file>
+-- Each sets lock_timeout = 5s: a lock it cannot get fails the file (nothing applied) instead of queueing
+-- HRMS requests behind it. Re-run it when traffic is lower.
+-- This file: first. Needs nothing from the others.
+--
+-- ── Rollback, in REVERSE order (107 → 106 → … → 101), each as one transaction ──
+--   107: see V144_107.
+--   106: DROP TABLE platform.usage_ledger, platform.provider_rate_cards, platform.marketing_channel_accounts;
+--        only while they are empty (usage rows are billing records: export them first, never just drop).
+--   105: DROP TABLE platform.sso_handoff_tickets; DROP TABLE platform.marketing_identity_map (only while
+--        no row is MAPPED: it is the only Mongo ↔ UnifiedTree identity record);
+--        UPDATE platform.module_plans SET included_modules = '{}' WHERE key = 'marketing';
+--        ALTER TABLE platform.company_modules DROP CONSTRAINT ck_company_modules_limits_object, DROP COLUMN limits;
+--        ALTER TABLE platform.module_plans DROP CONSTRAINT ck_module_plans_limits_object, DROP COLUMN limits.
+--   104: DROP TRIGGER trg_guard_issued_invoice_lines ON platform.invoice_lines;
+--        DROP TRIGGER trg_guard_issued_invoice ON platform.invoices;
+--        DROP FUNCTION platform.guard_issued_invoice_lines(), platform.guard_issued_invoice();
+--        DROP TABLE platform.invoice_lines, platform.invoices, platform.invoice_number_series,
+--                   platform.company_billing_profiles   -- only while no invoice was ever issued;
+--        ALTER TABLE platform.billing_settings DROP CONSTRAINT ck_billing_settings_invoice_prefix,
+--            DROP CONSTRAINT ck_billing_settings_sac, DROP COLUMN seller_legal_name, DROP COLUMN seller_gstin,
+--            DROP COLUMN seller_pan, DROP COLUMN seller_address, DROP COLUMN seller_state_code,
+--            DROP COLUMN seller_email, DROP COLUMN invoice_prefix, DROP COLUMN default_gst_rate_pct,
+--            DROP COLUMN invoice_due_days, DROP COLUMN default_sac_code,
+--            DROP COLUMN marketing_pooled_billing_enabled.
+--   103: DROP TABLE platform.module_plan_prices (after 104: invoice_lines references it).
+--   102: DROP TABLE platform.company_modules;
+--        ALTER TABLE platform.subscriptions DROP CONSTRAINT fk_subscriptions_company,
+--            DROP CONSTRAINT ck_subscriptions_company_has_tenant, DROP COLUMN company_id;
+--        NEVER drop platform.tenant_modules.seats: production had it before this file and PlanChangeService
+--        writes it (the ADD COLUMN IF NOT EXISTS was a no-op there);
+--        ALTER TABLE org.companies DROP CONSTRAINT uq_companies_id_tenant  -- LAST, after every composite FK
+--        that uses it (102, 104, 105, 106) is gone.
+--   101: DELETE FROM rbac.permissions WHERE code IN ('platform.company.read', 'platform.account.read',
+--        'platform.catalog.read', 'platform.catalog.manage', 'platform.subscription.read',
+--        'platform.billing.read', 'platform.billing.manage', 'platform.entitlement.manage',
+--        'platform.audit.read', 'platform.marketing.read', 'platform.marketing.manage');
+--        their rbac.role_permissions rows cascade.
+
+SET LOCAL lock_timeout = '5s';
 
 INSERT INTO rbac.permissions (code, display_name, module, description, risk_level, warning) VALUES
     ('platform.company.read',      'Read companies across workspaces', 'platform',
@@ -38,7 +85,7 @@ INSERT INTO rbac.permissions (code, display_name, module, description, risk_leve
      'Issue or void invoices and edit a company''s billing profile.',                   'HIGH',
      'An issued invoice cannot be edited, only voided and re-issued.'),
     ('platform.entitlement.manage','Grant or suspend a product for a company', 'platform',
-     'Switch a product on or off for one company outside its subscription (audited, reason required).', 'HIGH',
+     'Switch Marketing Automation on or off for one company outside its subscription (audited, reason required). HRMS modules stay per workspace.', 'HIGH',
      'Overrides what the company paid for until it is removed.'),
     ('platform.marketing.read',    'Read Marketing Automation administration', 'platform',
      'Read Marketing Automation companies, channels, usage and identity mapping.',    'LOW',    NULL),

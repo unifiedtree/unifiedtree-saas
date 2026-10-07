@@ -24,11 +24,29 @@
 -- The Java API refuses UNIFIEDTREE_POOLED / HYBRID while that switch is off, so
 -- no customer can be labelled pooled before the approval exists.
 --
--- Safety. Additive, empty tables. Idempotent. Production has Flyway OFF.
+-- Idempotency: a redelivered event is recorded once. Its payload_hash (SHA-256 of
+-- the event as received) is stored, so the same idempotency key with a different
+-- payload is refused (409) instead of silently dropped.
+--
+-- Safety. Additive, empty tables. Every FK is RESTRICT: usage rows are billing
+-- records, and a channel account is DISCONNECTED, not deleted. Idempotent.
+--
+-- ── Applying by hand (Flyway is OFF in production) ─────────────────────────────
+-- Order: strictly V144_101 → 102 → 103 → 104 → 105 → 106, BEFORE deploying the PR #12 revision
+-- (104 needs 103: invoice_lines → module_plan_prices; 105 needs 102: company_modules.limits;
+-- 106 needs 104: usage_ledger → invoice_lines; 102–106 need 102's uq_companies_id_tenant).
+-- V144_107 is applied AFTER the deploy. Each file is one transaction:
+--     psql -1 -v ON_ERROR_STOP=1 -f <file>
+-- Each sets lock_timeout = 5s: a lock it cannot get fails the file (nothing applied) instead of queueing
+-- HRMS requests behind it. Re-run it when traffic is lower.
+-- This file: sixth, last before the deploy (after 104, whose invoice_lines usage_ledger references).
+-- Rollback: full list in V144_101 (only while the tables are empty).
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE IF NOT EXISTS platform.marketing_channel_accounts (
     id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           UUID          NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
+    tenant_id           UUID          NOT NULL REFERENCES platform.tenants(id) ON DELETE RESTRICT,
     company_id          UUID          NOT NULL,
     provider            VARCHAR(30)   NOT NULL DEFAULT 'META_WHATSAPP',
     waba_id             VARCHAR(64)   NOT NULL,
@@ -40,7 +58,7 @@ CREATE TABLE IF NOT EXISTS platform.marketing_channel_accounts (
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT fk_channel_accounts_company FOREIGN KEY (company_id, tenant_id)
-        REFERENCES org.companies (id, tenant_id) ON DELETE CASCADE,
+        REFERENCES org.companies (id, tenant_id) ON DELETE RESTRICT,
     CONSTRAINT ck_channel_accounts_provider CHECK (provider IN ('META_WHATSAPP')),
     CONSTRAINT ck_channel_accounts_mode     CHECK (billing_mode IN ('DIRECT_CUSTOMER', 'UNIFIEDTREE_POOLED', 'HYBRID')),
     CONSTRAINT ck_channel_accounts_status   CHECK (status IN ('ACTIVE', 'DISCONNECTED')),
@@ -75,9 +93,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_rate_cards_open
 CREATE TABLE IF NOT EXISTS platform.usage_ledger (
     id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     idempotency_key       VARCHAR(200)  NOT NULL,
-    tenant_id             UUID          NOT NULL REFERENCES platform.tenants(id),
+    payload_hash          VARCHAR(64),
+    tenant_id             UUID          NOT NULL REFERENCES platform.tenants(id) ON DELETE RESTRICT,
     company_id            UUID          NOT NULL,
-    channel_account_id    UUID          REFERENCES platform.marketing_channel_accounts(id),
+    channel_account_id    UUID          REFERENCES platform.marketing_channel_accounts(id) ON DELETE RESTRICT,
     provider              VARCHAR(30)   NOT NULL,
     waba_id               VARCHAR(64),
     phone_number_id       VARCHAR(64),
@@ -94,15 +113,16 @@ CREATE TABLE IF NOT EXISTS platform.usage_ledger (
     billing_mode          VARCHAR(25)   NOT NULL DEFAULT 'DIRECT_CUSTOMER',
     status                VARCHAR(20)   NOT NULL DEFAULT 'RECORDED',
     reconciliation_status VARCHAR(20)   NOT NULL DEFAULT 'UNRECONCILED',
-    invoice_line_id       UUID          REFERENCES platform.invoice_lines(id) ON DELETE SET NULL,
+    invoice_line_id       UUID          REFERENCES platform.invoice_lines(id) ON DELETE RESTRICT,
     raw                   JSONB,
     created_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT fk_usage_ledger_company FOREIGN KEY (company_id, tenant_id)
-        REFERENCES org.companies (id, tenant_id),
+        REFERENCES org.companies (id, tenant_id) ON DELETE RESTRICT,
+    CONSTRAINT ck_usage_ledger_hash     CHECK (payload_hash IS NULL OR payload_hash ~ '^[0-9a-f]{64}$'),
     CONSTRAINT uq_usage_ledger_idempotency UNIQUE (idempotency_key),
     CONSTRAINT ck_usage_ledger_provider CHECK (provider IN ('META_WHATSAPP')),
     CONSTRAINT ck_usage_ledger_type     CHECK (usage_type IN ('CONVERSATION', 'MESSAGE')),
-    CONSTRAINT ck_usage_ledger_quantity CHECK (quantity > 0),
+    CONSTRAINT ck_usage_ledger_quantity CHECK (quantity > 0 AND quantity <= 10000),
     CONSTRAINT ck_usage_ledger_mode     CHECK (billing_mode IN ('DIRECT_CUSTOMER', 'UNIFIEDTREE_POOLED', 'HYBRID')),
     CONSTRAINT ck_usage_ledger_status   CHECK (status IN ('RECORDED', 'RATED', 'INVOICED', 'VOID')),
     CONSTRAINT ck_usage_ledger_recon    CHECK (reconciliation_status IN ('UNRECONCILED', 'MATCHED', 'MISMATCH', 'DISPUTED')),

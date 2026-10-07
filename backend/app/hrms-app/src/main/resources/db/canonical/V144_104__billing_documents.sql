@@ -11,29 +11,54 @@
 --   1. platform.billing_settings gains the seller's details printed on every
 --      invoice, the default GST rate, the invoice number prefix, and the switch
 --      for pooled Meta billing (FALSE: not approved by Meta, see V144.106).
---   2. platform.company_billing_profiles: one per company, for what org.companies
---      does not hold (billing address, state code for GST place of supply, billing
---      email). Its legal name / GSTIN / PAN override the company's when filled.
+--   2. platform.company_billing_profiles: one per company, ONLY for what
+--      org.companies does not hold: billing email and phone, the GST state code and an
+--      optional address override. Legal name, GSTIN and PAN are read from
+--      org.companies and the address from the headquarters branch
+--      (CompanyBillingDetails, shared with the billing breakdown), so a company's
+--      details live in one place.
 --   3. platform.invoice_number_series + platform.invoices + platform.invoice_lines.
 --      An invoice carries an immutable billing_snapshot taken when it is issued,
 --      so a company editing its address later does not rewrite old invoices.
 --      Numbers are PREFIX/26-27/00001: GST Rule 46(b) caps them at 16 characters,
 --      hence the 1-4 character prefix.
 --   4. Triggers make an ISSUED / PAID / VOID / DISCARDED invoice's amounts, number,
---      parties and snapshot unchangeable, and freeze its lines. The only way to
---      correct an issued one is to void it and issue another; a wrong DRAFT is
---      DISCARDED (it never had a number).
+--      parties, place of supply and snapshot unchangeable, and freeze its lines. The
+--      only way to correct an issued one is to void it and issue another; a wrong
+--      DRAFT is DISCARDED (it never had a number).
+--   5. GST (Rule 46): each line has its SAC code and its tax split into CGST + SGST
+--      (buyer in the seller's state) or IGST (another state), fixed at issue with the
+--      invoice's place_of_supply.
 --
 -- Not created: a payment-methods table. How a workspace pays is already on
 -- platform.subscriptions (payment_method, razorpay_subscription_id); no code needs
 -- another copy.
 --
+-- One tax invoice per sale: Razorpay issues the tax invoice for every charge it makes
+-- (owner decision, 6 Oct 2026), so the API refuses to ISSUE an invoice tied to a
+-- Razorpay payment or Razorpay-charged subscription until per-company billing names
+-- the single issuer (server flag unifiedtree.billing.invoices.issue-razorpay-charged,
+-- default off). If both kinds must ever coexist, add provider_invoice_id then.
+--
 -- Not done here: wiring invoice issue into the live Razorpay webhook. Invoices
 -- are issued from the admin console for now (platform.billing.manage), so the
 -- payment path that is earning money today is untouched.
 --
--- Safety. Additive. No RLS on platform.* (V002:4-7). Idempotent.
--- Production has Flyway OFF: apply by hand.
+-- Safety. Additive. No RLS on platform.* (V002:4-7). Every FK is RESTRICT: an
+-- invoice keeps its workspace, company, payment and subscription. Idempotent.
+--
+-- ── Applying by hand (Flyway is OFF in production) ─────────────────────────────
+-- Order: strictly V144_101 → 102 → 103 → 104 → 105 → 106, BEFORE deploying the PR #12 revision
+-- (104 needs 103: invoice_lines → module_plan_prices; 105 needs 102: company_modules.limits;
+-- 106 needs 104: usage_ledger → invoice_lines; 102–106 need 102's uq_companies_id_tenant).
+-- V144_107 is applied AFTER the deploy. Each file is one transaction:
+--     psql -1 -v ON_ERROR_STOP=1 -f <file>
+-- Each sets lock_timeout = 5s: a lock it cannot get fails the file (nothing applied) instead of queueing
+-- HRMS requests behind it. Re-run it when traffic is lower.
+-- This file: fourth (after 103, whose module_plan_prices invoice_lines references). 106 needs it.
+-- Rollback: full list in V144_101 (only while no invoice was ever issued).
+
+SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE platform.billing_settings
     ADD COLUMN IF NOT EXISTS seller_legal_name     VARCHAR(255),

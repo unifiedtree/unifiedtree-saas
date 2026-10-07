@@ -25,8 +25,24 @@
 -- The plan is not purchasable while LAUNCHING_SOON, so this changes nothing
 -- for customers today.
 --
--- Safety. Additive; the plan update touches one row only if it is empty.
--- Idempotent. Production has Flyway OFF: apply by hand.
+-- Safety. Additive; the plan update touches one row only if it is empty. The
+-- identity map is the only record of which Mongo user is whose, so its FKs are
+-- RESTRICT (an account, workspace or company with mapped rows is archived; a
+-- mapping is RETIRED, never deleted). SSO tickets are 60-second records and
+-- cascade with their account / workspace / company. Idempotent.
+--
+-- ── Applying by hand (Flyway is OFF in production) ─────────────────────────────
+-- Order: strictly V144_101 → 102 → 103 → 104 → 105 → 106, BEFORE deploying the PR #12 revision
+-- (104 needs 103: invoice_lines → module_plan_prices; 105 needs 102: company_modules.limits;
+-- 106 needs 104: usage_ledger → invoice_lines; 102–106 need 102's uq_companies_id_tenant).
+-- V144_107 is applied AFTER the deploy. Each file is one transaction:
+--     psql -1 -v ON_ERROR_STOP=1 -f <file>
+-- Each sets lock_timeout = 5s: a lock it cannot get fails the file (nothing applied) instead of queueing
+-- HRMS requests behind it. Re-run it when traffic is lower.
+-- This file: fifth (after 102, whose company_modules gains limits here).
+-- Rollback: full list in V144_101 (set the marketing plan's included_modules back to '{}').
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE IF NOT EXISTS platform.marketing_identity_map (
     id                        UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -34,8 +50,8 @@ CREATE TABLE IF NOT EXISTS platform.marketing_identity_map (
     legacy_marketing_user_id  VARCHAR(24)  NOT NULL,
     legacy_role               VARCHAR(30),
     legacy_email              VARCHAR(255),
-    account_id                UUID         REFERENCES platform.accounts(id) ON DELETE SET NULL,
-    tenant_id                 UUID         REFERENCES platform.tenants(id) ON DELETE CASCADE,
+    account_id                UUID         REFERENCES platform.accounts(id) ON DELETE RESTRICT,
+    tenant_id                 UUID         REFERENCES platform.tenants(id) ON DELETE RESTRICT,
     company_id                UUID,
     status                    VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
     source                    VARCHAR(20)  NOT NULL,
@@ -45,7 +61,7 @@ CREATE TABLE IF NOT EXISTS platform.marketing_identity_map (
     created_at                TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at                TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT fk_marketing_map_company FOREIGN KEY (company_id, tenant_id)
-        REFERENCES org.companies (id, tenant_id) ON DELETE SET NULL (company_id),
+        REFERENCES org.companies (id, tenant_id) ON DELETE RESTRICT,
     CONSTRAINT ck_marketing_map_kind    CHECK (kind IN ('COMPANY_OWNER', 'MEMBER', 'LEGACY_USER')),
     CONSTRAINT ck_marketing_map_status  CHECK (status IN ('PENDING', 'MAPPED', 'QUARANTINED', 'RETIRED')),
     CONSTRAINT ck_marketing_map_source  CHECK (source IN ('SSO', 'BACKFILL', 'MANUAL')),
