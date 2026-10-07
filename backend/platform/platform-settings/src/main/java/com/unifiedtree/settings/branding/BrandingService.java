@@ -138,18 +138,20 @@ public class BrandingService {
     }
 
     /**
-     * Public lookup by subdomain for the sign-in page: the workspace name and
-     * its image addresses, nothing else. Empty when no such workspace.
+     * Public lookup by subdomain for the sign-in page: the workspace name, its
+     * image addresses and its status (ACTIVE, SUSPENDED, ...; the same status
+     * the public workspace-status read already returns), nothing else. Empty
+     * when no such workspace.
      */
     @Transactional(readOnly = true)
     public Optional<PublicView> publicView(String subdomain) {
         if (subdomain == null || subdomain.isBlank()) return Optional.empty();
-        UUID tenantId = jdbc.query("SELECT id FROM platform.tenants WHERE subdomain = ?",
-                rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
+        Object[] tenant = jdbc.query("SELECT id, status FROM platform.tenants WHERE subdomain = ?",
+                rs -> rs.next() ? new Object[]{rs.getObject(1, UUID.class), rs.getString(2)} : null,
                 subdomain.trim().toLowerCase(Locale.ROOT));
-        if (tenantId == null) return Optional.empty();
-        View v = view(tenantId);
-        return Optional.of(new PublicView(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl()));
+        if (tenant == null) return Optional.empty();
+        View v = view((UUID) tenant[0]);
+        return Optional.of(new PublicView(v.workspaceName(), v.monogram(), v.logoUrl(), v.markUrl(), (String) tenant[1]));
     }
 
     /**
@@ -335,7 +337,7 @@ public class BrandingService {
                        String letterheadUrl, Integer letterheadWidth, Integer letterheadHeight) {}
 
     /** What the public sign-in lookup returns: name and images only. */
-    public record PublicView(String workspaceName, String monogram, String logoUrl, String markUrl) {}
+    public record PublicView(String workspaceName, String monogram, String logoUrl, String markUrl, String status) {}
 
     /** One stored image. */
     public record Asset(byte[] bytes, String contentType, String version) {}

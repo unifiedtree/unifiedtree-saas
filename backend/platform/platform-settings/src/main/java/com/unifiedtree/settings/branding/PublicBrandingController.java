@@ -1,5 +1,7 @@
 package com.unifiedtree.settings.branding;
 
+import com.hrms.core.dto.ErrorResponse;
+import com.hrms.core.tenant.ReservedSubdomains;
 import com.unifiedtree.settings.branding.BrandingImage.Kind;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -24,8 +26,10 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>{@code GET /v1/public/workspace-branding?subdomain=acme} (or the
  *       {@code X-Tenant-Subdomain} header / Host): the workspace's display
- *       name, monogram letter and image addresses. Nothing else about the
- *       workspace is returned.</li>
+ *       name, monogram letter, image addresses and status. Nothing else about
+ *       the workspace is returned. No business at that address: 404 with
+ *       errorCode WORKSPACE_NOT_FOUND, or WORKSPACE_RESERVED for UnifiedTree's
+ *       own addresses (ReservedSubdomains).</li>
  *   <li>{@code GET /v1/public/workspace-branding/{tenantId}/{logo|mark}?v=…}:
  *       the image itself. The address carries a content hash, so a matching
  *       {@code v} is cached for a year; anything else for five minutes.</li>
@@ -45,14 +49,18 @@ public class PublicBrandingController {
     }
 
     @GetMapping
-    public ResponseEntity<BrandingService.PublicView> lookup(
+    public ResponseEntity<?> lookup(
             @RequestParam(value = "subdomain", required = false) String subdomainParam,
             @RequestHeader(value = "X-Tenant-Subdomain", required = false) String subdomainHeader,
             @RequestHeader(value = "Host", required = false) String host) {
         String sub = resolve(subdomainParam, subdomainHeader, host);
         if (sub == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not identified");
-        BrandingService.PublicView v = service.publicView(sub)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found"));
+        BrandingService.PublicView v = service.publicView(sub).orElse(null);
+        // No such business: say whether the address is one of UnifiedTree's own (admin, marketing,
+        // www, ...) or simply unknown, so the web app shows the right page and never a sign-in.
+        // Same 404 and message as before; only the code is new. Not cached: a business created a
+        // minute later must not stay "not found".
+        if (v == null) return notFound(ReservedSubdomains.isReserved(sub));
         // The answer depends on the header / Host when there is no ?subdomain=,
         // so caches must key on them too, or one workspace could be shown
         // another's name and logo (all workspaces share one API address).
@@ -83,6 +91,13 @@ public class PublicBrandingController {
                 .header("Content-Security-Policy", "default-src 'none'; sandbox")
                 .header("Cross-Origin-Resource-Policy", "cross-origin")
                 .body(a.bytes());
+    }
+
+    /** The 404 for an address with no business: WORKSPACE_RESERVED or WORKSPACE_NOT_FOUND. */
+    static ResponseEntity<ErrorResponse> notFound(boolean reserved) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .cacheControl(CacheControl.noStore())
+                .body(ErrorResponse.of(404, reserved ? "WORKSPACE_RESERVED" : "WORKSPACE_NOT_FOUND", "Workspace not found"));
     }
 
     /** ?subdomain= wins, then the header the web app sends, then the Host's first label. */

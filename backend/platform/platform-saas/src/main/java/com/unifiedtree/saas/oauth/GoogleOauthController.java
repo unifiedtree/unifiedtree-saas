@@ -98,7 +98,9 @@ public class GoogleOauthController {
         // ?business=<subdomain>: "Continue with Google" on that business's own login page.
         if (businessSubdomain != null && !businessSubdomain.isBlank()) {
             returnTo = BusinessGoogleSignIn.returnToFor(businessSubdomain);
-            if (returnTo == null) {
+            // An address with no open business (unknown, or one of UnifiedTree's own such as
+            // admin) is refused here, before Google, like a malformed one.
+            if (returnTo == null || !business.isOpen(BusinessGoogleSignIn.businessOf(returnTo))) {
                 res.setStatus(HttpStatus.BAD_REQUEST.value());
                 res.setContentType("application/json");
                 res.getWriter().write("{\"error\":\"business_invalid\"}");
