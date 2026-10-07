@@ -5,11 +5,20 @@
 # Never point this at production — it creates invoices, price versions and overrides.
 #
 #   BASE=http://127.0.0.1:8085/api SERVICE_TOKEN=... OPS_EMAIL=... OPS_PASSWORD=... ./e2e_platform_admin.sh
+#
+# Optional PSQL="psql -h 127.0.0.1 -p 55440 -U postgres -d ut_migtest" (the SAME disposable database) turns
+# on the checks that need a row changed directly: a deactivated / locked workspace user, an expired SSO
+# ticket, an archived company, a lapsed subscription and a malformed company GSTIN. Without it they are
+# skipped. It must point at 127.0.0.1 / localhost.
 set -u
 BASE="${BASE:-http://127.0.0.1:8085/api}"
 case "$BASE" in *unifiedtree.com*) echo "Refusing to run against a unifiedtree.com host"; exit 2;; esac
+PSQL="${PSQL:-}"
+if [ -n "$PSQL" ]; then
+  case "$PSQL" in *127.0.0.1*|*localhost*) ;; *) echo "PSQL must point at a local disposable database"; exit 2;; esac
+fi
 
-PASS=0; FAIL=0
+PASS=0; FAIL=0; SKIP=0
 TENANT_DEMO=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 TENANT_BETA=bbbbbbbb-0000-0000-0000-00000000000b
 CO_A1=cccccccc-cccc-cccc-cccc-cccccccccccc     # has Marketing
@@ -39,6 +48,9 @@ except Exception: j=None
 sys.exit(0 if ($check) else 1)" 2>/dev/null; then ok "$label"; else bad "$label" "assertion failed: $check :: ${BODY_OUT:0:240}"; fi
 }
 jget() { printf '%s' "$BODY_OUT" | python -c "import json,sys; j=json.load(sys.stdin); print($1)"; }
+skip() { SKIP=$((SKIP+1)); printf "  SKIP  %s  (needs PSQL)\n" "$1"; }
+db()   { eval "$PSQL -X -q -At -v ON_ERROR_STOP=1 -c \"\$1\"" || { bad "database step failed" "$1"; return 1; }; }
+iso()  { python -c "import datetime as d; print((d.datetime.now(d.timezone.utc)+d.timedelta(hours=$1)).strftime('%Y-%m-%dT%H:%M:%SZ'))"; }
 
 echo "== Platform admin authentication (TEST 1, 11) =="
 req POST /v1/platform/auth/login "{\"email\":\"$OPS_EMAIL\",\"password\":\"$OPS_PASSWORD\"}"
@@ -87,8 +99,8 @@ expect "modules include hrms and whatsapp (Marketing)" 200 "{'hrms','whatsapp'} 
 req POST /v1/platform/admin/catalog/plans/crm/prices '{"unitPrice":99,"reason":"x"}' "$OPS"
 expect "price change without a real reason -> 400" 400
 req POST /v1/platform/admin/catalog/plans/crm/prices '{"unitPrice":99,"reason":"Launch price for CRM"}' "$OPS"
-expect "price change closes the old version and opens a new one" 200 \
-  "j['current']['unitPrice']==99 and j['previous'] and j['previous']['validTo'] and j['plan']['priceInr']==99"
+expect "price change closes the old version and opens a new one (no Razorpay plan cache is cleared)" 200 \
+  "j['current']['unitPrice']==99 and j['previous'] and j['previous']['validTo'] and j['plan']['priceInr']==99 and 'razorpayPlansCleared' not in j"
 req GET /v1/platform/admin/catalog/plans/crm/prices "" "$OPS"
 expect "price history keeps the old price" 200 "len(j)>=2 and sum(1 for v in j if v['current'])==1"
 req POST /v1/platform/admin/catalog/plans/crm/prices '{"unitPrice":99,"reason":"Same price again"}' "$OPS"
@@ -105,6 +117,8 @@ req DELETE "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A2/entitlem
 expect "removing the override turns it off again" 200 "j['cleared'] and not j['effective']['entitled']"
 req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_B1/entitlements/whatsapp" '{"status":"ACTIVE","reason":"wrong workspace attempt"}' "$OPS"
 expect "override for a company under the wrong workspace -> 404" 404
+req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A2/entitlements/hrms" '{"status":"SUSPENDED","reason":"Suspend HRMS for this company"}' "$OPS"
+expect "HRMS modules cannot be switched per company (HRMS ignores company_modules) -> 400" 400 "'MANUAL_NOT_ALLOWED' in raw"
 
 echo "== Billing: subscriptions, payments, invoices =="
 req GET /v1/platform/admin/payments "" "$OPS"
@@ -116,35 +130,83 @@ INV=$(jget "j['id']")
 req POST "/v1/platform/admin/payments/$PAYMENT/invoice" "" "$OPS"
 expect "a payment cannot be invoiced twice -> 409" 409
 req POST "/v1/platform/admin/invoices/$INV/issue" "" "$OPS"
-expect "issuing before the seller's GST details are set -> 409 (an issued invoice is frozen)" 409
-req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerPan":"AAACU1234F","sellerAddress":"Bengaluru","sellerStateCode":"29","sellerEmail":"billing@unifiedtree.test","invoicePrefix":"UTREE","defaultGstRatePct":18,"invoiceDueDays":7}' "$OPS"
-expect "a 5-character invoice prefix is refused (GST numbers are at most 16 characters)" 400
-req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerPan":"AAACU1234F","sellerAddress":"Bengaluru","sellerStateCode":"29","sellerEmail":"billing@unifiedtree.test","invoicePrefix":"UT","defaultGstRatePct":18,"invoiceDueDays":7}' "$OPS"
-expect "seller details saved" 200 "j['sellerGstin']=='29AAACU1234F1Z5' and j['invoicePrefix']=='UT'"
-req POST "/v1/platform/admin/invoices/$INV/issue" "" "$OPS"
-expect "issuing numbers it PREFIX/yy-yy/nnnnn (<= 16 chars), snapshots billing, marks it PAID" 200 \
-  "__import__('re').fullmatch(r'UT/\\d\\d-\\d\\d/\\d{5}', j['invoiceNumber']) and len(j['invoiceNumber'])<=16 and j['status']=='PAID' and j['billingSnapshot']['seller']['gstin']=='29AAACU1234F1Z5' and j['billingSnapshot']['buyer']['workspace']=='demo'"
-req POST "/v1/platform/admin/invoices/$INV/issue" "" "$OPS"
-expect "issuing twice -> 409" 409
-req POST "/v1/platform/admin/invoices/$INV/void" '{"reason":"no"}' "$OPS"
-expect "void without a real reason -> 400" 400
-req POST "/v1/platform/admin/invoices/$INV/void" '{"reason":"Issued against the wrong company"}' "$OPS"
-expect "void with a reason" 200 "j['status']=='VOID' and j['voidReason']"
-req POST "/v1/platform/admin/payments/$PAYMENT/invoice" "" "$OPS"
-expect "after the void, the payment can be drafted again" 200 "j['status']=='DRAFT'"
-INV2=$(jget "j['id']")
-req POST "/v1/platform/admin/invoices/$INV2/void" '{"reason":"Drafted with the wrong period"}' "$OPS"
-expect "a wrong draft is DISCARDED (it never had a number)" 200 "j['status']=='DISCARDED' and j['invoiceNumber'] is None"
+expect "a Razorpay-charged payment is never issued our own tax invoice (Razorpay issues it) -> 409" 409 "'RAZORPAY_INVOICED' in raw"
+req POST "/v1/platform/admin/invoices/$INV/void" '{"reason":"Razorpay invoices this charge"}' "$OPS"
+expect "the payment draft is DISCARDED (it never had a number)" 200 "j['status']=='DISCARDED' and j['invoiceNumber'] is None"
 req POST "/v1/platform/admin/payments/$PAYMENT/invoice" "" "$OPS"
 expect "after discarding, the payment can be drafted again" 200 "j['status']=='DRAFT'"
 req POST /v1/platform/admin/invoices "{\"tenantId\":\"$TENANT_BETA\",\"paymentId\":\"$PAYMENT\",\"lines\":[{\"description\":\"x\",\"unitPrice\":1}]}" "$OPS"
 expect "a draft cannot use another workspace's payment -> 400" 400
+
+LINE='{"description":"Marketing Automation, October","quantity":1,"unitPrice":1000}'
+req POST /v1/platform/admin/invoices "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"lines\":[$LINE]}" "$OPS"
+expect "a company invoice not charged through Razorpay is drafted" 200 "j['status']=='DRAFT' and abs(float(j['total'])-1180.0)<0.011"
+INV_A1=$(jget "j['id']")
+req POST "/v1/platform/admin/invoices/$INV_A1/issue" "" "$OPS"
+expect "issuing before the seller's GST details are set -> 409 (an issued invoice is frozen)" 409
+req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerPan":"AAACU1234F","sellerAddress":"Bengaluru","sellerStateCode":"29","sellerEmail":"billing@unifiedtree.test","invoicePrefix":"UTREE","defaultGstRatePct":18,"invoiceDueDays":7}' "$OPS"
+expect "a 5-character invoice prefix is refused (GST numbers are at most 16 characters)" 400
+req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1X5","sellerStateCode":"29","invoicePrefix":"UT","invoiceDueDays":7}' "$OPS"
+expect "a malformed seller GSTIN is refused (full GSTIN check)" 400
+req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerStateCode":"29","invoicePrefix":"UT","invoiceDueDays":7,"defaultSacCode":"123"}' "$OPS"
+expect "a SAC code that is not 99xxxx is refused" 400
+req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerPan":"AAACU1234F","sellerAddress":"Bengaluru","sellerStateCode":"29","sellerEmail":"billing@unifiedtree.test","invoicePrefix":"UT","defaultGstRatePct":18,"invoiceDueDays":7,"defaultSacCode":"998431"}' "$OPS"
+expect "seller details saved" 200 "j['sellerGstin']=='29AAACU1234F1Z5' and j['invoicePrefix']=='UT' and j['defaultSacCode']=='998431'"
+req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A1/billing-profile" '{"stateCode":"KA"}' "$OPS"
+expect "billing profile with a state name instead of the GST state code -> 400" 400
+req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A1/billing-profile" '{"stateCode":"29","billingEmail":"billing@demo.test","addressLine1":"1 MG Road","city":"Bengaluru","state":"Karnataka","postalCode":"560001"}' "$OPS"
+expect "billing profile keeps only email / state code / address; legal name and GSTIN come from org.companies" 200 \
+  "j['stateCode']=='29' and 'gstin' not in j and 'legalName' not in j and j['resolved']['stateCode']=='29' and j['resolved']['legalName']"
+req POST "/v1/platform/admin/invoices/$INV_A1/issue" "" "$OPS"
+expect "issued: PREFIX/yy-yy/nnnnn (<= 16 chars), ISSUED (no payment), place of supply 29, CGST + SGST with SAC" 200 \
+  "__import__('re').fullmatch(r'UT/\\d\\d-\\d\\d/\\d{5}', j['invoiceNumber']) and len(j['invoiceNumber'])<=16 and j['status']=='ISSUED' and j['placeOfSupply']=='29' and j['billingSnapshot']['supply']=='INTRA_STATE' and all(float(l['cgstAmount'])==90 and float(l['sgstAmount'])==90 and float(l['igstAmount'])==0 and l['sacCode']=='998431' for l in j['lines']) and j['billingSnapshot']['buyer']['workspace']=='demo' and j['billingSnapshot']['seller']['gstin']=='29AAACU1234F1Z5'"
+NUM_A1=$(jget "j['invoiceNumber']")
+req POST "/v1/platform/admin/invoices/$INV_A1/issue" "" "$OPS"
+expect "issuing twice -> 409" 409
+
+req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A2/billing-profile" '{"stateCode":"07","billingEmail":"billing@second.test"}' "$OPS"
+expect "A2 is billed in Delhi" 200 "j['resolved']['stateCode']=='07'"
+req POST /v1/platform/admin/invoices "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A2\",\"lines\":[$LINE]}" "$OPS"
+INV_A2=$(jget "j['id']")
+if [ -n "$PSQL" ]; then
+  db "UPDATE org.companies SET gstin = '07ABCDE1234' WHERE id = '$CO_A2'"
+  req POST "/v1/platform/admin/invoices/$INV_A2/issue" "" "$OPS"
+  expect "a malformed buyer GSTIN is refused, never printed or used for the state -> 409" 409 "'BUYER_GSTIN_INVALID' in raw"
+  db "UPDATE org.companies SET gstin = NULL WHERE id = '$CO_A2'"
+else skip "a malformed buyer GSTIN is refused"; fi
+req POST "/v1/platform/admin/invoices/$INV_A2/issue" "" "$OPS"
+expect "another state: IGST, place of supply 07" 200 \
+  "j['placeOfSupply']=='07' and j['billingSnapshot']['supply']=='INTER_STATE' and all(float(l['igstAmount'])==180 and float(l['cgstAmount'])==0 for l in j['lines'])"
+
+# The series lock: the same draft issued twice at once, and two drafts at once
+req POST /v1/platform/admin/invoices "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"lines\":[$LINE]}" "$OPS"
+INV_C=$(jget "j['id']")
+req POST /v1/platform/admin/invoices "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"lines\":[$LINE]}" "$OPS"
+INV_D=$(jget "j['id']")
+T=$(mktemp -d)
+for n in 1 2 3; do curl -s -o "$T/c$n" -w '%{http_code}' -X POST "$BASE/v1/platform/admin/invoices/$INV_C/issue" -H "$OPS" > "$T/c$n.code" & done
+curl -s -o "$T/d1" -w '%{http_code}' -X POST "$BASE/v1/platform/admin/invoices/$INV_D/issue" -H "$OPS" > "$T/d1.code" &
+wait
+CODES="$(cat "$T"/c1.code "$T"/c2.code "$T"/c3.code | sort | tr -d '\n')"
+NUMS="$(for f in c1 c2 c3 d1; do cat "$T/$f"; echo; done | python -c "
+import json,sys
+nums=[]
+for line in sys.stdin:
+    try: j=json.loads(line)
+    except Exception: continue
+    if isinstance(j, dict) and j.get('invoiceNumber'): nums.append(j['invoiceNumber'])
+print(' '.join(nums))")"
+rm -rf "$T"
+CODE=200; BODY_OUT="{\"codes\":\"$CODES\",\"nums\":\"$NUMS\",\"prev\":\"$NUM_A1\"}"
+expect "concurrent issue: the same draft is numbered once (one 200, two 409), two drafts get distinct consecutive numbers" 200 \
+  "j['codes']=='200409409' and len(set(j['nums'].split()))==2 and sorted(int(n[-5:]) for n in j['nums'].split())==[int(j['prev'][-5:])+2, int(j['prev'][-5:])+3]"
+
+req POST "/v1/platform/admin/invoices/$INV_A1/void" '{"reason":"no"}' "$OPS"
+expect "void without a real reason -> 400" 400
+req POST "/v1/platform/admin/invoices/$INV_A1/void" '{"reason":"Issued against the wrong company"}' "$OPS"
+expect "void with a reason" 200 "j['status']=='VOID' and j['voidReason']"
 req GET "/v1/platform/admin/invoices?tenantId=$TENANT_DEMO" "" "$OPS"
-expect "invoice list" 200 "j['totalElements']>=1"
-req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A1/billing-profile" '{"gstin":"BAD"}' "$OPS"
-expect "billing profile with a malformed GSTIN -> 400" 400
-req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A1/billing-profile" '{"legalName":"UnifiedTree Demo Corp Pvt Ltd","gstin":"29ABCDE1234F1Z5","stateCode":"29","billingEmail":"billing@demo.test","city":"Bengaluru"}' "$OPS"
-expect "valid billing profile saved" 200 "j['gstin']=='29ABCDE1234F1Z5'"
+expect "invoice list" 200 "j['totalElements']>=4"
 req GET /v1/platform/admin/subscriptions "" "$OPS"
 expect "subscriptions list" 200 "'content' in j"
 req GET /v1/platform/admin/settings/billing "" "$OPS"
@@ -152,14 +214,17 @@ expect "billing settings: pooled Meta billing is OFF" 200 "j['marketingPooledBil
 
 echo "== HRMS as a product, dashboard, audit =="
 req GET /v1/platform/admin/hrms/workspaces "" "$OPS"
-expect "HRMS workspaces with seats used (counted through RLS)" 200 \
-  "any(w['subdomain']=='demo' and w['seatsUsed']>0 for w in j)"
+expect "HRMS workspaces (paged) with seats from SeatQuotaService, counted through RLS" 200 \
+  "any(w['subdomain']=='demo' and w['seatsUsed']>0 for w in j['content']) and 'totalElements' in j"
 req GET /v1/platform/admin/dashboard "" "$OPS"
 expect "dashboard: real counts (companies across workspaces = 3)" 200 \
   "j['companies']==3 and j['workspaces']>=2 and j['companiesWithMarketing']==1"
 req GET "/v1/platform/admin/audit?size=50" "" "$OPS"
 expect "operator changes are in the platform audit trail" 200 \
   "{'PLAN_PRICE_CHANGE','ENTITLEMENT_OVERRIDE','INVOICE_ISSUED','INVOICE_VOIDED'} <= set(e['action'] for e in j['content'])"
+req GET "/v1/platform/admin/audit?action=OPERATOR_READ&size=200" "" "$OPS"
+expect "operator reads of workspace data are audited (who, which workspace)" 200 \
+  "any(e['entityType']=='workspace' or e['entityType']=='company' for e in j['content']) and any('/v1/platform/admin/payments' in (e['summary'] or '') for e in j['content'])"
 
 echo "== Internal API for Marketing (service token) =="
 ST="X-UnifiedTree-Service-Token: $SERVICE_TOKEN"
@@ -213,6 +278,31 @@ expect "an employee enters as a member, not as the company's Marketing admin" 20
   "j['email']=='reader@unifiedtree.demo' and j['marketingAdmin'] is False"
 req GET "/v1/internal/marketing/access?accountId=acc00000-0000-0000-0000-000000000002&tenantId=$TENANT_DEMO&companyId=$CO_A2" "" "$ST"
 expect "company switch re-check refuses a company the person cannot access" 403
+if [ -n "$PSQL" ]; then
+  req POST /v1/sso/marketing/handoff "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ADMIN_ACCT"
+  TICKET3=$(jget "j['ticket']")
+  db "UPDATE auth.user_credentials SET is_active = false WHERE id = '11111111-1111-1111-1111-111111111111'"
+  req POST /v1/sso/marketing/handoff "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ADMIN_ACCT"
+  expect "a user switched off in HRMS cannot get a Marketing handoff -> 403 ACCOUNT_INACTIVE" 403 "'ACCOUNT_INACTIVE' in raw"
+  req POST /v1/internal/marketing/sso/redeem "{\"ticket\":\"$TICKET3\"}" "$ST"
+  expect "... nor redeem a ticket minted before they were switched off -> 403" 403 "'ACCOUNT_INACTIVE' in raw"
+  req POST /v1/internal/marketing/sso/redeem "{\"ticket\":\"$TICKET3\"}" "$ST"
+  expect "... and that refused ticket stays used (not redeemable again) -> 401" 401
+  req GET "/v1/internal/marketing/access?accountId=acc00000-0000-0000-0000-000000000001&tenantId=$TENANT_DEMO&companyId=$CO_A1" "" "$ST"
+  expect "the periodic re-check ends their Marketing session too -> 403" 403 "'ACCOUNT_INACTIVE' in raw"
+  db "UPDATE auth.user_credentials SET is_active = true, locked_until = now() + interval '10 minutes' WHERE id = '11111111-1111-1111-1111-111111111111'"
+  req POST /v1/sso/marketing/handoff "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ADMIN_ACCT"
+  expect "a temporarily locked user is refused -> 403 ACCOUNT_LOCKED" 403 "'ACCOUNT_LOCKED' in raw"
+  db "UPDATE auth.user_credentials SET locked_until = NULL WHERE id = '11111111-1111-1111-1111-111111111111'"
+  req POST /v1/sso/marketing/handoff "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ADMIN_ACCT"
+  TICKET4=$(jget "j['ticket']")
+  db "UPDATE platform.sso_handoff_tickets SET created_at = now() - interval '3 minutes', expires_at = now() - interval '2 minutes' WHERE consumed_at IS NULL"
+  req POST /v1/internal/marketing/sso/redeem "{\"ticket\":\"$TICKET4\"}" "$ST"
+  expect "an expired ticket -> 401" 401
+else
+  for t in "deactivated user refused" "ticket minted before deactivation refused" "refused ticket stays used" \
+           "re-check ends the session" "locked user refused" "expired ticket -> 401"; do skip "$t"; done
+fi
 
 echo "== Identity map, channels, usage =="
 req PUT /v1/internal/marketing/principals "{\"kind\":\"COMPANY_OWNER\",\"legacyMarketingUserId\":\"65a1b2c3d4e5f60718293a4b\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\"}" "$ST"
@@ -239,23 +329,71 @@ expect "WABA registered to A1 (DIRECT_CUSTOMER)" 200 "j['billingMode']=='DIRECT_
 CH=$(jget "j['id']")
 req POST /v1/internal/marketing/channels "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A2\",\"wabaId\":\"104000000000001\"}" "$ST"
 expect "the same WABA cannot be moved to A2 -> 409" 409
+req GET "/v1/platform/admin/marketing/channels?tenantId=$TENANT_DEMO&size=1" "" "$OPS"
+expect "channel list is paged" 200 "j['size']==1 and j['totalElements']>=1 and len(j['content'])==1"
 req PUT "/v1/platform/admin/marketing/channels/$CH/billing-mode" '{"billingMode":"UNIFIEDTREE_POOLED"}' "$OPS"
 expect "pooled billing refused while Meta approval is absent -> 409" 409 "'POOLED_BILLING_DISABLED' in raw"
-USAGE="{\"idempotencyKey\":\"meta:wamid.LOCAL1:conversation\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"wabaId\":\"104000000000001\",\"usageType\":\"CONVERSATION\",\"category\":\"marketing\",\"market\":\"IN\",\"occurredAt\":\"2026-10-06T10:00:00Z\"}"
+AT=$(iso -3)
+USAGE="{\"idempotencyKey\":\"meta:wamid.LOCAL1:conversation\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"wabaId\":\"104000000000001\",\"usageType\":\"CONVERSATION\",\"category\":\"marketing\",\"market\":\"IN\",\"occurredAt\":\"$AT\"}"
 req POST /v1/internal/marketing/usage "$USAGE" "$ST"
 expect "usage event recorded" 200 "j['recorded'] and not j['duplicate']"
 req POST /v1/internal/marketing/usage "$USAGE" "$ST"
 expect "the same provider event is not recorded twice (idempotent)" 200 "j['duplicate'] and not j['recorded']"
+req POST /v1/internal/marketing/usage "${USAGE/CONVERSATION/MESSAGE}" "$ST"
+expect "the same idempotency key with a DIFFERENT event -> 409 (not a silent drop)" 409 "'IDEMPOTENCY_MISMATCH' in raw"
+req POST /v1/internal/marketing/usage "{\"idempotencyKey\":\"meta:old\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"usageType\":\"MESSAGE\",\"occurredAt\":\"2020-01-01T00:00:00Z\"}" "$ST"
+expect "an event older than 90 days -> 400" 400
+req POST /v1/internal/marketing/usage "{\"idempotencyKey\":\"meta:future\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"usageType\":\"MESSAGE\",\"occurredAt\":\"$(iso 2)\"}" "$ST"
+expect "an event dated in the future -> 400" 400
+req POST /v1/internal/marketing/usage "{\"idempotencyKey\":\"meta:huge\",\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A1\",\"usageType\":\"MESSAGE\",\"occurredAt\":\"$AT\",\"quantity\":20000}" "$ST"
+expect "an unbounded quantity -> 400" 400
+req GET "/v1/platform/admin/marketing/usage?tenantId=$TENANT_DEMO&from=2024-01-01T00:00:00Z" "" "$OPS"
+expect "a usage summary window over 366 days -> 400" 400
 req GET "/v1/platform/admin/marketing/usage?tenantId=$TENANT_DEMO" "" "$OPS"
 expect "usage summary in the admin console" 200 "j['events']==1 and j['pooledBillingEnabled'] is False"
 req POST /v1/internal/marketing/audit "{\"tenantId\":\"$TENANT_DEMO\",\"action\":\"PLATFORM_TAMPER\",\"summary\":\"x\"}" "$ST"
 expect "Marketing cannot write non-Marketing audit actions -> 400" 400
-req POST /v1/internal/marketing/audit "{\"tenantId\":\"$TENANT_DEMO\",\"action\":\"MARKETING_CAMPAIGN_SENT\",\"actorEmail\":\"admin@unifiedtree.demo\",\"summary\":\"Campaign Diwali sent to 120 contacts\"}" "$ST"
+req POST /v1/internal/marketing/audit "{\"tenantId\":\"$TENANT_DEMO\",\"accountId\":\"acc00000-0000-0000-0000-000000000001\",\"action\":\"MARKETING_CAMPAIGN_SENT\",\"actorEmail\":\"someone-else@evil.test\",\"summary\":\"Campaign Diwali sent to 120 contacts\"}" "$ST"
 expect "Marketing event lands in the workspace's audit trail" 200 "j['recorded']"
+req POST /v1/internal/marketing/audit "{\"tenantId\":\"$TENANT_DEMO\",\"action\":\"MARKETING_TEMPLATE_EDITED\",\"actorEmail\":\"spoofed@evil.test\",\"summary\":\"No account behind this one\"}" "$ST"
+expect "an event whose account does not resolve is still recorded" 200 "j['recorded']"
 req GET "/v1/platform/admin/audit?tenantId=$TENANT_DEMO&module=marketing" "" "$OPS"
-expect "... and the operator can read it there (workspace RLS)" 200 \
-  "any(e['action']=='MARKETING_CAMPAIGN_SENT' for e in j['content'])"
+expect "... read back through workspace RLS: the account's own email, and NULL (not the caller's text) when unresolved" 200 \
+  "any(e['action']=='MARKETING_CAMPAIGN_SENT' and e['actorEmail']=='admin@unifiedtree.demo' for e in j['content']) and any(e['action']=='MARKETING_TEMPLATE_EDITED' and e['actorEmail'] is None for e in j['content']) and not any('evil.test' in (e['actorEmail'] or '') for e in j['content'])"
+
+echo "== Archived company, module pause (one rule with the HRMS guard) =="
+if [ -n "$PSQL" ]; then
+  db "UPDATE org.companies SET is_active = false WHERE id = '$CO_A2'"
+  req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "an archived company is not entitled -> 403 COMPANY_INACTIVE" 403 "'COMPANY_INACTIVE' in raw"
+  db "UPDATE org.companies SET is_active = true WHERE id = '$CO_A2'"
+  # Marketing granted to the whole workspace, then the workspace's subscription lapses past its grace
+  db "INSERT INTO platform.tenant_modules (id, tenant_id, module_key, status, seats) VALUES (gen_random_uuid(), '$TENANT_DEMO', 'whatsapp', 'ACTIVE', 5)"
+  req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "workspace grant, grandfathered workspace without a subscription: entitled" 200 "j['entitled'] and j['source']=='WORKSPACE'"
+  db "INSERT INTO platform.subscriptions (id, tenant_id, plan_keys, modules, seats, status, current_period_end, grace_until, created_at, updated_at) VALUES ('5e5e0000-0000-0000-0000-0000000000e2', '$TENANT_DEMO', ARRAY['marketing'], ARRAY['whatsapp'], 5, 'HALTED', now() - interval '10 days', now() - interval '1 day', now(), now())"
+  req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "HALTED past its grace: Marketing is paused (entitled false, MODULE_PAUSED), as the HRMS guard would" 200 \
+    "j['entitled'] is False and j['status']=='MODULE_PAUSED' and j['source']=='WORKSPACE'"
+  req POST /v1/sso/marketing/handoff "{\"tenantId\":\"$TENANT_DEMO\",\"companyId\":\"$CO_A2\"}" "$ADMIN_ACCT"
+  expect "... and no Marketing handoff for it -> 403" 403 "'MARKETING_NOT_ENTITLED' in raw"
+  req GET "/v1/internal/marketing/companies/$CO_A1/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "an operator's MANUAL ACTIVE override is not paused (A1)" 200 "j['entitled'] and j['source']=='MANUAL'"
+  db "UPDATE platform.subscriptions SET status = 'PAST_DUE', grace_until = NULL, past_due_since = now() - interval '3 days', updated_at = now() WHERE id = '5e5e0000-0000-0000-0000-0000000000e2'"
+  req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "PAST_DUE for 3 days (inside the 7-day grace): entitled" 200 "j['entitled']"
+  db "UPDATE platform.subscriptions SET past_due_since = now() - interval '8 days', updated_at = now() WHERE id = '5e5e0000-0000-0000-0000-0000000000e2'"
+  req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "PAST_DUE for 8 days: paused" 200 "j['entitled'] is False and j['status']=='MODULE_PAUSED'"
+  db "UPDATE platform.subscriptions SET status = 'ACTIVE', past_due_since = NULL, updated_at = now() WHERE id = '5e5e0000-0000-0000-0000-0000000000e2'"
+  req GET "/v1/internal/marketing/companies/$CO_A2/entitlement?tenantId=$TENANT_DEMO" "" "$ST"
+  expect "paid again: entitled again" 200 "j['entitled'] and j['source']=='WORKSPACE'"
+  db "DELETE FROM platform.subscriptions WHERE id = '5e5e0000-0000-0000-0000-0000000000e2'; DELETE FROM platform.tenant_modules WHERE tenant_id = '$TENANT_DEMO' AND module_key = 'whatsapp'"
+else
+  for t in "archived company not entitled" "workspace grant entitled" "HALTED past grace paused" "no handoff while paused" \
+           "MANUAL ACTIVE not paused" "PAST_DUE inside grace entitled" "PAST_DUE 8 days paused" "paid again entitled"; do skip "$t"; done
+fi
 
 echo
-echo "RESULT: $PASS passed, $FAIL failed"
+echo "RESULT: $PASS passed, $FAIL failed, $SKIP skipped"
 [ "$FAIL" -eq 0 ]
