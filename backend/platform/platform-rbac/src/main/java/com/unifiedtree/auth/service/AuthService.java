@@ -407,13 +407,11 @@ public class AuthService {
 
         UserCredentials creds = credentialsRepo.findByIdForSession(authUserId)
             .orElseThrow(() -> new BusinessRuleException("Workspace account not found", "WORKSPACE_USER_NOT_FOUND"));
-        if (!creds.isActive()) {
-            throw new BusinessRuleException("Account is inactive", "ACCOUNT_INACTIVE");
-        }
-        if (creds.getLockedUntil() != null
-                && creds.getLockedUntil().isAfter(OffsetDateTime.now())) {
-            throw new BusinessRuleException("Account is temporarily locked", "ACCOUNT_LOCKED");
-        }
+        // Same rule as Marketing sign-in (WorkspaceSignInRule): inactive or locked is refused everywhere
+        WorkspaceSignInRule.refusal(creds.isActive(), creds.getLockedUntil(), OffsetDateTime.now()).ifPresent(code -> {
+            throw new BusinessRuleException(WorkspaceSignInRule.ACCOUNT_INACTIVE.equals(code)
+                    ? "Account is inactive" : "Account is temporarily locked", code);
+        });
         return issueSession(creds, tenantId);
     }
 
