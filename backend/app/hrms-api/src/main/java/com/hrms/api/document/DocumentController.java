@@ -2,6 +2,7 @@ package com.hrms.api.document;
 
 import com.hrms.api.access.RecordCompanyGuard;
 import com.hrms.core.dto.PageResponse;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.document.dto.DocumentRequest;
 import com.hrms.document.dto.DocumentResponse;
 import com.hrms.document.service.DocumentService;
@@ -89,14 +90,19 @@ public class DocumentController {
 
     // ─── HR / manager browse by employee ─────────────────────────────────────
 
-    @Operation(summary = "List an employee's documents")
+    @Operation(summary = "List an employee's documents, optionally only those uploaded ?from=&to= (India days, both included)")
     @GetMapping("/employee/{employeeId}")
     @PreAuthorize("hasAuthority('hrms.document.read')")
     public ResponseEntity<PageResponse<DocumentResponse>> employeeDocuments(
             @PathVariable UUID employeeId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
         RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
-        return ResponseEntity.ok(enrichPage(documentService.getEmployeeDocuments(employeeId, pageable)));
+        // Calendar everywhere (7 Oct 2026): the day the document was uploaded; none = the list as before.
+        ListDateRange range = ListDateRange.parse(from, to);
+        return ResponseEntity.ok(enrichPage(range == null ? documentService.getEmployeeDocuments(employeeId, pageable)
+                : documentService.getEmployeeDocuments(employeeId, range.startsAt(), range.endsBefore(), pageable)));
     }
 
     @Operation(summary = "Get a single document")

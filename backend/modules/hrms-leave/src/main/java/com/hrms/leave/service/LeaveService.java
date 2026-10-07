@@ -572,6 +572,46 @@ public class LeaveService {
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
+    /**
+     * {@link #getMyLeaves(UUID, Pageable)} kept to leave whose days overlap [from, to]
+     * (calendar everywhere, 7 Oct 2026). Null dates = exactly that list.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getMyLeaves(UUID employeeId, LocalDate from, LocalDate to, Pageable pageable) {
+        if (from == null || to == null) return getMyLeaves(employeeId, pageable);
+        return PageResponse.from(leaveRequestRepository.findByEmployeeIdOverlapping(employeeId, from, to, pageable),
+                this::toResponseWithTypeName);
+    }
+
+    /**
+     * The decided list kept to leave whose days overlap [from, to] (calendar
+     * everywhere, 7 Oct 2026), in the same scope as the lists without a range:
+     * a manager's ({@code managerId}), else HR's, for one company when
+     * {@code companyId} is set, else the whole tenant. Null status = every
+     * decided status.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getDecidedOverlapping(UUID managerId, UUID companyId, ApprovalStatus status,
+                                                                    LocalDate from, LocalDate to, Pageable pageable) {
+        String s = status == null ? null : status.name();
+        Page<LeaveRequest> page = managerId != null
+                ? leaveRequestRepository.findDecidedForManagerOverlapping(managerId, s, from, to, pageable)
+                : companyId != null
+                ? leaveRequestRepository.findAllDecidedInCompanyOverlapping(s, companyId, from, to, pageable)
+                : leaveRequestRepository.findAllDecidedOverlapping(s, from, to, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /** {@link #decidedCounts(UUID, UUID)} over the rows of {@link #getDecidedOverlapping}. */
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Long> decidedCountsOverlapping(UUID managerId, UUID companyId, LocalDate from, LocalDate to) {
+        return decidedCountsOf(managerId != null
+                ? leaveRequestRepository.countDecidedForManagerByStatusOverlapping(managerId, from, to)
+                : companyId != null
+                ? leaveRequestRepository.countAllDecidedByStatusInCompanyOverlapping(companyId, from, to)
+                : leaveRequestRepository.countAllDecidedByStatusOverlapping(from, to));
+    }
+
     /** Tenant-wide pending queue for admin/HR — every PENDING leave in the tenant (RLS scopes). */
     @Transactional(readOnly = true)
     public PageResponse<LeaveRequestResponse> getAllPending(Pageable pageable) {
@@ -713,6 +753,10 @@ public class LeaveService {
                 : companyId != null
                 ? leaveRequestRepository.countAllDecidedByStatusInCompany(companyId)
                 : leaveRequestRepository.countAllDecidedByStatus();
+        return decidedCountsOf(rows);
+    }
+
+    private static java.util.Map<String, Long> decidedCountsOf(List<Object[]> rows) {
         java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
         counts.put(ApprovalStatus.APPROVED.name(), 0L);
         counts.put(ApprovalStatus.REJECTED.name(), 0L);

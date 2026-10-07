@@ -6,6 +6,8 @@
 //   refresh it.
 import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeKey, setRangeParams } from '../api/shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import type { ExitType } from '../api/useWorkforce'
 
 export type ExitStatus = 'NOTICE_PERIOD' | 'EXITED' | 'TERMINATED'
@@ -28,13 +30,16 @@ export interface ExitRow {
 
 export interface ExitPage { content: ExitRow[]; page: number; size: number; totalElements: number; totalPages: number; last: boolean }
 
-export function useExitList(status: ExitStatus, page: number, pageSize: number, search?: string, opts?: { enabled?: boolean }) {
+// `opts.range`: only people whose last working day is in it (?from=&to=, calendar everywhere, 7 Oct 2026).
+export function useExitList(status: ExitStatus, page: number, pageSize: number, search?: string, opts?: { enabled?: boolean; range?: DayRange | null }) {
   const q = (search ?? '').trim()
+  const range = opts?.range ?? null
   return useQuery({
-    queryKey: ['hrms', 'employees', 'exits', status, page, pageSize, q],
+    queryKey: ['hrms', 'employees', 'exits', status, page, pageSize, q, ...(range ? [rangeKey(range)] : [])],
     queryFn: () => {
       const sp = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) })
       if (q) sp.set('search', q)
+      setRangeParams(sp, range)
       return apiJson<ExitPage>(`/v1/hrms/employees/exits?${sp}`)
     },
     enabled: opts?.enabled ?? true,

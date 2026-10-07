@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import { SHARED_KEYS } from './shared/contracts'
 
 /** Default rows per page for the my-leaves list. Was the literal 20
@@ -104,11 +106,12 @@ export interface LeaveOverviewResponse {
   pendingApprovals: number
 }
 
-export function useMyLeaves(page = 0, pageSize = LEAVE_PAGE_SIZE) {
+/** `range`: only leave whose days overlap it (?from=&to=, calendar everywhere); none = every request, as before. */
+export function useMyLeaves(page = 0, pageSize = LEAVE_PAGE_SIZE, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'leave', 'my', page, pageSize],
+    queryKey: ['hrms', 'leave', 'my', page, pageSize, ...(range ? [rangeKey(range)] : [])],
     queryFn: () =>
-      apiJson<{ content: LeaveRequestResponse[]; totalElements: number }>(`/v1/leave/my?page=${page}&size=${pageSize}`),
+      apiJson<{ content: LeaveRequestResponse[]; totalElements: number }>(`/v1/leave/my?page=${page}&size=${pageSize}${rangeQs(range)}`),
     staleTime: 30_000,
   })
 }
@@ -138,11 +141,11 @@ export function useEmployeeLeaveBalances(employeeId: string, year?: number, enab
   })
 }
 
-export function useEmployeeLeaveRequests(employeeId: string, page = 0, pageSize = 10, enabled = true) {
+export function useEmployeeLeaveRequests(employeeId: string, page = 0, pageSize = 10, enabled = true, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'leave', 'employee', employeeId, 'requests', page, pageSize],
+    queryKey: ['hrms', 'leave', 'employee', employeeId, 'requests', page, pageSize, ...(range ? [rangeKey(range)] : [])],
     queryFn: () => apiJson<{ content: LeaveRequestResponse[]; totalElements: number; totalPages: number }>(
-      `/v1/leave/employees/${employeeId}/requests?page=${page}&size=${pageSize}`),
+      `/v1/leave/employees/${employeeId}/requests?page=${page}&size=${pageSize}${rangeQs(range)}`),
     enabled: !!employeeId && enabled,
     staleTime: 30_000,
     retry: false,
@@ -206,12 +209,13 @@ export interface DecidedPage {
   /** Totals per decided status, in scope — null when the server failed to compute them (BW-40). */
   counts: Record<DecidedStatus, number> | null
 }
-export function useApprovalsHistory(page = 0, status?: DecidedStatus) {
+/** `range`: only leave whose days overlap it; the counts follow it too. None = every decision, as before. */
+export function useApprovalsHistory(page = 0, status?: DecidedStatus, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'leave', 'approvals', 'history', page, status ?? 'all'],
+    queryKey: ['hrms', 'leave', 'approvals', 'history', page, status ?? 'all', ...(range ? [rangeKey(range)] : [])],
     queryFn: () => {
       const qs = status ? `&status=${status}` : ''
-      return apiJson<DecidedPage>(`/v1/leave/approvals/history?page=${page}&size=20${qs}`)
+      return apiJson<DecidedPage>(`/v1/leave/approvals/history?page=${page}&size=20${qs}${rangeQs(range)}`)
     },
     staleTime: 30_000,
   })

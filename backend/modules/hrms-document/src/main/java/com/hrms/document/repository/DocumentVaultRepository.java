@@ -15,4 +15,8 @@ import java.util.UUID;
 public interface DocumentVaultRepository extends JpaRepository<EmployeeDocument, UUID> {
 
     Page<EmployeeDocument> findByEmployeeIdOrderByCreatedAtDesc(UUID employeeId, Pageable pageable);
+
+    /** {@link #findByEmployeeIdOrderByCreatedAtDesc} kept to documents uploaded in [start, end) (calendar everywhere, 7 Oct 2026). */
+    Page<EmployeeDocument> findByEmployeeIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+            UUID employeeId, java.time.Instant start, java.time.Instant end, Pageable pageable);
 }

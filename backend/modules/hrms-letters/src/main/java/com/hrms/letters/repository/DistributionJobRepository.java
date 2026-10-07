@@ -12,4 +12,9 @@ import java.util.UUID;
 public interface DistributionJobRepository extends JpaRepository<DistributionJob, UUID> {
 
     Page<DistributionJob> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /** {@link #findAllByOrderByCreatedAtDesc} kept to distributions started in [start, end) (calendar everywhere, 7 Oct 2026). */
+    Page<DistributionJob> findByCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(java.time.Instant start,
+                                                                                                  java.time.Instant end,
+                                                                                                  Pageable pageable);
 }

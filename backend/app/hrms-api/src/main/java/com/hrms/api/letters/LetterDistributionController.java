@@ -1,6 +1,7 @@
 package com.hrms.api.letters;
 
 import com.hrms.core.dto.PageResponse;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.letters.dto.CreateDistributionRequest;
 import com.hrms.letters.dto.DistributionJobDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -66,11 +67,15 @@ public class LetterDistributionController {
         return service.createDistribution(req, UUID.fromString(jwt.getSubject()));
     }
 
-    @Operation(summary = "List distribution jobs")
+    @Operation(summary = "List distribution jobs, optionally only those started ?from=&to= (India days, both included)")
     @GetMapping
     @PreAuthorize("hasAuthority('hrms.letters.distribute') or hasAuthority('hrms.letters.read')")
-    public PageResponse<DistributionJobDto> list(@PageableDefault(size = 20) Pageable pageable) {
-        return service.list(pageable);
+    public PageResponse<DistributionJobDto> list(@PageableDefault(size = 20) Pageable pageable,
+                                                 @RequestParam(required = false) String from,
+                                                 @RequestParam(required = false) String to) {
+        // Calendar everywhere (7 Oct 2026): the day the distribution was started; none = the list as before.
+        ListDateRange range = ListDateRange.parse(from, to);
+        return range == null ? service.list(pageable) : service.list(range.startsAt(), range.endsBefore(), pageable);
     }
 
     @Operation(summary = "Get a distribution job with its recipients")

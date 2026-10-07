@@ -187,6 +187,13 @@ public class ExpenseService {
         return toPage(claimRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));
     }
 
+    /** {@link #getMyClaims(UUID, Pageable)} kept to claims submitted in [start, end) (calendar everywhere, 7 Oct 2026). */
+    @Transactional(readOnly = true)
+    public PageResponse<ExpenseClaimResponse> getMyClaims(UUID employeeId, Instant start, Instant end, Pageable pageable) {
+        if (start == null || end == null) return getMyClaims(employeeId, pageable);
+        return toPage(claimRepository.findByEmployeeIdSubmittedIn(employeeId, start, end, pageable));
+    }
+
     /** Any employee's claims, newest first (the employee workspace; the API layer checks who may see whom). */
     @Transactional(readOnly = true)
     public PageResponse<ExpenseClaimResponse> getEmployeeClaims(UUID employeeId, Pageable pageable) {
@@ -235,6 +242,22 @@ public class ExpenseService {
     @Transactional(readOnly = true)
     public PageResponse<ExpenseClaimResponse> getPendingForApprover(UUID approverId, java.util.Collection<ExpenseStatus> statuses, Pageable pageable) {
         return toPage(claimRepository.findByApproverIdAndStatusInOrderByCreatedAtDesc(approverId, statuses, pageable));
+    }
+
+    /** {@link #getByStatuses} kept to claims submitted in [start, end) (calendar everywhere, 7 Oct 2026). */
+    @Transactional(readOnly = true)
+    public PageResponse<ExpenseClaimResponse> getByStatuses(java.util.Collection<ExpenseStatus> statuses, Instant start,
+                                                            Instant end, Pageable pageable) {
+        if (start == null || end == null) return getByStatuses(statuses, pageable);
+        return toPage(claimRepository.findByStatusInSubmittedIn(statuses, start, end, pageable));
+    }
+
+    /** {@link #getPendingForApprover} kept to claims submitted in [start, end) (calendar everywhere, 7 Oct 2026). */
+    @Transactional(readOnly = true)
+    public PageResponse<ExpenseClaimResponse> getPendingForApprover(UUID approverId, java.util.Collection<ExpenseStatus> statuses,
+                                                                    Instant start, Instant end, Pageable pageable) {
+        if (start == null || end == null) return getPendingForApprover(approverId, statuses, pageable);
+        return toPage(claimRepository.findByApproverIdAndStatusInSubmittedIn(approverId, statuses, start, end, pageable));
     }
 
     @Transactional(readOnly = true)

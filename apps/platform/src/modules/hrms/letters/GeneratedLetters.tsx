@@ -14,6 +14,8 @@ import { useGeneratedLetters, downloadLetterPdf, type GeneratedLetterDto } from 
 import { issuedDay, letterName, letterStatus, shortDay, signatureNote } from './lettersModel'
 import { SendLetterDialog, VoidLetterDialog } from './components/LetterDialogs'
 import { MyLetters } from './MyLetters'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../api/shared/listRange'
 
 const who = (l: GeneratedLetterDto) => l.employeeName || l.generationContext?.['employee.fullName'] || 'Employee record unavailable'
 
@@ -32,7 +34,9 @@ function AllLetters() {
   const navigate = useNavigate()
   const toast = useToast()
   const [page, setPage] = useState(0)
-  const { data, isLoading, error, refetch, isFetching } = useGeneratedLetters(page)
+  // The start / end calendar (?from=&to=): the server keeps the list to letters generated on those days.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const { data, isLoading, error, refetch, isFetching } = useGeneratedLetters(page, { range })
   const canSend = usePermission(P.HRMS_LETTERS_SEND)
   const canVoid = usePermission(P.HRMS_LETTERS_VOID)
   const [sending, setSending] = useState<GeneratedLetterDto | null>(null)
@@ -71,7 +75,10 @@ function AllLetters() {
     <>
       <Section title="Generated letters" body="flush" cardClass={false}
         loading={isLoading} skeleton="table" error={error} onRetry={() => refetch()} retrying={isFetching}
-        empty={!isLoading && !error && letters.length === 0 ? { title: 'No letters issued yet', hint: 'Use “Generate letter” to create one from a template.' } : undefined}
+        actions={<RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Generated" filterKey="letter-dates" align="end" />}
+        empty={!isLoading && !error && letters.length === 0 ? (range
+          ? { title: 'No letters generated on these dates', hint: 'Pick other dates, or clear them to see every letter.' }
+          : { title: 'No letters issued yet', hint: 'Use “Generate letter” to create one from a template.' }) : undefined}
         footer={total > 20 ? <Pager page={page} pageSize={20} total={total} onPageChange={setPage} noun="letters" /> : undefined}>
         <Table label="Generated letters" columns={columns} rows={letters} rowKey={(l) => l.id} mobile="cards"
           onRowClick={(l) => navigate(`/hrms/letters/generated/${l.id}`)} rowHref={(l) => `/hrms/letters/generated/${l.id}`} />

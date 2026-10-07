@@ -93,7 +93,7 @@ class ShiftHistoryAccessTest {
         Jwt jwt = as(List.of("DEPT_MANAGER"), "attendance.regularization.approve");
         myTeamIs(teammate);
         when(requests.listDecided(30)).thenReturn(List.of(decided(teammate), decided(stranger)));
-        var body = controller.decidedChangeRequests(jwt, 30).getBody();
+        var body = controller.decidedChangeRequests(jwt, 30, null, null).getBody();
         assertNotNull(body);
         assertEquals(1, body.size());
         assertEquals(teammate, body.getFirst().employeeId());
@@ -103,13 +103,13 @@ class ShiftHistoryAccessTest {
     @Test void hrSeesEveryDecidedRequest() {
         Jwt jwt = as(List.of("HR_MANAGER"), "attendance.regularization.approve", "attendance.workforce.admin");
         when(requests.listDecided(7)).thenReturn(List.of(decided(teammate), decided(stranger)));
-        assertEquals(2, controller.decidedChangeRequests(jwt, 7).getBody().size());
+        assertEquals(2, controller.decidedChangeRequests(jwt, 7, null, null).getBody().size());
     }
 
     @Test void theLookBackMustBeBetweenADayAndAYear() {
         Jwt jwt = as(List.of("HR_MANAGER"), "attendance.regularization.approve");
-        assertThrows(BusinessRuleException.class, () -> controller.decidedChangeRequests(jwt, 0));
-        assertThrows(BusinessRuleException.class, () -> controller.decidedChangeRequests(jwt, 366));
+        assertThrows(BusinessRuleException.class, () -> controller.decidedChangeRequests(jwt, 0, null, null));
+        assertThrows(BusinessRuleException.class, () -> controller.decidedChangeRequests(jwt, 366, null, null));
         verifyNoInteractions(requests);
     }
 }

@@ -46,4 +46,17 @@ public interface GeneratedLetterRepository extends JpaRepository<GeneratedLetter
 
     @Query("SELECT g FROM GeneratedLetter g WHERE g.status = :status AND g.deletedAt IS NULL ORDER BY g.createdAt DESC")
     Page<GeneratedLetter> findActiveByStatus(@Param("status") String status, Pageable pageable);
+
+    // ── Kept to a range of days (calendar everywhere, 7 Oct 2026): generated in [start, end), India day bounds.
+    // Same rows and order as findAllActive / findActiveByEmployeeId. Only used when the page sends ?from=&to=.
+
+    @Query("SELECT g FROM GeneratedLetter g WHERE g.deletedAt IS NULL AND g.createdAt >= :start AND g.createdAt < :end ORDER BY g.createdAt DESC")
+    Page<GeneratedLetter> findAllActiveCreatedIn(@Param("start") java.time.Instant start, @Param("end") java.time.Instant end,
+                                                 Pageable pageable);
+
+    @Query("SELECT g FROM GeneratedLetter g WHERE g.employeeId = :employeeId AND g.deletedAt IS NULL"
+            + " AND g.createdAt >= :start AND g.createdAt < :end ORDER BY g.createdAt DESC")
+    Page<GeneratedLetter> findActiveByEmployeeIdCreatedIn(@Param("employeeId") UUID employeeId,
+                                                          @Param("start") java.time.Instant start,
+                                                          @Param("end") java.time.Instant end, Pageable pageable);
 }

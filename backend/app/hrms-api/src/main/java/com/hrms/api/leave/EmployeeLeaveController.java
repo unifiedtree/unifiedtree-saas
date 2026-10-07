@@ -1,6 +1,7 @@
 package com.hrms.api.leave;
 
 import com.hrms.api.employee.EmployeeRecordAccess;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -76,21 +77,26 @@ public class EmployeeLeaveController {
         return leaveService.getMyBalances(employeeId, y);
     }
 
-    @Operation(summary = "An employee's leave requests, newest first (HR / admin: anyone; managers: their team; else self)")
+    @Operation(summary = "An employee's leave requests, newest first, optionally only leave whose days overlap ?from=&to= (HR / admin: anyone; managers: their team; else self)")
     @GetMapping("/{employeeId}/requests")
     @PreAuthorize("hasAnyAuthority('hrms.leave.employee.read','hrms.leave.approve.l1','leave.balance.read')")
     public PageResponse<LeaveRequestResponse> requests(@PathVariable UUID employeeId,
                                                        @RequestParam(defaultValue = "0") int page,
                                                        @RequestParam(defaultValue = "20") int size,
+                                                       @RequestParam(required = false) String from,
+                                                       @RequestParam(required = false) String to,
                                                        @AuthenticationPrincipal Jwt jwt,
                                                        Authentication auth) {
+        // Calendar everywhere (7 Oct 2026): no range = the list exactly as before.
+        ListDateRange range = ListDateRange.parse(from, to);
         access.assertCanView(employeeId, jwt, auth, ANYONE, TEAM);
         if (employeeRepository.findById(employeeId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Employee not found");
         }
         PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100),
                 Sort.by(Sort.Order.desc("startDate"), Sort.Order.desc("createdAt")));
-        PageResponse<LeaveRequestResponse> found = leaveService.getMyLeaves(employeeId, pageable);
+        PageResponse<LeaveRequestResponse> found = range == null ? leaveService.getMyLeaves(employeeId, pageable)
+                : leaveService.getMyLeaves(employeeId, range.from(), range.to(), pageable);
         if (details == null) return found;
         return new PageResponse<>(details.apply(found.content(), false), found.page(), found.size(),
                 found.totalElements(), found.totalPages(), found.last());

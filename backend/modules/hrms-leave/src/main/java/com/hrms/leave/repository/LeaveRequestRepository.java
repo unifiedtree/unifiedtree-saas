@@ -311,4 +311,71 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
     @Query(value = "SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + IN_COMPANY + " GROUP BY lr.status",
         nativeQuery = true)
     List<Object[]> countAllDecidedByStatusInCompany(@Param("companyId") UUID companyId);
+
+    // ── The lists kept to a range of days (calendar everywhere, 7 Oct 2026) ──
+    // The same rows as the lists above, kept to leave whose days overlap
+    // [from, to] (start on or before `to`, end on or after `from`). Only used
+    // when the page sends ?from=&to=; without them the lists above are used
+    // exactly as before. A null status is every decided status.
+
+    String OVERLAPS = " AND lr.start_date <= :to AND lr.end_date >= :from";
+    String ONE_STATUS = " AND (CAST(:status AS text) IS NULL OR lr.status = CAST(:status AS text))";
+    String MANAGER_SCOPE = " AND ( lr.approver_id = :managerEmpId"
+            + " OR e.reporting_manager_id = :managerEmpId"
+            + " OR d.department_head_employee_id = :managerEmpId )";
+    String MANAGER_JOINS = " LEFT JOIN hrms.employees e ON e.id = lr.employee_id"
+            + " LEFT JOIN hrms.departments d ON d.id = e.department_id";
+
+    /** {@link #findByEmployeeId} kept to leave overlapping [from, to]; the order is the pageable's, as there. */
+    @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId AND lr.startDate <= :to AND lr.endDate >= :from")
+    Page<LeaveRequest> findByEmployeeIdOverlapping(@Param("employeeId") UUID employeeId, @Param("from") LocalDate from,
+                                                   @Param("to") LocalDate to, Pageable pageable);
+
+    /** {@link #findAllDecided} / {@link #findAllDecidedByStatus} kept to leave overlapping [from, to]. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + ONE_STATUS + OVERLAPS
+            + " ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + ONE_STATUS + OVERLAPS,
+        nativeQuery = true)
+    Page<LeaveRequest> findAllDecidedOverlapping(@Param("status") String status, @Param("from") LocalDate from,
+                                                 @Param("to") LocalDate to, Pageable pageable);
+
+    /** {@link #findAllDecidedInCompany} / {@link #findAllDecidedByStatusInCompany} kept to leave overlapping [from, to]. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + ONE_STATUS + IN_COMPANY
+            + OVERLAPS + " ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + ONE_STATUS
+            + IN_COMPANY + OVERLAPS,
+        nativeQuery = true)
+    Page<LeaveRequest> findAllDecidedInCompanyOverlapping(@Param("status") String status, @Param("companyId") UUID companyId,
+                                                          @Param("from") LocalDate from, @Param("to") LocalDate to,
+                                                          Pageable pageable);
+
+    /** {@link #findDecidedForManager} / {@link #findDecidedForManagerByStatus} kept to leave overlapping [from, to]. */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr" + MANAGER_JOINS + " WHERE lr.status <> 'PENDING'"
+            + ONE_STATUS + MANAGER_SCOPE + OVERLAPS + " ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr" + MANAGER_JOINS + " WHERE lr.status <> 'PENDING'"
+            + ONE_STATUS + MANAGER_SCOPE + OVERLAPS,
+        nativeQuery = true)
+    Page<LeaveRequest> findDecidedForManagerOverlapping(@Param("managerEmpId") UUID managerEmpId, @Param("status") String status,
+                                                        @Param("from") LocalDate from, @Param("to") LocalDate to,
+                                                        Pageable pageable);
+
+    /** Rows of {@link #findAllDecidedOverlapping} (every status), counted per status: [status, count]. */
+    @Query(value = "SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + OVERLAPS
+            + " GROUP BY lr.status",
+        nativeQuery = true)
+    List<Object[]> countAllDecidedByStatusOverlapping(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /** Rows of {@link #findAllDecidedInCompanyOverlapping} (every status), counted per status. */
+    @Query(value = "SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'" + IN_COMPANY
+            + OVERLAPS + " GROUP BY lr.status",
+        nativeQuery = true)
+    List<Object[]> countAllDecidedByStatusInCompanyOverlapping(@Param("companyId") UUID companyId, @Param("from") LocalDate from,
+                                                               @Param("to") LocalDate to);
+
+    /** Rows of {@link #findDecidedForManagerOverlapping} (every status), counted per status. */
+    @Query(value = "SELECT lr.status, COUNT(*) FROM leave_mgmt.leave_requests lr" + MANAGER_JOINS
+            + " WHERE lr.status <> 'PENDING'" + MANAGER_SCOPE + OVERLAPS + " GROUP BY lr.status",
+        nativeQuery = true)
+    List<Object[]> countDecidedForManagerByStatusOverlapping(@Param("managerEmpId") UUID managerEmpId,
+                                                             @Param("from") LocalDate from, @Param("to") LocalDate to);
 }

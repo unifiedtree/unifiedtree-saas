@@ -15,6 +15,8 @@ import {
   type DistributionJobDto, type ScheduledDistribution,
 } from './api/useDistribution'
 import { distributionStatus, localDay, scheduleStatus, shortDay } from './lettersModel'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../api/shared/listRange'
 
 function Scheduled() {
   const toast = useToast()
@@ -59,7 +61,9 @@ function Scheduled() {
 export function DistributionsList() {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
-  const { data, isLoading, error, refetch, isFetching } = useDistributions(page)
+  // The start / end calendar (?from=&to=): the server keeps the list to distributions started on those days.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const { data, isLoading, error, refetch, isFetching } = useDistributions(page, range)
   const jobs = data?.content ?? []
   const total = data?.totalElements ?? 0
   const columns: TableColumn<DistributionJobDto>[] = [
@@ -74,7 +78,10 @@ export function DistributionsList() {
       <Scheduled />
       <Section title="Distributions" body="flush" cardClass={false}
         loading={isLoading} skeleton="table" error={error} onRetry={() => refetch()} retrying={isFetching}
-        empty={!isLoading && !error && jobs.length === 0 ? { title: 'No distributions yet', hint: 'Send a letter, like a policy update, to many people at once.' } : undefined}
+        actions={<RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Started" filterKey="distribution-dates" align="end" />}
+        empty={!isLoading && !error && jobs.length === 0 ? (range
+          ? { title: 'No distributions on these dates', hint: 'Pick other dates, or clear them to see every distribution.' }
+          : { title: 'No distributions yet', hint: 'Send a letter, like a policy update, to many people at once.' }) : undefined}
         footer={total > 20 ? <Pager page={page} pageSize={20} total={total} onPageChange={setPage} noun="distributions" /> : undefined}>
         <Table label="Distributions" columns={columns} rows={jobs} rowKey={(j) => j.id} mobile="cards"
           onRowClick={(j) => navigate(`/hrms/letters/distributions/${j.id}`)} rowHref={(j) => `/hrms/letters/distributions/${j.id}`} />

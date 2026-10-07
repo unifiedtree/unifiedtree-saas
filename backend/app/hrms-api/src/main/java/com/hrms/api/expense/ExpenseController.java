@@ -2,6 +2,7 @@ package com.hrms.api.expense;
 
 import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.rbac.company.CompanyAccessService;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -349,15 +350,20 @@ public class ExpenseController {
         return ResponseEntity.ok(enrichPage(expenseService.getEmployeeClaims(employeeId, pageable)));
     }
 
-    @Operation(summary = "Get my expense claims")
+    @Operation(summary = "Get my expense claims (optionally only those submitted ?from=&to=, India days, both included)")
     @GetMapping("/my")
     @PreAuthorize("hasAuthority('hrms.expense.claim.self')")
     public ResponseEntity<PageResponse<ExpenseClaimResponse>> myClaims(
             @AuthenticationPrincipal Jwt jwt,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        // Calendar everywhere (7 Oct 2026): the day a claim was submitted (made, for a draft); none = as before.
+        ListDateRange range = ListDateRange.parse(from, to);
         // Enriched (redesign BW-60) so each row carries its approver's name,
         // categories, reimbursement batch and policy check.
-        return ResponseEntity.ok(enrichPage(expenseService.getMyClaims(extractEmployeeId(jwt), pageable)));
+        return ResponseEntity.ok(enrichPage(range == null ? expenseService.getMyClaims(extractEmployeeId(jwt), pageable)
+                : expenseService.getMyClaims(extractEmployeeId(jwt), range.startsAt(), range.endsBefore(), pageable)));
     }
 
     @Operation(summary = "Get a single expense claim with its line items")
@@ -421,11 +427,20 @@ public class ExpenseController {
     public ResponseEntity<PageResponse<ExpenseClaimResponse>> pendingApprovals(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(name = "status", required = false) List<com.hrms.expense.enums.ExpenseStatus> status,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            //  5. RANGE (calendar everywhere, 7 Oct 2026). Optional ?from=&to=
+            //     (India days, both included): claims submitted on those days.
+            //     Without them the list is as before. The scope is unchanged.
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        ListDateRange range = ListDateRange.parse(from, to);
         java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
         boolean financeOrAdmin = perms != null && perms.contains("hrms.expense.reimbursement");
         java.util.List<com.hrms.expense.enums.ExpenseStatus> open = approvalStatuses(status);
-        PageResponse<ExpenseClaimResponse> page = financeOrAdmin
+        PageResponse<ExpenseClaimResponse> page = range != null
+                ? (financeOrAdmin ? expenseService.getByStatuses(open, range.startsAt(), range.endsBefore(), pageable)
+                        : expenseService.getPendingForApprover(extractEmployeeId(jwt), open, range.startsAt(), range.endsBefore(), pageable))
+                : financeOrAdmin
                 ? expenseService.getByStatuses(open, pageable)
                 : expenseService.getPendingForApprover(extractEmployeeId(jwt), open, pageable);
         return ResponseEntity.ok(enrichPage(page));

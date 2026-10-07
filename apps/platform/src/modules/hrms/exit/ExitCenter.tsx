@@ -27,6 +27,8 @@ import { useFnfStatus } from '../api/shared/useFnfStatus'
 import { daysLeft, dayMon, fnfState } from '../performance/growModel'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { exitName, useExitList, type ExitRow, type ExitStatus } from './useExits'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../api/shared/listRange'
 import '../performance/grow.css'
 
 type Tab = 'notice' | 'exited' | 'terminated'
@@ -63,8 +65,10 @@ export function ExitCenter() {
   const searching = query.length > 0
   const stats = useEmployeeStats(undefined, { enabled: canRead })
   const counts = useEmployeeCounts(undefined, { enabled: canRead && stats.notAvailable })
-  // HR (employee.write): the exit list with reasons; the search and the paging are the server's.
-  const exits = useExitList(current.status, page, PAGE, query, { enabled: canWrite })
+  // HR (employee.write): the exit list with reasons; the search, the paging and the start / end calendar
+  // (?from=&to=, the last working day) are the server's.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const exits = useExitList(current.status, page, PAGE, query, { enabled: canWrite, range })
   // Read-only: the directory, as before (no reason).
   const dir = useEmployeeDirectory({ status: current.status, search: query || undefined, page, pageSize: PAGE }, { enabled: canRead && !canWrite })
   const exitEmployee = useExitEmployee()
@@ -153,7 +157,8 @@ export function ExitCenter() {
   }
   const s = stats.data
   const c = counts.data
-  const empty = tab === 'notice' ? (searching ? 'No one on notice matches this search.' : 'No one is serving notice.')
+  const empty = canWrite && range ? 'No one here has a last working day on these dates.'
+    : tab === 'notice' ? (searching ? 'No one on notice matches this search.' : 'No one is serving notice.')
     : searching ? 'No leavers match this search.' : tab === 'exited' ? 'No exited employees yet.' : 'No terminated employees.'
   return (
     <PageFrame label="Resignation & exit" className="grw-page">
@@ -178,13 +183,16 @@ export function ExitCenter() {
         )}
       </Section>
       <Section title={current.label} body="flush" error={list.error} onRetry={() => list.refetch()}
-        actions={<div style={{ width: 'min(100%, 300px)' }}><Input label={`Search ${current.label.toLowerCase()}`} type="search" value={search} placeholder="Name, code or department"
-          onChange={(e) => { setSearch(e.target.value); setPage(0) }} /></div>}
+        actions={<div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 8 }}>
+          {canWrite && <RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Last working day" filterKey="exit-dates" align="end" size="md" />}
+          <div style={{ width: 300, maxWidth: '100%' }}><Input label={`Search ${current.label.toLowerCase()}`} type="search" value={search} placeholder="Name, code or department"
+            onChange={(e) => { setSearch(e.target.value); setPage(0) }} /></div>
+        </div>}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="people" /> : undefined}>
         <Table label={current.label} columns={columns} rows={rows} rowKey={(r) => r.employeeId} loading={list.isLoading} mobile="cards"
           empty={<EmptyState variant="plain" icon="userMinus" title={empty}
             hint={tab === 'notice' ? 'Start a notice period from here or from an employee’s Exit tab.' : 'Employees appear here once HR marks them as exited or terminated.'}
-            action={tab === 'notice' && canWrite && !searching ? <Button variant="primary" icon="plus" onClick={() => setStarting(true)}>Start notice period</Button> : undefined} />} />
+            action={tab === 'notice' && canWrite && !searching && !range ? <Button variant="primary" icon="plus" onClick={() => setStarting(true)}>Start notice period</Button> : undefined} />} />
       </Section>
       {starting && <StartNoticePanel onClose={() => setStarting(false)} onDone={() => { setStarting(false); setTab('notice') }} />}
       {editing && <SeparationPanel row={editing} onClose={() => setEditing(null)} />}

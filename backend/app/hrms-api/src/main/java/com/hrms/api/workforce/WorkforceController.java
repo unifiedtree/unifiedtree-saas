@@ -535,9 +535,14 @@ public class WorkforceController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int pageSize) {
+            @RequestParam(defaultValue = "50") int pageSize,
+            // Calendar everywhere (7 Oct 2026): optional ?from=&to=, the last working day; none = as before.
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        com.hrms.core.dto.ListDateRange range = com.hrms.core.dto.ListDateRange.parse(from, to);
         companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
-        return recordQueries.exits(companyId, status, search, page, pageSize);
+        return range == null ? recordQueries.exits(companyId, status, search, page, pageSize)
+                : recordQueries.exits(companyId, status, search, range, page, pageSize);
     }
 
     /**

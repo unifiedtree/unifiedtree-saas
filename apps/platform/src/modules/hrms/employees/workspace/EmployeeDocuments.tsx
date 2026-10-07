@@ -17,6 +17,8 @@ import React, { useState } from 'react'
 import { FileText, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { useNavigate } from 'react-router-dom'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../../api/shared/listRange'
 import { TableCard, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import {
@@ -68,8 +70,11 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
   const verify = useVerifyDocument()
   const reject = useRejectDocument()
 
+  // The start / end calendar (?from=&to=): the server keeps the list to documents uploaded on those days. The
+  // Overview's tile asks without dates, so it keeps its own cache entry.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
   const { data, isLoading, error, refetch } = useEmployeeDocuments(
-    employeeId, page, canRead, EMPLOYEE_DOCUMENTS_PAGE_SIZE,
+    employeeId, page, canRead, EMPLOYEE_DOCUMENTS_PAGE_SIZE, range,
   )
 
   // Exact counts over every document (BW-77), not just the page on screen; absent on older servers.
@@ -96,19 +101,22 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
       hint={sum
         ? [`${sum.onFile} on file`, sum.waitingForHr ? `${sum.waitingForHr} waiting for review` : '', sum.expiringSoon ? `${sum.expiringSoon} expiring soon` : '', sum.expired ? `${sum.expired} expired` : '', sum.rejected ? `${sum.rejected} rejected` : ''].filter(Boolean).join(' · ')
         : total ? `${total} document${total === 1 ? '' : 's'} on record` : 'Contracts, ID proofs, certificates and tax records.'}
-      action={canWrite ? (
-        <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/documents')}>
-          Open Document Vault
-        </HrButton>
-      ) : undefined}
+      action={<div className="flex flex-wrap items-center justify-end gap-2">
+        {!error && <RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Uploaded" filterKey="employee-document-dates" align="end" />}
+        {canWrite && (
+          <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/documents')}>
+            Open Document Vault
+          </HrButton>
+        )}
+      </div>}
     >
       <SectionState
         isLoading={isLoading}
         error={error}
         isEmpty={!isLoading && !error && docs.length === 0}
         emptyIcon={FileText}
-        emptyTitle="No documents on record"
-        emptyHint={canWrite
+        emptyTitle={range ? 'No documents uploaded on these dates' : 'No documents on record'}
+        emptyHint={range ? 'Pick other dates, or clear them to see every document.' : canWrite
           ? 'Add this employee’s contract, ID proof or certificates from the Document Vault.'
           : 'Nothing has been filed against this employee yet.'}
         forbiddenTitle="You don’t have access to this employee’s documents"

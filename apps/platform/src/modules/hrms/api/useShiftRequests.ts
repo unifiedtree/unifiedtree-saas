@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import { SHARED_KEYS } from './shared/contracts'
 
 export interface ShiftRequest {
@@ -42,12 +44,14 @@ export function usePendingShiftRequests(opts?: { enabled?: boolean }) {
 /**
  * Requests approved or rejected in the last `days` days, newest decision first
  * (GET /v1/shifts/change-requests/decided). Same permission as the pending list;
- * a manager gets their own team's only.
+ * a manager gets their own team's only. `opts.range` (calendar everywhere, 7 Oct
+ * 2026): the requests whose effective date is in it, in place of the last `days` days.
  */
-export function useDecidedShiftRequests(days = 30, opts?: { enabled?: boolean }) {
+export function useDecidedShiftRequests(days = 30, opts?: { enabled?: boolean; range?: DayRange | null }) {
+  const range = opts?.range ?? null
   return useQuery({
-    queryKey: ['shifts', 'requests', 'decided', days],
-    queryFn: () => apiJson<ShiftRequest[]>(`/v1/shifts/change-requests/decided?days=${days}`),
+    queryKey: ['shifts', 'requests', 'decided', days, ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<ShiftRequest[]>(`/v1/shifts/change-requests/decided?days=${days}${rangeQs(range)}`),
     enabled: opts?.enabled ?? true,
   })
 }

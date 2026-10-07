@@ -294,6 +294,22 @@ public class ShiftChangeRequestService {
     }
 
     /**
+     * {@link #listDecided(int)} for a range of days instead of the days-back
+     * window (calendar everywhere, 7 Oct 2026): requests approved or rejected
+     * whose effective date (the one applied, else the one asked for) is in
+     * [from, to], newest decision first, at most {@link #MAX_DECIDED_ROWS}.
+     */
+    @Transactional(readOnly = true)
+    public List<ShiftChangeRequestResponse> listDecided(java.time.LocalDate from, java.time.LocalDate to) {
+        UUID tenantId = TenantContext.getTenantId();
+        return jdbc.query(select() + """
+                 WHERE scr.tenant_id = ? AND scr.status IN ('APPROVED', 'REJECTED')
+                   AND COALESCE(scr.applied_effective_date, scr.requested_effective_date) BETWEEN ? AND ?
+                 ORDER BY scr.decided_at DESC, scr.created_at DESC
+                 LIMIT\s""" + MAX_DECIDED_ROWS, MAPPER, tenantId, from, to);
+    }
+
+    /**
      * The note kept with the assignment an approval creates, shown in the
      * employee's shift history: the employee's reason, cut to the column's 500
      * characters.

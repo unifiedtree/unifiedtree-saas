@@ -70,6 +70,18 @@ public class HiringService {
                 page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast());
     }
 
+    /** {@link #getOffers(UUID, Pageable)} kept to offers made in [start, end) (calendar everywhere, 7 Oct 2026); null = that list. */
+    @Transactional(readOnly = true)
+    public PageResponse<HiringOfferResponse> getOffers(UUID companyId, java.time.Instant start, java.time.Instant end,
+                                                       Pageable pageable) {
+        if (start == null || end == null) return getOffers(companyId, pageable);
+        Page<HiringOffer> page = companyId != null
+                ? offerRepository.findByCompanyIdCreatedIn(companyId, start, end, pageable)
+                : offerRepository.findCreatedIn(start, end, pageable);
+        return new PageResponse<>(toOffers(page.getContent()),
+                page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast());
+    }
+
     @Transactional
     public HiringOfferResponse createOffer(UUID companyId, HiringOfferRequest request) {
         if (request.status() != null && request.status() != OfferStatus.DRAFT)
@@ -249,6 +261,25 @@ public class HiringService {
             throw e;
         }
         return toPage(page);
+    }
+
+    /**
+     * {@link #getRequisitions(UUID, Pageable)} kept to requisitions opened in
+     * [start, end) (calendar everywhere, 7 Oct 2026); null = that list.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<JobRequisitionResponse> getRequisitions(UUID companyId, java.time.Instant start, java.time.Instant end,
+                                                                Pageable pageable) {
+        if (start == null || end == null) return getRequisitions(companyId, pageable);
+        // The same paranoia as above: never list without a tenant bound.
+        if (TenantContext.getTenantId() == null) {
+            throw new BusinessRuleException(
+                    "No tenant context — the request is not scoped to a workspace",
+                    "TENANT_MISSING");
+        }
+        return toPage(companyId != null
+                ? requisitionRepository.findByCompanyIdCreatedIn(companyId, start, end, pageable)
+                : requisitionRepository.findCreatedIn(start, end, pageable));
     }
 
     @Transactional(readOnly = true)

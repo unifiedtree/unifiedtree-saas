@@ -12,6 +12,8 @@ import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { dashIcon, dashIconComponent } from './icons'
 import { inr } from './PayslipDrawer'
 import { MON } from './dates'
+import { rangeValue } from '@/shared/components/hr'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 
 export interface AdvRow {
   id: string; empId: string; name: string; code: string; type: string; principal: number; emi: number; months: number; left: number
@@ -37,7 +39,11 @@ export class PayAdvances extends DCLogic {
     const p = this.props, s = this.state
     const st = p.state || 'live', isLoading = st === 'loading', isError = st === 'error'
     const base: AdvRow[] = isLoading || isError ? [] : p.rows || []
-    const isEmpty = !isLoading && !isError && base.length === 0, live = !isLoading && !isError && !isEmpty
+    // The start / end calendar (props.range, ?from=&to= kept by PayrollContainer): the server lists the advances
+    // asked for on those days. With a range on, an empty list keeps the table (and the box to clear it).
+    const range: DayRange | null = p.range ?? null
+    const setRange = (v: DayRange | null) => p.onRange && p.onRange(v)
+    const isEmpty = !isLoading && !isError && base.length === 0 && !range, live = !isLoading && !isError && !isEmpty
     const me: string = p.me || '', canApprove = !!p.canApprove, canRequest = !!p.canRequest, canOthers = !!p.canRequestOthers, Decision = p.decisionActions
     const people: AdvPerson[] = p.people || []
     const firstEmp = canRequest ? me : people[0]?.id || ''
@@ -95,8 +101,9 @@ export class PayAdvances extends DCLogic {
       isLoading, isError, isEmpty, live, isDesktop: !p.mobile, isMobile: !!p.mobile, rows, columns, openRow: (a: any) => a.onView(),
       chips: [{ label: 'Active', value: all.filter((a) => a.key === 'ACTIVE').length }, { label: 'Pending approval', value: all.filter((a) => a.status === 'REQUESTED').length }, { label: 'Outstanding', value: inr(out) }],
       search: { value: s.q, onChange: (v: string) => this.setState({ q: v }), placeholder: 'Find a person or EMP code…' },
-      filters: [{ key: 'status', allLabel: 'All statuses', value: s.status, options: [['ACTIVE', 'Active deduction'], ['PENDING', 'Pending approval'], ['APPROVED', 'Approved · to pay out'], ['CLOSED', 'Closed'], ['REJECTED', 'Rejected']].map(([value, label]) => ({ value, label })), onChange: (v: string) => this.setState({ status: v }) }],
-      clear: () => this.setState({ q: '', status: '' }),
+      filters: [{ key: 'status', allLabel: 'All statuses', value: s.status, options: [['ACTIVE', 'Active deduction'], ['PENDING', 'Pending approval'], ['APPROVED', 'Approved · to pay out'], ['CLOSED', 'Closed'], ['REJECTED', 'Rejected']].map(([value, label]) => ({ value, label })), onChange: (v: string) => this.setState({ status: v }) },
+        ...(p.onRange ? [{ key: 'advance-dates', type: 'range', allLabel: 'All dates', ariaLabel: 'Asked on', maxSpan: p.maxSpan, value: rangeValue(range), onChange: (v: string) => { const [a, b] = v.split('/'); setRange(a && b ? { from: a, to: b } : null) } }] : [])],
+      clear: () => { this.setState({ q: '', status: '' }); if (range) setRange(null) },
       actions: createElement(HrButton, {
         variant: 'ghost', size: 'sm', disabled: rows.length === 0, 'data-tip': 'Downloads this list (Excel)',
         onClick: () => {

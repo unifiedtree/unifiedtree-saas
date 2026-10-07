@@ -19,4 +19,16 @@ public interface HiringOfferRepository extends JpaRepository<HiringOffer, UUID> 
     /** The candidate's most recent accepted offer (source of CTC / joining date on conversion). */
     java.util.Optional<HiringOffer> findFirstByCandidateIdAndStatusOrderByRespondedAtDescCreatedAtDesc(UUID candidateId, com.hrms.hiring.enums.OfferStatus status);
     Page<HiringOffer> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    // ── Kept to a range of days (calendar everywhere, 7 Oct 2026): made in [start, end), India day bounds.
+    // Same order as the lists above. Only used when the page sends ?from=&to=.
+
+    @org.springframework.data.jpa.repository.Query("SELECT x FROM HiringOffer x WHERE x.createdAt >= :start AND x.createdAt < :end ORDER BY x.createdAt DESC")
+    Page<HiringOffer> findCreatedIn(@org.springframework.data.repository.query.Param("start") java.time.Instant start,
+                              @org.springframework.data.repository.query.Param("end") java.time.Instant end, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Query("SELECT x FROM HiringOffer x WHERE x.companyId = :companyId AND x.createdAt >= :start AND x.createdAt < :end ORDER BY x.createdAt DESC")
+    Page<HiringOffer> findByCompanyIdCreatedIn(@org.springframework.data.repository.query.Param("companyId") UUID companyId,
+                                        @org.springframework.data.repository.query.Param("start") java.time.Instant start,
+                                        @org.springframework.data.repository.query.Param("end") java.time.Instant end, Pageable pageable);
 }

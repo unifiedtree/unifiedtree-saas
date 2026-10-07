@@ -18,6 +18,8 @@ import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/compo
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { Facts, range } from '@/design/module/ModuleKit'
 import { istToday } from '@/design/dc/dates'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../../api/shared/listRange'
 import { useEmployeeLeaveBalances, useEmployeeLeaveRequests, type LeaveApprovalStatus } from '../../api/useLeave'
 import { SectionState, SubSection } from './shared'
 import { ApplyLeaveForPanel } from './OnBehalfPanels'
@@ -46,8 +48,10 @@ export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: 
   const canApplySelf = usePermission('leave.request.self') && personal
   const year = Number(istToday().slice(0, 4))
   const [page, setPage] = useState(0)
+  // The start / end calendar (?from=&to=): the server keeps the requests to leave whose days fall in it.
+  const [dates, setDates] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
   const balances = useEmployeeLeaveBalances(employeeId, year)
-  const requests = useEmployeeLeaveRequests(employeeId, page, PAGE_SIZE)
+  const requests = useEmployeeLeaveRequests(employeeId, page, PAGE_SIZE, true, dates)
   useClampedPage(page, requests.data?.totalPages, setPage)
   const rows = requests.data?.content ?? []
   const bal = balances.data ?? []
@@ -78,12 +82,15 @@ export function EmployeeLeave({ employeeId, firstName, companyId, name, self }: 
       </SubSection>
 
       <SubSection title="Leave requests" hint="Newest first, with where each one stands."
-        action={canDecide ? <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/leave')}>Open Leave centre</HrButton> : undefined}>
+        action={<div className="flex flex-wrap items-center justify-end gap-2">
+          {!requests.error && <RangeFilter value={dates} onChange={(r) => { setDates(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Leave dates" filterKey="employee-leave-dates" align="end" />}
+          {canDecide && <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/leave')}>Open Leave centre</HrButton>}
+        </div>}>
         <SectionState
           isLoading={requests.isLoading} error={requests.error} onRetry={() => requests.refetch()}
           isEmpty={!requests.isLoading && !requests.error && rows.length === 0}
-          emptyIcon={Plane} emptyTitle="No leave requests yet"
-          emptyHint={`Requests ${firstName} makes appear here with their status.`}
+          emptyIcon={Plane} emptyTitle={dates ? 'No leave on these dates' : 'No leave requests yet'}
+          emptyHint={dates ? 'Pick other dates, or clear them to see every request.' : `Requests ${firstName} makes appear here with their status.`}
           forbiddenTitle="You can't see this person's leave"
           forbiddenHint="Managers see their own team's leave; HR and admins see everyone's."
         >

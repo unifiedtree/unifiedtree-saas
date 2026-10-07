@@ -106,7 +106,7 @@ class CompanyScopedLevelTwoViewsTest {
         verify(wfhService).getAllPending(me, company, page);
         leave.overview(tokenOf(me), hr, 2026);
         verify(leaveService).getAllPending(me, company, Pageable.ofSize(1));
-        leave.approvalsHistory(tokenOf(me), hr, page, null);
+        leave.approvalsHistory(tokenOf(me), hr, page, null, null, null);
         verify(leaveService).getAllDecided(null, company, page);
         verify(leaveService).decidedCounts(null, company);
         // The workspace-wide lists are never read for them.
@@ -125,7 +125,7 @@ class CompanyScopedLevelTwoViewsTest {
         verify(leaveService).getPendingL2Approvals(me, page);
         wfh.pendingApprovals(tokenOf(me), hr, page);
         verify(wfhService).getAllPending(me, page);
-        leave.approvalsHistory(tokenOf(me), hr, page, null);
+        leave.approvalsHistory(tokenOf(me), hr, page, null, null, null);
         verify(leaveService).getAllDecided(page);
         verify(leaveService).decidedCounts(null);
         verify(leaveService, never()).getAllPending(any(), any(), any());

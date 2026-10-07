@@ -2,6 +2,7 @@ package com.hrms.api.leave;
 
 import com.hrms.api.access.RecordCompanyGuard;
 import com.unifiedtree.rbac.company.CompanyAccessService;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.leave.dto.LeaveApprovalRequest;
@@ -325,13 +326,19 @@ public class LeaveController {
         return ResponseEntity.ok(new LeaveOverviewResponse(balances, withDetails(recent.content(), false), pendingApprovals));
     }
 
-    @Operation(summary = "Get my leave requests")
+    @Operation(summary = "Get my leave requests (optionally only leave whose days overlap ?from=&to=, India days, both included)")
     @GetMapping("/my")
     @PreAuthorize("hasAuthority('leave.balance.read')")
     public ResponseEntity<PageResponse<LeaveRequestResponse>> myLeaves(
             @AuthenticationPrincipal Jwt jwt,
-            @PageableDefault(size = 20) Pageable pageable) {
-        PageResponse<LeaveRequestResponse> page = leaveService.getMyLeaves(extractEmployeeId(jwt), pageable);
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        // Calendar everywhere (7 Oct 2026): no range = the list exactly as before.
+        ListDateRange range = ListDateRange.parse(from, to);
+        PageResponse<LeaveRequestResponse> page = range == null
+                ? leaveService.getMyLeaves(extractEmployeeId(jwt), pageable)
+                : leaveService.getMyLeaves(extractEmployeeId(jwt), range.from(), range.to(), pageable);
         // Who it went to, who decided and when, and who applied when HR did (BW-38, E9).
         return ResponseEntity.ok(new PageResponse<>(withDetails(page.content(), false), page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last()));
@@ -435,8 +442,12 @@ public class LeaveController {
             @AuthenticationPrincipal Jwt jwt,
             org.springframework.security.core.Authentication auth,
             @PageableDefault(size = 20) Pageable pageable,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
         com.hrms.core.enums.ApprovalStatus only = decidedStatus(status);
+        // Calendar everywhere (7 Oct 2026): optional ?from=&to=, leave whose days overlap them; none = as before.
+        ListDateRange range = ListDateRange.parse(from, to);
         // Same admin/HR broadening as pendingApprovals above, and for the same
         // reason: this was personal-scope only, so an admin who is nobody's
         // reporting manager got an empty history and every decided leave in the
@@ -446,6 +457,7 @@ public class LeaveController {
         UUID me = extractEmployeeId(jwt);
         // A company-scoped HR-level approver: their current company only (COMPANY_ACCESS.md).
         UUID onlyCompany = adminOrHr ? CompanyAccessService.scopedViewCompanyId(companyAccess) : null;
+        if (range != null) return ResponseEntity.ok(decidedInRange(adminOrHr ? null : me, onlyCompany, only, range, pageable));
         PageResponse<LeaveRequestResponse> page = adminOrHr && onlyCompany != null
                 ? leaveService.getAllDecided(only, onlyCompany, pageable)
                 : only == null
@@ -461,6 +473,21 @@ public class LeaveController {
         }
         return ResponseEntity.ok(new DecidedPage(enriched.content(), enriched.page(), enriched.size(),
                 enriched.totalElements(), enriched.totalPages(), enriched.last(), counts));
+    }
+
+    /** {@link #approvalsHistory} for a range of days: the same scope (a manager's, else HR's, maybe one company), counts over the same rows. */
+    private DecidedPage decidedInRange(UUID manager, UUID company, com.hrms.core.enums.ApprovalStatus only,
+                                       ListDateRange range, Pageable pageable) {
+        PageResponse<LeaveRequestResponse> enriched = enrichPage(
+                leaveService.getDecidedOverlapping(manager, company, only, range.from(), range.to(), pageable), false);
+        Map<String, Long> counts;
+        try {
+            counts = leaveService.decidedCountsOverlapping(manager, company, range.from(), range.to());
+        } catch (org.springframework.dao.DataAccessException e) {
+            counts = null; // the list still works without its counts
+        }
+        return new DecidedPage(enriched.content(), enriched.page(), enriched.size(),
+                enriched.totalElements(), enriched.totalPages(), enriched.last(), counts);
     }
 
     @Operation(summary = "L1 manager approval — approve escalates to HR, reject closes")

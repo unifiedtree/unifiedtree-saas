@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import { SHARED_KEYS } from './shared/contracts'
 
 // Mirrors backend com.hrms.expense.enums
@@ -75,10 +77,11 @@ export const inr = (n?: number) =>
 
 // ── Claims ─────────────────────────────────────────────────────────────────
 
-export function useMyClaims(page = 0, size = 20) {
+/** `range`: only claims submitted on those days (made, for a draft); none = every claim, as before. */
+export function useMyClaims(page = 0, size = 20, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'expense', 'my', page, size],
-    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/my?page=${page}&size=${size}`),
+    queryKey: ['hrms', 'expense', 'my', page, size, ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/my?page=${page}&size=${size}${rangeQs(range)}`),
     staleTime: 30_000,
   })
 }
@@ -115,13 +118,15 @@ export function usePendingExpenseApprovals(
   enabled = true,
   pageSize = EXPENSE_APPROVALS_PAGE_SIZE,
   filter: ExpenseApprovalFilter = 'ALL',
+  // Only claims submitted on these days (?from=&to=, calendar everywhere); none = the whole queue, as before.
+  range?: DayRange | null,
 ) {
-  const query = filter === 'ALL' ? '' : `&status=${filter}`
+  const query = (filter === 'ALL' ? '' : `&status=${filter}`) + rangeQs(range)
   return useQuery({
     // `page` is part of the key: without it react-query would hand page 2 the
     // cached page-1 rows and the queue would never appear to advance. The
     // filter joins the key too, so switching tabs refetches cleanly.
-    queryKey: ['hrms', 'expense', 'approvals', page, pageSize, filter],
+    queryKey: ['hrms', 'expense', 'approvals', page, pageSize, filter, ...(range ? [rangeKey(range)] : [])],
     queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=${pageSize}${query}`),
     staleTime: 15_000,
     enabled,

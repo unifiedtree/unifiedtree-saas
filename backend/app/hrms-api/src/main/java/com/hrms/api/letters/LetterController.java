@@ -1,6 +1,7 @@
 package com.hrms.api.letters;
 
 import com.hrms.core.dto.PageResponse;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.core.exception.HrmsException;
 import com.hrms.letters.dto.*;
 import com.hrms.letters.service.LetterGenerationService;
@@ -123,12 +124,20 @@ public class LetterController {
                 .body(extras.one(issueService.generate(req, extractUserId(jwt))));
     }
 
-    @Operation(summary = "List generated letters (admin)")
+    @Operation(summary = "List generated letters (admin), optionally only those generated ?from=&to= (India days, both included)")
     @GetMapping("/generated")
     @PreAuthorize("hasAuthority('hrms.letters.read')")
     public ResponseEntity<PageResponse<GeneratedLetterDto>> listGenerated(
             @RequestParam(required = false) UUID employeeId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        // Calendar everywhere (7 Oct 2026): the day the letter was generated; none = the list as before.
+        ListDateRange range = ListDateRange.parse(from, to);
+        if (range != null) {
+            return ResponseEntity.ok(extras.page(
+                    generationService.listGenerated(employeeId, range.startsAt(), range.endsBefore(), pageable)));
+        }
         return ResponseEntity.ok(extras.page(employeeId == null ? generationService.listGenerated(pageable)
                 : generationService.getMyLetters(employeeId, pageable)));
     }
