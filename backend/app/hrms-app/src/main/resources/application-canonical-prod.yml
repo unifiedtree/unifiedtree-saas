@@ -86,7 +86,7 @@ unifiedtree:
   # Marketing Automation (Node) calls /v1/internal/marketing/** with this shared
   # token in X-UnifiedTree-Service-Token. Empty (the default) refuses every internal
   # call with 503 — set it from Secret Manager, at least 32 random characters, and
-  # give Marketing the same value (UNIFIEDTREE_SERVICE_TOKEN on its side).
+  # give Marketing the same value (UNIFIEDTREE_MARKETING_SERVICE_TOKEN on its side too).
   marketing:
     service-token: ${UNIFIEDTREE_MARKETING_SERVICE_TOKEN:}
 

@@ -1,4 +1,4 @@
--- V144.6: the data path for billing WhatsApp (Meta) usage through UnifiedTree.
+-- V144.106: the data path for billing WhatsApp (Meta) usage through UnifiedTree.
 --
 -- Why. The business direction is that customers pay UnifiedTree for WhatsApp
 -- usage and UnifiedTree settles with Meta. That needs Meta's partner /
@@ -20,7 +20,7 @@
 --      reconciliation state for matching against Meta's own invoice.
 --
 -- Pooled billing stays OFF: every account defaults to DIRECT_CUSTOMER, and
--- platform.billing_settings.marketing_pooled_billing_enabled (V144.4) is FALSE.
+-- platform.billing_settings.marketing_pooled_billing_enabled (V144.104) is FALSE.
 -- The Java API refuses UNIFIEDTREE_POOLED / HYBRID while that switch is off, so
 -- no customer can be labelled pooled before the approval exists.
 --

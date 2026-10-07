@@ -1,4 +1,4 @@
--- V144.4: invoices, company billing profiles and payment methods.
+-- V144.104: invoices and company billing profiles.
 --
 -- Why. UnifiedTree takes money (platform.payments, platform.subscriptions) but
 -- has never issued an invoice: there is no invoice table and no Java code that
@@ -10,17 +10,23 @@
 -- What it does.
 --   1. platform.billing_settings gains the seller's details printed on every
 --      invoice, the default GST rate, the invoice number prefix, and the switch
---      for pooled Meta billing (FALSE: not approved by Meta, see V144.6).
---   2. platform.company_billing_profiles: one per company.
---   3. platform.payment_methods: gateway references only (customer, token,
---      mandate / subscription ids) and a display label. Never a card number or
---      CVV: there is no column that could hold one.
---   4. platform.invoice_number_series + platform.invoices + platform.invoice_lines.
+--      for pooled Meta billing (FALSE: not approved by Meta, see V144.106).
+--   2. platform.company_billing_profiles: one per company, for what org.companies
+--      does not hold (billing address, state code for GST place of supply, billing
+--      email). Its legal name / GSTIN / PAN override the company's when filled.
+--   3. platform.invoice_number_series + platform.invoices + platform.invoice_lines.
 --      An invoice carries an immutable billing_snapshot taken when it is issued,
 --      so a company editing its address later does not rewrite old invoices.
---   5. Triggers make an ISSUED / PAID / VOID invoice's amounts, number, parties
---      and snapshot unchangeable, and freeze its lines. The only way to correct
---      one is to void it and issue another, which is what an auditor expects.
+--      Numbers are PREFIX/26-27/00001: GST Rule 46(b) caps them at 16 characters,
+--      hence the 1-4 character prefix.
+--   4. Triggers make an ISSUED / PAID / VOID / DISCARDED invoice's amounts, number,
+--      parties and snapshot unchangeable, and freeze its lines. The only way to
+--      correct an issued one is to void it and issue another; a wrong DRAFT is
+--      DISCARDED (it never had a number).
+--
+-- Not created: a payment-methods table. How a workspace pays is already on
+-- platform.subscriptions (payment_method, razorpay_subscription_id); no code needs
+-- another copy.
 --
 -- Not done here: wiring invoice issue into the live Razorpay webhook. Invoices
 -- are issued from the admin console for now (platform.billing.manage), so the
@@ -40,6 +46,14 @@ ALTER TABLE platform.billing_settings
     ADD COLUMN IF NOT EXISTS default_gst_rate_pct  NUMERIC(5,2) NOT NULL DEFAULT 18.00,
     ADD COLUMN IF NOT EXISTS invoice_due_days      INTEGER      NOT NULL DEFAULT 7,
     ADD COLUMN IF NOT EXISTS marketing_pooled_billing_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_billing_settings_invoice_prefix') THEN
+        ALTER TABLE platform.billing_settings
+            ADD CONSTRAINT ck_billing_settings_invoice_prefix CHECK (invoice_prefix ~ '^[A-Z0-9]{1,4}$');
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS platform.company_billing_profiles (
     company_id      UUID         PRIMARY KEY,
@@ -66,32 +80,6 @@ CREATE TABLE IF NOT EXISTS platform.company_billing_profiles (
     CONSTRAINT ck_billing_profile_pan   CHECK (pan IS NULL OR pan ~ '^[A-Z]{5}[0-9]{4}[A-Z]$')
 );
 CREATE INDEX IF NOT EXISTS ix_billing_profiles_tenant ON platform.company_billing_profiles (tenant_id);
-
-CREATE TABLE IF NOT EXISTS platform.payment_methods (
-    id                   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id            UUID         NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    company_id           UUID,
-    provider             VARCHAR(20)  NOT NULL DEFAULT 'RAZORPAY',
-    method_type          VARCHAR(30)  NOT NULL,
-    provider_customer_id VARCHAR(100),
-    provider_token_id    VARCHAR(100),
-    provider_mandate_id  VARCHAR(100),
-    display_label        VARCHAR(100),
-    status               VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-    is_default           BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    revoked_at           TIMESTAMPTZ,
-    CONSTRAINT fk_payment_methods_company FOREIGN KEY (company_id, tenant_id)
-        REFERENCES org.companies (id, tenant_id) ON DELETE SET NULL (company_id),
-    CONSTRAINT ck_payment_methods_provider CHECK (provider IN ('RAZORPAY')),
-    CONSTRAINT ck_payment_methods_type     CHECK (method_type IN ('UPI_AUTOPAY', 'EMANDATE', 'CARD_TOKEN', 'OTHER')),
-    CONSTRAINT ck_payment_methods_status   CHECK (status IN ('ACTIVE', 'REVOKED', 'EXPIRED'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_methods_token
-    ON platform.payment_methods (provider, provider_token_id) WHERE provider_token_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_methods_one_default
-    ON platform.payment_methods (tenant_id, coalesce(company_id, '00000000-0000-0000-0000-000000000000'::uuid))
-    WHERE is_default AND status = 'ACTIVE';
 
 CREATE TABLE IF NOT EXISTS platform.invoice_number_series (
     series_key  VARCHAR(40) PRIMARY KEY,
@@ -120,34 +108,32 @@ CREATE TABLE IF NOT EXISTS platform.invoices (
     paid_at             TIMESTAMPTZ,
     voided_at           TIMESTAMPTZ,
     void_reason         TEXT,
-    provider            VARCHAR(20),
-    provider_invoice_id VARCHAR(100),
-    provider_payment_id VARCHAR(100),
     billing_snapshot    JSONB,
-    pdf_storage_key     VARCHAR(500),
     notes               TEXT,
     created_by          VARCHAR(255),
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT fk_invoices_company FOREIGN KEY (company_id, tenant_id)
         REFERENCES org.companies (id, tenant_id),
-    CONSTRAINT ck_invoices_status  CHECK (status IN ('DRAFT', 'ISSUED', 'PAID', 'VOID')),
+    CONSTRAINT ck_invoices_status  CHECK (status IN ('DRAFT', 'ISSUED', 'PAID', 'VOID', 'DISCARDED')),
     CONSTRAINT ck_invoices_amounts CHECK (subtotal >= 0 AND discount_total >= 0 AND tax_total >= 0
                                           AND total >= 0 AND amount_paid >= 0),
     CONSTRAINT ck_invoices_total   CHECK (total = subtotal - discount_total + tax_total),
-    -- Anything past DRAFT has a number, an issue date and the snapshot it was issued with.
-    CONSTRAINT ck_invoices_issued  CHECK (status = 'DRAFT'
+    -- Anything issued has a number, an issue date and the snapshot it was issued with. A DISCARDED draft never did.
+    CONSTRAINT ck_invoices_issued  CHECK (status IN ('DRAFT', 'DISCARDED')
                                           OR (invoice_number IS NOT NULL AND issued_at IS NOT NULL
                                               AND billing_snapshot IS NOT NULL)),
-    CONSTRAINT ck_invoices_void    CHECK (status <> 'VOID' OR (voided_at IS NOT NULL AND void_reason IS NOT NULL)),
+    CONSTRAINT ck_invoices_discarded CHECK (status <> 'DISCARDED' OR invoice_number IS NULL),
+    CONSTRAINT ck_invoices_void    CHECK (status NOT IN ('VOID', 'DISCARDED')
+                                          OR (voided_at IS NOT NULL AND void_reason IS NOT NULL)),
     CONSTRAINT ck_invoices_period  CHECK (period_end IS NULL OR period_start IS NULL OR period_end >= period_start)
 );
 CREATE INDEX IF NOT EXISTS ix_invoices_tenant_issued ON platform.invoices (tenant_id, issued_at DESC);
 CREATE INDEX IF NOT EXISTS ix_invoices_company ON platform.invoices (company_id) WHERE company_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_invoices_status ON platform.invoices (status);
--- One live invoice per payment: a payment is invoiced once (void it to re-issue).
+-- One live invoice per payment: a payment is invoiced once (void or discard it to re-draft).
 CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_payment_live
-    ON platform.invoices (payment_id) WHERE payment_id IS NOT NULL AND status <> 'VOID';
+    ON platform.invoices (payment_id) WHERE payment_id IS NOT NULL AND status NOT IN ('VOID', 'DISCARDED');
 
 CREATE TABLE IF NOT EXISTS platform.invoice_lines (
     id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -165,7 +151,6 @@ CREATE TABLE IF NOT EXISTS platform.invoice_lines (
     amount           NUMERIC(14,2) NOT NULL,
     period_start     TIMESTAMPTZ,
     period_end       TIMESTAMPTZ,
-    metadata         JSONB,
     CONSTRAINT uq_invoice_line_no      UNIQUE (invoice_id, line_no),
     CONSTRAINT ck_invoice_lines_values CHECK (quantity > 0 AND unit_price >= 0 AND discount >= 0
                                               AND tax_rate_pct >= 0 AND tax_amount >= 0 AND amount >= 0)
@@ -175,7 +160,7 @@ CREATE TABLE IF NOT EXISTS platform.invoice_lines (
 CREATE OR REPLACE FUNCTION platform.guard_issued_invoice() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    IF OLD.status IN ('ISSUED', 'PAID', 'VOID') THEN
+    IF OLD.status IN ('ISSUED', 'PAID', 'VOID', 'DISCARDED') THEN
         IF NEW.invoice_number   IS DISTINCT FROM OLD.invoice_number
         OR NEW.tenant_id        IS DISTINCT FROM OLD.tenant_id
         OR NEW.company_id       IS DISTINCT FROM OLD.company_id
@@ -191,9 +176,9 @@ BEGIN
             RAISE EXCEPTION 'Invoice % is %: its amounts and billing details cannot change. Void it and issue a new one.',
                 OLD.invoice_number, OLD.status USING ERRCODE = 'check_violation';
         END IF;
-        IF OLD.status = 'VOID' AND NEW.status <> 'VOID' THEN
-            RAISE EXCEPTION 'Invoice % is void and cannot be reopened.', OLD.invoice_number
-                USING ERRCODE = 'check_violation';
+        IF OLD.status IN ('VOID', 'DISCARDED') AND NEW.status IS DISTINCT FROM OLD.status THEN
+            RAISE EXCEPTION 'Invoice % is % and cannot be reopened.', COALESCE(OLD.invoice_number, OLD.id::text),
+                lower(OLD.status) USING ERRCODE = 'check_violation';
         END IF;
         IF NEW.status = 'DRAFT' THEN
             RAISE EXCEPTION 'Invoice % has been issued and cannot go back to draft.', OLD.invoice_number
@@ -231,13 +216,11 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ut_app') THEN
         GRANT USAGE ON SCHEMA platform TO ut_app;
         GRANT SELECT, INSERT, UPDATE ON platform.company_billing_profiles,
-            platform.payment_methods, platform.invoice_number_series,
-            platform.invoices, platform.invoice_lines TO ut_app;
+            platform.invoice_number_series, platform.invoices, platform.invoice_lines TO ut_app;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hrms_app') THEN
         GRANT USAGE ON SCHEMA platform TO hrms_app;
         GRANT SELECT, INSERT, UPDATE ON platform.company_billing_profiles,
-            platform.payment_methods, platform.invoice_number_series,
-            platform.invoices, platform.invoice_lines TO hrms_app;
+            platform.invoice_number_series, platform.invoices, platform.invoice_lines TO hrms_app;
     END IF;
 END $$;

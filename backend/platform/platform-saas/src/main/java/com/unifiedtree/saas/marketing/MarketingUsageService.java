@@ -22,7 +22,7 @@ import java.util.UUID;
 
 /**
  * WhatsApp (Meta) usage and which company owns which WhatsApp Business Account —
- * the internal foundation for billing usage through UnifiedTree (V144.6).
+ * the internal foundation for billing usage through UnifiedTree (V144.106).
  *
  * <p>Pooled billing is NOT active: Meta's partner / line-of-credit approval does not
  * exist yet. Every channel defaults to DIRECT_CUSTOMER (Meta bills the customer), and

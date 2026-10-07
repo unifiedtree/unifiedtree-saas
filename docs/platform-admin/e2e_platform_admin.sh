@@ -116,14 +116,29 @@ INV=$(jget "j['id']")
 req POST "/v1/platform/admin/payments/$PAYMENT/invoice" "" "$OPS"
 expect "a payment cannot be invoiced twice -> 409" 409
 req POST "/v1/platform/admin/invoices/$INV/issue" "" "$OPS"
-expect "issuing numbers it in the FY series, snapshots billing, marks it PAID" 200 \
-  "j['invoiceNumber'].startswith('UT/') and j['status']=='PAID' and j['billingSnapshot'] and j['billingSnapshot']['buyer']['workspace']=='demo'"
+expect "issuing before the seller's GST details are set -> 409 (an issued invoice is frozen)" 409
+req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerPan":"AAACU1234F","sellerAddress":"Bengaluru","sellerStateCode":"29","sellerEmail":"billing@unifiedtree.test","invoicePrefix":"UTREE","defaultGstRatePct":18,"invoiceDueDays":7}' "$OPS"
+expect "a 5-character invoice prefix is refused (GST numbers are at most 16 characters)" 400
+req PUT /v1/platform/admin/settings/billing '{"sellerLegalName":"UnifiedTree Technologies Pvt Ltd","sellerGstin":"29AAACU1234F1Z5","sellerPan":"AAACU1234F","sellerAddress":"Bengaluru","sellerStateCode":"29","sellerEmail":"billing@unifiedtree.test","invoicePrefix":"UT","defaultGstRatePct":18,"invoiceDueDays":7}' "$OPS"
+expect "seller details saved" 200 "j['sellerGstin']=='29AAACU1234F1Z5' and j['invoicePrefix']=='UT'"
+req POST "/v1/platform/admin/invoices/$INV/issue" "" "$OPS"
+expect "issuing numbers it PREFIX/yy-yy/nnnnn (<= 16 chars), snapshots billing, marks it PAID" 200 \
+  "__import__('re').fullmatch(r'UT/\\d\\d-\\d\\d/\\d{5}', j['invoiceNumber']) and len(j['invoiceNumber'])<=16 and j['status']=='PAID' and j['billingSnapshot']['seller']['gstin']=='29AAACU1234F1Z5' and j['billingSnapshot']['buyer']['workspace']=='demo'"
 req POST "/v1/platform/admin/invoices/$INV/issue" "" "$OPS"
 expect "issuing twice -> 409" 409
 req POST "/v1/platform/admin/invoices/$INV/void" '{"reason":"no"}' "$OPS"
 expect "void without a real reason -> 400" 400
 req POST "/v1/platform/admin/invoices/$INV/void" '{"reason":"Issued against the wrong company"}' "$OPS"
 expect "void with a reason" 200 "j['status']=='VOID' and j['voidReason']"
+req POST "/v1/platform/admin/payments/$PAYMENT/invoice" "" "$OPS"
+expect "after the void, the payment can be drafted again" 200 "j['status']=='DRAFT'"
+INV2=$(jget "j['id']")
+req POST "/v1/platform/admin/invoices/$INV2/void" '{"reason":"Drafted with the wrong period"}' "$OPS"
+expect "a wrong draft is DISCARDED (it never had a number)" 200 "j['status']=='DISCARDED' and j['invoiceNumber'] is None"
+req POST "/v1/platform/admin/payments/$PAYMENT/invoice" "" "$OPS"
+expect "after discarding, the payment can be drafted again" 200 "j['status']=='DRAFT'"
+req POST /v1/platform/admin/invoices "{\"tenantId\":\"$TENANT_BETA\",\"paymentId\":\"$PAYMENT\",\"lines\":[{\"description\":\"x\",\"unitPrice\":1}]}" "$OPS"
+expect "a draft cannot use another workspace's payment -> 400" 400
 req GET "/v1/platform/admin/invoices?tenantId=$TENANT_DEMO" "" "$OPS"
 expect "invoice list" 200 "j['totalElements']>=1"
 req PUT "/v1/platform/admin/workspaces/$TENANT_DEMO/companies/$CO_A1/billing-profile" '{"gstin":"BAD"}' "$OPS"
@@ -150,6 +165,10 @@ echo "== Internal API for Marketing (service token) =="
 ST="X-UnifiedTree-Service-Token: $SERVICE_TOKEN"
 req GET "/v1/internal/marketing/companies/$CO_A1/entitlement?tenantId=$TENANT_DEMO"
 expect "internal API without the service token -> 401" 401
+req GET "/v1/inte%72nal/marketing/principals?companyId=$CO_A1"
+expect "a percent-encoded path cannot skip the service token (regression)" 401
+req GET "/v1/%69nternal/marketing/access?accountId=$CO_A1&tenantId=$TENANT_DEMO&companyId=$CO_A1"
+expect "another encoded variant is refused too" 401
 req GET "/v1/internal/marketing/companies/$CO_A1/entitlement?tenantId=$TENANT_DEMO" "" "X-UnifiedTree-Service-Token: wrong-wrong-wrong-wrong-wrong-wrong"
 expect "internal API with a wrong token -> 401" 401
 req GET "/v1/internal/marketing/companies/$CO_A1/entitlement?tenantId=$TENANT_DEMO" "" "$ST"

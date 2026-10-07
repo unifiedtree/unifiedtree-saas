@@ -1,4 +1,4 @@
--- V144.2: products are entitled per company, not only per workspace.
+-- V144.102: products are entitled per company, not only per workspace.
 --
 -- Why. A customer pays per company (owner decision, 2026-10-03). Today a product
 -- is switched on per WORKSPACE in platform.tenant_modules, so Company A and

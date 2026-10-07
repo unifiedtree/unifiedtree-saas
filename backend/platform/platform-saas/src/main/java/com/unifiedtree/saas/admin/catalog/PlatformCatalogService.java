@@ -29,7 +29,7 @@ import java.util.UUID;
  * switched on) and {@code platform.module_plans} (what is sold) — rather than a
  * second admin-only product list. {@code module_plans.price_inr} stays the current
  * price that checkout, the website and seat billing already read;
- * {@code platform.module_plan_prices} (V144.3) adds the history behind it.
+ * {@code platform.module_plan_prices} (V144.103) adds the history behind it.
  */
 @Service
 public class PlatformCatalogService {

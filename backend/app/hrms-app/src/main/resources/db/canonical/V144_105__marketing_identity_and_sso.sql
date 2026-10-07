@@ -1,4 +1,4 @@
--- V144.5: Marketing Automation joins UnifiedTree identity.
+-- V144.105: Marketing Automation joins UnifiedTree identity.
 --
 -- Why. Marketing Automation (Node + MongoDB) was a standalone SaaS with its own
 -- users, passwords and subscriptions. It becomes a UnifiedTree product: people
@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS ix_marketing_map_tenant ON platform.marketing_identit
 CREATE INDEX IF NOT EXISTS ix_marketing_map_status ON platform.marketing_identity_map (status);
 
 CREATE TABLE IF NOT EXISTS platform.sso_handoff_tickets (
-    ticket_hash  CHAR(64)     PRIMARY KEY,
+    ticket_hash  VARCHAR(64)  PRIMARY KEY,   -- VARCHAR, not CHAR(n): bpchar breaks String entity mapping (V104 incident)
     audience     VARCHAR(30)  NOT NULL,
     account_id   UUID         NOT NULL REFERENCES platform.accounts(id) ON DELETE CASCADE,
     tenant_id    UUID         NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,

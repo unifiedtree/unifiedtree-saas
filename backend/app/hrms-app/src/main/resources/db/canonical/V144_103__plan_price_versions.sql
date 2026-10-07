@@ -1,4 +1,4 @@
--- V144.3: plan prices are versioned.
+-- V144.103: plan prices are versioned.
 --
 -- Why. platform.module_plans holds ONE price per plan (price_inr). Changing it
 -- rewrote the only record of what the plan used to cost, so "what was this
@@ -52,7 +52,7 @@ COMMENT ON TABLE platform.module_plan_prices IS
 INSERT INTO platform.module_plan_prices
        (plan_key, currency, unit_price, price_model, annual_discount_pct, valid_from, reason, created_by)
 SELECT p.key, 'INR', p.price_inr, p.price_model, p.annual_discount_pct, p.created_at,
-       'Baseline: the price in effect when price history began (V144.3)', 'migration:V144_3'
+       'Baseline: the price in effect when price history began (V144.103)', 'migration:V144_103'
   FROM platform.module_plans p
  WHERE NOT EXISTS (SELECT 1 FROM platform.module_plan_prices x WHERE x.plan_key = p.key);
 

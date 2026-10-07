@@ -1,4 +1,4 @@
--- V144.1: permissions for the UnifiedTree platform admin console (admin.unifiedtree.com).
+-- V144.101: permissions for the UnifiedTree platform admin console (admin.unifiedtree.com).
 --
 -- Why. Until now the platform operator had four permissions (platform.admin and
 -- platform.tenant.read/.approve/.reject, V019), enough to approve sign-ups and
@@ -33,7 +33,7 @@ INSERT INTO rbac.permissions (code, display_name, module, description, risk_leve
     ('platform.subscription.read', 'Read subscriptions',               'platform',
      'Read every workspace''s and company''s subscriptions.',                           'MEDIUM', NULL),
     ('platform.billing.read',      'Read invoices and payments',       'platform',
-     'Read invoices, payments, payment methods and company billing profiles.',        'MEDIUM', NULL),
+     'Read invoices, payments and company billing profiles.',        'MEDIUM', NULL),
     ('platform.billing.manage',    'Issue invoices and edit billing profiles', 'platform',
      'Issue or void invoices and edit a company''s billing profile.',                   'HIGH',
      'An issued invoice cannot be edited, only voided and re-issued.'),
