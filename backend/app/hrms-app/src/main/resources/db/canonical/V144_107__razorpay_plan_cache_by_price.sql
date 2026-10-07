@@ -16,9 +16,12 @@
 -- Safety. Existing rows already satisfy the new key (it is a superset of the old one). Takes a brief
 -- SHARE lock on razorpay_plans while the index builds (a handful of rows). Idempotent.
 --
+-- The old key is a UNIQUE CONSTRAINT in production (created there before V089, whose CREATE UNIQUE INDEX IF
+-- NOT EXISTS then did nothing) and a plain unique index on databases built from migrations: both are handled.
+--
 -- Rollback (only while no two rows share a module_key + billing_cycle, and with the pre-PR #12 code back):
---   CREATE UNIQUE INDEX razorpay_plans_module_key_billing_cycle_key
---       ON platform.razorpay_plans (module_key, billing_cycle);
+--   ALTER TABLE platform.razorpay_plans
+--       ADD CONSTRAINT razorpay_plans_module_key_billing_cycle_key UNIQUE (module_key, billing_cycle);
 --   DROP INDEX platform.uq_razorpay_plans_module_cycle_price;
 
 SET LOCAL lock_timeout = '5s';
@@ -26,4 +29,12 @@ SET LOCAL lock_timeout = '5s';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_razorpay_plans_module_cycle_price
     ON platform.razorpay_plans (module_key, billing_cycle, unit_price_paise);
 
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint
+                WHERE conname = 'razorpay_plans_module_key_billing_cycle_key'
+                  AND conrelid = 'platform.razorpay_plans'::regclass) THEN
+        ALTER TABLE platform.razorpay_plans DROP CONSTRAINT razorpay_plans_module_key_billing_cycle_key;
+    END IF;
+END $$;
 DROP INDEX IF EXISTS platform.razorpay_plans_module_key_billing_cycle_key;
