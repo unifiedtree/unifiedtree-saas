@@ -5,6 +5,7 @@ import com.unifiedtree.rbac.company.CompanyAccessService.CompanyAccessView;
 import com.unifiedtree.rbac.company.CompanyAccessService.CompanyEntry;
 import com.unifiedtree.rbac.company.CompanyAccessService.RoleEntry;
 import com.unifiedtree.rbac.company.CompanyAccess;
+import com.unifiedtree.auth.service.WorkspaceSignInRule;
 import com.unifiedtree.saas.admin.support.TenantScopedReader;
 import com.unifiedtree.saas.entitlement.CompanyEntitlementService;
 import com.unifiedtree.saas.entitlement.CompanyEntitlementService.Entitlement;
@@ -13,7 +14,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +27,8 @@ import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -51,7 +57,7 @@ import java.util.UUID;
 public class MarketingAccessService {
 
     /** Catalogue module that is Marketing Automation (V035; linked to plan `marketing` in V144.105). */
-    public static final String MODULE = "whatsapp";
+    public static final String MODULE = CompanyEntitlementService.MARKETING_MODULE;
     public static final String AUDIENCE = "marketing";
     public static final Duration TICKET_TTL = Duration.ofSeconds(60);
 
@@ -64,15 +70,20 @@ public class MarketingAccessService {
     private final CompanyAccessService companyAccess;
     private final CompanyEntitlementService entitlements;
     private final ObjectMapper json;
+    private final TransactionTemplate consumeTx;
     private final SecureRandom random = new SecureRandom();
 
     public MarketingAccessService(JdbcTemplate jdbc, TenantScopedReader scoped, CompanyAccessService companyAccess,
-                                  CompanyEntitlementService entitlements, ObjectMapper json) {
+                                  CompanyEntitlementService entitlements, ObjectMapper json,
+                                  PlatformTransactionManager transactionManager) {
         this.jdbc = jdbc;
         this.scoped = scoped;
         this.companyAccess = companyAccess;
         this.entitlements = entitlements;
         this.json = json;
+        // Consuming a ticket commits on its own, so a refused re-verify cannot roll it back into a redeemable state.
+        this.consumeTx = new TransactionTemplate(transactionManager);
+        this.consumeTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     // ── DTOs (the versioned contract Marketing consumes) ────────────────────
@@ -108,12 +119,14 @@ public class MarketingAccessService {
     public MarketingEntitlement entitlement(UUID tenantId, UUID companyId) {
         // A company-level row says "entitled" whatever tenant is passed, so the pair is checked first: the company
         // must be visible under that workspace's RLS binding. Writes are covered by composite FKs; this is the read.
-        Boolean inWorkspace = scoped.read(tenantId, () -> jdbc.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM org.companies WHERE id = ?)", Boolean.class, companyId));
-        if (!Boolean.TRUE.equals(inWorkspace)) {
+        Boolean active = scoped.read(tenantId, () -> jdbc.query(
+                "SELECT is_active FROM org.companies WHERE id = ?", (rs, i) -> rs.getBoolean(1), companyId)
+                .stream().findFirst().orElse(null));
+        if (active == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "COMPANY_NOT_FOUND: That company is not in that workspace");
         }
+        if (!active) throw forbidden("COMPANY_INACTIVE", "That company has been archived");
         Entitlement e = entitlements.resolve(tenantId, companyId, MODULE);
         Map<String, Object> plan = marketingPlan(e.subscriptionId());
         Map<String, Object> limits = new LinkedHashMap<>(parse((String) (plan == null ? null : plan.get("limits"))));
@@ -132,12 +145,14 @@ public class MarketingAccessService {
 
     /**
      * Verify that the account may work in the company in Marketing, and describe them.
-     * 403 with a specific code when not: not a member, workspace not active, no access
-     * to the company, or the company has not bought Marketing.
+     * 403 with a specific code when not: not a member, workspace not active, the workspace
+     * user is switched off or locked in HRMS ({@link WorkspaceSignInRule}, the same rule as
+     * the HRMS session), no access to the company, or the company has not bought Marketing.
      */
     public MarketingIdentity verify(UUID accountId, UUID tenantId, UUID companyId) {
         Map<String, Object> m = membership(accountId, tenantId);
         UUID authUserId = (UUID) m.get("auth_user_id");
+        requireWorkspaceSignIn(tenantId, authUserId);
         CompanyAccessCheck check = companyAccessCheck(tenantId, authUserId, companyId);
         CompanyEntry company = check.company();
         if (company == null) {
@@ -208,18 +223,19 @@ public class MarketingAccessService {
 
     /**
      * Redeem a ticket once, then re-verify the account, company and entitlement.
-     * 401 when the ticket is unknown, expired or already used.
+     * 401 when the ticket is unknown, expired or already used. The ticket is consumed in its
+     * own committed transaction first: a re-verify that refuses (403) leaves it used, not
+     * redeemable again.
      */
-    @Transactional
     public MarketingIdentity redeem(String ticket) {
         if (ticket == null || ticket.length() < 20 || ticket.length() > 100) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid handoff ticket");
         }
-        List<Map<String, Object>> used = jdbc.queryForList("""
+        List<Map<String, Object>> used = consumeTx.execute(status -> jdbc.queryForList("""
                 UPDATE platform.sso_handoff_tickets SET consumed_at = now()
                  WHERE ticket_hash = ? AND audience = ? AND consumed_at IS NULL AND expires_at > now()
                 RETURNING account_id, tenant_id, company_id
-                """, sha256(ticket), AUDIENCE);
+                """, sha256(ticket), AUDIENCE));
         if (used.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Handoff ticket is invalid, expired or already used");
         }
@@ -346,6 +362,24 @@ public class MarketingAccessService {
         if (!"ACTIVE".equals(row.get("acct_status"))) throw forbidden("ACCOUNT_INACTIVE", "This account is not active");
         if (!"ACTIVE".equals(row.get("ws_status"))) throw forbidden("WORKSPACE_INACTIVE", "That workspace is not active");
         return row;
+    }
+
+    /**
+     * The workspace user behind the membership must be allowed in right now: the same {@link WorkspaceSignInRule} as
+     * {@code AuthService.issueWorkspaceSession}. auth.user_credentials is FORCE RLS, so it is read inside the workspace.
+     */
+    private void requireWorkspaceSignIn(UUID tenantId, UUID authUserId) {
+        Map<String, Object> creds = authUserId == null ? null : scoped.read(tenantId, () -> jdbc.queryForList(
+                "SELECT is_active, locked_until FROM auth.user_credentials WHERE id = ?", authUserId)
+                .stream().findFirst().orElse(null));
+        if (creds == null) throw forbidden(WorkspaceSignInRule.ACCOUNT_INACTIVE, "This workspace user no longer exists");
+        Timestamp lockedUntil = (Timestamp) creds.get("locked_until");
+        WorkspaceSignInRule.refusal(Boolean.TRUE.equals(creds.get("is_active")),
+                lockedUntil == null ? null : lockedUntil.toInstant().atOffset(ZoneOffset.UTC),
+                OffsetDateTime.now(ZoneOffset.UTC)).ifPresent(code -> {
+            throw forbidden(code, WorkspaceSignInRule.ACCOUNT_INACTIVE.equals(code)
+                    ? "This user has been deactivated in the workspace" : "This user is temporarily locked");
+        });
     }
 
     /** One person in one company: the company entry (null = no access) and whether a built-in admin role applies. */
