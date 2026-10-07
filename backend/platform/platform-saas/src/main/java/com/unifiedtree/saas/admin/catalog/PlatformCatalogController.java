@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -92,12 +93,13 @@ public class PlatformCatalogController {
 
     @PostMapping("/catalog/plans/{planKey}/prices")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.catalog.manage')")
+    @Transactional
     public PriceChange changePrice(@PathVariable String planKey, @Valid @RequestBody PriceChangeRequest req,
                                    @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         PriceChange change = catalog.changePrice(planKey, req.unitPrice(), req.priceModel(),
                 req.annualDiscountPct(), req.reason(), op.label());
-        audit.record(op, http, "PLAN_PRICE_CHANGE", "module_plan", null,
+        audit.recordInTransaction(op, http, "PLAN_PRICE_CHANGE", "module_plan", null,
                 "Plan %s price %s -> %s %s (%s). Reason: %s".formatted(planKey,
                         change.previous() == null ? "none" : change.previous().unitPrice(),
                         change.current().unitPrice(), change.current().priceModel(),
@@ -118,6 +120,7 @@ public class PlatformCatalogController {
     /** Switch a product on (ACTIVE) or off (SUSPENDED) for one company, with a reason. */
     @PutMapping("/workspaces/{tenantId}/companies/{companyId}/entitlements/{moduleKey}")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.entitlement.manage')")
+    @Transactional
     public Entitlement setEntitlement(@PathVariable UUID tenantId, @PathVariable UUID companyId,
                                       @PathVariable String moduleKey,
                                       @Valid @RequestBody EntitlementChangeRequest req,
@@ -126,7 +129,7 @@ public class PlatformCatalogController {
         Operator op = Operator.of(jwt);
         String status = req.status().trim().toUpperCase(java.util.Locale.ROOT);
         entitlements.setManual(tenantId, companyId, moduleKey, status, req.endsAt(), req.reason(), op.label());
-        audit.record(op, http, "ENTITLEMENT_OVERRIDE", "company", companyId,
+        audit.recordInTransaction(op, http, "ENTITLEMENT_OVERRIDE", "company", companyId,
                 "Workspace %s company %s: %s set to %s%s by operator. Reason: %s".formatted(tenantId, companyId,
                         moduleKey, status, req.endsAt() == null ? "" : " until " + req.endsAt(), req.reason().strip()));
         return entitlements.resolve(tenantId, companyId, moduleKey);
@@ -135,6 +138,7 @@ public class PlatformCatalogController {
     /** Remove the operator's override; the subscription or workspace decides again. */
     @DeleteMapping("/workspaces/{tenantId}/companies/{companyId}/entitlements/{moduleKey}")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.entitlement.manage')")
+    @Transactional
     public Map<String, Object> clearEntitlement(@PathVariable UUID tenantId, @PathVariable UUID companyId,
                                                 @PathVariable String moduleKey,
                                                 @RequestParam(required = false) String reason,
@@ -147,7 +151,7 @@ public class PlatformCatalogController {
         Operator op = Operator.of(jwt);
         boolean cleared = entitlements.clearManual(companyId, moduleKey);
         if (cleared) {
-            audit.record(op, http, "ENTITLEMENT_OVERRIDE_CLEARED", "company", companyId,
+            audit.recordInTransaction(op, http, "ENTITLEMENT_OVERRIDE_CLEARED", "company", companyId,
                     "Workspace %s company %s: manual %s override removed. Reason: %s"
                             .formatted(tenantId, companyId, moduleKey, reason.strip()));
         }

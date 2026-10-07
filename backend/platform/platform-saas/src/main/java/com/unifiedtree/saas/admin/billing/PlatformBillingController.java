@@ -14,6 +14,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -83,43 +84,47 @@ public class PlatformBillingController {
 
     @PostMapping("/invoices")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.billing.manage')")
+    @Transactional
     public Invoice createDraft(@RequestBody DraftInput body, @AuthenticationPrincipal Jwt jwt,
                                HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         Invoice draft = invoices.createDraft(body, op.label());
-        audit.record(op, http, "INVOICE_DRAFTED", "invoice", draft.id(),
+        audit.recordInTransaction(op, http, "INVOICE_DRAFTED", "invoice", draft.id(),
                 "Draft invoice for workspace %s total %s".formatted(draft.tenantId(), draft.total()));
         return draft;
     }
 
     @PostMapping("/payments/{paymentId}/invoice")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.billing.manage')")
+    @Transactional
     public Invoice draftFromPayment(@PathVariable UUID paymentId, @AuthenticationPrincipal Jwt jwt,
                                     HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         Invoice draft = invoices.draftFromPayment(paymentId, op.label());
-        audit.record(op, http, "INVOICE_DRAFTED", "invoice", draft.id(),
+        audit.recordInTransaction(op, http, "INVOICE_DRAFTED", "invoice", draft.id(),
                 "Draft invoice from payment %s total %s".formatted(paymentId, draft.total()));
         return draft;
     }
 
     @PostMapping("/invoices/{id}/issue")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.billing.manage')")
+    @Transactional
     public Invoice issue(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         Invoice issued = invoices.issue(id);
-        audit.record(op, http, "INVOICE_ISSUED", "invoice", id,
+        audit.recordInTransaction(op, http, "INVOICE_ISSUED", "invoice", id,
                 "Issued %s (%s) total %s".formatted(issued.invoiceNumber(), issued.status(), issued.total()));
         return issued;
     }
 
     @PostMapping("/invoices/{id}/void")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.billing.manage')")
+    @Transactional
     public Invoice voidInvoice(@PathVariable UUID id, @RequestBody VoidRequest body,
                                @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         Invoice voided = invoices.voidInvoice(id, body.reason());
-        audit.record(op, http, "INVOICE_VOIDED", "invoice", id,
+        audit.recordInTransaction(op, http, "INVOICE_VOIDED", "invoice", id,
                 "Voided %s. Reason: %s".formatted(voided.invoiceNumber(), body.reason().strip()));
         return voided;
     }
@@ -134,12 +139,13 @@ public class PlatformBillingController {
 
     @PutMapping("/workspaces/{tenantId}/companies/{companyId}/billing-profile")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.billing.manage')")
+    @Transactional
     public BillingProfile saveBillingProfile(@PathVariable UUID tenantId, @PathVariable UUID companyId,
                                              @RequestBody BillingProfile body, @AuthenticationPrincipal Jwt jwt,
                                              HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         BillingProfile saved = billing.saveBillingProfile(tenantId, companyId, body, op.label());
-        audit.record(op, http, "BILLING_PROFILE_UPDATED", "company", companyId,
+        audit.recordInTransaction(op, http, "BILLING_PROFILE_UPDATED", "company", companyId,
                 "Billing profile of company %s in workspace %s updated".formatted(companyId, tenantId));
         return saved;
     }
@@ -152,11 +158,12 @@ public class PlatformBillingController {
 
     @PutMapping("/settings/billing")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.billing.manage')")
+    @Transactional
     public BillingSettings saveSettings(@RequestBody BillingSettings body, @AuthenticationPrincipal Jwt jwt,
                                         HttpServletRequest http) {
         Operator op = Operator.of(jwt);
         BillingSettings saved = billing.saveSettings(body);
-        audit.record(op, http, "BILLING_SETTINGS_UPDATED", "billing_settings", null,
+        audit.recordInTransaction(op, http, "BILLING_SETTINGS_UPDATED", "billing_settings", null,
                 "Seller/invoice settings updated (prefix %s, GST %s%%, due %d days)".formatted(
                         saved.invoicePrefix(), saved.defaultGstRatePct(), saved.invoiceDueDays()));
         return saved;

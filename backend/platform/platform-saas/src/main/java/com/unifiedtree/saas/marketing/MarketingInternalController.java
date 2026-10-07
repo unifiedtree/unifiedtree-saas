@@ -1,6 +1,6 @@
 package com.unifiedtree.saas.marketing;
 
-import com.unifiedtree.audit.AuditService;
+import com.unifiedtree.saas.admin.support.PlatformAuditTrail;
 import com.unifiedtree.saas.admin.support.TenantScopedReader;
 import com.unifiedtree.saas.marketing.MarketingAccessService.MarketingEntitlement;
 import com.unifiedtree.saas.marketing.MarketingAccessService.MarketingIdentity;
@@ -42,14 +42,14 @@ public class MarketingInternalController {
 
     private final MarketingAccessService access;
     private final MarketingUsageService usage;
-    private final AuditService audit;
+    private final PlatformAuditTrail auditTrail;
     private final TenantScopedReader scoped;
 
     public MarketingInternalController(MarketingAccessService access, MarketingUsageService usage,
-                                       AuditService audit, TenantScopedReader scoped) {
+                                       PlatformAuditTrail auditTrail, TenantScopedReader scoped) {
         this.access = access;
         this.usage = usage;
-        this.audit = audit;
+        this.auditTrail = auditTrail;
         this.scoped = scoped;
     }
 
@@ -105,10 +105,12 @@ public class MarketingInternalController {
         }
         // The person behind a Marketing action is recorded as their user in that workspace (null if not a member)
         UUID actor = access.actorUserId(req.accountId(), req.tenantId());
-        // When the account resolves, its own email is recorded (not whatever text the caller sent)
-        String email = actor != null ? access.accountEmail(req.accountId()) : req.actorEmail();
+        // Only a resolved account's own email is recorded; the caller's actorEmail text is never trusted (null otherwise)
+        String email = actor != null ? access.accountEmail(req.accountId()) : null;
+        // JDBC on the workspace-bound transaction (its insert policy takes that workspace's rows only); a failure
+        // answers 500 so Marketing can retry, instead of "recorded" with nothing written
         scoped.write(req.tenantId(), () -> {
-            audit.recordAs(actor, email, null, "marketing-service", "marketing", action,
+            auditTrail.insertInTransaction(actor, email, null, "marketing-service", "marketing", action,
                     req.entityType(), req.entityId(), clip(req.summary(), 1000));
             return null;
         });

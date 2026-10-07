@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -124,15 +125,16 @@ public class PlatformMarketingAdminController {
      */
     @PostMapping("/identity-map/{id}/retire")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.marketing.manage')")
+    @Transactional
     public Map<String, Object> retireMapping(@PathVariable UUID id, @Valid @RequestBody RetireRequest req,
                                              @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
         String reason = req.reason().strip();
         if (reason.length() < 5) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reason must be at least 5 characters");
         }
-        // The write runs in the service's transaction (a bare JdbcTemplate update here would never commit)
+        // One transaction with its audit row (a bare JdbcTemplate update outside one would never commit)
         Map<String, Object> row = access.retireMapping(id);
-        audit.record(Operator.of(jwt), http, "MARKETING_IDENTITY_RETIRED", "marketing_identity", id,
+        audit.recordInTransaction(Operator.of(jwt), http, "MARKETING_IDENTITY_RETIRED", "marketing_identity", id,
                 "%s mapping of Marketing user %s (company %s) retired. Reason: %s".formatted(
                         row.get("kind"), row.get("legacy_marketing_user_id"), row.get("company_id"), reason));
         return Map.of("id", id, "status", "RETIRED");
@@ -148,10 +150,11 @@ public class PlatformMarketingAdminController {
     /** Change a channel's billing mode. Anything but DIRECT_CUSTOMER is refused while pooled billing is off. */
     @PutMapping("/channels/{channelId}/billing-mode")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.marketing.manage')")
+    @Transactional
     public ChannelAccount setBillingMode(@PathVariable UUID channelId, @Valid @RequestBody BillingModeRequest req,
                                          @AuthenticationPrincipal Jwt jwt, HttpServletRequest http) {
         ChannelAccount saved = usage.setBillingMode(channelId, req.billingMode(), req.monthlySpendLimit());
-        audit.record(Operator.of(jwt), http, "MARKETING_BILLING_MODE", "marketing_channel", channelId,
+        audit.recordInTransaction(Operator.of(jwt), http, "MARKETING_BILLING_MODE", "marketing_channel", channelId,
                 "WABA %s billing mode %s, spend limit %s".formatted(saved.wabaId(), saved.billingMode(),
                         saved.monthlySpendLimit()));
         return saved;
