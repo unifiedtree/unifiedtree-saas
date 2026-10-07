@@ -240,19 +240,6 @@ public class PlatformDirectoryService {
         }
     }
 
-    /** Company names for a set of ids in one workspace (for lists that hold ids). */
-    public Map<UUID, String> companyNames(UUID tenantId, List<UUID> companyIds) {
-        if (companyIds.isEmpty()) return Map.of();
-        return scoped.read(tenantId, () -> {
-            Map<UUID, String> out = new LinkedHashMap<>();
-            String in = String.join(",", companyIds.stream().map(x -> "?").toList());
-            jdbc.query("SELECT id, name FROM org.companies WHERE id IN (" + in + ")",
-                    (ResultSet rs) -> { out.put(rs.getObject("id", UUID.class), rs.getString("name")); },
-                    companyIds.toArray());
-            return out;
-        });
-    }
-
     public Map<String, Object> requireWorkspace(UUID tenantId) {
         if (tenantId == null || TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found");

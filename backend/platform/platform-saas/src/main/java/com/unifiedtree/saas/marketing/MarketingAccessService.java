@@ -4,6 +4,7 @@ import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.rbac.company.CompanyAccessService.CompanyAccessView;
 import com.unifiedtree.rbac.company.CompanyAccessService.CompanyEntry;
 import com.unifiedtree.rbac.company.CompanyAccessService.RoleEntry;
+import com.unifiedtree.rbac.company.CompanyAccess;
 import com.unifiedtree.saas.admin.support.TenantScopedReader;
 import com.unifiedtree.saas.entitlement.CompanyEntitlementService;
 import com.unifiedtree.saas.entitlement.CompanyEntitlementService.Entitlement;
@@ -41,7 +42,7 @@ import java.util.UUID;
  * security applies — Marketing does not get its own idea of who belongs where.
  * Entitlement is {@link CompanyEntitlementService} for module {@value #MODULE}.
  *
- * <p>Also mints and redeems the single-use SSO handoff tickets (V144.5). A ticket is
+ * <p>Also mints and redeems the single-use SSO handoff tickets (V144.105). A ticket is
  * 32 random bytes; only its SHA-256 is stored, it lives {@link #TICKET_TTL}, and
  * redeeming it is one atomic UPDATE, so it cannot be used twice. Access and
  * entitlement are checked again at redemption, not only when it was minted.
@@ -49,7 +50,7 @@ import java.util.UUID;
 @Service
 public class MarketingAccessService {
 
-    /** Catalogue module that is Marketing Automation (V035; linked to plan `marketing` in V144.5). */
+    /** Catalogue module that is Marketing Automation (V035; linked to plan `marketing` in V144.105). */
     public static final String MODULE = "whatsapp";
     public static final String AUDIENCE = "marketing";
     public static final Duration TICKET_TTL = Duration.ofSeconds(60);
@@ -137,7 +138,8 @@ public class MarketingAccessService {
     public MarketingIdentity verify(UUID accountId, UUID tenantId, UUID companyId) {
         Map<String, Object> m = membership(accountId, tenantId);
         UUID authUserId = (UUID) m.get("auth_user_id");
-        CompanyEntry company = companyEntry(tenantId, authUserId, companyId);
+        CompanyAccessCheck check = companyAccessCheck(tenantId, authUserId, companyId);
+        CompanyEntry company = check.company();
         if (company == null) {
             throw forbidden("COMPANY_ACCESS_DENIED", "You do not have access to that company");
         }
@@ -147,8 +149,9 @@ public class MarketingAccessService {
         }
         String workspaceRole = (String) m.get("role");
         List<String> roles = company.roles().stream().map(RoleEntry::code).distinct().toList();
-        boolean admin = MARKETING_ADMIN_WORKSPACE_ROLES.contains(workspaceRole)
-                || roles.stream().anyMatch(MARKETING_ADMIN_ROLES::contains);
+        // Only BUILT-IN roles count: a workspace can create a custom role coded "ADMIN", which must not make its
+        // holders the company's Marketing owner (same rule as CompanyAccess.Profile.workspaceWide()).
+        boolean admin = MARKETING_ADMIN_WORKSPACE_ROLES.contains(workspaceRole) || check.systemAdmin();
         return new MarketingIdentity(CONTRACT_VERSION, accountId, (String) m.get("email"),
                 (String) m.get("display_name"), tenantId, (String) m.get("subdomain"), (String) m.get("ws_name"),
                 workspaceRole, companyId, company.name(), company.access(), roles, admin, authUserId, ent,
@@ -207,6 +210,7 @@ public class MarketingAccessService {
      * Redeem a ticket once, then re-verify the account, company and entitlement.
      * 401 when the ticket is unknown, expired or already used.
      */
+    @Transactional
     public MarketingIdentity redeem(String ticket) {
         if (ticket == null || ticket.length() < 20 || ticket.length() > 100) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid handoff ticket");
@@ -238,6 +242,9 @@ public class MarketingAccessService {
         }
         if ("MEMBER".equals(k) && accountId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A MEMBER mapping needs accountId");
+        }
+        if ("MEMBER".equals(k) && actorUserId(accountId, tenantId) == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "That account is not a member of the workspace");
         }
         int written;
         try {
@@ -296,6 +303,13 @@ public class MarketingAccessService {
      * The workspace user an account acts as in one workspace (audit.events records actors by that id), or null when
      * the account is not an active member there. platform.account_workspaces has no RLS.
      */
+    /** The account's sign-in email, or null */
+    public String accountEmail(UUID accountId) {
+        if (accountId == null) return null;
+        return jdbc.query("SELECT email FROM platform.accounts WHERE id = ?", (rs, i) -> rs.getString(1), accountId)
+                .stream().findFirst().orElse(null);
+    }
+
     public UUID actorUserId(UUID accountId, UUID tenantId) {
         if (accountId == null || tenantId == null) return null;
         return jdbc.query("""
@@ -334,11 +348,20 @@ public class MarketingAccessService {
         return row;
     }
 
-    private CompanyEntry companyEntry(UUID tenantId, UUID authUserId, UUID companyId) {
-        CompanyAccessView view = scoped.read(tenantId,
-                () -> companyAccess.view(companyAccess.profile(authUserId), false));
-        return view.companies().stream().filter(c -> c.companyId().equals(companyId) && c.active())
-                .findFirst().orElse(null);
+    /** One person in one company: the company entry (null = no access) and whether a built-in admin role applies. */
+    private record CompanyAccessCheck(CompanyEntry company, boolean systemAdmin) {}
+
+    private CompanyAccessCheck companyAccessCheck(UUID tenantId, UUID authUserId, UUID companyId) {
+        return scoped.read(tenantId, () -> {
+            CompanyAccess.Profile profile = companyAccess.profile(authUserId);
+            CompanyEntry entry = companyAccess.view(profile, false).companies().stream()
+                    .filter(c -> c.companyId().equals(companyId) && c.active()).findFirst().orElse(null);
+            boolean systemAdmin = profile.roles().stream()
+                    .anyMatch(r -> r.system() && MARKETING_ADMIN_ROLES.contains(r.code()))
+                    || profile.grants().stream().anyMatch(g -> companyId.equals(g.companyId()) && g.role().system()
+                            && MARKETING_ADMIN_ROLES.contains(g.role().code()));
+            return new CompanyAccessCheck(entry, systemAdmin);
+        });
     }
 
     /** The plan behind Marketing: the subscription's plan if any, else the catalogue's Marketing plan. */
