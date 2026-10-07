@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from '../../api/shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import { asAvailable, unmatchedPathParam, useAvailableQuery } from '../../api/shared/available'
 
 export type DistributionStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED'
@@ -62,10 +64,11 @@ export interface PageResponse<T> {
 const TERMINAL: DistributionStatus[] = ['COMPLETED', 'PARTIAL_FAILURE', 'FAILED']
 export const isTerminalStatus = (s?: DistributionStatus): boolean => !!s && TERMINAL.includes(s)
 
-export function useDistributions(page = 0) {
+/** `range`: only distributions started on those days (?from=&to=, calendar everywhere); none = all, as before. */
+export function useDistributions(page = 0, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'letters', 'distributions', 'list', page],
-    queryFn: () => apiJson<PageResponse<DistributionJobDto>>(`/v1/letters/distributions?page=${page}&size=20`),
+    queryKey: ['hrms', 'letters', 'distributions', 'list', page, ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<PageResponse<DistributionJobDto>>(`/v1/letters/distributions?page=${page}&size=20${rangeQs(range)}`),
     staleTime: 10_000,
   })
 }

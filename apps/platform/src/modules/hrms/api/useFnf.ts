@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 
 // Mirrors backend com.hrms.fnf.enums
 export type FnfStatus = 'INITIATED' | 'PROCESSED' | 'APPROVED' | 'PAID' | 'CANCELLED'
@@ -54,12 +56,13 @@ export const inr = (n?: number) =>
  */
 export const FNF_PAGE_SIZE = 20
 
-export function useFnfSettlements(page = 0) {
+/** `range`: only settlements whose last working day is in it (?from=&to=, calendar everywhere); none = all, as before. */
+export function useFnfSettlements(page = 0, range?: DayRange | null) {
   return useQuery({
     // `page` is part of the key: without it react-query would hand page 2 the
     // cached page-1 rows and the table would never appear to advance.
-    queryKey: ['hrms', 'fnf', 'settlements', page],
-    queryFn: () => apiJson<Page<FnfSettlement>>(`/v1/fnf/settlements?page=${page}&size=${FNF_PAGE_SIZE}`),
+    queryKey: ['hrms', 'fnf', 'settlements', page, ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<Page<FnfSettlement>>(`/v1/fnf/settlements?page=${page}&size=${FNF_PAGE_SIZE}${rangeQs(range)}`),
     staleTime: 15_000,
   })
 }

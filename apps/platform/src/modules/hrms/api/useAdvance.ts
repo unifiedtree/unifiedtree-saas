@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 
 // Mirrors backend com.hrms.advance.enums
 export type AdvanceStatus = 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'DISBURSED' | 'CLOSED'
@@ -56,18 +58,21 @@ export function useAdvance(id: string | undefined) {
   })
 }
 
-/** The admin list's filters, matching the backend (BW-62): a status, a phase, or a department. */
+/**
+ * The admin list's filters, matching the backend (BW-62): a status, a phase, or a department; and the days the
+ * advances were asked for (?from=&to=, calendar everywhere, 7 Oct 2026).
+ */
 export type AdvancePhase = 'RECOVERING' | 'REPAID'
-export interface AdvanceListFilters { status?: AdvanceStatus; phase?: AdvancePhase; departmentId?: string }
+export interface AdvanceListFilters { status?: AdvanceStatus; phase?: AdvancePhase; departmentId?: string; range?: DayRange | null }
 
 export function useCompanyAdvances(page = 0, filters: AdvanceListFilters = {}, size = 20) {
   const parts: string[] = []
   if (filters.status) parts.push(`status=${filters.status}`)
   if (filters.phase) parts.push(`phase=${filters.phase}`)
   if (filters.departmentId) parts.push(`departmentId=${encodeURIComponent(filters.departmentId)}`)
-  const query = parts.length ? `&${parts.join('&')}` : ''
+  const query = (parts.length ? `&${parts.join('&')}` : '') + rangeQs(filters.range)
   return useQuery({
-    queryKey: ['hrms', 'advance', 'company', page, filters.status ?? null, filters.phase ?? null, filters.departmentId ?? null, size],
+    queryKey: ['hrms', 'advance', 'company', page, filters.status ?? null, filters.phase ?? null, filters.departmentId ?? null, size, ...(filters.range ? [rangeKey(filters.range)] : [])],
     queryFn: () => apiJson<Page<AdvanceRequest>>(`/v1/advance/requests?page=${page}&size=${size}${query}`),
     staleTime: 15_000,
   })

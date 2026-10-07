@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson, apiBlob } from '@/core/api/client'
+import { rangeQs, rangeKey, setRangeParams } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import { asAvailable, useAvailableQuery } from './shared/available'
 
 export type OfferStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
@@ -31,10 +33,11 @@ export interface HiringOffer extends Omit<HiringOfferPayload, 'candidateEmail'> 
   /** The email stored on the offer, else the linked candidate's; null when neither exists (or on older servers). */
   candidateEmail?: string | null
 }
-export function useHiringOffers(page: number) {
+/** `range`: only offers made on those days (?from=&to=, calendar everywhere); none = every offer, as before. */
+export function useHiringOffers(page: number, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'hiring', 'offers', page],
-    queryFn: () => apiJson<Page<HiringOffer>>(`/v1/hiring/offers?page=${page}&size=20`),
+    queryKey: ['hrms', 'hiring', 'offers', page, ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<Page<HiringOffer>>(`/v1/hiring/offers?page=${page}&size=20${rangeQs(range)}`),
   })
 }
 export function useCreateHiringOffer() {
@@ -134,12 +137,15 @@ export const inr = (n?: number | null) =>
 
 // ── Requisitions ─────────────────────────────────────────────────────────────
 
-export function useRequisitions(page = 0, companyId?: string, opts?: { enabled?: boolean }) {
+/** `opts.range`: only requisitions opened on those days (?from=&to=, calendar everywhere); none = all, as before. */
+export function useRequisitions(page = 0, companyId?: string, opts?: { enabled?: boolean; range?: DayRange | null }) {
+  const range = opts?.range ?? null
   return useQuery({
-    queryKey: ['hrms', 'hiring', 'requisitions', page, companyId ?? 'all'],
+    queryKey: ['hrms', 'hiring', 'requisitions', page, companyId ?? 'all', ...(range ? [rangeKey(range)] : [])],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), size: '20' })
       if (companyId) params.set('companyId', companyId)
+      setRangeParams(params, range)
       return apiJson<Page<JobRequisition>>(`/v1/hiring/requisitions?${params.toString()}`)
     },
     // Callers without hrms.hiring.read should pass { enabled: false } so this

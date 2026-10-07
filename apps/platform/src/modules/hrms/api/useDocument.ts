@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import { rangeQs, rangeKey } from './shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 import { asAvailable, useAvailableQuery } from './shared/available'
 
 // Mirrors backend com.hrms.document.enums.DocumentCategory
@@ -54,10 +56,11 @@ export function useMyDocuments(page = 0, pageSize = DOCUMENT_PAGE_SIZE) {
   })
 }
 
-export function useEmployeeDocuments(employeeId: string | undefined, page = 0, enabled = true, pageSize = DOCUMENT_PAGE_SIZE) {
+/** `range`: only documents uploaded on those days (?from=&to=, calendar everywhere); none = all, as before. */
+export function useEmployeeDocuments(employeeId: string | undefined, page = 0, enabled = true, pageSize = DOCUMENT_PAGE_SIZE, range?: DayRange | null) {
   return useQuery({
-    queryKey: ['hrms', 'document', 'employee', employeeId, page, pageSize],
-    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/employee/${employeeId}?page=${page}&size=${pageSize}`),
+    queryKey: ['hrms', 'document', 'employee', employeeId, page, pageSize, ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/employee/${employeeId}?page=${page}&size=${pageSize}${rangeQs(range)}`),
     enabled: !!employeeId && enabled,
     staleTime: 15_000,
   })

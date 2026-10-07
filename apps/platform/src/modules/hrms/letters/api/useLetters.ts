@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson, apiText, apiBlob } from '@/core/api/client'
+import { rangeQs, rangeKey } from '../../api/shared/listRange'
+import type { DayRange } from '@/design/kit/rangeFilterModel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -195,11 +197,13 @@ export function useGenerateLetter() {
   })
 }
 
-export function useGeneratedLetters(page = 0, opts?: { enabled?: boolean }) {
+/** `opts.range`: only letters generated on those days (?from=&to=, calendar everywhere); none = all, as before. */
+export function useGeneratedLetters(page = 0, opts?: { enabled?: boolean; range?: DayRange | null }) {
+  const range = opts?.range ?? null
   return useQuery({
-    queryKey: ['hrms', 'letters', 'generated', page],
+    queryKey: ['hrms', 'letters', 'generated', page, ...(range ? [rangeKey(range)] : [])],
     queryFn: () =>
-      apiJson<PageResponse<GeneratedLetterDto>>(`/v1/letters/generated?page=${page}&size=20`),
+      apiJson<PageResponse<GeneratedLetterDto>>(`/v1/letters/generated?page=${page}&size=20${rangeQs(range)}`),
     staleTime: 30_000,
     enabled: opts?.enabled ?? true,
   })
