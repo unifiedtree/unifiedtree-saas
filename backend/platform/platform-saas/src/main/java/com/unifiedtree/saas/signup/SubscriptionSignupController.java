@@ -167,6 +167,11 @@ public class SubscriptionSignupController {
         // cancel and pick a different one." — a much worse UX after money has
         // moved).
         String requestedSubdomain = normSubdomain(req.subdomain());
+        // A reserved address (admin, marketing, www, ...) would only fail at provisioning, after the
+        // mandate: refuse it here, before Razorpay, like the free sign-up does.
+        if (com.hrms.core.tenant.ReservedSubdomains.isReserved(requestedSubdomain)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, com.hrms.core.tenant.ReservedSubdomains.MESSAGE);
+        }
         if (requestedSubdomain != null && subdomainTaken(requestedSubdomain)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "SUBDOMAIN_TAKEN");
         }

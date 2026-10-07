@@ -11,6 +11,7 @@ import { Toaster } from 'sonner'
 import { ThemeProvider, ThemeRoute } from './design/theme'
 import { QueryProvider } from './providers/QueryProvider'
 import { AuthProvider } from './providers/AuthProvider'
+import { WorkspaceHostGate } from './core/tenant/WorkspaceHostGate'
 import { NotificationProvider } from './core/notifications/NotificationProvider'
 import { ConfirmDialogProvider } from './shared/components/ConfirmDialog'
 import { CurrentCompanyProvider } from './modules/hrms/company/CurrentCompany'
@@ -38,6 +39,8 @@ enableMocking().then(() => {
         <QueryProvider>
           <BrowserRouter>
             <ThemeRoute />
+            {/* An unknown or reserved address (tata., admin., ...) gets its own page, never a sign-in. */}
+            <WorkspaceHostGate>
             <AuthProvider>
               <NotificationProvider>
                 <ConfirmDialogProvider>
@@ -49,6 +52,7 @@ enableMocking().then(() => {
                 </ConfirmDialogProvider>
               </NotificationProvider>
             </AuthProvider>
+            </WorkspaceHostGate>
           </BrowserRouter>
         </QueryProvider>
       </ThemeProvider>

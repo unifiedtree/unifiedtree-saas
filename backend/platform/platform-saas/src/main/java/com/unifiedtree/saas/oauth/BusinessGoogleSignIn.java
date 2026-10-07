@@ -59,6 +59,14 @@ public class BusinessGoogleSignIn {
         return SUBDOMAIN.matcher(s).matches() ? s : null;
     }
 
+    /** Whether an ACTIVE business holds this address (the same test {@link #signIn} starts with). */
+    public boolean isOpen(String subdomain) {
+        if (subdomain == null) return false;
+        return !jdbc.queryForList(
+                "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?) AND status = 'ACTIVE'",
+                UUID.class, subdomain).isEmpty();
+    }
+
     public String businessUrl(String subdomain) {
         return businessUrl.replace("{sub}", subdomain).replaceAll("/+$", "");
     }

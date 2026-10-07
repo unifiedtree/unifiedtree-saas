@@ -53,25 +53,9 @@ public class SaasService {
     private static final UUID PLATFORM_SUPER_ADMIN_ROLE_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000006");
 
-    /**
-     * Subdomains a tenant may NOT register, because they collide with
-     * platform infrastructure or routing. The wildcard *.unifiedtree.com
-     * serves the tenant workspace app, but these names are claimed by
-     * other hosts (the marketing site, the admin console, the API, mail,
-     * static assets, etc.). Allowing a tenant to take one would hijack
-     * real traffic. Kept lowercase; matching is exact after normalization.
-     */
-    private static final java.util.Set<String> RESERVED_SUBDOMAINS = java.util.Set.of(
-            "www", "api", "admin", "app", "apps", "platform", "dashboard",
-            "mail", "email", "smtp", "imap", "ftp", "ns", "ns1", "ns2", "dns",
-            "static", "assets", "cdn", "img", "images", "media", "files",
-            "status", "health", "metrics", "monitor", "grafana", "prometheus",
-            "blog", "docs", "help", "support", "billing", "pay", "payment",
-            "payments", "checkout", "auth", "login", "signup", "register",
-            "account", "accounts", "console", "control", "internal", "test",
-            "staging", "stage", "dev", "demo", "sandbox", "preview", "vercel",
-            "railway", "root", "unifiedtree", "webhook", "webhooks",
-            "ws", "socket", "vpn", "git", "ci", "cd", "ops", "noc", "sec");
+    // Subdomains a tenant may NOT register (they collide with platform hosts: www, api, admin,
+    // marketing, business, mail, ...) live in com.hrms.core.tenant.ReservedSubdomains, the one list
+    // the public sign-in lookup also answers from.
 
     private final JdbcTemplate jdbc;
     private final SaasWriter writer;
@@ -117,9 +101,8 @@ public class SaasService {
         // Reject infrastructure-reserved names BEFORE the DB check so the
         // guard holds even on a fresh database. Covers both the live
         // availability probe and createWorkspace (which calls this method).
-        if (RESERVED_SUBDOMAINS.contains(subdomain)) {
-            return new SubdomainCheckResponse(subdomain, false,
-                    "This workspace address is reserved. Please choose another.");
+        if (com.hrms.core.tenant.ReservedSubdomains.isReserved(subdomain)) {
+            return new SubdomainCheckResponse(subdomain, false, com.hrms.core.tenant.ReservedSubdomains.MESSAGE);
         }
         // A subdomain is unavailable if it's either
         //   (a) already provisioned into platform.tenants, OR
@@ -444,7 +427,7 @@ public class SaasService {
         if (subdomain.length() < 3) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workspace address too short");
         }
-        if (RESERVED_SUBDOMAINS.contains(subdomain)) {
+        if (com.hrms.core.tenant.ReservedSubdomains.isReserved(subdomain)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Workspace address '" + subdomain + "' is reserved. Please choose another.");
         }

@@ -64,7 +64,12 @@ export type WorkspaceStatus = {
 }
 
 export function currentSubdomain() {
-  const host = window.location.hostname.toLowerCase()
+  return subdomainOf(window.location.hostname)
+}
+
+/** The workspace label of a host name ('' when the host is not <one-label>.localhost / .unifiedtree.com). */
+export function subdomainOf(hostname: string) {
+  const host = hostname.toLowerCase()
   for (const suffix of ['.localhost', '.unifiedtree.com']) {
     if (host.endsWith(suffix)) {
       const subdomain = host.slice(0, -suffix.length)
