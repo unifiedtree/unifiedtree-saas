@@ -2,6 +2,8 @@ package com.unifiedtree.saas.admin.billing;
 
 import com.unifiedtree.saas.admin.directory.PlatformDirectoryService;
 import com.unifiedtree.saas.admin.support.PageResult;
+import com.unifiedtree.saas.billing.CompanyBillingDetails;
+import com.unifiedtree.saas.billing.Gst;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,7 +22,6 @@ import java.util.List;
 import java.util.Locale;
 
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * Subscriptions, payments, company billing profiles and billing settings, as the
@@ -31,16 +32,15 @@ import java.util.regex.Pattern;
 @Service
 public class PlatformBillingService {
 
-    private static final Pattern GSTIN = Pattern.compile("^[0-9]{2}[A-Z0-9]{13}$");
-    private static final Pattern PAN = Pattern.compile("^[A-Z]{5}[0-9]{4}[A-Z]$");
-    private static final Pattern STATE_CODE = Pattern.compile("^[0-9]{2}$");
-
     private final JdbcTemplate jdbc;
     private final PlatformDirectoryService directory;
+    private final CompanyBillingDetails details;
 
-    public PlatformBillingService(JdbcTemplate jdbc, PlatformDirectoryService directory) {
+    public PlatformBillingService(JdbcTemplate jdbc, PlatformDirectoryService directory,
+                                  CompanyBillingDetails details) {
         this.jdbc = jdbc;
         this.directory = directory;
+        this.details = details;
     }
 
     public record SubscriptionRow(UUID id, UUID tenantId, String workspaceSubdomain, UUID companyId,
@@ -57,15 +57,20 @@ public class PlatformBillingService {
                              boolean signatureVerified, Instant createdAt, Instant paidAt, UUID invoiceId,
                              String invoiceNumber) {}
 
-    public record BillingProfile(UUID companyId, UUID tenantId, String legalName, String gstin, String pan,
-                                 String billingEmail, String billingPhone, String addressLine1, String addressLine2,
-                                 String city, String state, String stateCode, String postalCode, String country,
-                                 String currency, String updatedBy, Instant updatedAt) {}
+    /**
+     * What billing keeps for a company beyond org.companies: billing email and phone, the GST state code, and an
+     * optional address override (else the headquarters branch). Legal name, GSTIN and PAN are org.companies' own
+     * (HRMS company settings); {@code resolved} shows what an invoice would print, read-only.
+     */
+    public record BillingProfile(UUID companyId, UUID tenantId, String billingEmail, String billingPhone,
+                                 String addressLine1, String addressLine2, String city, String state,
+                                 String stateCode, String postalCode, String country, String currency,
+                                 String updatedBy, Instant updatedAt, CompanyBillingDetails.Details resolved) {}
 
     public record BillingSettings(boolean trialEnabled, int trialDays, String sellerLegalName, String sellerGstin,
                                   String sellerPan, String sellerAddress, String sellerStateCode, String sellerEmail,
                                   String invoicePrefix, BigDecimal defaultGstRatePct, int invoiceDueDays,
-                                  boolean marketingPooledBillingEnabled, Instant updatedAt) {}
+                                  String defaultSacCode, boolean marketingPooledBillingEnabled, Instant updatedAt) {}
 
     // ── Subscriptions ───────────────────────────────────────────────────────
 
@@ -132,31 +137,27 @@ public class PlatformBillingService {
 
     public BillingProfile billingProfile(UUID tenantId, UUID companyId) {
         directory.requireCompany(tenantId, companyId);
+        CompanyBillingDetails.Details resolved = details.company(tenantId, companyId);
         List<BillingProfile> rows = jdbc.query("""
                 SELECT * FROM platform.company_billing_profiles WHERE company_id = ? AND tenant_id = ?
-                """, this::mapProfile, companyId, tenantId);
+                """, (rs, i) -> mapProfile(rs, resolved), companyId, tenantId);
         return rows.isEmpty() ? new BillingProfile(companyId, tenantId, null, null, null, null, null, null, null,
-                null, null, null, null, "IN", "INR", null, null) : rows.get(0);
+                null, "IN", "INR", null, null, resolved) : rows.get(0);
     }
 
     @Transactional
     public BillingProfile saveBillingProfile(UUID tenantId, UUID companyId, BillingProfile in, String updatedBy) {
         directory.requireCompany(tenantId, companyId);
-        String gstin = upper(in.gstin());
-        String pan = upper(in.pan());
-        if (gstin != null && !GSTIN.matcher(gstin).matches()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "GSTIN must be 15 characters, e.g. 29ABCDE1234F1Z5");
-        }
-        if (pan != null && !PAN.matcher(pan).matches()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PAN must look like ABCDE1234F");
-        }
         String stateCode = blank(in.stateCode());
-        if (stateCode != null && !STATE_CODE.matcher(stateCode).matches()) {
+        if (stateCode != null && !Gst.knownStateCode(stateCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "stateCode is the two-digit GST state code");
         }
-        if (gstin != null && stateCode != null && !gstin.startsWith(stateCode)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "The GSTIN's first two digits (" + gstin.substring(0, 2) + ") must match the state code");
+        // A registered company's place of supply is its GSTIN's state: a different override would contradict it
+        CompanyBillingDetails.Details current = details.company(tenantId, companyId);
+        if (stateCode != null && current != null && current.gstin() != null
+                && !current.gstin().startsWith(stateCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The company's GSTIN is registered in state "
+                    + current.gstin().substring(0, 2) + "; its state code cannot be " + stateCode);
         }
         String email = blank(in.billingEmail());
         if (email != null && !email.contains("@")) {
@@ -164,17 +165,16 @@ public class PlatformBillingService {
         }
         jdbc.update("""
                 INSERT INTO platform.company_billing_profiles
-                       (company_id, tenant_id, legal_name, gstin, pan, billing_email, billing_phone, address_line1,
+                       (company_id, tenant_id, billing_email, billing_phone, address_line1,
                         address_line2, city, state, state_code, postal_code, country, currency, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (company_id) DO UPDATE SET
-                       legal_name = EXCLUDED.legal_name, gstin = EXCLUDED.gstin, pan = EXCLUDED.pan,
                        billing_email = EXCLUDED.billing_email, billing_phone = EXCLUDED.billing_phone,
                        address_line1 = EXCLUDED.address_line1, address_line2 = EXCLUDED.address_line2,
                        city = EXCLUDED.city, state = EXCLUDED.state, state_code = EXCLUDED.state_code,
                        postal_code = EXCLUDED.postal_code, country = EXCLUDED.country, currency = EXCLUDED.currency,
                        updated_by = EXCLUDED.updated_by, updated_at = now()
-                """, companyId, tenantId, blank(in.legalName()), gstin, pan, email, blank(in.billingPhone()),
+                """, companyId, tenantId, email, blank(in.billingPhone()),
                 blank(in.addressLine1()), blank(in.addressLine2()), blank(in.city()), blank(in.state()), stateCode,
                 blank(in.postalCode()), in.country() == null ? "IN" : in.country().trim().toUpperCase(Locale.ROOT),
                 in.currency() == null ? "INR" : in.currency().trim().toUpperCase(Locale.ROOT), updatedBy);
@@ -190,7 +190,8 @@ public class PlatformBillingService {
                         rs.getString("seller_address"), rs.getString("seller_state_code"),
                         rs.getString("seller_email"), rs.getString("invoice_prefix"),
                         rs.getBigDecimal("default_gst_rate_pct"), rs.getInt("invoice_due_days"),
-                        rs.getBoolean("marketing_pooled_billing_enabled"), instant(rs, "updated_at")));
+                        rs.getString("default_sac_code"), rs.getBoolean("marketing_pooled_billing_enabled"),
+                        instant(rs, "updated_at")));
     }
 
     /**
@@ -201,12 +202,24 @@ public class PlatformBillingService {
     @Transactional
     public BillingSettings saveSettings(BillingSettings in) {
         String gstin = upper(in.sellerGstin());
-        if (gstin != null && !GSTIN.matcher(gstin).matches()) {
+        if (gstin != null && !Gst.validGstin(gstin)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellerGstin is not a valid GSTIN");
         }
         String pan = upper(in.sellerPan());
-        if (pan != null && !PAN.matcher(pan).matches()) {
+        if (pan != null && !Gst.PAN.matcher(pan).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellerPan is not a valid PAN");
+        }
+        String sellerState = blank(in.sellerStateCode());
+        if (sellerState != null && !Gst.knownStateCode(sellerState)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellerStateCode is the two-digit GST state code");
+        }
+        if (gstin != null && sellerState != null && !gstin.startsWith(sellerState)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "The seller GSTIN's first two digits must be the seller state code");
+        }
+        String sac = blank(in.defaultSacCode());
+        if (sac != null && !InvoiceService.SAC.matcher(sac).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "defaultSacCode is a 6-digit SAC starting with 99");
         }
         if (in.defaultGstRatePct() != null
                 && (in.defaultGstRatePct().signum() < 0 || in.defaultGstRatePct().compareTo(BigDecimal.valueOf(100)) > 0)) {
@@ -226,10 +239,10 @@ public class PlatformBillingService {
                    SET seller_legal_name = ?, seller_gstin = ?, seller_pan = ?, seller_address = ?,
                        seller_state_code = ?, seller_email = ?, invoice_prefix = coalesce(?, invoice_prefix),
                        default_gst_rate_pct = coalesce(?, default_gst_rate_pct), invoice_due_days = ?,
-                       updated_at = now()
+                       default_sac_code = ?, updated_at = now()
                  WHERE id = 1
-                """, blank(in.sellerLegalName()), gstin, pan, blank(in.sellerAddress()), blank(in.sellerStateCode()),
-                blank(in.sellerEmail()), prefix, in.defaultGstRatePct(), in.invoiceDueDays());
+                """, blank(in.sellerLegalName()), gstin, pan, blank(in.sellerAddress()), sellerState,
+                blank(in.sellerEmail()), prefix, in.defaultGstRatePct(), in.invoiceDueDays(), sac);
         return settings();
     }
 
@@ -247,13 +260,12 @@ public class PlatformBillingService {
                 instant(rs, "created_at"));
     }
 
-    private BillingProfile mapProfile(ResultSet rs, int i) throws SQLException {
+    private BillingProfile mapProfile(ResultSet rs, CompanyBillingDetails.Details resolved) throws SQLException {
         return new BillingProfile(rs.getObject("company_id", UUID.class), rs.getObject("tenant_id", UUID.class),
-                rs.getString("legal_name"), rs.getString("gstin"), rs.getString("pan"), rs.getString("billing_email"),
-                rs.getString("billing_phone"), rs.getString("address_line1"), rs.getString("address_line2"),
-                rs.getString("city"), rs.getString("state"), rs.getString("state_code"), rs.getString("postal_code"),
-                rs.getString("country"), rs.getString("currency"), rs.getString("updated_by"),
-                instant(rs, "updated_at"));
+                rs.getString("billing_email"), rs.getString("billing_phone"), rs.getString("address_line1"),
+                rs.getString("address_line2"), rs.getString("city"), rs.getString("state"), rs.getString("state_code"),
+                rs.getString("postal_code"), rs.getString("country"), rs.getString("currency"),
+                rs.getString("updated_by"), instant(rs, "updated_at"), resolved);
     }
 
     static List<String> strings(Array a) throws SQLException {

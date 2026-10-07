@@ -45,6 +45,7 @@ ALTER TABLE platform.billing_settings
     ADD COLUMN IF NOT EXISTS invoice_prefix        VARCHAR(10)  NOT NULL DEFAULT 'UT',
     ADD COLUMN IF NOT EXISTS default_gst_rate_pct  NUMERIC(5,2) NOT NULL DEFAULT 18.00,
     ADD COLUMN IF NOT EXISTS invoice_due_days      INTEGER      NOT NULL DEFAULT 7,
+    ADD COLUMN IF NOT EXISTS default_sac_code      VARCHAR(6),
     ADD COLUMN IF NOT EXISTS marketing_pooled_billing_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
 DO $$
@@ -53,14 +54,18 @@ BEGIN
         ALTER TABLE platform.billing_settings
             ADD CONSTRAINT ck_billing_settings_invoice_prefix CHECK (invoice_prefix ~ '^[A-Z0-9]{1,4}$');
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_billing_settings_sac') THEN
+        ALTER TABLE platform.billing_settings
+            ADD CONSTRAINT ck_billing_settings_sac CHECK (default_sac_code IS NULL OR default_sac_code ~ '^99[0-9]{4}$');
+    END IF;
 END $$;
 
+-- Only what org.companies does not hold. Legal name, GSTIN and PAN stay on org.companies (HRMS company
+-- settings) and the address defaults to the headquarters branch: CompanyBillingDetails resolves all of it
+-- for both the invoice and the billing breakdown.
 CREATE TABLE IF NOT EXISTS platform.company_billing_profiles (
     company_id      UUID         PRIMARY KEY,
-    tenant_id       UUID         NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    legal_name      VARCHAR(255),
-    gstin           VARCHAR(15),
-    pan             VARCHAR(10),
+    tenant_id       UUID         NOT NULL REFERENCES platform.tenants(id) ON DELETE RESTRICT,
     billing_email   VARCHAR(255),
     billing_phone   VARCHAR(30),
     address_line1   VARCHAR(255),
@@ -75,9 +80,8 @@ CREATE TABLE IF NOT EXISTS platform.company_billing_profiles (
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT fk_billing_profile_company FOREIGN KEY (company_id, tenant_id)
-        REFERENCES org.companies (id, tenant_id) ON DELETE CASCADE,
-    CONSTRAINT ck_billing_profile_gstin CHECK (gstin IS NULL OR gstin ~ '^[0-9]{2}[A-Z0-9]{13}$'),
-    CONSTRAINT ck_billing_profile_pan   CHECK (pan IS NULL OR pan ~ '^[A-Z]{5}[0-9]{4}[A-Z]$')
+        REFERENCES org.companies (id, tenant_id) ON DELETE RESTRICT,
+    CONSTRAINT ck_billing_profile_state CHECK (state_code IS NULL OR state_code ~ '^[0-9]{2}$')
 );
 CREATE INDEX IF NOT EXISTS ix_billing_profiles_tenant ON platform.company_billing_profiles (tenant_id);
 
@@ -90,10 +94,10 @@ CREATE TABLE IF NOT EXISTS platform.invoice_number_series (
 CREATE TABLE IF NOT EXISTS platform.invoices (
     id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_number      VARCHAR(40)   UNIQUE,
-    tenant_id           UUID          NOT NULL REFERENCES platform.tenants(id),
+    tenant_id           UUID          NOT NULL REFERENCES platform.tenants(id) ON DELETE RESTRICT,
     company_id          UUID,
-    subscription_id     UUID          REFERENCES platform.subscriptions(id) ON DELETE SET NULL,
-    payment_id          UUID          REFERENCES platform.payments(id) ON DELETE SET NULL,
+    subscription_id     UUID          REFERENCES platform.subscriptions(id) ON DELETE RESTRICT,
+    payment_id          UUID          REFERENCES platform.payments(id) ON DELETE RESTRICT,
     status              VARCHAR(20)   NOT NULL DEFAULT 'DRAFT',
     currency            VARCHAR(3)    NOT NULL DEFAULT 'INR',
     subtotal            NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -101,6 +105,8 @@ CREATE TABLE IF NOT EXISTS platform.invoices (
     tax_total           NUMERIC(14,2) NOT NULL DEFAULT 0,
     total               NUMERIC(14,2) NOT NULL DEFAULT 0,
     amount_paid         NUMERIC(14,2) NOT NULL DEFAULT 0,
+    -- GST place of supply (buyer's state code), fixed at issue; decides CGST+SGST vs IGST on the lines
+    place_of_supply     VARCHAR(2),
     period_start        TIMESTAMPTZ,
     period_end          TIMESTAMPTZ,
     issued_at           TIMESTAMPTZ,
@@ -114,7 +120,7 @@ CREATE TABLE IF NOT EXISTS platform.invoices (
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT fk_invoices_company FOREIGN KEY (company_id, tenant_id)
-        REFERENCES org.companies (id, tenant_id),
+        REFERENCES org.companies (id, tenant_id) ON DELETE RESTRICT,
     CONSTRAINT ck_invoices_status  CHECK (status IN ('DRAFT', 'ISSUED', 'PAID', 'VOID', 'DISCARDED')),
     CONSTRAINT ck_invoices_amounts CHECK (subtotal >= 0 AND discount_total >= 0 AND tax_total >= 0
                                           AND total >= 0 AND amount_paid >= 0),
@@ -122,7 +128,8 @@ CREATE TABLE IF NOT EXISTS platform.invoices (
     -- Anything issued has a number, an issue date and the snapshot it was issued with. A DISCARDED draft never did.
     CONSTRAINT ck_invoices_issued  CHECK (status IN ('DRAFT', 'DISCARDED')
                                           OR (invoice_number IS NOT NULL AND issued_at IS NOT NULL
-                                              AND billing_snapshot IS NOT NULL)),
+                                              AND billing_snapshot IS NOT NULL AND place_of_supply IS NOT NULL)),
+    CONSTRAINT ck_invoices_place   CHECK (place_of_supply IS NULL OR place_of_supply ~ '^[0-9]{2}$'),
     CONSTRAINT ck_invoices_discarded CHECK (status <> 'DISCARDED' OR invoice_number IS NULL),
     CONSTRAINT ck_invoices_void    CHECK (status NOT IN ('VOID', 'DISCARDED')
                                           OR (voided_at IS NOT NULL AND void_reason IS NOT NULL)),
@@ -143,17 +150,28 @@ CREATE TABLE IF NOT EXISTS platform.invoice_lines (
     module_key       VARCHAR(50),
     price_version_id UUID          REFERENCES platform.module_plan_prices(id),
     description      VARCHAR(500)  NOT NULL,
+    sac_code         VARCHAR(6),
     quantity         NUMERIC(14,4) NOT NULL DEFAULT 1,
     unit_price       NUMERIC(14,2) NOT NULL,
     discount         NUMERIC(14,2) NOT NULL DEFAULT 0,
     tax_rate_pct     NUMERIC(5,2)  NOT NULL DEFAULT 0,
     tax_amount       NUMERIC(14,2) NOT NULL DEFAULT 0,
+    -- tax_amount split at issue: CGST + SGST inside the seller's state, IGST across states (Rule 46)
+    cgst_amount      NUMERIC(14,2) NOT NULL DEFAULT 0,
+    sgst_amount      NUMERIC(14,2) NOT NULL DEFAULT 0,
+    igst_amount      NUMERIC(14,2) NOT NULL DEFAULT 0,
     amount           NUMERIC(14,2) NOT NULL,
     period_start     TIMESTAMPTZ,
     period_end       TIMESTAMPTZ,
     CONSTRAINT uq_invoice_line_no      UNIQUE (invoice_id, line_no),
     CONSTRAINT ck_invoice_lines_values CHECK (quantity > 0 AND unit_price >= 0 AND discount >= 0
-                                              AND tax_rate_pct >= 0 AND tax_amount >= 0 AND amount >= 0)
+                                              AND tax_rate_pct >= 0 AND tax_amount >= 0 AND amount >= 0),
+    CONSTRAINT ck_invoice_lines_sac    CHECK (sac_code IS NULL OR sac_code ~ '^99[0-9]{4}$'),
+    -- Not split yet (draft), or split exactly, and never both CGST/SGST and IGST
+    CONSTRAINT ck_invoice_lines_gst    CHECK (cgst_amount >= 0 AND sgst_amount >= 0 AND igst_amount >= 0
+                                              AND (cgst_amount + sgst_amount + igst_amount = 0
+                                                   OR cgst_amount + sgst_amount + igst_amount = tax_amount)
+                                              AND (igst_amount = 0 OR cgst_amount + sgst_amount = 0))
 );
 
 -- An issued invoice is a legal document: its money and parties are frozen.
@@ -171,6 +189,7 @@ BEGIN
         OR NEW.total            IS DISTINCT FROM OLD.total
         OR NEW.issued_at        IS DISTINCT FROM OLD.issued_at
         OR NEW.billing_snapshot IS DISTINCT FROM OLD.billing_snapshot
+        OR NEW.place_of_supply  IS DISTINCT FROM OLD.place_of_supply
         OR NEW.period_start     IS DISTINCT FROM OLD.period_start
         OR NEW.period_end       IS DISTINCT FROM OLD.period_end THEN
             RAISE EXCEPTION 'Invoice % is %: its amounts and billing details cannot change. Void it and issue a new one.',
