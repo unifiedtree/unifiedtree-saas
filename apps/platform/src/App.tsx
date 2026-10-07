@@ -6,6 +6,7 @@ import { RouteGuard } from '@/routes/RouteGuard'
 import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
 import { RequirePermission } from '@/core/permissions/RequirePermission'
 import { PlatformShell } from '@/layouts/PlatformShell'
+import { BusinessShell } from '@/layouts/BusinessShell'
 import { LoginPage } from '@/core/auth/LoginPage'
 // The Keka-style HRMS analytics board (client redesign 2026-08-11) replaces the
 // old pages/Dashboard welcome screen as the module home.
@@ -228,6 +229,19 @@ export const ROUTE_TREE = (
           route just doesn't reach it. Delete the file (and this route)
           entirely when a real replacement lands. */}
       <Route path="/module-workspace" element={<Navigate to="/dashboard" replace />} />
+
+      {/* Business settings (master context §11), opened from the launcher: the business's own pages in the
+          business frame, outside the modules (no HRMS rail or company selector). Same pages and the same
+          guards as their /settings, /users, /roles and /audit-logs routes in the shell below, which stay. */}
+      <Route element={<RouteGuard><BusinessShell /></RouteGuard>}>
+        <Route path="/business"            element={<Navigate to="/modules" replace />} />
+        <Route path="/business/details"    element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'workspace.profile.update', 'workspace.security.manage']}><Settings tab="profile" /></RouteGuard>} />
+        <Route path="/business/branding"   element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write', 'workspace.profile.update', 'workspace.security.manage']}><Settings tab="branding" /></RouteGuard>} />
+        <Route path="/business/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
+        <Route path="/business/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
+        <Route path="/business/billing"    element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings tab="billing" /></RequirePermission>} />
+        <Route path="/business/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
+      </Route>
 
       {/* Protected shell */}
       <Route

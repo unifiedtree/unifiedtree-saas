@@ -489,6 +489,15 @@
 .ut-set__text { display: flex; flex-direction: column; min-width: 0; }
 .ut-set__label { font-size: 14px; font-weight: 650; }
 .ut-set__desc { font-size: 12.5px; color: var(--u-ink3, #6A7A73); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The business frame (BusinessShell, /business/*): "All apps" back to the launcher. */
+.ut-biz__apps {
+  height: 36px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; box-sizing: border-box;
+  border: 1px solid var(--u-ln, #E3E9E6); border-radius: 999px; background: var(--u-sf, #fff); color: var(--u-brt, #0F6E56);
+  font-size: 13px; font-weight: 600; white-space: nowrap; text-decoration: none; outline: none;
+}
+.ut-biz__apps:hover { border-color: var(--u-brl, #BFDFD1); background: var(--u-brs, #E8F3EE); }
+.ut-biz__apps:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); border-color: var(--u-brl, #BFDFD1); }
+@media (max-width: 767px) { .ut-biz__apps { margin-right: 4px; } }
 @keyframes ut-skel { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { .ut-app, .ut-app__icon--skel, .ut-app__skeltext { transition: none; animation: none; } }
 

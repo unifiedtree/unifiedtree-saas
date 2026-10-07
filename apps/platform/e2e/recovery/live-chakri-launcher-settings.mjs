@@ -51,7 +51,7 @@ try {
   check('owner: all six cards', ['Business details', 'Branding', 'Users & access', 'Roles & permissions', 'Billing & plan', 'Audit logs'].every((n) => names.includes(n)), names.join(' | '))
   check('owner: settings are not app tiles', (await owner.locator('.ut-apps__grid .ut-app', { hasText: /Branding|Billing & plan|Users & access/ }).count()) === 0)
   await owner.screenshot({ path: `${shots}/chakri-launcher-owner-1440.png`, fullPage: true })
-  for (const [label, path] of [['Branding', '/settings/branding'], ['Users & access', '/users'], ['Billing & plan', '/settings/billing'], ['Business details', '/settings']]) {
+  for (const [label, path] of [['Branding', '/business/branding'], ['Users & access', '/business/users'], ['Billing & plan', '/business/billing'], ['Business details', '/business/details']]) {
     await section(owner).getByRole('button', { name: new RegExp(`^${label.replace(/[&]/g, '\\$&')}`) }).click()
     await owner.waitForURL((u) => u.pathname === path, { timeout: 15000 }).catch(() => {})
     check(`owner: "${label}" opens ${path}`, new URL(owner.url()).pathname === path, owner.url())
