@@ -81,7 +81,16 @@ public class PhoneLookupService {
     public Optional<Match> findByPhone(String phone, UUID tenantId) {
         if (tenantId == null) return findByPhone(phone);
         String last10 = last10(phone);
-        return last10 == null ? Optional.empty() : matchInTenant(tenantId, last10);
+        return last10 == null ? Optional.empty() : matchInTenant(tenantId, last10, true);
+    }
+
+    /**
+     * The number is on more than one login in the named business (review 7 Oct: in production 3 numbers
+     * sit on 10 logins, admins and non-admins mixed), so a code sent to it can't say WHICH login to sign
+     * in: nobody is signed in by it; they use their email.
+     */
+    public static class SeveralLogins extends RuntimeException {
+        public SeveralLogins() { super("This mobile number is on more than one login here"); }
     }
 
     /** Sentinel for "a business was named but doesn't exist": matches nothing. */
@@ -137,24 +146,34 @@ public class PhoneLookupService {
         }
 
         for (UUID t : tenantIds) {
-            Optional<Match> m = matchInTenant(t, last10);
+            Optional<Match> m = matchInTenant(t, last10, false);
             if (m.isPresent()) return m;
         }
         return Optional.empty();
     }
 
-    /** One business: its active employee with this number and an active login (RLS: tenant bound first). */
-    private Optional<Match> matchInTenant(UUID t, String last10) {
+    /**
+     * One business: its active employee with this number and an active login (RLS: tenant bound first).
+     * {@code strict} (a business named, the web): an inactive employee never matches, and a number on
+     * more than one login throws {@link SeveralLogins} instead of picking one. The app's lookup across
+     * businesses ({@code strict} false) is unchanged.
+     */
+    private Optional<Match> matchInTenant(UUID t, String last10, boolean strict) {
         try {
             jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)", String.class, t.toString());
             List<Map<String, Object>> emp = jdbc.queryForList(
-                    "SELECT id, email FROM hrms.employees "
-                            + "WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ? "
-                            + "  AND tenant_id = ? "
-                            + "  AND (employment_status IS NULL OR employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')) "
-                            + "LIMIT 1",
+                    "SELECT e.id, e.email FROM hrms.employees e "
+                            + "WHERE right(regexp_replace(coalesce(e.phone, ''), '\\D', '', 'g'), 10) = ? "
+                            + "  AND e.tenant_id = ? "
+                            + "  AND (e.employment_status IS NULL OR e.employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')) "
+                            + (strict
+                                ? "  AND e.is_active = TRUE AND EXISTS (SELECT 1 FROM auth.user_credentials uc "
+                                  + "WHERE uc.employee_id = e.id AND uc.tenant_id = e.tenant_id AND uc.is_active = TRUE) "
+                                  + "LIMIT 2"
+                                : "LIMIT 1"),
                     last10, t);
             if (emp.isEmpty()) return Optional.empty();
+            if (strict && emp.size() > 1) throw new SeveralLogins();
             UUID employeeId = (UUID) emp.get(0).get("id");
             String email = (String) emp.get(0).get("email");
             List<UUID> userIds = jdbc.queryForList(
@@ -165,6 +184,8 @@ public class PhoneLookupService {
                 return Optional.empty();
             }
             return Optional.of(new Match(t, userIds.get(0), employeeId, email));
+        } catch (SeveralLogins e) {
+            throw e;
         } catch (Exception ignored) {
             // Unreadable tenant (schema drift, permission oddity) — skip.
             return Optional.empty();

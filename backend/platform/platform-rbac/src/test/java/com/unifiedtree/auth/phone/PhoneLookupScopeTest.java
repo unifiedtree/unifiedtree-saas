@@ -68,4 +68,21 @@ class PhoneLookupScopeTest {
     void tooShortANumberNeverMatches() {
         assertThat(lookup.findByPhone("12345", acme)).isEmpty();
     }
+
+    @Test
+    void aNumberOnSeveralLoginsInTheBusinessSignsNobodyIn() {
+        // Review 7 Oct: in production 3 numbers sit on 10 logins. Picking one would sign into someone else's.
+        when(jdbc.queryForList(contains("FROM hrms.employees"), eq("9876543210"), eq(acme)))
+                .thenReturn(List.of(Map.of("id", employee, "email", "ravi@acme.test"),
+                        Map.of("id", UUID.randomUUID(), "email", "admin@acme.test")));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> lookup.findByPhone("9876543210", acme))
+                .isInstanceOf(PhoneLookupService.SeveralLogins.class);
+    }
+
+    @Test
+    void onABusinessPageOnlyActiveEmployeesWithAnActiveLoginCount() {
+        when(jdbc.queryForList(contains("e.is_active = TRUE"), eq("9876543210"), eq(acme))).thenReturn(List.of());
+        assertThat(lookup.findByPhone("9876543210", acme)).isEmpty();
+        verify(jdbc).queryForList(contains("e.is_active = TRUE"), eq("9876543210"), eq(acme));
+    }
 }

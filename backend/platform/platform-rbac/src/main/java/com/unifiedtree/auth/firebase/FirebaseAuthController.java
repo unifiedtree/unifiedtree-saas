@@ -5,7 +5,9 @@ import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.hrms.core.exception.HrmsException;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
+import com.unifiedtree.auth.mfa.MfaService;
 import com.unifiedtree.auth.phone.PhoneLookupService;
+import com.unifiedtree.auth.ratelimit.ClientIp;
 import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -17,11 +19,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -68,13 +72,22 @@ public class FirebaseAuthController {
     private final AuthService auth;
     private final PhoneLookupService phoneLookup;
     private final PublicEndpointRateLimiter rateLimiter;
+    private final MfaService mfa;
+    private final JdbcTemplate jdbc;
+
+    /** Roles that never sign in with an SMS code on the web (review 7 Oct, see {@link #refuseOnTheWeb}). */
+    static final List<String> PRIVILEGED = List.of("OWNER", "SUPER_ADMIN", "ADMIN");
 
     public FirebaseAuthController(AuthService auth,
                                   PhoneLookupService phoneLookup,
-                                  PublicEndpointRateLimiter rateLimiter) {
+                                  PublicEndpointRateLimiter rateLimiter,
+                                  MfaService mfa,
+                                  JdbcTemplate jdbc) {
         this.auth = auth;
         this.phoneLookup = phoneLookup;
         this.rateLimiter = rateLimiter;
+        this.mfa = mfa;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -109,13 +122,19 @@ public class FirebaseAuthController {
         }
         // Two rate-limit passes (same pattern as /firebase-verify) so a
         // burst against one number OR one source IP both trip.
-        rateLimiter.check(ENDPOINT_CHECK, clientIp(http), null);
-        rateLimiter.check(ENDPOINT_CHECK, null, phone);
+        rateLimiter.check(ENDPOINT_CHECK, ClientIp.of(http), null);
+        rateLimiter.check(ENDPOINT_CHECK, null, ClientIp.phoneKey(phone));
 
         // findByPhone normalises to last-10-digit lookup across all
         // tenants — same match logic the /firebase-verify path uses on
         // the phone_number claim, so a hit here guarantees a hit there.
-        boolean registered = phoneLookup.findByPhone(phone, businessFrom(http)).isPresent();
+        boolean registered;
+        try {
+            registered = phoneLookup.findByPhone(phone, businessFrom(http)).isPresent();
+        } catch (PhoneLookupService.SeveralLogins e) {
+            // Several logins here carry this number: no SMS (it couldn't sign anyone in).
+            return ResponseEntity.ok(Map.of("registered", false, "reason", "PHONE_ON_SEVERAL_LOGINS"));
+        }
         log.info("phone/check: phone(last-10)={} registered={}",
                 phone.length() > 10 ? phone.substring(phone.length() - 10) : phone,
                 registered);
@@ -132,7 +151,7 @@ public class FirebaseAuthController {
         // this stops a single source from hammering the endpoint with random
         // tokens. Once we know the phone, we rate-limit on that too (below)
         // so a distributed flood targeting one victim's phone still trips.
-        rateLimiter.check(ENDPOINT, clientIp(http), null);
+        rateLimiter.check(ENDPOINT, ClientIp.of(http), null);
 
         // ── Verify the ID token. FirebaseAuth throws:
         //   - FirebaseAuthException      → tampered / expired / wrong project
@@ -141,7 +160,8 @@ public class FirebaseAuthController {
         // server) uses the same status for a bad JWT, so this stays consistent.
         FirebaseToken decoded;
         try {
-            decoded = FirebaseAuth.getInstance().verifyIdToken(req.idToken());
+            // checkRevoked: a token Firebase has revoked (signed out everywhere, disabled) is refused.
+            decoded = FirebaseAuth.getInstance().verifyIdToken(req.idToken(), true);
         } catch (FirebaseAuthException e) {
             log.warn("firebase-verify: token verification failed: {}", e.getMessage());
             throw new HrmsException("Invalid or expired sign-in token", HttpStatus.UNAUTHORIZED,
@@ -150,6 +170,14 @@ public class FirebaseAuthController {
             log.warn("firebase-verify: malformed token: {}", e.getMessage());
             throw new HrmsException("Invalid sign-in token", HttpStatus.UNAUTHORIZED,
                     "FIREBASE_TOKEN_MALFORMED");
+        }
+
+        // Only a phone sign-in proves the number (a token from another Firebase sign-in method doesn't).
+        Object firebaseClaim = decoded.getClaims() == null ? null : decoded.getClaims().get("firebase");
+        Object provider = firebaseClaim instanceof Map<?, ?> f ? f.get("sign_in_provider") : null;
+        if (!"phone".equals(provider)) {
+            log.warn("firebase-verify: token is not a phone sign-in (provider={}), uid={}", provider, decoded.getUid());
+            throw new HrmsException("Invalid sign-in token", HttpStatus.UNAUTHORIZED, "FIREBASE_NOT_PHONE");
         }
 
         String phone = extractPhone(decoded);
@@ -165,13 +193,21 @@ public class FirebaseAuthController {
 
         // Second rate-limit pass — now that we have a stable per-user key,
         // this defends against distributed floods targeting one number.
-        rateLimiter.check(ENDPOINT, null, phone);
+        rateLimiter.check(ENDPOINT, null, ClientIp.phoneKey(phone));
 
         // ── Look up the employee across tenants (RLS-safe scan, see
         // FirebasePhoneLookupService).
         // On a business's own login page the web says which business (X-Tenant-Subdomain):
         // the match stays inside it. The mobile app sends none: matched across businesses, as before.
-        Optional<PhoneLookupService.Match> maybe = phoneLookup.findByPhone(phone, businessFrom(http));
+        UUID business = businessFrom(http);
+        Optional<PhoneLookupService.Match> maybe;
+        try {
+            maybe = phoneLookup.findByPhone(phone, business);
+        } catch (PhoneLookupService.SeveralLogins e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "error", "PHONE_ON_SEVERAL_LOGINS",
+                    "message", "This mobile number is on more than one login here. Sign in with your email."));
+        }
         if (maybe.isEmpty()) {
             log.info("firebase-verify: no employee found for phone (last 10 digits) — uid={}",
                     decoded.getUid());
@@ -190,6 +226,8 @@ public class FirebaseAuthController {
         TenantContext.setTenantId(match.tenantId());
         com.hrms.core.tenant.TenantContext.setTenantId(match.tenantId());
 
+        if (business != null) refuseOnTheWeb(match);
+
         LoginResponse out = auth.issueWorkspaceSession(match.tenantId(), match.authUserId());
 
         // Web clients rely on the httpOnly refresh cookie to survive reloads;
@@ -199,6 +237,29 @@ public class FirebaseAuthController {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /**
+     * On a business's web sign-in (a business named), an SMS code alone never signs in (review 7 Oct):
+     * <ul>
+     *   <li>the owner, super admins and admins — anyone who can edit employees could otherwise put
+     *       their own number on an admin's record and sign in as them: USE_EMAIL_FOR_ADMIN;</li>
+     *   <li>anyone whose login needs a two-factor code: USE_PASSWORD_FOR_TWO_FACTOR, as Google sign-in.</li>
+     * </ul>
+     * The mobile app (no business named) is unchanged: owner to decide.
+     */
+    void refuseOnTheWeb(PhoneLookupService.Match match) {
+        List<String> roles = jdbc.queryForList("""
+                SELECT r.code FROM rbac.user_roles ur JOIN rbac.roles r ON r.id = ur.role_id
+                 WHERE ur.tenant_id = ? AND ur.user_id = ?
+                """, String.class, match.tenantId(), match.authUserId());
+        if (roles.stream().anyMatch(PRIVILEGED::contains)) {
+            throw new HrmsException("Admins sign in with their email and password.", HttpStatus.FORBIDDEN, "USE_EMAIL_FOR_ADMIN");
+        }
+        if (mfa.requirementFor(match.tenantId(), match.authUserId(), roles) != MfaService.Requirement.NONE) {
+            throw new HrmsException("Your login uses two-factor sign-in. Sign in with your email and password.",
+                    HttpStatus.FORBIDDEN, "USE_PASSWORD_FOR_TWO_FACTOR");
+        }
+    }
 
     /** The business named by X-Tenant-Subdomain; null when the header is absent (the mobile app). */
     private UUID businessFrom(HttpServletRequest http) {
@@ -216,22 +277,6 @@ public class FirebaseAuthController {
         // SDK version — read the claim map, same key Firebase always uses.
         Object v = token.getClaims() == null ? null : token.getClaims().get("phone_number");
         return v == null ? null : v.toString();
-    }
-
-    /**
-     * Real caller IP. Cloud Run puts the client at the head of
-     * X-Forwarded-For; fall back to the direct socket for local dev.
-     * Mirrors the resolver used by FreeSignupController + SubscriptionSignupController.
-     */
-    private static String clientIp(HttpServletRequest req) {
-        if (req == null) return null;
-        String xff = req.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            int comma = xff.indexOf(',');
-            String first = (comma > 0 ? xff.substring(0, comma) : xff).trim();
-            if (!first.isEmpty()) return first;
-        }
-        return req.getRemoteAddr();
     }
 
     private static String cookieName(UUID tenantId) {

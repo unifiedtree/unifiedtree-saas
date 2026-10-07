@@ -4,6 +4,7 @@ import { useAuthStore, WorkspaceSummary } from '../store/authStore';
 import { api, ApiError } from '../lib/api';
 import { Building2, Plus, ArrowRight, Star, Loader2, Settings, Check, X as XIcon } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { handOverUrl } from '../lib/handOver';
 import { Navbar } from '../components/layout/Navbar';
 
 /* Compact one-line module summary for a workspace row — the rows stay quiet,
@@ -97,11 +98,11 @@ export function WorkspacesPage() {
 
       // In local dev, *.localhost subdomains don't resolve in browsers.
       // Redirect to plain localhost:3001 — the JWT already carries tenant context.
-      const target =
+      const target = handOverUrl(
         window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-          ? `http://${workspace.subdomain}.localhost:3001/?token=${response.auth.accessToken}`
-          : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`)
-            + `/?token=${response.auth.accessToken}`;
+          ? `http://${workspace.subdomain}.localhost:3001`
+          : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`),
+        response.auth.accessToken);
 
       // Deliberately NOT passing 'noopener' in the feature string.
       //

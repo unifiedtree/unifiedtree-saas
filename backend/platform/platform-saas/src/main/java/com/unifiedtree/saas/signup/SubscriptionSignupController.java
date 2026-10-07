@@ -385,21 +385,10 @@ public class SubscriptionSignupController {
         return s == null ? null : s.trim();
     }
 
-    /**
-     * Best-effort client-IP resolution. Prefers the leftmost address in
-     * {@code X-Forwarded-For} (Cloud Run injects it), else the servlet's
-     * {@code getRemoteAddr()}. Returns null on total failure so the limiter
-     * simply skips the IP key rather than erroring out the signup.
-     */
+    /** The caller's IP for the sign-up rate limits (ClientIp: the hop Google's front end appended). */
     private static String clientIp(HttpServletRequest req) {
-        if (req == null) return null;
-        String xff = req.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            int comma = xff.indexOf(',');
-            String first = (comma > 0 ? xff.substring(0, comma) : xff).trim();
-            if (!first.isEmpty()) return first;
-        }
-        return req.getRemoteAddr();
+        // The hop Google's front end appended, not the first one (which the caller can set): review 7 Oct.
+        return com.unifiedtree.auth.ratelimit.ClientIp.of(req);
     }
 
     private static String normSubdomain(String s) {
