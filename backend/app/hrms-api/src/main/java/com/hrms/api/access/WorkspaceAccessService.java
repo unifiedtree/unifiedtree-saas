@@ -424,7 +424,7 @@ public class WorkspaceAccessService {
      * employee self-service (EMPLOYEE); someone who isn't loses sign-in.
      */
     @Transactional
-    public void endOwnerTransition(UUID tenantId, UUID oldOwnerUserId) {
+    public boolean endOwnerTransition(UUID tenantId, UUID oldOwnerUserId, UUID actorId) {
         bindTenant(tenantId);
         Role admin = roleByCode("ADMIN");
         UserCredentials old = credRepo.findById(oldOwnerUserId)
@@ -437,10 +437,11 @@ public class WorkspaceAccessService {
             old.setActive(false);
             credRepo.save(old);
         }
-        audit.record(oldOwnerUserId, AccessAudit.PERMISSION_CHANGE, "USER", oldOwnerUserId,
+        audit.record(actorId, AccessAudit.PERMISSION_CHANGE, "USER", oldOwnerUserId,
             "Ownership transition ended for " + old.getEmail(),
             Map.of("user", old.getEmail(), "keeps", employee ? "EMPLOYEE" : "nothing (no employee record)"));
         guard.evict(oldOwnerUserId);
+        return employee;
     }
 
     private Role roleByCode(String code) {

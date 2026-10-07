@@ -1,6 +1,7 @@
 package com.hrms.api.access;
 
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.api.mail.MailService;
 import com.unifiedtree.auth.entity.UserCredentials;
 import com.unifiedtree.auth.repository.UserCredentialsRepository;
 import com.unifiedtree.auth.service.PasswordService;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -36,7 +38,8 @@ class OwnershipTransferServiceTest {
     private final PasswordService passwords = mock(PasswordService.class);
     private final SessionService sessions = mock(SessionService.class);
     private final OwnershipTransferService service = new OwnershipTransferService(jdbc, access, guard, creds, passwords,
-            sessions, mock(AppNotificationService.class));
+            sessions, mock(AppNotificationService.class), mock(AccessAudit.class), mock(MailService.class),
+            mock(PlatformTransactionManager.class));
 
     private final UUID tenant = UUID.randomUUID();
     private final UUID owner = UUID.randomUUID();
@@ -110,6 +113,8 @@ class OwnershipTransferServiceTest {
     void acceptingMovesTheRolesAndSignsBothOut() {
         openTransfer("PENDING", Instant.now().plusSeconds(3600));
         when(creds.findById(asha)).thenReturn(Optional.of(login(asha, "asha@acme.test", true)));
+        when(jdbc.update(contains("SET status = 'TRANSITION'"), any(Object[].class))).thenReturn(1);
+        when(jdbc.queryForList(contains("FROM platform.accounts"), eq(UUID.class), any(Object[].class))).thenReturn(List.of(UUID.randomUUID()));
         service.accept(tenant, asha, id);
 
         verify(access).transferOwnership(tenant, owner, asha);
@@ -131,9 +136,55 @@ class OwnershipTransferServiceTest {
         openTransfer("TRANSITION", Instant.now());
         assertThatThrownBy(() -> service.endTransition(tenant, owner, id))
                 .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("NOT_ALLOWED"));
+        when(jdbc.update(contains("SET status = 'COMPLETED'"), any(Object[].class))).thenReturn(1);
         service.endTransition(tenant, asha, id);
-        verify(access).endOwnerTransition(tenant, owner);
+        verify(access).endOwnerTransition(tenant, owner, asha);   // the new owner is recorded as who ended it
         verify(sessions).revokeAll(eq(tenant), eq(owner));
-        verify(jdbc).update(contains("SET status = 'COMPLETED'"), any(Object[].class));
+    }
+
+    @Test
+    void acceptLosesToACancelThatGotThereFirst() {
+        // Read as PENDING, but by the time accept claims it a cancel has committed: nothing moves.
+        openTransfer("PENDING", Instant.now().plusSeconds(3600));
+        when(jdbc.update(contains("SET status = 'TRANSITION'"), any(Object[].class))).thenReturn(0);
+        assertThatThrownBy(() -> service.accept(tenant, asha, id))
+                .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("TRANSFER_NOT_OPEN"));
+        verify(access, never()).transferOwnership(any(), any(), any());
+        verify(sessions, never()).revokeAll(any(), any());
+    }
+
+    @Test
+    void cancelLosesToAnAcceptThatGotThereFirst() {
+        openTransfer("PENDING", Instant.now().plusSeconds(3600));
+        when(jdbc.update(contains("WHERE id = ? AND status = ?"), any(Object[].class))).thenReturn(0);
+        assertThatThrownBy(() -> service.cancel(tenant, owner, id))
+                .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("TRANSFER_NOT_OPEN"));
+    }
+
+    @Test
+    void aHandoverAlreadyEndedIsNotEndedTwice() {
+        openTransfer("TRANSITION", Instant.now());
+        when(jdbc.update(contains("SET status = 'COMPLETED'"), any(Object[].class))).thenReturn(0);
+        assertThatThrownBy(() -> service.endTransition(tenant, asha, id)).isInstanceOf(BusinessRuleException.class);
+        verify(access, never()).endOwnerTransition(any(), any(), any());
+    }
+
+    @Test
+    void fiveWrongPasswordsThenAPause() {
+        when(passwords.matches("wrong", "hash")).thenReturn(false);
+        for (int i = 0; i < 5; i++) {
+            assertThatThrownBy(() -> service.start(tenant, owner, asha, "wrong", null))
+                    .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("PASSWORD_WRONG"));
+        }
+        when(passwords.matches("pw", "hash")).thenReturn(true);
+        assertThatThrownBy(() -> service.start(tenant, owner, asha, "pw", null))
+                .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("RATE_LIMITED"));
+    }
+
+    @Test
+    void theNoteHasALimit() {
+        when(passwords.matches("pw", "hash")).thenReturn(true);
+        assertThatThrownBy(() -> service.start(tenant, owner, asha, "pw", "x".repeat(501)))
+                .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("NOTE_TOO_LONG"));
     }
 }

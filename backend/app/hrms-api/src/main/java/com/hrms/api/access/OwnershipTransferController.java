@@ -68,7 +68,16 @@ public class OwnershipTransferController {
         return ResponseEntity.noContent().build();
     }
 
-    private static UUID me(Jwt jwt) {
+    /**
+     * The caller's id, after settling this business's overdue offers and handovers, so the 15-day end
+     * never depends on the daily job alone (review 7 Oct).
+     */
+    private UUID me(Jwt jwt) {
+        try {
+            transfers.settleOverdue(TenantContext.getTenantId());
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(OwnershipTransferController.class).warn("ownership settle failed: {}", e.getMessage());
+        }
         return UUID.fromString(jwt.getSubject());
     }
 }
