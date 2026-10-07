@@ -54,7 +54,20 @@ public class RazorpayClient {
     private final RazorpayProperties props;
     private final RestClient http;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public RazorpayClient(RazorpayProperties props) {
+        this(props, CONNECT_TIMEOUT, READ_TIMEOUT);
+    }
+
+    /**
+     * The same client with shorter timeouts, for a caller that must not keep a request waiting (the
+     * subscription access guard asks Razorpay before pausing: review 7 Oct, a paused request waited 20 s).
+     */
+    public RazorpayClient withTimeouts(Duration connect, Duration read) {
+        return new RazorpayClient(props, connect, read);
+    }
+
+    private RazorpayClient(RazorpayProperties props, Duration connectTimeout, Duration readTimeout) {
         this.props = props;
         // Explicit request factory for two reasons:
         //
@@ -72,11 +85,11 @@ public class RazorpayClient {
         // handles arbitrary verbs and takes a connect timeout on the client
         // plus a read timeout on the factory.
         java.net.http.HttpClient jdkClient = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(CONNECT_TIMEOUT)
+                .connectTimeout(connectTimeout)
                 .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(jdkClient);
-        factory.setReadTimeout(READ_TIMEOUT);
+        factory.setReadTimeout(readTimeout);
         this.http = RestClient.builder()
                 .baseUrl(props.apiBase())
                 .requestFactory(factory)
@@ -315,9 +328,31 @@ public class RazorpayClient {
             return toSubscriptionView(resp);
         } catch (ResponseStatusException e) {
             throw e;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // Razorpay answered "no" (bad keys, unknown subscription…): not a network problem.
+            log.warn("Razorpay fetchSubscription refused: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new Refused(e.getStatusCode().value(), "Razorpay refused the subscription lookup (" + e.getStatusCode().value() + ")");
         } catch (Exception e) {
             log.warn("Razorpay fetchSubscription failed: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not fetch subscription");
+        }
+    }
+
+    /**
+     * Razorpay answered with a 4xx: a definite "no" (wrong or rotated keys, unknown subscription), as
+     * opposed to no answer, a timeout or a 5xx. Still a BAD_GATEWAY ResponseStatusException, so callers
+     * that don't care are unchanged.
+     */
+    public static class Refused extends ResponseStatusException {
+        private final int razorpayStatus;
+
+        public Refused(int razorpayStatus, String reason) {
+            super(HttpStatus.BAD_GATEWAY, reason);
+            this.razorpayStatus = razorpayStatus;
+        }
+
+        public int razorpayStatus() {
+            return razorpayStatus;
         }
     }
 
