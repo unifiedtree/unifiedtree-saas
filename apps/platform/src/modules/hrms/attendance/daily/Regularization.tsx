@@ -19,6 +19,8 @@ import { useDecisionUndo } from '../../api/shared/useDecisionUndo'
 import { FixDayPanel } from './FixDayPanel'
 import { hhmmIst } from './dailyModel'
 import type { DailyPerms } from './DailyTracking'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { keepInRange, wholeList } from '@/design/kit/rangeFilterModel'
 
 const STATE: Record<string, { label: string; tone: StatusTone }> = {
   PENDING: { label: 'Waiting', tone: 'amber' }, APPROVED: { label: 'Approved', tone: 'success' }, REJECTED: { label: 'Rejected', tone: 'danger' },
@@ -42,6 +44,9 @@ export function Regularization({ perms }: { perms: DailyPerms }) {
   const recent = useRecentDecisions({ enabled: approver })
   const decide = useDecideCorrection()
   const undo = useDecisionUndo()
+  // The start / end calendar (?from=&to=) keeps both lists to the days the fixes are for. The lists come whole
+  // (up to 100 waiting, your own 20 latest), so they are kept to the range here; a longer list says so.
+  const [range, setRange] = useRangeParam()
   const undoable = new Map((recent.data ?? []).filter((d) => d.kind === 'CORRECTION').map((d) => [d.requestId, d]))
 
   const run = (id: string, what: 'approve' | 'reject', note: string) => {
@@ -76,14 +81,23 @@ export function Regularization({ perms }: { perms: DailyPerms }) {
     ...(r.attachmentUrl ? [{ label: 'Proof', value: <Button size={30} variant="ghost" icon="fileText" onClick={() => openProof(r)}>Open proof</Button> }] : []),
   ]
 
-  const waiting = pending.data?.content ?? []
+  const waitingAll = pending.data?.content ?? []
+  const waiting = keepInRange(waitingAll, range, (r) => r.requestedDate)
   const decided = [...(approved.data?.content ?? []), ...(rejected.data?.content ?? [])]
     .sort((a, b) => (b.decidedAt || '').localeCompare(a.decidedAt || ''))
-  const myList = mine.data?.content ?? []
-  const views = approver && ownFixes
-    ? <FilterPills label="Whose requests" semantics="tabs" value={view} onChange={(v) => setView(v as 'team' | 'mine')}
-      options={[{ value: 'team', label: 'Team requests', count: waiting.length || null }, { value: 'mine', label: 'My requests', count: myList.length || null }]} />
-    : null
+  const myAll = mine.data?.content ?? []
+  const myList = keepInRange(myAll, range, (r) => r.requestedDate)
+  const partial = !!range && (view === 'team' && approver
+    ? !wholeList(waitingAll.length, pending.data?.totalElements)
+    : !wholeList(myAll.length, mine.data?.totalElements))
+  const views = (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+      {approver && ownFixes && <FilterPills label="Whose requests" semantics="tabs" value={view} onChange={(v) => setView(v as 'team' | 'mine')}
+        options={[{ value: 'team', label: 'Team requests', count: waiting.length || null }, { value: 'mine', label: 'My requests', count: myList.length || null }]} />}
+      <RangeFilter value={range} onChange={setRange} label="Fix dates" filterKey="fix-dates" />
+      {partial && <span className="udt-q">Only the latest {view === 'team' && approver ? waitingAll.length : myAll.length} requests are searched.</span>}
+    </div>
+  )
 
   return (
     <>
@@ -95,7 +109,7 @@ export function Regularization({ perms }: { perms: DailyPerms }) {
         <>
           <Section title="Waiting for your OK" count={waiting.length || null} countTone="gold" variant="section" body="list"
             loading={pending.isLoading} error={pending.isError ? pending.error : undefined} onRetry={() => void pending.refetch()} retrying={pending.isFetching}
-            empty={waiting.length === 0 ? { title: 'All caught up', hint: 'No attendance fixes are waiting for you.', variant: 'success' } : undefined}>
+            empty={waiting.length === 0 ? (range && waitingAll.length ? { title: 'Nothing on these dates', hint: 'No fixes waiting for these days. Clear the dates to see them all.' } : { title: 'All caught up', hint: 'No attendance fixes are waiting for you.', variant: 'success' }) : undefined}>
             <div className="udt-cards">
               {waiting.map((r) => (
                 <ApprovalRow key={r.id} variant="card" withNote notePlaceholder="Decision note (optional)"
@@ -126,7 +140,7 @@ export function Regularization({ perms }: { perms: DailyPerms }) {
       ) : (
         <Section title="My requests" count={myList.length || null} variant="section" body="flush"
           loading={mine.isLoading} error={mine.isError ? mine.error : undefined} onRetry={() => void mine.refetch()}
-          empty={myList.length === 0 ? { title: 'No fix requests yet', hint: 'Forgot to punch? Ask for a fix with “New request”.' } : undefined}>
+          empty={myList.length === 0 ? (range && myAll.length ? { title: 'Nothing on these dates', hint: 'None of your fixes are for these days.' } : { title: 'No fix requests yet', hint: 'Forgot to punch? Ask for a fix with “New request”.' }) : undefined}>
           <ul className="udt-mine">
             {myList.map((r) => {
               const s = STATE[r.status] || STATE.PENDING

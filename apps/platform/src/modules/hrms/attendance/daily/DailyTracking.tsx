@@ -99,6 +99,8 @@ export function DailyTracking() {
     const q = new URLSearchParams(params)
     q.set('tab', next)
     if (next !== 'team') { q.delete('date'); q.delete('status') }
+    // Each view keeps its own start / end dates (Review, Regularization): a new view starts on its default.
+    if (next !== tab) { q.delete('from'); q.delete('to') }
     navigate(`/hrms/attendance?${q}`, { replace: true })
   }
   const items: PillTab[] = tabs.map((k) => ({

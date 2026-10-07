@@ -17,6 +17,8 @@ import {
 } from '../../api/useOvertime'
 import { capLabel, counted, hm, isoDay, minimumLabel, overtimeTotals, statusOf, toMinutes } from './shiftModel'
 import { MyOvertime } from './MyOvertime'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { rangeWords } from '@/design/kit/rangeFilterModel'
 
 /** One row of the Overtime list, from punches or asked for. */
 interface Row {
@@ -55,15 +57,20 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
   const requests = useTeamOvertimeRequests(prevMonthStart, addDays(today, 30), canTeam)
   const rules = useOvertimeRules(companyId, { enabled: canTeam || canPolicy })
   const decideEntry = useDecideOvertime(), decideReq = useDecideOvertimeRequest()
-  const [view, setView] = useState<'waiting' | 'month'>('waiting')
+  // The list: this month by default, or the start / end picked on the calendar (?from=&to=; both lists ask the API for it).
+  const [picked, setPicked] = useRangeParam()
+  const [view, setView] = useState<'waiting' | 'month'>(picked ? 'month' : 'waiting')
+  const listRange = picked ?? { from: monthStart, to: today }
+  const listEntries = useOvertimeEntries(listRange.from, listRange.to, canTeam && view === 'month')
+  const listRequests = useTeamOvertimeRequests(listRange.from, listRange.to, canTeam && view === 'month')
   const [busy, setBusy] = useState<Record<string, 'approve' | 'reject'>>({})
   const [rejecting, setRejecting] = useState<Row | null>(null)
   const [reason, setReason] = useState('')
   const [editing, setEditing] = useState(false)
 
-  const rows: Row[] = useMemo(() => {
+  const toRows = (entryList: readonly OvertimeEntry[], requestList: readonly OvertimeRequest[]): Row[] => {
     const out: Row[] = []
-    for (const o of (entries.data ?? []) as OvertimeEntry[]) {
+    for (const o of entryList) {
       const iso = isoDay(o.date), p = who(o.employeeId)
       out.push({
         key: `p-${o.id}`, id: o.id, source: 'punch', employeeId: o.employeeId, name: o.employeeName, sub: p ? [p.code, p.dept].filter((x) => x && x !== '—').join(' · ') : '',
@@ -77,7 +84,7 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
         ],
       })
     }
-    for (const r of (requests.data ?? []) as OvertimeRequest[]) {
+    for (const r of requestList) {
       const p = who(r.employeeId)
       out.push({
         key: `r-${r.id}`, id: r.id, source: 'request', employeeId: r.employeeId, name: r.employeeName || 'Employee',
@@ -87,10 +94,12 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
       })
     }
     return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.name.localeCompare(b.name)))
-  }, [entries.data, requests.data, who])
+  }
+  const rows: Row[] = useMemo(() => toRows(entries.data ?? [], requests.data ?? []), [entries.data, requests.data, who]) // eslint-disable-line react-hooks/exhaustive-deps
+  const listRows: Row[] = useMemo(() => toRows(listEntries.data ?? [], listRequests.data ?? []), [listEntries.data, listRequests.data, who]) // eslint-disable-line react-hooks/exhaustive-deps
   const totals = useMemo(() => overtimeTotals(entries.data ?? [], requests.data ?? [], monthStart), [entries.data, requests.data, monthStart])
   const waiting = rows.filter((r) => r.status === 'PENDING')
-  const month = rows.filter((r) => r.date >= monthStart && r.status !== 'CANCELLED')
+  const month = listRows.filter((r) => r.date >= listRange.from && r.date <= listRange.to && r.status !== 'CANCELLED')
 
   const decide = async (r: Row, approve: boolean, note: string) => {
     if (!approve && !note.trim()) { setRejecting(r); setReason(''); return }
@@ -152,8 +161,11 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
         </Section>
       )}
 
-      <FilterPills label="Overtime views" size="sm" value={view} onChange={(v) => setView(v as 'waiting' | 'month')}
-        options={[{ value: 'waiting', label: 'Waiting for you', count: waiting.length || null }, { value: 'month', label: 'This month' }]} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+        <FilterPills label="Overtime views" size="sm" value={view} onChange={(v) => setView(v as 'waiting' | 'month')}
+          options={[{ value: 'waiting', label: 'Waiting for you', count: waiting.length || null }, { value: 'month', label: picked ? 'By dates' : 'This month' }]} />
+        {view === 'month' && <RangeFilter value={listRange} onChange={setPicked} label="Overtime dates" filterKey="overtime-dates" clearable={!!picked} />}
+      </div>
       {view === 'waiting' ? (
         <Section title="Waiting for a decision" sub={minimum ? `Days under the ${hm(minimum)} minimum aren’t listed: they aren’t overtime.` : undefined}
           error={entries.error ?? requests.error} onRetry={() => { void entries.refetch(); void requests.refetch() }}>
@@ -172,9 +184,9 @@ export function OvertimeView({ today, companyId, canTeam, canDecide, canPolicy, 
           )}
         </Section>
       ) : (
-        <Section title="Overtime requests" body="flush" error={entries.error ?? requests.error} onRetry={() => { void entries.refetch(); void requests.refetch() }}>
-          <Table label="Overtime this month" columns={columns} rows={month} rowKey={(r) => r.key} loading={entries.isLoading} mobile="cards"
-            empty={<EmptyState variant="plain" icon="timer" title="No overtime requests" hint="Overtime from punches and requests this month shows up here." />} />
+        <Section title="Overtime requests" sub={picked ? rangeWords(listRange) : undefined} body="flush" error={listEntries.error ?? listRequests.error} onRetry={() => { void listEntries.refetch(); void listRequests.refetch() }}>
+          <Table label={picked ? `Overtime, ${rangeWords(listRange)}` : 'Overtime this month'} columns={columns} rows={month} rowKey={(r) => r.key} loading={listEntries.isLoading || listRequests.isLoading} mobile="cards"
+            empty={<EmptyState variant="plain" icon="timer" title="No overtime requests" hint={picked ? 'Nothing from punches or requests on these dates.' : 'Overtime from punches and requests this month shows up here.'} />} />
         </Section>
       )}
 
