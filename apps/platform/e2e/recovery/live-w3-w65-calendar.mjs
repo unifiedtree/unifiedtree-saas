@@ -114,6 +114,8 @@ const ADMIN_PAGES = [
   { name: 'Onboarding · New hires', path: '/hrms/onboarding', key: 'joining-dates', api: null, optional: true },
   { name: 'Hiring · Interviews', path: '/hrms/hiring?tab=interviews', key: 'interview-dates', api: null, optional: true },
   { name: 'Timesheet approvals', path: '/hrms/attendance?tab=timesheet', key: 'timesheet-dates', api: null, optional: true },
+  { name: 'Expenses · Reimbursement batches', path: '/hrms/expenses?tab=batches', key: 'batch-dates', api: null },
+  { name: 'Leave · Encash (decided)', path: '/hrms/leave?tab=encash', key: 'encash-dates', api: null, optional: true },
 ]
 const SELF_PAGES = [
   { name: 'Home · Attendance history', path: '/', key: 'attendance-dates', api: new RegExp(`/v1/attendance/history\\?year=${prevYm.slice(0, 4)}&month=${Number(prevYm.slice(5))}`), optional: true },
