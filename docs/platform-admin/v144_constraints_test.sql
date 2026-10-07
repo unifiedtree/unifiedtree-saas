@@ -168,11 +168,16 @@ SELECT 'V144_104 invoices carry no unused provider/pdf columns',
                               AND table_name = 'invoices'
                               AND column_name IN ('provider', 'provider_invoice_id', 'provider_payment_id', 'pdf_storage_key'))
             THEN 'PASS' ELSE 'FAIL' END;
-SELECT pg_temp.expect_ok('V144_104 a second draft for the same payment can be discarded and re-drafted',
-  $q$WITH d AS (INSERT INTO platform.invoices (id, tenant_id, status, subtotal, tax_total, total)
-                VALUES ('11110000-0000-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-00000000000a','DRAFT',100,18,118) RETURNING id)
-     UPDATE platform.invoices SET status='DISCARDED', voided_at=now(), void_reason='Drafted from the wrong payment'
-      WHERE id IN (SELECT id FROM d)$q$);
+SELECT pg_temp.expect_ok('V144_104 a draft to discard',
+  $q$INSERT INTO platform.invoices (id, tenant_id, status, subtotal, tax_total, total)
+     VALUES ('11110000-0000-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-00000000000a','DRAFT',100,18,118)$q$);
+SELECT pg_temp.expect_ok('V144_104 a wrong draft is DISCARDED with a reason (no number)',
+  $q$UPDATE platform.invoices SET status='DISCARDED', voided_at=now(), void_reason='Drafted from the wrong payment'
+      WHERE id='11110000-0000-0000-0000-000000000002'$q$);
+INSERT INTO results(check_name, outcome)
+SELECT 'V144_104 the discard really happened',
+       CASE WHEN status = 'DISCARDED' THEN 'PASS' ELSE 'FAIL (' || status || ')' END
+  FROM platform.invoices WHERE id = '11110000-0000-0000-0000-000000000002';
 SELECT pg_temp.expect_error('V144_104 a discarded draft cannot be issued (trigger)',
   $q$UPDATE platform.invoices SET status='ISSUED', invoice_number='UT/26-27/09999', issued_at=now(),
             billing_snapshot='{}'::jsonb WHERE id='11110000-0000-0000-0000-000000000002'$q$, '23514');
