@@ -11,6 +11,8 @@ import { jwtDecode } from 'jwt-decode'
 import { getAccessToken, useAnyPermission, usePermission, P } from '@unifiedtree/sdk'
 import { apiBlob, apiJson } from '@/core/api/client'
 import { HrDrawer } from '@/shared/components/hr'
+import { useRangeParam } from '@/design/kit/RangeFilter'
+import { monthRange } from '@/design/kit/rangeFilterModel'
 import { PayrollModule } from '@/design/dc/PayrollModule'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, addDays, fmtShort, MON, MONTHS } from '@/design/dc/dates'
@@ -96,6 +98,9 @@ export function PayrollContainer() {
   const location = useLocation()
   const { id: runParam } = useParams()
   const [params] = useSearchParams()
+  const monthLink = /^\d{4}-(0[1-9]|1[0-2])$/.test(params.get('month') || '') ? monthRange(params.get('month') as string) : null
+  // The runs list's pay periods (?from=&to=); a new range replaces an older ?month= link.
+  const [runsRange, setRunsRange] = useRangeParam({ fallback: monthLink, resetKeys: ['month'] })
   const mobile = useIsMobile()
   const qc = useQueryClient()
   const today = istToday()
@@ -298,8 +303,8 @@ export function PayrollContainer() {
   }
   if (section === 'runs' && !runId) {
     px.PayRuns = {
-      // ?month=YYYY-MM (the dashboard's payroll chart) opens the list on that month.
-      month: params.get('month') || '',
+      // The pay periods shown (?from=&to=, the start / end calendar); ?month=YYYY-MM (the dashboard's payroll chart) is that month.
+      range: runsRange, onRange: setRunsRange,
       state: coReady ? stateOf(runsQ) : 'loading', runs: runs.map(toRun), companies, canManage, onRetry: () => runsQ.refetch(),
       companyNote: multi ? 'The company chosen at the top of the page. Switch company there to run another company’s payroll.' : undefined,
       onCreate: (q: { companyId: string; year: number; month: number }) => createRun.mutateAsync({ companyId: q.companyId, periodMonth: q.month, periodYear: q.year })

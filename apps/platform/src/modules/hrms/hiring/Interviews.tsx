@@ -31,6 +31,8 @@ import {
   STAGE_LABEL, dayMon, interviewState, interviewWhen, interviewersLine, istDateOf, istTodayIso, mergeInterviews, type InterviewRow,
 } from './hiringModel'
 import './hiring.css'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { keepInRange } from '@/design/kit/rangeFilterModel'
 
 const REC_TONE: Record<Recommendation, 'success' | 'mint' | 'warning' | 'danger'> = { STRONG_YES: 'success', YES: 'mint', NO: 'warning', STRONG_NO: 'danger' }
 const RATING_LABEL = ['', '1 · Poor', '2 · Below the bar', '3 · Meets the bar', '4 · Strong', '5 · Exceptional']
@@ -345,6 +347,9 @@ function InterviewTable({ rows, loading, error, onRetry, retrying, empty, hr }: 
   const [scoring, setScoring] = useState<Interview | null>(null)
   const [open, setOpen] = useState<InterviewRow | null>(null)
   const today = istTodayIso()
+  // The start / end calendar (?from=&to=) keeps the list to interviews on those days (India time); the lists come whole.
+  const [range, setRange] = useRangeParam()
+  const shown = useMemo(() => keepInRange(rows, range, (r) => r.interview.scheduledAtIst), [rows, range])
   const scoreButton = (r: InterviewRow) => (r.mine && r.interview.started && r.interview.status === 'SCHEDULED'
     ? <Button size={30} variant={r.mine.scorecards.length ? 'secondary' : 'soft'} onClick={() => setScoring(r.mine)}>{r.mine.scorecards.length ? 'Edit scorecard' : 'Fill scorecard'}</Button>
     : null)
@@ -383,8 +388,10 @@ function InterviewTable({ rows, loading, error, onRetry, retrying, empty, hr }: 
   return (
     <>
       <Section title="Coming up" body="flush" loading={loading} skeleton="table" error={error} onRetry={onRetry} retrying={retrying}
+        actions={rows.length > 0 ? <RangeFilter value={range} onChange={setRange} label="Interview dates" filterKey="interview-dates" align="end" /> : undefined}
         empty={!loading && !error && rows.length === 0 ? { ...empty, icon: 'calendar' } : undefined}>
-        <Table label="Interviews coming up" columns={columns} rows={rows} rowKey={(r) => r.id} mobile="cards" onRowClick={(r) => setOpen(r)} />
+        <Table label="Interviews coming up" columns={columns} rows={shown} rowKey={(r) => r.id} mobile="cards" onRowClick={(r) => setOpen(r)}
+          empty={<EmptyState variant="plain" icon="calendar" title="No interviews on these dates" hint="Pick other dates, or clear them to see every interview." />} />
       </Section>
       {open && (
         <SidePanel open onClose={() => setOpen(null)} width={600} closeLabel="Close panel" title={open.interview.title}
