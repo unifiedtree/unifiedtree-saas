@@ -21,7 +21,7 @@ import type { WorkforceEmployee, PageResponse } from '../api/useWorkforce'
 import type { ShiftPolicy } from '../api/useShiftPolicies'
 import type { LeaveTypeResponse } from '../api/useLeave'
 import type { Policy, Page } from '../api/usePolicy'
-import type { SalaryComponent, PayrollSettings, PtSlab } from '../api/usePayroll'
+import { payrollSettingsKey, payrollSettingsUrl, type SalaryComponent, type PayrollSettings, type PtSlab } from '../api/usePayroll'
 import type { HrConfigResponse, NextEmployeeCodePreview } from '../api/useSettings'
 import {
   employeeRec, companyRec, branchRec, deptRec, desigRec, gradeRec, agencyRec, classRec, shiftRec, leaveRec, policyRec, componentRec, statutoryRecs,
@@ -245,7 +245,8 @@ export function MasterContainer({ directory }: MasterContainerProps = {}) {
     combine: listOf as (rs: UseQueryResult<Policy[]>[]) => Coll<Policy>,
   })
   const compQ = useQuery({ queryKey: ['hrms', 'payroll', 'components'], queryFn: () => apiJson<SalaryComponent[]>('/v1/payroll/components'), enabled: canCompRead && want('components'), staleTime: 30_000 })
-  const setQ = useQuery({ queryKey: ['hrms', 'payroll', 'settings'], queryFn: () => apiJson<PayrollSettings>('/v1/payroll/settings'), enabled: canSetRead && (want('statutory') || want('components')), staleTime: 60_000 })
+  // Payroll settings are per company (V143.105): the current company's, saved back to it (masterSync.statutory).
+  const setQ = useQuery({ queryKey: payrollSettingsKey(defaultCo), queryFn: () => apiJson<PayrollSettings>(payrollSettingsUrl(defaultCo)), enabled: (!!defaultCo || !companiesQ.isLoading) && canSetRead && (want('statutory') || want('components')), staleTime: 60_000 })
   const ptCode = setQ.data?.ptStateCode || ''
   // Milestone filter (URL filter=birthday|anniversary|retirement). Changing it keeps the page's other filters.
   const milestone = MILESTONES.some((m) => m.v === params.get('filter')) ? params.get('filter') as string : ''

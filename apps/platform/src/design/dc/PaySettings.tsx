@@ -31,6 +31,16 @@ export const LWF_SCHEDULES: [string, string][] = [['6,12', 'June and December'],
 const monthsKey = (m?: number[] | null) => (m && m.length ? [...m].sort((a, b) => a - b).join(',') : '6,12')
 export const lwfMonthsLabel = (key: string) => LWF_SCHEDULES.find(([k]) => k === key)?.[1] || key.split(',').filter(Boolean).map((n) => MONTH_NAMES[Number(n) - 1]?.slice(0, 3)).join(', ')
 /** The cycle ends the day before it starts again. */
+/**
+ * The page's heading and line under it. Settings are per company (V143.105): the heading names the
+ * company they belong to ("Payroll settings · Acme"); without a name, as before.
+ */
+export function settingsHeading(companyName?: string | null): { title: string; subtitle: string } {
+  const name = (companyName || '').trim()
+  return name
+    ? { title: `Payroll settings · ${name}`, subtitle: `Statutory deductions and payroll cycle used by ${name}’s payroll runs.` }
+    : { title: 'Payroll settings', subtitle: 'Statutory deductions and payroll cycle used by every payroll run.' }
+}
 const endFor = (start: string) => (/^\d{1,2}$/.test(start) && +start >= 1 && +start <= 31 ? String(+start === 1 ? 31 : +start - 1) : '')
 
 type Form = {
@@ -298,6 +308,7 @@ export class PaySettings extends DCLogic {
     const skb = (w: any, h: number, r?: number) => ({ style: { width: w, height: h, borderRadius: r == null ? 6 : r } })
     const nVis = visKeys.length, t = s.toast, isErrToast = !!(t && t.kind === 'error')
     return {
+      ...settingsHeading(p.companyName),
       rootRef: this.rootRef, live, isLoading, isError, noAccess, canEdit, readOnly,
       showSide: !narrow && (live || isLoading), showChips: narrow && live,
       toc, pf, esi, pt, lwf, cycle, cyc, fx, slabCols, yes: true, slabs,

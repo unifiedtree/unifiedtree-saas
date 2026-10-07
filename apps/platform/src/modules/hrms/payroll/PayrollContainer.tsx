@@ -30,7 +30,7 @@ import {
   useRuns, useRun, useRunEmployees, useRunSkipped, useEligibleEmployees, useRunPayslip, useCreateRun, useProcessRun, useLockRun, useReopenRun,
   downloadPayslipPdf, type PayrollRun, type EligibleEmployee, type ComponentTotal, type StatutoryDue,
 } from '../api/usePayrollRuns'
-import type { EmployeeSalaryStructure, SalaryComponent, PtSlab, PayrollDashboardKpis } from '../api/usePayroll'
+import { payrollSettingsKey, payrollSettingsUrl, type EmployeeSalaryStructure, type SalaryComponent, type PtSlab, type PayrollDashboardKpis } from '../api/usePayroll'
 import { downloadBatchFile, type DisbursementBatch, type BankProfile, type BatchDetail } from '../api/useDisbursement'
 import type { AdvanceRequest, Page, AdvanceScheduleRow } from '../api/useAdvance'
 import { useAdvanceDecision, useRequestAdvance, useRequestAdvanceOnBehalf } from '../api/useAdvance'
@@ -201,7 +201,8 @@ export function PayrollContainer() {
     queryFn: () => apiJson<{ employeeId: string; gradeCode: string; gradeName: string; minCtcAnnual: number | null; maxCtcAnnual: number | null }[]>(`/v1/hrms/pay-bands?employeeIds=${salaryIds.join(',')}`),
     enabled: canBands && salaryIds.length > 0, staleTime: 60_000,
   })
-  const settingsQ = useQuery({ queryKey: ['hrms', 'payroll', 'settings'], queryFn: () => apiJson<ApiPayrollSettings>('/v1/payroll/settings'), enabled: canSettings && ['salary', 'settings'].includes(section), staleTime: 60_000 })
+  // Payroll settings are the chosen company's (V143.105); a switch loads that company's.
+  const settingsQ = useQuery({ queryKey: payrollSettingsKey(co), queryFn: () => apiJson<ApiPayrollSettings>(payrollSettingsUrl(co)), enabled: coReady && canSettings && ['salary', 'settings'].includes(section), staleTime: 60_000 })
   const [ptCode, setPtCode] = useState('')
   const slabCode = section === 'settings' ? ptCode : settingsQ.data?.ptEnabled ? settingsQ.data.ptStateCode || '' : ''
   const slabsQ = useQuery({ queryKey: ['hrms', 'payroll', 'pt-slabs', slabCode], queryFn: () => apiJson<PtSlab[]>(`/v1/payroll/pt-slabs/${slabCode}`), enabled: !!slabCode && ['salary', 'settings'].includes(section), staleTime: Infinity })
@@ -213,7 +214,7 @@ export function PayrollContainer() {
     mutationFn: (body: Record<string, unknown>) => apiJson<EmployeeSalaryStructure>('/v1/payroll/structures', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'structure', 'employee', v.employeeId as string] }); qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'structure', 'history', v.employeeId as string] }); qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'runs'] }) },
   })
-  const saveSettings = useMutation({ mutationFn: (s: ApiPayrollSettings) => apiJson<ApiPayrollSettings>('/v1/payroll/settings', { method: 'PUT', body: JSON.stringify(s) }), onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'settings'] }) })
+  const saveSettings = useMutation({ mutationFn: (s: ApiPayrollSettings) => apiJson<ApiPayrollSettings>(payrollSettingsUrl(co), { method: 'PUT', body: JSON.stringify(s) }), onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'settings'] }) })
 
   // ── PLI ──
   const pliQ = useQuery({
@@ -467,7 +468,7 @@ export function PayrollContainer() {
   }
   if (section === 'settings') {
     px.PaySettings = {
-      state: settingsQ.isError ? 'error' : 'live', settings: settingsQ.data, access: canSettingsEdit ? 'edit' : canSettings ? 'view' : 'none', ptSlabs: slabsQ.data ?? [],
+      state: settingsQ.isError ? 'error' : 'live', settings: settingsQ.data, access: canSettingsEdit ? 'edit' : canSettings ? 'view' : 'none', ptSlabs: slabsQ.data ?? [], companyName,
       onPtState: (code: string) => setPtCode(code), onRetry: () => settingsQ.refetch(), onGo: (sec: string) => sec === 'dashboard' && navigate('/hrms/payroll-dashboard'),
       onSave: (s: ApiPayrollSettings) => saveSettings.mutateAsync(s).then(() => ({ ok: true }), (e) => ({ ok: false, message: errText(e) })),
     }

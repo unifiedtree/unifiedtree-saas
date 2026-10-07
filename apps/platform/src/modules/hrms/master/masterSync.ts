@@ -8,7 +8,7 @@ import { apiJson } from '@/core/api/client'
 import { assignEmployeeShift } from '../api/useOrg'
 import { sendInvite } from '../employees/api/useInvitation'
 import { applyNewPersonAccess, isDefaultAccess, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
-import type { PayrollSettings } from '../api/usePayroll'
+import { payrollSettingsUrl, type PayrollSettings } from '../api/usePayroll'
 import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, BRANCH_KIND_CODE, ACCRUAL_CODE, WEEK, pretty, type Rec } from './masterData'
 
 export interface Diff { added: Rec[]; changed: [Rec, Rec][]; removed: Rec[] }
@@ -352,7 +352,8 @@ async function statutory({ changed }: Diff, env: SyncEnv) {
   // PUT replaces the settings (an omitted late-mark threshold is cleared), so the whole row goes back.
   const next: PayrollSettings = { ...env.settings }
   for (const [, r] of changed) (next as any)[FLAG[r.id]] = !!r.on
-  await apiJson('/v1/payroll/settings', json('PUT', next))
+  // The settings of the company the page is on (V143.105), the one they were loaded for.
+  await apiJson(payrollSettingsUrl(env.defaultCo), json('PUT', next))
   return [['hrms', 'payroll', 'settings']]
 }
 
