@@ -371,7 +371,7 @@ public class AdvanceController {
         return perms != null && perms.contains(permission);
     }
 
-    @Operation(summary = "List salary advances across all statuses, scoped to the caller")
+    @Operation(summary = "List salary advances across all statuses, scoped to the caller (optionally only those asked for ?from=&to=, India days, both included)")
     @GetMapping("/requests")
     @PreAuthorize("hasAuthority('hrms.advance.read')")
     public ResponseEntity<PageResponse<AdvanceResponse>> listRequests(
@@ -379,12 +379,16 @@ public class AdvanceController {
             @RequestParam(required = false) AdvanceReadService.Phase phase,
             @RequestParam(required = false) UUID departmentId,
             @PageableDefault(size = 20) Pageable pageable,
-            @AuthenticationPrincipal Jwt jwt) {
-        if (phase != null || departmentId != null) {
-            // BW-62: Recovering / Repaid and a department, in the same scope as below.
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        // Calendar everywhere (7 Oct 2026): the request date; none = the list as before.
+        com.hrms.core.dto.ListDateRange range = com.hrms.core.dto.ListDateRange.parse(from, to);
+        if (phase != null || departmentId != null || range != null) {
+            // BW-62: Recovering / Repaid and a department (and the range), in the same scope as below.
             AdvanceReadService.IdPage ids = reads.filteredIds(com.hrms.core.tenant.TenantContext.getTenantId(),
                     seesAllAdvances(jwt) ? null : scopeOf(extractEmployeeId(jwt)),
-                    status == null ? null : List.of(status.name()), phase, departmentId,
+                    status == null ? null : List.of(status.name()), phase, departmentId, range,
                     pageable.getPageNumber(), pageable.getPageSize());
             int size = Math.max(1, pageable.getPageSize());
             int totalPages = (int) ((ids.total() + size - 1) / size);

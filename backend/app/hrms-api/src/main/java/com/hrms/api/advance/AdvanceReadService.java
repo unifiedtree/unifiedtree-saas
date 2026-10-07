@@ -88,6 +88,17 @@ public class AdvanceReadService {
     @Transactional(readOnly = true)
     public IdPage filteredIds(UUID tenantId, UUID approverScope, Collection<String> statuses, Phase phase,
                               UUID departmentId, int page, int size) {
+        return filteredIds(tenantId, approverScope, statuses, phase, departmentId, null, page, size);
+    }
+
+    /**
+     * {@link #filteredIds(UUID, UUID, Collection, Phase, UUID, int, int)}, also
+     * kept to advances asked for on a day in {@code range} (calendar everywhere,
+     * 7 Oct 2026: the request date, created_at in India). Null = no range.
+     */
+    @Transactional(readOnly = true)
+    public IdPage filteredIds(UUID tenantId, UUID approverScope, Collection<String> statuses, Phase phase,
+                              UUID departmentId, com.hrms.core.dto.ListDateRange range, int page, int size) {
         StringBuilder where = new StringBuilder(" WHERE ar.tenant_id = ?");
         List<Object> args = new ArrayList<>();
         args.add(tenantId);  // WRITE_OFFS
@@ -102,6 +113,11 @@ public class AdvanceReadService {
             where.append(" AND EXISTS (SELECT 1 FROM hrms.employees e WHERE e.tenant_id = ar.tenant_id"
                     + " AND e.id = ar.employee_id AND e.department_id = ?)");
             args.add(departmentId);
+        }
+        if (range != null) {
+            where.append(" AND ar.created_at >= ? AND ar.created_at < ?");
+            args.add(range.startsAtOffset());
+            args.add(range.endsBeforeOffset());
         }
         String from = " FROM advance_mgmt.advance_requests ar " + WRITE_OFFS + where;
         Long total = jdbc.queryForObject("SELECT count(*)" + from, Long.class, args.toArray());

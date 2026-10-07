@@ -1,6 +1,7 @@
 package com.hrms.api.fnf;
 
 import com.hrms.api.access.RecordCompanyGuard;
+import com.hrms.core.dto.ListDateRange;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -83,16 +84,20 @@ public class FnfController {
 
     // ─── Read ────────────────────────────────────────────────────────────────
 
-    @Operation(summary = "List full & final settlements, optionally by status (comma-separated) and/or one employee")
+    @Operation(summary = "List full & final settlements, optionally by status (comma-separated), one employee and/or a range of last working days (?from=&to=, both included)")
     @GetMapping("/settlements")
     @PreAuthorize("hasAuthority('hrms.fnf.read')")
     public ResponseEntity<PageResponse<FnfSettlementResponse>> list(
             @RequestParam(required = false) List<FnfStatus> status,
             @RequestParam(required = false) UUID employeeId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        ListDateRange range = ListDateRange.parse(from, to);
         RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
-        // No filter = today's call exactly (BW-64 adds the two optional filters).
-        return ResponseEntity.ok(enrichPage(fnfService.getSettlements(status, employeeId, pageable)));
+        // No filter = today's call exactly (BW-64 adds the two optional filters; calendar everywhere, 7 Oct 2026, the range).
+        return ResponseEntity.ok(enrichPage(range == null ? fnfService.getSettlements(status, employeeId, pageable)
+                : fnfService.getSettlements(status, employeeId, range.from(), range.to(), pageable)));
     }
 
     /**

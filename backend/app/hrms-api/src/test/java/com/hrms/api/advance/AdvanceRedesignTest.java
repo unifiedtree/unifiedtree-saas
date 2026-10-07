@@ -126,24 +126,24 @@ class AdvanceRedesignTest {
 
         Pageable page = PageRequest.of(1, 10);
         UUID dept = UUID.randomUUID(), row = UUID.randomUUID();
-        when(reads.filteredIds(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+        when(reads.filteredIds(any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
                 .thenReturn(new AdvanceReadService.IdPage(List.of(row), 11));
         when(advances.getByIdsInOrder(List.of(row))).thenReturn(List.of(advanceOf(other, me, AdvanceStatus.DISBURSED)));
         PageResponse<AdvanceResponse> out = controller.listRequests(null, AdvanceReadService.Phase.RECOVERING, dept, page,
-                jwt(me, "hrms.advance.read")).getBody();
-        verify(reads).filteredIds(tenant, me, null, AdvanceReadService.Phase.RECOVERING, dept, 1, 10);
+                jwt(me, "hrms.advance.read"), null, null).getBody();
+        verify(reads).filteredIds(tenant, me, null, AdvanceReadService.Phase.RECOVERING, dept, null, 1, 10);
         assertEquals(11, out.totalElements());
         assertEquals(2, out.totalPages());
         assertTrue(out.last());
         assertEquals(1, out.content().size());
 
         controller.listRequests(AdvanceStatus.CLOSED, AdvanceReadService.Phase.REPAID, null, page,
-                jwt(me, "hrms.advance.read", "hrms.advance.disburse"));
-        verify(reads).filteredIds(tenant, null, List.of("CLOSED"), AdvanceReadService.Phase.REPAID, null, 1, 10);
+                jwt(me, "hrms.advance.read", "hrms.advance.disburse"), null, null);
+        verify(reads).filteredIds(tenant, null, List.of("CLOSED"), AdvanceReadService.Phase.REPAID, null, null, 1, 10);
 
         // Without a phase or department it is today's query, untouched.
         when(advances.getPendingForApprover(any(), any(), any())).thenReturn(new PageResponse<>(List.of(), 0, 20, 0, 0, true));
-        controller.listRequests(null, null, null, page, jwt(me, "hrms.advance.read"));
+        controller.listRequests(null, null, null, page, jwt(me, "hrms.advance.read"), null, null);
         verify(advances).getPendingForApprover(eq(me), eq(List.of(AdvanceStatus.values())), eq(page));
         verifyNoMoreInteractions(reads);
     }

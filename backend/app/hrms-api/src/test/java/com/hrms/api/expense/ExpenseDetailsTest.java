@@ -256,11 +256,11 @@ class ExpenseDetailsTest {
         when(service.getPendingForApprover(any(), any(), any())).thenReturn(empty);
         var page = PageRequest.of(0, 20);
 
-        controller.pendingApprovals(jwt(List.of("hrms.expense.reimbursement")), List.of(ExpenseStatus.SUBMITTED), page);
+        controller.pendingApprovals(jwt(List.of("hrms.expense.reimbursement")), List.of(ExpenseStatus.SUBMITTED), page, null, null);
         verify(service).getByStatuses(List.of(ExpenseStatus.SUBMITTED), page);
-        controller.pendingApprovals(jwt(List.of("hrms.expense.claim.approve")), List.of(ExpenseStatus.APPROVED), page);
+        controller.pendingApprovals(jwt(List.of("hrms.expense.claim.approve")), List.of(ExpenseStatus.APPROVED), page, null, null);
         verify(service).getPendingForApprover(me, List.of(ExpenseStatus.APPROVED), page);
-        controller.pendingApprovals(jwt(List.of("hrms.expense.claim.approve")), null, page);
+        controller.pendingApprovals(jwt(List.of("hrms.expense.claim.approve")), null, page, null, null);
         verify(service).getPendingForApprover(me, List.of(ExpenseStatus.SUBMITTED, ExpenseStatus.APPROVED), page);
     }
 

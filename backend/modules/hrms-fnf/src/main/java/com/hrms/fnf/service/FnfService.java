@@ -183,6 +183,22 @@ public class FnfService {
         return toPage(settlementRepository.findByEmployeeIdAndStatusInOrderByCreatedAtDesc(employeeId, statuses, pageable));
     }
 
+    /**
+     * {@link #getSettlements(java.util.Collection, UUID, Pageable)} kept to
+     * settlements whose last working day is in [from, to] (calendar
+     * everywhere, 7 Oct 2026). Null dates = exactly that list.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<FnfSettlementResponse> getSettlements(java.util.Collection<FnfStatus> statuses, UUID employeeId,
+                                                             java.time.LocalDate from, java.time.LocalDate to,
+                                                             Pageable pageable) {
+        if (from == null || to == null) return getSettlements(statuses, employeeId, pageable);
+        java.util.Collection<FnfStatus> in = statuses == null || statuses.isEmpty() ? java.util.List.of(FnfStatus.values()) : statuses;
+        return toPage(employeeId == null
+                ? settlementRepository.findByStatusInAndLastWorkingDayBetweenOrderByCreatedAtDesc(in, from, to, pageable)
+                : settlementRepository.findByEmployeeIdAndStatusInAndLastWorkingDayBetweenOrderByCreatedAtDesc(employeeId, in, from, to, pageable));
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<FnfSettlementResponse> getByStatus(FnfStatus status, Pageable pageable) {
         return toPage(settlementRepository.findByStatusOrderByCreatedAtDesc(status, pageable));
