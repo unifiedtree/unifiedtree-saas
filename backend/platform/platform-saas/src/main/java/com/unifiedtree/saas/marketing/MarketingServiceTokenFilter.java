@@ -28,11 +28,14 @@ import java.time.Instant;
  *
  * <p>Fails closed: if {@code unifiedtree.marketing.service-token}
  * ({@code UNIFIEDTREE_MARKETING_SERVICE_TOKEN}) is unset or shorter than 32
- * characters, every internal request is refused with 503. Compared in constant time.
+ * characters, every internal request is refused with 401 (the security chain refuses
+ * first, since no token can match) and a warning is logged at startup. Compared in
+ * constant time.
  *
  * <p>Two layers, both on the DECODED path (the one Spring Security and Spring MVC route on):
- * the security chain requires {@link #hasValidToken} for {@code /v1/internal/marketing/**},
- * and this filter (registered after the chain) answers the precise 401/503. Deciding on the
+ * the security chain requires {@link #hasValidToken} for {@code /v1/internal/marketing/**}
+ * (401 when it fails), and this filter, registered after the chain, refuses again (401, or
+ * 503 if the chain ever let an unconfigured request through). Deciding on the
  * raw request URI alone let {@code /v1/inte%72nal/...} skip the check while still routing to
  * the controller.
  */

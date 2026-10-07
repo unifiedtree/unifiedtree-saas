@@ -237,7 +237,7 @@ public class CanonicalProdSecurityConfig {
                 // Server-to-server API for Marketing Automation (Node): no user JWT, the
                 // shared service token instead. Checked HERE, with the same (decoded-path)
                 // matcher that routes the request, so no encoding of the path can skip it;
-                // MarketingServiceTokenFilter, after this chain, answers the precise 401/503.
+                // 401 here when the token is missing, wrong or not configured; MarketingServiceTokenFilter checks again.
                 .requestMatchers("/v1/internal/marketing/**")
                     .access((authentication, context) ->
                             new AuthorizationDecision(marketingServiceToken.hasValidToken(context.getRequest())))

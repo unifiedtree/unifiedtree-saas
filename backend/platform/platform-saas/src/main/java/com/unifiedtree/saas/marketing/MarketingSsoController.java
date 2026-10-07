@@ -1,5 +1,6 @@
 package com.unifiedtree.saas.marketing;
 
+import com.unifiedtree.saas.admin.support.PlatformAuditTrail;
 import com.unifiedtree.saas.marketing.MarketingAccessService.Handoff;
 import com.unifiedtree.saas.marketing.MarketingAccessService.WorkspaceChoice;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,6 +58,6 @@ public class MarketingSsoController {
     public Handoff handoff(@Valid @RequestBody HandoffRequest req, @AuthenticationPrincipal Jwt jwt,
                            HttpServletRequest http) {
         return access.mint(UUID.fromString(jwt.getSubject()), req.tenantId(), req.companyId(),
-                http.getRemoteAddr(), http.getHeader("User-Agent"));
+                PlatformAuditTrail.clientIp(http), http.getHeader("User-Agent"));
     }
 }

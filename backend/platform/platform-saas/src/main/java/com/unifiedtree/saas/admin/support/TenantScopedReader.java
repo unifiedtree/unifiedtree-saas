@@ -27,6 +27,16 @@ import java.util.function.Supplier;
  * <p>Read-only by construction (the transaction is read-only), and the caller's
  * own tenant and user are restored afterwards, so the rest of the request — and
  * any audit written after it — stays attributed to the operator.
+ *
+ * <p>Limits, by design:
+ * <ul>
+ *   <li>JDBC only inside the callback. It binds {@code com.unifiedtree.security.tenant.TenantContext}
+ *       (what the data source's {@code SET LOCAL} uses), not {@code com.hrms.core.tenant.TenantContext}
+ *       or the Hibernate tenant filter, so JPA repositories and HRMS services must not be called inside.</li>
+ *   <li>Called inside an outer transaction it holds a second pool connection for its duration
+ *       (REQUIRES_NEW). A loop over many workspaces opens one transaction per workspace, so such
+ *       lists are paged.</li>
+ * </ul>
  */
 @Component
 public class TenantScopedReader {
