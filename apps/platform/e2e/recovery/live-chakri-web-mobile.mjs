@@ -76,6 +76,8 @@ try {
   check('it opens the website step for this business', opened.origin === site && opened.searchParams.get('business') === 'demo' && opened.searchParams.get('port') === new URL(base).port, page.url())
   await page.getByRole('heading', { name: 'Sign in with your mobile' }).waitFor({ timeout: 30000 })
   const demoName = (await fetch(`${api}/v1/public/workspace-branding?subdomain=demo`).then((r) => r.json())).workspaceName || '(none)'
+  // The name / logo arrive with the public branding lookup, a moment after the heading.
+  await page.locator('main').getByText(demoName).or(page.locator('main img')).first().waitFor({ timeout: 15000 }).catch(() => {})
   check('the step shows the business, not the site', (await page.locator('main').innerText()).includes(demoName) || await page.locator('main img').count() > 0,
     `navbar links: ${await page.locator('nav a').count()}`)
   await page.screenshot({ path: `${shots}/chakri-web-mobile-1440.png` })
