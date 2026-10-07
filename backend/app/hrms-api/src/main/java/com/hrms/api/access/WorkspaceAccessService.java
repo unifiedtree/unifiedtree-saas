@@ -380,6 +380,74 @@ public class WorkspaceAccessService {
         }
     }
 
+    // ── Ownership transfer (contract §3 with Chakri's lane, 6 Oct 2026) ─────────
+    // Called only by OwnershipTransferService, which checks who may do what; these just move the roles.
+
+    /**
+     * Moves ownership in one transaction: the new owner gets OWNER + SUPER_ADMIN and loses any
+     * per-company grants (an owner covers the whole business); the old owner loses OWNER + SUPER_ADMIN
+     * and gets the built-in ADMIN for the transition. Audited; both people's access caches cleared.
+     */
+    @Transactional
+    public void transferOwnership(UUID tenantId, UUID fromUserId, UUID toUserId) {
+        bindTenant(tenantId);
+        if (fromUserId.equals(toUserId)) {
+            throw new BusinessRuleException("The new owner must be someone else.", "SAME_PERSON");
+        }
+        Role owner = roleByCode("OWNER"), superAdmin = roleByCode("SUPER_ADMIN"), admin = roleByCode("ADMIN");
+        if (!guard.isOwner(fromUserId)) {
+            throw new BusinessRuleException("Only the current owner can hand over ownership.", "NOT_OWNER");
+        }
+        UserCredentials to = credRepo.findById(toUserId)
+            .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
+        if (!to.isActive()) {
+            throw new BusinessRuleException("The new owner's login isn't active yet.", "USER_NOT_ACTIVE");
+        }
+        String fromEmail = credRepo.findById(fromUserId).map(UserCredentials::getEmail).orElse(fromUserId.toString());
+
+        grantIfAbsent(tenantId, toUserId, owner.getId(), fromUserId);
+        grantIfAbsent(tenantId, toUserId, superAdmin.getId(), fromUserId);
+        jdbc.update("DELETE FROM rbac.user_company_access WHERE tenant_id = ? AND user_id = ?", tenantId, toUserId);
+        userRoleRepo.deleteById(new UserRole.PK(tenantId, fromUserId, owner.getId()));
+        userRoleRepo.deleteById(new UserRole.PK(tenantId, fromUserId, superAdmin.getId()));
+        grantIfAbsent(tenantId, fromUserId, admin.getId(), fromUserId);
+
+        audit.record(fromUserId, AccessAudit.PERMISSION_CHANGE, "USER", toUserId,
+            "Handed ownership to " + to.getEmail(),
+            Map.of("ownershipFrom", fromEmail, "ownershipTo", to.getEmail(), "oldOwnerNow", "ADMIN"));
+        guard.evict(fromUserId);
+        guard.evict(toUserId);
+    }
+
+    /**
+     * Ends the old owner's transition: the ADMIN role goes. Someone who is also an employee keeps
+     * employee self-service (EMPLOYEE); someone who isn't loses sign-in.
+     */
+    @Transactional
+    public void endOwnerTransition(UUID tenantId, UUID oldOwnerUserId) {
+        bindTenant(tenantId);
+        Role admin = roleByCode("ADMIN");
+        UserCredentials old = credRepo.findById(oldOwnerUserId)
+            .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
+        userRoleRepo.deleteById(new UserRole.PK(tenantId, oldOwnerUserId, admin.getId()));
+        boolean employee = old.getEmployeeId() != null;
+        if (employee) {
+            grantIfAbsent(tenantId, oldOwnerUserId, roleByCode("EMPLOYEE").getId(), oldOwnerUserId);
+        } else {
+            old.setActive(false);
+            credRepo.save(old);
+        }
+        audit.record(oldOwnerUserId, AccessAudit.PERMISSION_CHANGE, "USER", oldOwnerUserId,
+            "Ownership transition ended for " + old.getEmail(),
+            Map.of("user", old.getEmail(), "keeps", employee ? "EMPLOYEE" : "nothing (no employee record)"));
+        guard.evict(oldOwnerUserId);
+    }
+
+    private Role roleByCode(String code) {
+        return roleRepo.findByCode(code)
+            .orElseThrow(() -> new BusinessRuleException("Unknown role " + code, "ROLE_NOT_FOUND"));
+    }
+
     private void grant(UUID tenantId, UUID userId, UUID roleId, UUID actorId) {
         UserRole ur = new UserRole();
         ur.setTenantId(tenantId);

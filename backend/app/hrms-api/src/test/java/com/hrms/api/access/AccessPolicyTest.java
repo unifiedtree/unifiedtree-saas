@@ -99,9 +99,18 @@ class AccessPolicyTest {
 
     @Test void ownerAndSuperAdminRolesOnlyFromAnOwner() {
         assertEquals("OWNER_ONLY", code(() -> AccessPolicy.requireCanGrantRole(ADMIN, "SUPER_ADMIN", "Super Admin", List.of(), RISK)));
-        assertEquals("OWNER_ONLY", code(() -> AccessPolicy.requireCanRevokeRole(ADMIN, "OWNER", "Owner")));
+        assertEquals("OWNER_ONLY", code(() -> AccessPolicy.requireCanRevokeRole(ADMIN, "SUPER_ADMIN", "Super Admin")));
         assertDoesNotThrow(() -> AccessPolicy.requireCanGrantRole(OWNER, "SUPER_ADMIN", "Super Admin", List.of(), RISK));
         assertDoesNotThrow(() -> AccessPolicy.requireCanRevokeRole(ADMIN, "DEPT_MANAGER", "Dept Manager"));
+    }
+
+    @Test void theOwnerRoleMovesOnlyByTransfer() {
+        // Exactly one owner: not even an owner gives or takes the Owner role on the Access screen.
+        assertEquals("OWNER_BY_TRANSFER_ONLY", code(() -> AccessPolicy.requireCanGrantRole(OWNER, "OWNER", "Owner", List.of(), RISK)));
+        assertEquals("OWNER_BY_TRANSFER_ONLY", code(() -> AccessPolicy.requireCanRevokeRole(OWNER, "OWNER", "Owner")));
+        assertEquals("OWNER_BY_TRANSFER_ONLY", code(() -> AccessPolicy.requireCanRevokeRole(ADMIN, "OWNER", "Owner")));
+        assertEquals("The owner changes only through Transfer ownership in Business settings.",
+                AccessPolicy.grantBlockedReason(OWNER, "OWNER", "Owner", List.of(), RISK));
     }
 
     @Test void platformAndLegacyRolesAreNeverGiven() {
