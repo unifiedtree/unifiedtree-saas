@@ -142,9 +142,11 @@ public class PlatformMarketingAdminController {
 
     @GetMapping("/channels")
     @PreAuthorize("@platformAdmin.check(authentication) and hasAuthority('platform.marketing.read')")
-    public List<ChannelAccount> channels(@RequestParam(required = false) UUID tenantId,
-                                         @RequestParam(required = false) UUID companyId) {
-        return usage.channels(tenantId, companyId);
+    public PageResult<ChannelAccount> channels(@RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestParam(required = false) Integer page,
+                                               @RequestParam(required = false) Integer size) {
+        return usage.channels(tenantId, companyId, PageResult.page(page), PageResult.size(size));
     }
 
     /** Change a channel's billing mode. Anything but DIRECT_CUSTOMER is refused while pooled billing is off. */

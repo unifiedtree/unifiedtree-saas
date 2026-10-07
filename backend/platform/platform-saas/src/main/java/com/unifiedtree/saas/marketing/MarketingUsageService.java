@@ -1,6 +1,7 @@
 package com.unifiedtree.saas.marketing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unifiedtree.saas.admin.support.PageResult;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -9,11 +10,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,6 +43,13 @@ public class MarketingUsageService {
     static final String PROVIDER = "META_WHATSAPP";
     static final Set<String> MODES = Set.of("DIRECT_CUSTOMER", "UNIFIEDTREE_POOLED", "HYBRID");
     static final Set<String> USAGE_TYPES = Set.of("CONVERSATION", "MESSAGE");
+
+    /** Bounds on one event: how late it may arrive, how far ahead a clock may be, and its size. */
+    static final Duration MAX_AGE = Duration.ofDays(90);
+    static final Duration MAX_FUTURE = Duration.ofMinutes(5);
+    static final BigDecimal MAX_QUANTITY = BigDecimal.valueOf(10_000);
+    /** The longest window a usage summary covers. */
+    static final Duration MAX_SUMMARY_WINDOW = Duration.ofDays(366);
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -88,13 +101,19 @@ public class MarketingUsageService {
         return channel(PROVIDER, wabaId);
     }
 
-    public List<ChannelAccount> channels(UUID tenantId, UUID companyId) {
+    public PageResult<ChannelAccount> channels(UUID tenantId, UUID companyId, int page, int size) {
         List<Object> args = new ArrayList<>();
         StringBuilder where = new StringBuilder(" WHERE TRUE");
         if (tenantId != null) { where.append(" AND tenant_id = ?"); args.add(tenantId); }
         if (companyId != null) { where.append(" AND company_id = ?"); args.add(companyId); }
-        return jdbc.query("SELECT * FROM platform.marketing_channel_accounts" + where + " ORDER BY created_at DESC",
-                this::mapChannel, args.toArray());
+        Long total = jdbc.queryForObject("SELECT count(*) FROM platform.marketing_channel_accounts" + where,
+                Long.class, args.toArray());
+        List<Object> pageArgs = new ArrayList<>(args);
+        pageArgs.add(size);
+        pageArgs.add((long) page * size);
+        List<ChannelAccount> rows = jdbc.query("SELECT * FROM platform.marketing_channel_accounts" + where
+                + " ORDER BY created_at DESC, id LIMIT ? OFFSET ?", this::mapChannel, pageArgs.toArray());
+        return PageResult.of(rows, page, size, total == null ? 0 : total);
     }
 
     @Transactional
@@ -123,7 +142,12 @@ public class MarketingUsageService {
 
     // ── Usage ───────────────────────────────────────────────────────────────
 
-    /** Record one provider event; a redelivered event (same idempotency key) is not recorded twice. */
+    /**
+     * Record one provider event; a redelivered event (same idempotency key) is not recorded twice. The key
+     * is global, so the event's billing fields are hashed and stored with it: the same key with different
+     * fields is a 409 (IDEMPOTENCY_MISMATCH), not a silent drop. occurredAt must lie within
+     * {@link #MAX_AGE} before now and {@link #MAX_FUTURE} after it; quantity is at most {@link #MAX_QUANTITY}.
+     */
     @Transactional
     public UsageRecorded record(UsageEvent e) {
         if (e.idempotencyKey() == null || e.idempotencyKey().isBlank() || e.idempotencyKey().length() > 200) {
@@ -137,7 +161,16 @@ public class MarketingUsageService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tenantId, companyId and occurredAt are required");
         }
         BigDecimal qty = e.quantity() == null ? BigDecimal.ONE : e.quantity();
-        if (qty.signum() <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantity must be positive");
+        if (qty.signum() <= 0 || qty.compareTo(MAX_QUANTITY) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantity must be between 0 and " + MAX_QUANTITY);
+        }
+        Instant now = Instant.now();
+        if (e.occurredAt().isBefore(now.minus(MAX_AGE)) || e.occurredAt().isAfter(now.plus(MAX_FUTURE))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "occurredAt must be within the last " + MAX_AGE.toDays() + " days and not in the future");
+        }
+        String key = e.idempotencyKey().trim();
+        String hash = payloadHash(e, type, qty);
 
         Map<String, Object> channel = e.wabaId() == null ? null : jdbc.queryForList("""
                 SELECT id, billing_mode, company_id FROM platform.marketing_channel_accounts
@@ -158,27 +191,56 @@ public class MarketingUsageService {
         try {
             inserted = jdbc.query("""
                     INSERT INTO platform.usage_ledger
-                           (idempotency_key, tenant_id, company_id, channel_account_id, provider, waba_id,
+                           (idempotency_key, payload_hash, tenant_id, company_id, channel_account_id, provider, waba_id,
                             phone_number_id, provider_event_id, usage_type, category, market, occurred_at, quantity,
                             billing_mode, raw)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
                     ON CONFLICT (idempotency_key) DO NOTHING
                     RETURNING id
-                    """, (rs, i) -> rs.getObject(1, UUID.class), e.idempotencyKey().trim(), e.tenantId(),
+                    """, (rs, i) -> rs.getObject(1, UUID.class), key, hash, e.tenantId(),
                     e.companyId(), channel == null ? null : channel.get("id"), PROVIDER, e.wabaId(),
                     e.phoneNumberId(), e.providerEventId(), type, upper(e.category()), upper(e.market()),
                     Timestamp.from(e.occurredAt()), qty, mode, raw);
         } catch (DataIntegrityViolationException ex) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "That company is not in that workspace");
         }
-        return inserted.isEmpty()
-                ? new UsageRecorded(false, true, null, mode)
-                : new UsageRecorded(true, false, inserted.get(0), mode);
+        if (!inserted.isEmpty()) return new UsageRecorded(true, false, inserted.get(0), mode);
+        Map<String, Object> held = jdbc.queryForList(
+                "SELECT id, payload_hash FROM platform.usage_ledger WHERE idempotency_key = ?", key)
+                .stream().findFirst().orElse(null);
+        // A row from before payload hashes has none: it is treated as the same event
+        if (held != null && held.get("payload_hash") != null && !hash.equals(held.get("payload_hash"))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "IDEMPOTENCY_MISMATCH: That idempotencyKey was "
+                    + "already recorded for a different event; usage was not recorded");
+        }
+        return new UsageRecorded(false, true, held == null ? null : (UUID) held.get("id"), mode);
+    }
+
+    /**
+     * SHA-256 over the fields that make the event billable (who, which channel, what, when, how much). The
+     * raw provider payload is not part of it: a redelivery may differ in delivery metadata, not in these.
+     */
+    static String payloadHash(UsageEvent e, String type, BigDecimal qty) {
+        String canonical = String.join("\n", String.valueOf(e.tenantId()), String.valueOf(e.companyId()),
+                String.valueOf(e.wabaId()), String.valueOf(e.phoneNumberId()), String.valueOf(e.providerEventId()),
+                type, String.valueOf(upper(e.category())), String.valueOf(upper(e.market())),
+                e.occurredAt().truncatedTo(ChronoUnit.MILLIS).toString(), qty.stripTrailingZeros().toPlainString());
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     public UsageSummary summary(UUID tenantId, UUID companyId, Instant from, Instant to) {
         Instant f = from == null ? Instant.now().minusSeconds(30L * 24 * 3600) : from;
         Instant t = to == null ? Instant.now() : to;
+        if (!t.isAfter(f) || Duration.between(f, t).compareTo(MAX_SUMMARY_WINDOW) > 0) {
+            // byDay has one row per day: a bounded window keeps the summary a bounded size
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "from must be before to, at most " + MAX_SUMMARY_WINDOW.toDays() + " days apart");
+        }
         List<Object> args = new ArrayList<>(List.of(Timestamp.from(f), Timestamp.from(t)));
         StringBuilder where = new StringBuilder(" WHERE occurred_at >= ? AND occurred_at < ? AND status <> 'VOID'");
         if (tenantId != null) { where.append(" AND tenant_id = ?"); args.add(tenantId); }
