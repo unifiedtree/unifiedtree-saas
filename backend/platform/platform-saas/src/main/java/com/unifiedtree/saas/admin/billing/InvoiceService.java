@@ -3,6 +3,7 @@ package com.unifiedtree.saas.admin.billing;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unifiedtree.saas.admin.directory.PlatformDirectoryService;
 import com.unifiedtree.saas.admin.support.PageResult;
+import com.unifiedtree.saas.admin.support.TenantScopedReader;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,7 @@ import java.util.UUID;
  * legal document. Issuing gives it the next number in the financial-year series
  * ({@code UT/2026-27/000001}) and freezes a copy of the seller's and buyer's
  * details; from then on the database refuses any change to its money, parties,
- * snapshot or lines (V144.4 triggers). The only correction is void + re-issue.
+ * snapshot or lines (V144.104 triggers). The only correction is void + re-issue.
  *
  * <p>Not wired into the live Razorpay webhook: invoices are issued from the admin
  * console for now, so the payment path that earns money today is unchanged.
@@ -44,11 +45,14 @@ public class InvoiceService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final PlatformDirectoryService directory;
+    private final TenantScopedReader scoped;
 
-    public InvoiceService(JdbcTemplate jdbc, ObjectMapper json, PlatformDirectoryService directory) {
+    public InvoiceService(JdbcTemplate jdbc, ObjectMapper json, PlatformDirectoryService directory,
+                          TenantScopedReader scoped) {
         this.jdbc = jdbc;
         this.json = json;
         this.directory = directory;
+        this.scoped = scoped;
     }
 
     public record LineInput(String description, String planKey, String moduleKey, BigDecimal quantity,
@@ -106,6 +110,7 @@ public class InvoiceService {
         if (in.lines() == null || in.lines().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An invoice needs at least one line");
         }
+        requireOwnedReferences(in);
         BigDecimal rate = in.taxRatePct() != null ? in.taxRatePct() : defaultGstRate();
         if (rate.signum() < 0 || rate.compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "taxRatePct must be between 0 and 100");
@@ -148,11 +153,10 @@ public class InvoiceService {
         jdbc.update("""
                 INSERT INTO platform.invoices
                        (id, tenant_id, company_id, subscription_id, payment_id, status, currency, subtotal,
-                        discount_total, tax_total, total, period_start, period_end, provider, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, 'DRAFT', 'INR', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        discount_total, tax_total, total, period_start, period_end, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, 'DRAFT', 'INR', ?, ?, ?, ?, ?, ?, ?, ?)
                 """, id, in.tenantId(), in.companyId(), in.subscriptionId(), in.paymentId(), subtotal, discounts,
-                taxes, total, ts(periodStart), ts(periodEnd), in.paymentId() == null ? null : "RAZORPAY",
-                in.notes(), createdBy);
+                taxes, total, ts(periodStart), ts(periodEnd), in.notes(), createdBy);
         for (InvoiceLine l : computed) {
             jdbc.update("""
                     INSERT INTO platform.invoice_lines
@@ -190,15 +194,15 @@ public class InvoiceService {
                     "This payment is not attached to a workspace yet (sign-up still pending)");
         }
         Integer live = jdbc.queryForObject("""
-                SELECT count(*) FROM platform.invoices WHERE payment_id = ? AND status <> 'VOID'
+                SELECT count(*) FROM platform.invoices WHERE payment_id = ? AND status NOT IN ('VOID', 'DISCARDED')
                 """, Integer.class, paymentId);
         if (live != null && live > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This payment already has an invoice");
         }
         BigDecimal rate = defaultGstRate();
         BigDecimal gross = money((BigDecimal) p.get("amount_inr"));
-        BigDecimal net = money(gross.multiply(BigDecimal.valueOf(100))
-                .divide(BigDecimal.valueOf(100).add(rate), 6, RoundingMode.HALF_UP));
+        BigDecimal[] split = splitInclusive(gross, rate);
+        BigDecimal net = split[0];
         Instant paidAt = ts(p, "paid_at");
         int months = p.get("period_months") instanceof Number m ? m.intValue() : 1;
         Instant periodEnd = paidAt == null ? null
@@ -218,6 +222,20 @@ public class InvoiceService {
         Invoice draft = createDraft(new DraftInput(tenantId, null, subscriptionId, paymentId, rate, List.of(line),
                 "Drafted from Razorpay payment %s. The charged amount %s is treated as GST-inclusive."
                         .formatted(p.get("razorpay_payment_id"), gross)), createdBy);
+        // Tax re-derived from the rounded net can be a paisa off (Rs 49 -> 41.53 + 7.48 = 49.01). The invoice must
+        // add up to what was charged, so the single line's tax is set to gross - net.
+        BigDecimal diff = split[1].subtract(draft.taxTotal());
+        if (diff.signum() != 0) {
+            jdbc.update("""
+                    UPDATE platform.invoice_lines SET tax_amount = tax_amount + ?, amount = amount + ?
+                     WHERE invoice_id = ? AND line_no = 1
+                    """, diff, diff, draft.id());
+            jdbc.update("""
+                    UPDATE platform.invoices SET tax_total = tax_total + ?, total = total + ?, updated_at = now()
+                     WHERE id = ? AND status = 'DRAFT'
+                    """, diff, diff, draft.id());
+            draft = get(draft.id());
+        }
         return draft;
     }
 
@@ -225,11 +243,22 @@ public class InvoiceService {
 
     @Transactional
     public Invoice issue(UUID id) {
+        // Lock the draft first: two concurrent issues must not both take a number
+        jdbc.query("SELECT id FROM platform.invoices WHERE id = ? FOR UPDATE", (rs, i) -> rs.getObject(1), id);
         Invoice inv = get(id);
         if (!"DRAFT".equals(inv.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a draft can be issued; this is " + inv.status());
         }
         Map<String, Object> settings = jdbc.queryForMap("SELECT * FROM platform.billing_settings WHERE id = 1");
+        List<String> missing = new ArrayList<>();
+        if (blank(settings.get("seller_legal_name"))) missing.add("legal name");
+        if (blank(settings.get("seller_gstin"))) missing.add("GSTIN");
+        if (blank(settings.get("seller_state_code"))) missing.add("state code");
+        if (!missing.isEmpty()) {
+            // An issued invoice is frozen, so it must not go out without the seller's GST details
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Fill in the seller's " + String.join(", ", missing) + " in billing settings before issuing");
+        }
         Instant issuedAt = jdbc.queryForObject("SELECT now()", Timestamp.class).toInstant();
         String series = (String) settings.get("invoice_prefix") + "/" + financialYear(issuedAt);
         Long next = jdbc.queryForObject("""
@@ -238,7 +267,7 @@ public class InvoiceService {
                    SET last_number = platform.invoice_number_series.last_number + 1, updated_at = now()
                 RETURNING last_number
                 """, Long.class, series);
-        String number = "%s/%06d".formatted(series, next);
+        String number = invoiceNumber(series, next);
         int dueDays = settings.get("invoice_due_days") instanceof Number d ? d.intValue() : 7;
 
         Map<String, Object> snapshot = new LinkedHashMap<>();
@@ -258,7 +287,7 @@ public class InvoiceService {
                 """, inv.paymentId()).stream().findFirst().orElse(null);
         Timestamp paidAt = paid == null ? null : (Timestamp) paid.get("paid_at");
 
-        jdbc.update("""
+        int updated = jdbc.update("""
                 UPDATE platform.invoices
                    SET status = ?, invoice_number = ?, issued_at = ?, due_at = ?, billing_snapshot = ?::jsonb,
                        amount_paid = CASE WHEN ? THEN total ELSE amount_paid END,
@@ -267,6 +296,10 @@ public class InvoiceService {
                 """, paid == null ? "ISSUED" : "PAID", number, Timestamp.from(issuedAt),
                 Timestamp.from(issuedAt.atZone(INDIA).plusDays(dueDays).toInstant()), snapshotJson,
                 paid != null, paid == null ? null : (paidAt == null ? Timestamp.from(issuedAt) : paidAt), id);
+        if (updated != 1) {
+            // Rolls back this transaction, including the series number taken above
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This invoice was issued by someone else just now");
+        }
         return get(id);
     }
 
@@ -277,24 +310,84 @@ public class InvoiceService {
                     "Voiding needs a reason of at least 5 characters (it stays on the invoice)");
         }
         Invoice inv = get(id);
-        if ("DRAFT".equals(inv.status()) || "VOID".equals(inv.status())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Only an issued or paid invoice can be voided; this is " + inv.status());
+        if ("DRAFT".equals(inv.status())) {
+            // A draft has no number yet: it is discarded (kept on record with the reason), which also frees its
+            // payment for a corrected draft
+            int discarded = jdbc.update("""
+                    UPDATE platform.invoices SET status = 'DISCARDED', voided_at = now(), void_reason = ?, updated_at = now()
+                     WHERE id = ? AND status = 'DRAFT'
+                    """, reason.strip(), id);
+            if (discarded != 1) throw new ResponseStatusException(HttpStatus.CONFLICT, "This draft changed just now");
+            return get(id);
         }
-        jdbc.update("""
+        if (!"ISSUED".equals(inv.status()) && !"PAID".equals(inv.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only a draft, issued or paid invoice can be voided; this is " + inv.status());
+        }
+        int voided = jdbc.update("""
                 UPDATE platform.invoices SET status = 'VOID', voided_at = now(), void_reason = ?, updated_at = now()
-                 WHERE id = ?
+                 WHERE id = ? AND status IN ('ISSUED', 'PAID')
                 """, reason.strip(), id);
+        if (voided != 1) throw new ResponseStatusException(HttpStatus.CONFLICT, "This invoice changed just now");
         return get(id);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    /** Indian financial year label for an instant: April–March, e.g. 2026-27. */
+    /** GST Rule 46(b): an invoice serial number is at most 16 characters (letters, digits, '-' and '/'). */
+    static final int MAX_INVOICE_NUMBER_LENGTH = 16;
+
+    /** Indian financial year label for an instant, short form: April–March, e.g. 26-27. */
     static String financialYear(Instant at) {
         LocalDate d = at.atZone(INDIA).toLocalDate();
         int start = d.getMonthValue() >= 4 ? d.getYear() : d.getYear() - 1;
-        return "%d-%02d".formatted(start, (start + 1) % 100);
+        return "%02d-%02d".formatted(start % 100, (start + 1) % 100);
+    }
+
+    /** {@code PREFIX/26-27/00001}: at most 16 characters with a prefix of up to 4 (validated in billing settings). */
+    static String invoiceNumber(String series, long next) {
+        String number = "%s/%05d".formatted(series, next);
+        if (number.length() > MAX_INVOICE_NUMBER_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Invoice number " + number + " would exceed 16 characters (GST); shorten the invoice prefix");
+        }
+        return number;
+    }
+
+    /** A GST-inclusive amount split into {net, tax} so that net + tax is exactly the amount (tax = gross - net). */
+    static BigDecimal[] splitInclusive(BigDecimal gross, BigDecimal ratePct) {
+        BigDecimal g = money(gross);
+        BigDecimal net = money(g.multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(100).add(ratePct), 6, RoundingMode.HALF_UP));
+        return new BigDecimal[] {net, g.subtract(net)};
+    }
+
+    /** A draft's payment and subscription must belong to its workspace (and company, when given). */
+    private void requireOwnedReferences(DraftInput in) {
+        if (in.paymentId() != null) {
+            Map<String, Object> p = jdbc.queryForList("SELECT tenant_id, status FROM platform.payments WHERE id = ?",
+                    in.paymentId()).stream().findFirst().orElse(null);
+            if (p == null || !in.tenantId().equals(p.get("tenant_id"))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "That payment is not this workspace's");
+            }
+            if (!"PAID".equals(p.get("status")) && !"CONSUMED".equals(p.get("status"))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a captured payment can be invoiced");
+            }
+        }
+        if (in.subscriptionId() != null) {
+            Map<String, Object> sub = jdbc.queryForList(
+                    "SELECT tenant_id, company_id FROM platform.subscriptions WHERE id = ?", in.subscriptionId())
+                    .stream().findFirst().orElse(null);
+            if (sub == null || !in.tenantId().equals(sub.get("tenant_id"))
+                    || (in.companyId() != null && sub.get("company_id") != null
+                        && !in.companyId().equals(sub.get("company_id")))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "That subscription is not this workspace's");
+            }
+        }
+    }
+
+    private static boolean blank(Object v) {
+        return v == null || v.toString().isBlank();
     }
 
     static BigDecimal money(BigDecimal v) {
@@ -326,6 +419,11 @@ public class InvoiceService {
         return m;
     }
 
+    /**
+     * Who is billed. Per field: the company's billing profile when filled, else the company itself (org.companies,
+     * read under that workspace's RLS), else, for a workspace-level invoice only, the workspace's sign-up details.
+     * A company's GSTIN/PAN never falls back to the workspace's (another company of the workspace may own those).
+     */
     private Map<String, Object> buyer(UUID tenantId, UUID companyId) {
         Map<String, Object> m = new LinkedHashMap<>();
         Map<String, Object> t = jdbc.queryForMap("""
@@ -333,29 +431,31 @@ public class InvoiceService {
                        contact_email FROM platform.tenants WHERE id = ?
                 """, tenantId);
         m.put("workspace", t.get("subdomain"));
-        List<Map<String, Object>> profile = companyId == null ? List.of() : jdbc.queryForList(
-                "SELECT * FROM platform.company_billing_profiles WHERE company_id = ?", companyId);
-        if (!profile.isEmpty()) {
-            Map<String, Object> p = profile.get(0);
-            m.put("companyId", companyId.toString());
-            m.put("legalName", p.get("legal_name"));
-            m.put("gstin", p.get("gstin"));
-            m.put("pan", p.get("pan"));
-            m.put("email", p.get("billing_email"));
-            m.put("address", join(p.get("address_line1"), p.get("address_line2"), p.get("city"), p.get("state"),
-                    p.get("postal_code")));
-            m.put("stateCode", p.get("state_code"));
-        } else {
-            // No company billing profile yet: the workspace's own sign-up details.
-            if (companyId != null) m.put("companyId", companyId.toString());
-            m.put("legalName", t.get("display_name"));
-            m.put("gstin", t.get("gstin"));
-            m.put("pan", t.get("pan"));
-            m.put("email", t.get("contact_email"));
-            m.put("address", join(t.get("address_line1"), t.get("address_line2"), t.get("city"), t.get("state"),
-                    t.get("postal_code")));
-        }
+        Map<String, Object> p = companyId == null ? Map.of() : jdbc.queryForList(
+                "SELECT * FROM platform.company_billing_profiles WHERE company_id = ?", companyId)
+                .stream().findFirst().orElse(Map.of());
+        Map<String, Object> c = companyId == null ? Map.of() : scoped.read(tenantId, () -> jdbc.queryForList(
+                "SELECT name, legal_name, gstin, pan_number FROM org.companies WHERE id = ?", companyId))
+                .stream().findFirst().orElse(Map.of());
+        boolean company = companyId != null;
+        if (company) m.put("companyId", companyId.toString());
+        m.put("legalName", first(p.get("legal_name"), c.get("legal_name"), c.get("name"),
+                company ? null : t.get("display_name")));
+        Object gstin = first(p.get("gstin"), c.get("gstin"), company ? null : t.get("gstin"));
+        m.put("gstin", gstin);
+        m.put("pan", first(p.get("pan"), c.get("pan_number"), company ? null : t.get("pan")));
+        m.put("email", first(p.get("billing_email"), t.get("contact_email")));
+        m.put("address", p.isEmpty()
+                ? join(t.get("address_line1"), t.get("address_line2"), t.get("city"), t.get("state"), t.get("postal_code"))
+                : join(p.get("address_line1"), p.get("address_line2"), p.get("city"), p.get("state"), p.get("postal_code")));
+        // GST place of supply: the profile's state code, else the first two digits of the GSTIN (they are the state)
+        m.put("stateCode", first(p.get("state_code"), gstin == null ? null : gstin.toString().substring(0, 2)));
         return m;
+    }
+
+    private static Object first(Object... values) {
+        for (Object v : values) if (v != null && !v.toString().isBlank()) return v;
+        return null;
     }
 
     private static String join(Object... parts) {

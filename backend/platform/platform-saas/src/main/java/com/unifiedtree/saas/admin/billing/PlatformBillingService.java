@@ -213,9 +213,10 @@ public class PlatformBillingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "defaultGstRatePct must be 0-100");
         }
         String prefix = blank(in.invoicePrefix());
-        if (prefix != null && !prefix.matches("^[A-Z0-9-]{1,10}$")) {
+        // PREFIX/26-27/00001 must stay within GST's 16-character limit for invoice numbers
+        if (prefix != null && !prefix.matches("^[A-Z0-9]{1,4}$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "invoicePrefix: 1-10 capital letters, digits or '-'");
+                    "invoicePrefix: 1-4 capital letters or digits (GST invoice numbers are at most 16 characters)");
         }
         if (in.invoiceDueDays() < 0 || in.invoiceDueDays() > 365) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invoiceDueDays must be 0-365");
