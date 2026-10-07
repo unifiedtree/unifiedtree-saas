@@ -100,10 +100,9 @@ public class PlatformCatalogController {
         PriceChange change = catalog.changePrice(planKey, req.unitPrice(), req.priceModel(),
                 req.annualDiscountPct(), req.reason(), op.label());
         audit.recordInTransaction(op, http, "PLAN_PRICE_CHANGE", "module_plan", null,
-                "Plan %s price %s -> %s %s (%s). Reason: %s".formatted(planKey,
-                        change.previous() == null ? "none" : change.previous().unitPrice(),
-                        change.current().unitPrice(), change.current().priceModel(),
-                        change.razorpayPlansCleared() + " cached Razorpay plan(s) cleared", req.reason().strip()));
+                "Plan %s price %s -> %s %s (new checkouts; existing subscriptions keep theirs). Reason: %s"
+                        .formatted(planKey, change.previous() == null ? "none" : change.previous().unitPrice(),
+                                change.current().unitPrice(), change.current().priceModel(), req.reason().strip()));
         return change;
     }
 

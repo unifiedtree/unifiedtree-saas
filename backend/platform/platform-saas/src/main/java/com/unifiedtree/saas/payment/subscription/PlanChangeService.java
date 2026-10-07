@@ -306,7 +306,8 @@ public class PlanChangeService {
             rzp = subscriptions.createSubscription(
                     List.of(it.planKey()), it.seats(), c,
                     subdomain, email, startAt,
-                    pendingId.toString());   // notes.pending_signup_id — webhook fallback
+                    pendingId.toString(),    // notes.pending_signup_id — webhook fallback
+                    keptUnitPrice(replacesSubscriptionId, it.planKey(), c));   // null = catalogue price
         } catch (RuntimeException rex) {
             // Razorpay call failed — mark the intent CANCELLED so it doesn't
             // sit as AWAITING_MANDATE forever. The Razorpay side was never
@@ -402,7 +403,10 @@ public class PlanChangeService {
             // Discount-aware per-seat rate. For MONTHLY this is priceInr()
             // rounded; for ANNUAL it is priceInr() * (1 - discount_pct/100)
             // rounded. Multiplied by 12 for ANNUAL to get the yearly charge.
-            BigDecimal effectiveMonthlyUnit = planService.effectiveMonthlyUnit(plan, cycle);
+            // A replacement keeps the price the customer bought at (same rule as create()), so the
+            // ledger records what Razorpay is actually charging
+            BigDecimal kept = keptUnitPrice(r.replacesSubscriptionId, it.planKey(), cycle);
+            BigDecimal effectiveMonthlyUnit = kept != null ? kept : planService.effectiveMonthlyUnit(plan, cycle);
             effectiveMonthlyUnitLast = effectiveMonthlyUnit;
             BigDecimal perPlanMonthly = effectiveMonthlyUnit
                     .multiply(BigDecimal.valueOf(it.seats()));
@@ -839,9 +843,12 @@ public class PlanChangeService {
         if (unitMonthly == null || unitMonthly.signum() <= 0) {
             BillingCycle subCycle = "ANNUAL".equalsIgnoreCase(sub.billingCycle)
                     ? BillingCycle.ANNUAL : BillingCycle.MONTHLY;
-            unitMonthly = planService.findLenient(planKey)
-                    .map(p -> planService.effectiveMonthlyUnit(p, subCycle))
-                    .orElse(BigDecimal.ZERO);
+            // The price in force when the subscription was bought (price history), not today's:
+            // a later price change must not re-price an existing customer
+            unitMonthly = planService.effectiveMonthlyUnitAt(planKey, subCycle, sub.createdAt)
+                    .orElseGet(() -> planService.findLenient(planKey)
+                            .map(p -> planService.effectiveMonthlyUnit(p, subCycle))
+                            .orElse(BigDecimal.ZERO));
             log.warn("subscription {} has unit_price_inr={} — falling back to catalog rate ₹{}/seat/mo "
                      + "for the seat-change amount (signup-path rows are inserted with 0)",
                     sub.razorpaySubscriptionId, sub.unitPriceInr, unitMonthly);
@@ -977,7 +984,7 @@ public class PlanChangeService {
         try {
             return jdbc.queryForObject("""
                     SELECT seats, billing_cycle, unit_price_inr, status,
-                           razorpay_subscription_id
+                           razorpay_subscription_id, created_at
                       FROM platform.subscriptions
                      WHERE tenant_id = ?
                        AND status IN ('TRIALING','ACTIVE','PAST_DUE','HALTED','PAUSED','GRACE')
@@ -991,7 +998,8 @@ public class PlanChangeService {
                             rs.getString("billing_cycle"),
                             rs.getBigDecimal("unit_price_inr"),
                             rs.getString("status"),
-                            rs.getString("razorpay_subscription_id")),
+                            rs.getString("razorpay_subscription_id"),
+                            rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant()),
                     tenantId, planKey);
         } catch (EmptyResultDataAccessException e) {
             return null;
@@ -999,7 +1007,32 @@ public class PlanChangeService {
     }
 
     private record LockedSub(int seats, String billingCycle, BigDecimal unitPriceInr,
-                             String status, String razorpaySubscriptionId) {}
+                             String status, String razorpaySubscriptionId, java.time.Instant createdAt) {}
+
+    /**
+     * The per-seat monthly rate a REPLACEMENT subscription keeps: the old subscription's own rate when it
+     * is the same plan and billing cycle (a seat change or a mandate rotation is not a new purchase), or,
+     * when its ledger rate was never filled in (signup-path rows hold 0), the price in force when it was
+     * bought. Null = not a replacement, a different plan or cycle, or nothing known: charge the catalogue.
+     */
+    private BigDecimal keptUnitPrice(String replacesSubscriptionId, String planKey, BillingCycle cycle) {
+        if (replacesSubscriptionId == null || replacesSubscriptionId.isBlank()) return null;
+        java.util.Map<String, Object> old = jdbc.queryForList("""
+                SELECT plan_keys, billing_cycle, unit_price_inr, created_at FROM platform.subscriptions
+                 WHERE razorpay_subscription_id = ? ORDER BY created_at DESC LIMIT 1
+                """, replacesSubscriptionId).stream().findFirst().orElse(null);
+        if (old == null || !cycle.name().equalsIgnoreCase((String) old.get("billing_cycle"))) return null;
+        try {
+            java.sql.Array keys = (java.sql.Array) old.get("plan_keys");
+            if (keys == null || !java.util.Arrays.asList((String[]) keys.getArray()).contains(planKey)) return null;
+        } catch (java.sql.SQLException e) {
+            return null;
+        }
+        BigDecimal unit = (BigDecimal) old.get("unit_price_inr");
+        if (unit != null && unit.signum() > 0) return unit;
+        java.sql.Timestamp bought = (java.sql.Timestamp) old.get("created_at");
+        return bought == null ? null : planService.effectiveMonthlyUnitAt(planKey, cycle, bought.toInstant()).orElse(null);
+    }
 
     /** Subdomain + contact email for the Razorpay subscription notes. */
     private TenantMeta loadTenantMeta(UUID tenantId) {

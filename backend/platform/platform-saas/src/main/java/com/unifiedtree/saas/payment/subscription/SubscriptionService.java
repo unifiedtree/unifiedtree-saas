@@ -7,7 +7,6 @@ import com.unifiedtree.saas.plans.ModulePlanDto;
 import com.unifiedtree.saas.plans.ModulePlanService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -110,6 +109,23 @@ public class SubscriptionService {
                                                        String subdomain, String email,
                                                        Instant startAt,
                                                        String pendingSignupId) {
+        return createSubscription(planKeys, seats, cycle, subdomain, email, startAt, pendingSignupId, null);
+    }
+
+    /**
+     * As above, at a fixed per-seat monthly rate instead of today's catalogue price. Used when a
+     * subscription replaces one the customer already has (a seat change on a mandate Razorpay
+     * will not modify, or a mandate rotation): existing subscriptions keep the price they bought at.
+     *
+     * @param unitMonthlyInr per-seat monthly rate (discount-adjusted for ANNUAL, as
+     *                       {@link ModulePlanService#effectiveMonthlyUnit}); null = the catalogue's
+     */
+    public CreateSubscriptionResult createSubscription(List<String> planKeys, int seats,
+                                                       BillingCycle cycle,
+                                                       String subdomain, String email,
+                                                       Instant startAt,
+                                                       String pendingSignupId,
+                                                       BigDecimal unitMonthlyInr) {
         if (!props.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment gateway is not configured");
         }
@@ -140,7 +156,8 @@ public class SubscriptionService {
         if ("FLAT".equalsIgnoreCase(plan.priceModel())) {
             billedSeats = 1;
         }
-        BigDecimal unitPerCyclePerSeat = planService.effectiveMonthlyUnit(plan, c);
+        BigDecimal unitPerCyclePerSeat = unitMonthlyInr != null && unitMonthlyInr.signum() > 0
+                ? unitMonthlyInr : planService.effectiveMonthlyUnit(plan, c);
         if (unitPerCyclePerSeat.signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Selected plan has no payable amount");
@@ -189,14 +206,20 @@ public class SubscriptionService {
     // -- 2. Razorpay Plan cache -----------------------------------------------
 
     /**
-     * Return the Razorpay plan id for a {@code (moduleKey, billing_cycle)} tuple,
-     * creating and persisting one if we don't have it. Idempotent: a race that
-     * inserts twice will hit the UNIQUE(module_key, billing_cycle) constraint;
-     * we swallow that and read the winner.
+     * Return the Razorpay plan id for a {@code (moduleKey, billing_cycle, unit price)},
+     * creating and persisting one if we don't have it. Keyed by price: a Razorpay plan
+     * fixes its amount, so a price change gets a new plan and every existing
+     * subscription (and its replacements) keeps the plan it bought at.
+     *
+     * <p>Works under either unique key: V144_107 re-keys razorpay_plans by
+     * (module_key, billing_cycle, unit_price_paise); before it, the old
+     * (module_key, billing_cycle) key only lets the first price be cached, so a
+     * second price is created on Razorpay each time and never cached — correct,
+     * just not reused. The insert names no conflict target for that reason.
      */
     private String ensureRazorpayPlan(String moduleKey, BillingCycle cycle, String moduleName,
                                       long unitPaise) {
-        String existing = findRazorpayPlanId(moduleKey, cycle);
+        String existing = findRazorpayPlanId(moduleKey, cycle, unitPaise);
         if (existing != null) return existing;
 
         String period = cycle == BillingCycle.ANNUAL ? "yearly" : "monthly";
@@ -209,25 +232,22 @@ public class SubscriptionService {
                     INSERT INTO platform.razorpay_plans
                         (module_key, billing_cycle, razorpay_plan_id, unit_price_paise, currency)
                     VALUES (?, ?, ?, ?, 'INR')
-                    ON CONFLICT (module_key, billing_cycle) DO NOTHING
+                    ON CONFLICT DO NOTHING
                     """, moduleKey, cycle.name(), rzpPlanId, unitPaise);
         } catch (Exception e) {
             // Race — some other request beat us to it. Read the winner.
             log.warn("Race inserting razorpay_plans row: {}", e.getMessage());
         }
-        String stored = findRazorpayPlanId(moduleKey, cycle);
+        String stored = findRazorpayPlanId(moduleKey, cycle, unitPaise);
         return stored != null ? stored : rzpPlanId;
     }
 
-    private String findRazorpayPlanId(String moduleKey, BillingCycle cycle) {
-        try {
-            return jdbc.queryForObject("""
-                    SELECT razorpay_plan_id FROM platform.razorpay_plans
-                     WHERE module_key = ? AND billing_cycle = ?
-                    """, String.class, moduleKey, cycle.name());
-        } catch (EmptyResultDataAccessException e) {
-            return null;
-        }
+    private String findRazorpayPlanId(String moduleKey, BillingCycle cycle, long unitPaise) {
+        return jdbc.query("""
+                SELECT razorpay_plan_id FROM platform.razorpay_plans
+                 WHERE module_key = ? AND billing_cycle = ? AND unit_price_paise = ?
+                 ORDER BY created_at LIMIT 1
+                """, (rs, n) -> rs.getString(1), moduleKey, cycle.name(), unitPaise).stream().findFirst().orElse(null);
     }
 
     // -- 2b. update (Hotstar-style seat change) --------------------------------

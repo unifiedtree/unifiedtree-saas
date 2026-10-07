@@ -126,6 +126,37 @@ public class ModulePlanService {
         return unit;
     }
 
+    /**
+     * The per-seat monthly rate (same arithmetic as {@link #effectiveMonthlyUnit}) of the price that was in
+     * force for a plan at {@code at}, from the price history (platform.module_plan_prices, V144_103). Empty
+     * when the history is not there yet or has no version covering that moment; callers then fall back to
+     * the catalogue as before.
+     */
+    public Optional<BigDecimal> effectiveMonthlyUnitAt(String planKey, BillingCycle cycle, java.time.Instant at) {
+        if (planKey == null || at == null) return Optional.empty();
+        // Checked first: a failed statement would poison the caller's transaction
+        if (!Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT to_regclass('platform.module_plan_prices') IS NOT NULL", Boolean.class))) {
+            return Optional.empty();
+        }
+        Optional<ModulePlanDto> plan = findLenient(planKey);
+        if (plan.isPresent() && plan.get().included()) return Optional.of(BigDecimal.ZERO);
+        java.sql.Timestamp ts = java.sql.Timestamp.from(at);
+        return jdbc.query("""
+                SELECT unit_price, annual_discount_pct FROM platform.module_plan_prices
+                 WHERE plan_key = ? AND currency = 'INR' AND valid_from <= ? AND (valid_to IS NULL OR valid_to > ?)
+                 ORDER BY valid_from DESC LIMIT 1
+                """, (rs, n) -> {
+                    BigDecimal unit = rs.getBigDecimal("unit_price");
+                    if (cycle == BillingCycle.ANNUAL) {
+                        BigDecimal pct = rs.getBigDecimal("annual_discount_pct");
+                        BigDecimal factor = BigDecimal.ONE.subtract((pct == null ? BigDecimal.ZERO : pct).movePointLeft(2));
+                        unit = unit.multiply(factor).setScale(0, RoundingMode.HALF_UP);
+                    }
+                    return unit;
+                }, planKey.trim().toLowerCase(Locale.ROOT), ts, ts).stream().findFirst();
+    }
+
     /** Effective per-user/month rate across the given plans (for the ledger). */
     public BigDecimal unitPriceInr(List<ModulePlanDto> plans, BillingCycle cycle) {
         BigDecimal sum = BigDecimal.ZERO;

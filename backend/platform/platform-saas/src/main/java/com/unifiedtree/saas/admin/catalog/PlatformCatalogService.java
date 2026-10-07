@@ -56,7 +56,7 @@ public class PlatformCatalogService {
                                BigDecimal annualDiscountPct, Instant validFrom, Instant validTo, String reason,
                                String createdBy, Instant createdAt, boolean current) {}
 
-    public record PriceChange(PlanRow plan, PriceVersion previous, PriceVersion current, int razorpayPlansCleared) {}
+    public record PriceChange(PlanRow plan, PriceVersion previous, PriceVersion current) {}
 
     public List<ModuleRow> modules() {
         return jdbc.query("""
@@ -95,12 +95,12 @@ public class PlatformCatalogService {
     /**
      * Publish a new price for a plan, effective now.
      *
-     * <p>In one transaction: close the current version, open the new one, update
-     * {@code module_plans} (so checkout charges it), and clear the cached Razorpay
-     * plans for the plan's modules. That cache is keyed by (module, cycle), not by
-     * price ({@code SubscriptionService.ensureRazorpayPlan}), so without clearing it
-     * new checkouts would keep being charged the old price by Razorpay. Subscriptions
-     * that already exist hold their own Razorpay plan id and are unaffected.
+     * <p>In one transaction: close the current version, open the new one, and update
+     * {@code module_plans} (so new checkouts charge it). Existing customers keep the price
+     * they bought at: their subscriptions hold their own Razorpay plan, a replacement
+     * subscription (seat change, mandate rotation) is created at the old subscription's
+     * rate ({@code PlanChangeService.keptUnitPrice}), and the Razorpay plan cache is keyed
+     * by price ({@code SubscriptionService.ensureRazorpayPlan}), so nothing is cleared.
      */
     @Transactional
     public PriceChange changePrice(String planKey, BigDecimal unitPrice, String priceModel,
@@ -157,16 +157,11 @@ public class PlatformCatalogService {
                  WHERE key = ?
                 """, price, model, discount, planKey);
 
-        String[] modules = moduleKeys(p.get("included_modules"));
-        int cleared = jdbc.update("""
-                DELETE FROM platform.razorpay_plans WHERE module_key = ? OR module_key = ANY (?)
-                """, planKey, modules);
-
         PriceVersion current = jdbc.queryForObject("SELECT * FROM platform.module_plan_prices WHERE id = ?",
                 this::mapPrice, newId);
         PriceVersion closed = previous == null ? null : jdbc.queryForObject(
                 "SELECT * FROM platform.module_plan_prices WHERE id = ?", this::mapPrice, previous.id());
-        return new PriceChange(plan(planKey), closed, current, cleared);
+        return new PriceChange(plan(planKey), closed, current);
     }
 
     // ── mapping ─────────────────────────────────────────────────────────────
