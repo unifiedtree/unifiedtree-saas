@@ -34,10 +34,13 @@ public class MyPayService {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final JdbcTemplate jdbc;
+    /** Payroll settings per company (V143.105), else the workspace row. */
+    private final PayrollSettingsStore settingsStore;
     private Clock clock = Clock.system(IST);
 
     public MyPayService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.settingsStore = new PayrollSettingsStore(jdbc);
     }
 
     /** Tests pin "today". */
@@ -74,16 +77,15 @@ public class MyPayService {
     public PayScheduleDto schedule(UUID tenantId, UUID employeeId) {
         bindTenant(tenantId);
         LocalDate today = LocalDate.now(clock);
-        Map<String, Object> settings = jdbc.query("""
-            SELECT payroll_cycle_start_day, salary_processing_day FROM payroll.settings WHERE tenant_id = ?
-            """, rs -> rs.next() ? Map.<String, Object>of(
-                    "start", rs.getInt("payroll_cycle_start_day"), "day", rs.getInt("salary_processing_day")) : null,
-            tenantId);
-        Integer processingDay = settings == null ? null : (Integer) settings.get("day");
-
         UUID companyId = employeeId == null ? null : jdbc.query(
                 "SELECT company_id FROM hrms.employees WHERE tenant_id = ? AND id = ?",
                 rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, employeeId);
+        // The caller's company's payroll settings (V143.105), else the workspace's.
+        Map<String, Object> row = settingsStore.find(tenantId, companyId);
+        Map<String, Object> settings = row == null ? null : Map.<String, Object>of(
+                "start", ((Number) row.get("payroll_cycle_start_day")).intValue(),
+                "day", ((Number) row.get("salary_processing_day")).intValue());
+        Integer processingDay = settings == null ? null : (Integer) settings.get("day");
         Set<String> periodsWithRun = new HashSet<>();
         LocalDate runDate = null;
         if (companyId != null) {

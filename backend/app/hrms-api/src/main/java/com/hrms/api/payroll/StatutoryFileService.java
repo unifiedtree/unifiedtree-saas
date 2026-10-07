@@ -60,9 +60,12 @@ public class StatutoryFileService {
     private static final String EOL = "\n";
 
     private final JdbcTemplate jdbc;
+    /** Payroll settings per company (V143.105), else the workspace row. */
+    private final PayrollSettingsStore settingsStore;
 
     public StatutoryFileService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.settingsStore = new PayrollSettingsStore(jdbc);
     }
 
     // ── DTO ───────────────────────────────────────────────────────────────────
@@ -108,10 +111,9 @@ public class StatutoryFileService {
                     "RUN_NOT_LOCKED");
         }
 
-        // Load PF ceiling setting (tenant-scoped)
-        boolean applyCeiling = jdbc.query("""
-                SELECT pf_apply_ceiling FROM payroll.settings WHERE tenant_id = ?
-                """, rs -> rs.next() && rs.getBoolean(1), tenantId);
+        // The PF ceiling setting of the run's company (V143.105), else the workspace's.
+        Map<String, Object> settings = settingsStore.find(tenantId, (UUID) run.get("company_id"));
+        boolean applyCeiling = settings != null && Boolean.TRUE.equals(settings.get("pf_apply_ceiling"));
 
         // Per-employee aggregate — one row per employee in the run.
         List<EcrEmployeeRow> rows = jdbc.query("""

@@ -55,6 +55,8 @@ public class PayrollRunService {
     private final ObjectMapper objectMapper;
     private final DefaultComponentSeeder seeder;
     private final AdvanceRecoveryService advanceRecovery;
+    /** Payroll settings per company (V143.105), else the workspace row. */
+    private final PayrollSettingsStore settingsStore;
 
     public PayrollRunService(JdbcTemplate jdbc, PdfRenderer pdfRenderer, ObjectMapper objectMapper,
                              DefaultComponentSeeder seeder,
@@ -64,6 +66,7 @@ public class PayrollRunService {
         this.objectMapper = objectMapper;
         this.seeder = seeder;
         this.advanceRecovery = advanceRecovery;
+        this.settingsStore = new PayrollSettingsStore(jdbc);
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -424,9 +427,9 @@ public class PayrollRunService {
             throw new BusinessRuleException("companyId, periodMonth and periodYear are required", "INVALID_RUN");
         }
         YearMonth ym = YearMonth.of(req.periodYear(), req.periodMonth());
-        // The pay period follows the cycle start day in Payroll Settings (the
-        // calendar month unless a cycle is configured).
-        Map<String, Object> settings = loadSettings(tenantId);
+        // The pay period follows the cycle start day in the company's Payroll
+        // Settings (the calendar month unless a cycle is configured).
+        Map<String, Object> settings = loadSettings(tenantId, req.companyId());
         PayrollCalc.Period period = PayrollCalc.cyclePeriod(ym, intSetting(settings, "payroll_cycle_start_day", 1));
         LocalDate start = period.start();
         LocalDate end = period.end();
@@ -482,7 +485,7 @@ public class PayrollRunService {
                 throw new BusinessRuleException("Unable to seed default salary components", "COMPONENTS_NOT_SEEDED");
             }
         }
-        Map<String, Object> settings = loadSettings(tenantId);
+        Map<String, Object> settings = loadSettings(tenantId, run.companyId());
 
         // V143.11: the pay period follows the cycle start day in Payroll
         // Settings (calendar month by default). A run that isn't locked takes
@@ -1720,9 +1723,12 @@ public class PayrollRunService {
         return map;
     }
 
-    private Map<String, Object> loadSettings(UUID tenantId) {
-        jdbc.update("INSERT INTO payroll.settings (tenant_id) VALUES (?) ON CONFLICT (tenant_id) DO NOTHING", tenantId);
-        return jdbc.queryForMap("SELECT * FROM payroll.settings WHERE tenant_id = ?", tenantId);
+    /**
+     * The payroll settings of the run's company (V143.105): its own row, else the workspace row
+     * (created with the defaults if the workspace has none, as before).
+     */
+    private Map<String, Object> loadSettings(UUID tenantId, UUID companyId) {
+        return settingsStore.load(tenantId, companyId);
     }
 
     /**

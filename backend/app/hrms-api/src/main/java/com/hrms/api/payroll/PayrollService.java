@@ -1,6 +1,7 @@
 package com.hrms.api.payroll;
 
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.payroll.engine.PayrollEngine;
 import com.hrms.payroll.lop.LopCalculator;
 import com.hrms.payroll.service.DefaultComponentSeeder;
@@ -27,10 +28,13 @@ public class PayrollService {
 
     private final JdbcTemplate jdbc;
     private final DefaultComponentSeeder seeder;
+    /** Payroll settings per company (V143.105), else the workspace row. */
+    private final PayrollSettingsStore store;
 
     public PayrollService(JdbcTemplate jdbc, DefaultComponentSeeder seeder) {
         this.jdbc = jdbc;
         this.seeder = seeder;
+        this.store = new PayrollSettingsStore(jdbc);
     }
 
     // ── DTOs ────────────────────────────────────────────────────────────────
@@ -147,18 +151,39 @@ public class PayrollService {
 
     // ── Settings ────────────────────────────────────────────────────────────
 
+    /** Settings without naming a company (see {@link #getSettings(UUID, UUID)}). */
     @Transactional
     public SettingsDto getSettings(UUID tenantId) {
-        bindTenant(tenantId);
-        ensureSettingsRow(tenantId);
-        Map<String, Object> r = jdbc.queryForMap("SELECT * FROM payroll.settings WHERE tenant_id = ?", tenantId);
-        return toSettings(r);
+        return getSettings(tenantId, null);
     }
 
+    /**
+     * A company's payroll settings (V143.105): its own row, else the workspace row. {@code companyId}
+     * null = the workspace's only company when it has exactly one, else the workspace row (as before).
+     * An id that is not a company of this workspace is refused (404).
+     */
+    @Transactional
+    public SettingsDto getSettings(UUID tenantId, UUID companyId) {
+        bindTenant(tenantId);
+        UUID company = settingsCompany(companyId);
+        return toSettings(store.load(tenantId, company));
+    }
+
+    /** A save without naming a company (see {@link #updateSettings(UUID, UUID, SettingsDto)}). */
     @Transactional
     public SettingsDto updateSettings(UUID tenantId, SettingsDto req) {
+        return updateSettings(tenantId, null, req);
+    }
+
+    /**
+     * Saves a company's payroll settings (V143.105): only that company's row changes (it is first
+     * made from the workspace row if the company has none). Without a company (or before V143.105 is
+     * applied) the workspace row is saved, as before.
+     */
+    @Transactional
+    public SettingsDto updateSettings(UUID tenantId, UUID companyId, SettingsDto req) {
         bindTenant(tenantId);
-        ensureSettingsRow(tenantId);
+        UUID company = settingsCompany(companyId);
         String lwfMonths = null;
         if (req.lwfDeductionMonths() != null) {
             java.util.TreeSet<Integer> months = new java.util.TreeSet<>();
@@ -173,9 +198,24 @@ public class PayrollService {
             }
             lwfMonths = "{" + String.join(",", months.stream().map(String::valueOf).toList()) + "}";
         }
+        boolean own = store.ensureCompanyRow(tenantId, company);
+        if (!own) ensureSettingsRow(tenantId);
+        String table = own ? PayrollSettingsStore.COMPANY_TABLE : "payroll.settings";
+        String where = own ? "tenant_id = ? AND company_id = ?" : "tenant_id = ?";
+        Object[] key = own ? new Object[] {tenantId, company} : new Object[] {tenantId};
+        List<Object> args = new ArrayList<>(Arrays.asList(
+            req.pfEnabled(), req.pfEmployeePercent(), req.pfEmployerPercent(), req.pfWageCeiling(),
+            req.pfApplyCeiling(), req.pfEstablishmentCode(),
+            req.esiEnabled(), req.esiEmployeePercent(), req.esiEmployerPercent(), req.esiWageCeiling(),
+            req.esiEstablishmentCode(),
+            req.ptEnabled(), req.ptStateCode(),
+            req.lwfEnabled(), req.lwfEmployeeAmount(), req.lwfEmployerAmount(),
+            req.sandwichRuleEnabled(), req.lateMarkLopThreshold(),
+            req.payrollCycleStartDay(), req.salaryProcessingDay(), lwfMonths));
+        args.addAll(Arrays.asList(key));
         // Overlay only non-null fields onto the existing row.
         jdbc.update("""
-            UPDATE payroll.settings SET
+            UPDATE %s SET
                 pf_enabled              = COALESCE(?, pf_enabled),
                 pf_employee_percent     = COALESCE(?, pf_employee_percent),
                 pf_employer_percent     = COALESCE(?, pf_employer_percent),
@@ -198,36 +238,35 @@ public class PayrollService {
                 salary_processing_day   = COALESCE(?, salary_processing_day),
                 lwf_deduction_months    = COALESCE(?::integer[], lwf_deduction_months),
                 updated_at = now()
-            WHERE tenant_id = ?
-            """,
-            req.pfEnabled(), req.pfEmployeePercent(), req.pfEmployerPercent(), req.pfWageCeiling(),
-            req.pfApplyCeiling(), req.pfEstablishmentCode(),
-            req.esiEnabled(), req.esiEmployeePercent(), req.esiEmployerPercent(), req.esiWageCeiling(),
-            req.esiEstablishmentCode(),
-            req.ptEnabled(), req.ptStateCode(),
-            req.lwfEnabled(), req.lwfEmployeeAmount(), req.lwfEmployerAmount(),
-            req.sandwichRuleEnabled(), req.lateMarkLopThreshold(),
-            req.payrollCycleStartDay(), req.salaryProcessingDay(), lwfMonths,
-            tenantId);
+            WHERE %s
+            """.formatted(table, where), args.toArray());
         // V143.11: a cycle is defined by its start day, and runs cover the
         // start day up to the day before the next start. The end day shown in
         // Payroll Settings is therefore always the day before the start day
         // (whatever the request said).
         jdbc.update("""
-            UPDATE payroll.settings
+            UPDATE %s
                SET payroll_cycle_end_day = CASE WHEN payroll_cycle_start_day = 1 THEN 31
                                                 ELSE payroll_cycle_start_day - 1 END
-             WHERE tenant_id = ?
-            """, tenantId);
-        return getSettingsInline(tenantId);
+             WHERE %s
+            """.formatted(table, where), key);
+        return toSettings(store.load(tenantId, company));
+    }
+
+    /**
+     * The company whose settings a request reads or saves: the one it names (which must be a
+     * company of this workspace), else the workspace's only company, else none (the workspace row).
+     */
+    private UUID settingsCompany(UUID companyId) {
+        if (companyId != null) {
+            if (!store.companyExists(companyId)) throw new ResourceNotFoundException("Company not found");
+            return companyId;
+        }
+        return store.onlyCompany();
     }
 
     private void ensureSettingsRow(UUID tenantId) {
-        jdbc.update("INSERT INTO payroll.settings (tenant_id) VALUES (?) ON CONFLICT (tenant_id) DO NOTHING", tenantId);
-    }
-
-    private SettingsDto getSettingsInline(UUID tenantId) {
-        return toSettings(jdbc.queryForMap("SELECT * FROM payroll.settings WHERE tenant_id = ?", tenantId));
+        store.ensureWorkspaceRow(tenantId);
     }
 
     // ── Components ──────────────────────────────────────────────────────────
@@ -522,6 +561,14 @@ public class PayrollService {
         args.add(tenantId);
         args.addAll(ids);
         PreviewContext ctx = new PreviewContext();
+        // Each person's company, for their company's payroll settings (V143.105), in one query.
+        Map<UUID, UUID> companies = new HashMap<>();
+        jdbc.query("SELECT id, company_id FROM hrms.employees WHERE tenant_id = ? AND id IN (" + marks + ")",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                    UUID c = rs.getObject("company_id", UUID.class);
+                    companies.put(rs.getObject("id", UUID.class), c == null ? NONE : c);
+                }, args.toArray());
+        ctx.knowCompanies(companies);
         Map<UUID, StructureDto> out = new LinkedHashMap<>();
         for (Map<String, Object> row : jdbc.queryForList(
                 "SELECT * FROM payroll.employee_salary_structures WHERE tenant_id = ? AND is_current IS TRUE"
@@ -532,24 +579,39 @@ public class PayrollService {
         return out;
     }
 
-    /** The catalogue and settings a structure preview needs, read once per request. */
+    /**
+     * The catalogue and settings a structure preview needs, read once per request. The settings are
+     * those of the person's company (V143.105), as their payroll run will use them.
+     */
     private final class PreviewContext {
         private Map<String, PayrollCalc.ComponentInfo> catalog;
-        private SettingsDto settings;
+        /** Settings by company id; the key NONE stands for "no company" (the workspace row). */
+        private final Map<UUID, SettingsDto> settings = new HashMap<>();
+        private final Map<UUID, UUID> companyOf = new HashMap<>();
 
         Map<String, PayrollCalc.ComponentInfo> catalog() {
             if (catalog == null) catalog = loadCatalog();
             return catalog;
         }
 
-        SettingsDto settings(UUID tid) {
-            if (settings == null) {
-                ensureSettingsRow(tid);
-                settings = getSettingsInline(tid);
-            }
-            return settings;
+        /** Tells the context the companies of several people at once (one query for a whole page). */
+        void knowCompanies(Map<UUID, UUID> byEmployee) {
+            companyOf.putAll(byEmployee);
+        }
+
+        SettingsDto settings(UUID tid, UUID employeeId) {
+            UUID company = employeeId == null ? null
+                    : companyOf.computeIfAbsent(employeeId, id -> {
+                        UUID c = store.companyOfEmployee(tid, id);
+                        return c == null ? NONE : c;
+                    });
+            UUID key = company == null ? NONE : company;
+            return settings.computeIfAbsent(key, k -> toSettings(store.load(tid, NONE.equals(k) ? null : k)));
         }
     }
+
+    /** Stands for "no company" in the preview's settings cache. */
+    private static final UUID NONE = new UUID(0L, 0L);
 
     private StructureDto toStructure(Map<String, Object> r) {
         return toStructure(r, new PreviewContext());
@@ -620,11 +682,12 @@ public class PayrollService {
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 // A tenant that has never opened Payroll Settings has no row,
-                // and getSettingsInline throws on an empty result — which the
-                // catch below would turn straight back into ₹0. Create the
-                // defaults row first (idempotent), same as the settings screen.
+                // and reading it would throw — which the catch below would
+                // turn straight back into ₹0. The store creates the defaults
+                // row first (idempotent), same as the settings screen. The
+                // settings are the person's company's (V143.105).
                 UUID tid = TenantContext.getTenantId();
-                SettingsDto s = ctx.settings(tid);
+                SettingsDto s = ctx.settings(tid, (UUID) r.get("employee_id"));
                 pfOn = Boolean.TRUE.equals(s.pfEnabled());
                 boolean ptEnabled = Boolean.TRUE.equals(s.ptEnabled());
                 String ptState = (String) r.get("pt_state") != null

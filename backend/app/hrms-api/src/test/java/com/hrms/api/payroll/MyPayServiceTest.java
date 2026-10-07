@@ -39,9 +39,17 @@ class MyPayServiceTest {
         service.setClock(Clock.fixed(TODAY.atTime(12, 0).atZone(IST).toInstant(), IST));
     }
 
+    /** The workspace row (payroll.settings); null = the workspace has none. */
     private void settings(Integer startDay, Integer processingDay) {
-        doReturn(startDay == null ? null : Map.of("start", startDay, "day", processingDay))
-                .when(jdbc).query(contains("FROM payroll.settings"), any(ResultSetExtractor.class), any(Object[].class));
+        doReturn(startDay == null ? List.of() : List.of(Map.of("payroll_cycle_start_day", startDay, "salary_processing_day", processingDay)))
+                .when(jdbc).queryForList(contains("FROM payroll.settings"), any(Object[].class));
+    }
+
+    /** V143.105 applied, and the company has its own row. */
+    private void companySettings(int startDay, int processingDay) {
+        doReturn(true).when(jdbc).queryForObject(contains("to_regclass"), eq(Boolean.class));
+        doReturn(List.of(Map.of("payroll_cycle_start_day", startDay, "salary_processing_day", processingDay)))
+                .when(jdbc).queryForList(contains("FROM payroll.company_settings"), any(Object[].class));
     }
 
     private void company(UUID company) {
@@ -130,6 +138,28 @@ class MyPayServiceTest {
         settings(1, 30);
         assertEquals(new MyPayService.PayScheduleDto("2026-09-30", 30), service.schedule(TENANT, null));
         verify(jdbc, never()).query(contains("FROM payroll.runs"), any(ResultSetExtractor.class), any(Object[].class));
+    }
+
+    @Test
+    void theScheduleFollowsTheCallersCompanysSettings() {
+        settings(1, 28);           // the workspace row
+        companySettings(1, 5);     // the caller's company pays on the 5th (V143.105)
+        company(COMPANY);
+        nextRunPayDate(null);
+        runsInMonths();
+        assertEquals(new MyPayService.PayScheduleDto("2026-10-05", 5), service.schedule(TENANT, READER));
+        verify(jdbc).queryForList(contains("FROM payroll.company_settings"), eq(TENANT), eq(COMPANY));
+    }
+
+    @Test
+    void aCompanyWithoutItsOwnRowUsesTheWorkspaceRow() {
+        settings(1, 28);
+        doReturn(true).when(jdbc).queryForObject(contains("to_regclass"), eq(Boolean.class));
+        doReturn(List.of()).when(jdbc).queryForList(contains("FROM payroll.company_settings"), any(Object[].class));
+        company(COMPANY);
+        nextRunPayDate(null);
+        runsInMonths();
+        assertEquals(new MyPayService.PayScheduleDto("2026-09-28", 28), service.schedule(TENANT, READER));
     }
 
     // ── this financial year ───────────────────────────────────────────────────
