@@ -463,9 +463,18 @@ public class AttendanceController {
                 .filter(record -> record.getCheckInAt() != null)
                 .map(AttendanceRecord::getEmployeeId)
                 .collect(Collectors.toSet());
+        // A reviewer's status on someone's weekly off (set to absent or present, or
+        // excused) puts them on the day as a punch does: the day has a status of its
+        // own, and the tiles count it. They used to be left out, so a weekly-off
+        // ABSENT set by HR was on nobody's tile.
+        Set<UUID> reviewedIds = reviewedOnWeeklyOff(rosterAll.stream()
+                .map(Employee::getId)
+                .filter(id -> !punchedIds.contains(id)
+                        && onWeeklyOff(selectedDate, joins.get(id), lastDays.get(id), weekOffs.get(id)))
+                .toList(), selectedDate);
         List<Employee> employees = rosterAll.stream()
                 .filter(emp -> onDayRoster(selectedDate, joins.get(emp.getId()), lastDays.get(emp.getId()),
-                        weekOffs.get(emp.getId()), punchedIds.contains(emp.getId())))
+                        weekOffs.get(emp.getId()), punchedIds.contains(emp.getId()) || reviewedIds.contains(emp.getId())))
                 .toList();
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         // The rows and the tiles have to be the same people, so a record left
@@ -583,7 +592,8 @@ public class AttendanceController {
      * so a punch made on a day off was invisible: the person was missing from
      * Daily Logs, from the team payload and from the day's worked counts. They
      * are put back as a worked day only - pass {@code false} to count who was
-     * *expected* in, which working on a day off does not change.
+     * *expected* in, which working on a day off does not change. A reviewer's
+     * status on the day off counts as a punch here ({@link #reviewedOnWeeklyOff}).
      */
     static boolean onDayRoster(LocalDate date, LocalDate joined, LocalDate lastDay,
                                java.util.Set<Integer> weeklyOffs, boolean punched) {
@@ -598,6 +608,25 @@ public class AttendanceController {
         if (joined != null && joined.isAfter(date)) return false;
         if (!com.hrms.api.workforce.DashboardAsOf.workedOn(lastDay, date)) return false;
         return weeklyOffs != null && weeklyOffs.contains(date.getDayOfWeek().getValue());
+    }
+
+    /**
+     * Of {@code employeeIds} (people on their weekly off who did not punch), the
+     * ones whose day carries a reviewer's status (set or excused): they belong on
+     * the day's roster and in its tiles. Empty without the policy service.
+     */
+    private Set<UUID> reviewedOnWeeklyOff(List<UUID> employeeIds, LocalDate date) {
+        if (employeeIds.isEmpty()) return Set.of();
+        return effectiveOn(employeeIds, date).entrySet().stream()
+                .filter(e -> e.getValue().manual())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** Whether {@code id}'s effective status on {@code date} was set by a reviewer (see {@link #reviewedOnWeeklyOff}). */
+    static boolean reviewedOn(Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective, UUID id, LocalDate date) {
+        com.hrms.attendance.policy.EffectiveDay d = effective.getOrDefault(id, Map.of()).get(date);
+        return d != null && d.manual();
     }
 
     /** Effective statuses for one day; empty when the policy service isn't available. */
@@ -859,11 +888,12 @@ public class AttendanceController {
             if (!effective.isEmpty()) {
                 // Counted: the scheduled people plus whoever punched on their
                 // weekly off - their day is real work and belongs in a bucket,
-                // while scheduledForDay keeps the expected total honest.
+                // while scheduledForDay keeps the expected total honest - and,
+                // as on the day roster, whoever a reviewer gave a status that day.
                 List<UUID> roster = employees.stream()
                         .filter(emp -> onDayRoster(dayFinal, trendJoins.get(emp.getId()),
                                 trendLastDays.get(emp.getId()), trendOffs.get(emp.getId()),
-                                punchedThatDay.contains(emp.getId())))
+                                punchedThatDay.contains(emp.getId()) || reviewedOn(effective, emp.getId(), dayFinal)))
                         .map(Employee::getId).toList();
                 series.add(effectiveCounts(day, roster, scheduledForDay, offForDay, effective, dayRecords));
                 continue;
