@@ -4,6 +4,7 @@
 import { useRef, useState } from 'react'
 import { getAccessToken } from '@unifiedtree/sdk'
 import { Image as ImageIcon, Upload } from 'lucide-react'
+import { Modal } from '@unifiedtree/ui-kit'
 import { API_BASE_URL } from '@/core/api/client'
 import { resolveAssetUrl, type BrandingDto } from '@/core/tenant/workspaceBranding'
 import { HrButton } from '@/shared/components/hr'
@@ -64,6 +65,7 @@ export function SignInPictureSection({ dto, canEdit, show, onSaved }: {
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<'save' | 'remove' | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const current = resolveAssetUrl(dto.loginUrl)
 
   const pick = async (file: File | undefined) => {
@@ -84,6 +86,7 @@ export function SignInPictureSection({ dto, canEdit, show, onSaved }: {
     setBusy('remove')
     const r = await send('DELETE')
     setBusy(null)
+    setConfirmRemove(false)
     if (!r.ok) { show('error', 'Sign-in picture not removed', failWords(r.status, r.message)); return }
     onSaved(r.dto, 'Sign-in picture removed', 'The sign-in page shows the standard panel again.')
   }
@@ -106,7 +109,7 @@ export function SignInPictureSection({ dto, canEdit, show, onSaved }: {
           <HrButton disabled={busy !== null} onClick={() => input.current?.click()}>
             <Upload size={15} aria-hidden /> {busy === 'save' ? 'Saving…' : current ? 'Replace picture' : 'Upload a picture'}
           </HrButton>
-          {current && <HrButton variant="ghost" disabled={busy !== null} onClick={() => { void remove() }}>{busy === 'remove' ? 'Removing…' : 'Remove'}</HrButton>}
+          {current && <HrButton variant="ghost" disabled={busy !== null} onClick={() => setConfirmRemove(true)}>Remove</HrButton>}
         </div>
       ) : (
         <SettingsNote>Only workspace admins can change the sign-in picture.</SettingsNote>
@@ -114,6 +117,15 @@ export function SignInPictureSection({ dto, canEdit, show, onSaved }: {
       <p style={{ margin: 0, fontSize: 12.5, color: 'var(--u-ink3,#6A7A73)' }}>
         A landscape photo works best (it is cropped to fill the space). PNG, JPEG or WebP, up to 2 MB, at least {SIGN_IN_MIN_SIDE} px on the shortest side.
       </p>
+      <Modal open={confirmRemove} onOpenChange={(o: boolean) => { if (!o && busy === null) setConfirmRemove(false) }}
+        title="Remove the sign-in picture?"
+        description="Your business’s sign-in page will show the standard panel instead. You can upload a picture again at any time."
+        size="sm">
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <HrButton variant="ghost" disabled={busy !== null} onClick={() => setConfirmRemove(false)}>Keep it</HrButton>
+          <HrButton variant="danger" disabled={busy !== null} onClick={() => { void remove() }}>{busy === 'remove' ? 'Removing…' : 'Remove'}</HrButton>
+        </div>
+      </Modal>
     </SettingsSection>
   )
 }
