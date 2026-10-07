@@ -18,6 +18,8 @@ import { useMemo, useState } from 'react'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
 import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit/DateRangePicker'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from './api/shared/listRange'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { usePersonalPages } from '@/shared/hooks/usePersonalPages'
@@ -73,7 +75,9 @@ const hr = (n: number | null | undefined) => (typeof n === 'number' ? `${n.toFix
 function MyLeave({ toast }: { toast: (m: string, err?: boolean, d?: string) => void }) {
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(20)
-  const q = useMyLeaves(page, size)
+  // The start / end calendar (?from=&to=): the server keeps the list to leave whose days fall in it (paging still works).
+  const [dates, setDates] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const q = useMyLeaves(page, size, dates)
   const bal = useMyBalances(new Date().getFullYear())
   const cancel = useCancelLeave()
   const [asking, setAsking] = useState<LeaveRequestResponse | null>(null)
@@ -92,9 +96,13 @@ function MyLeave({ toast }: { toast: (m: string, err?: boolean, d?: string) => v
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {bal.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={tiles} />}
-      <SubHeading>Your requests</SubHeading>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <SubHeading>Your requests</SubHeading>
+        <RangeFilter value={dates} onChange={(r) => { setDates(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Leave dates" filterKey="my-leave-dates" align="end" />
+      </div>
       {q.isLoading ? <State kind="loading" />
         : q.error ? <State kind="error" title="Couldn’t load your leave" description={errMsg(q.error)} onRetry={() => q.refetch()} />
+          : rows.length === 0 && dates ? <State kind="empty" icon="calendarDays" title="No leave on these dates" description="Pick other dates, or clear them to see every request." />
           : rows.length === 0 ? <State kind="empty" icon="calendarDays" title="No leave requests yet" description="Requests you make appear here with their status." />
             : (
               <RowList>
@@ -351,7 +359,9 @@ function Approvals({ toast, decided = false }: { toast: (m: string, err?: boolea
   const l2 = usePendingL2Approvals(page, 20, canLeave && canL2)
   const wq = usePendingWfhApprovals(page, 20, canWfh)
   const stats = useLeaveApprovalStats(7, canLeave)
-  const history = useApprovalsHistory(page, seg === 'all' ? undefined : (seg === 'pending' ? undefined : (seg.toUpperCase() as DecidedStatus)))
+  // Decided: the start / end calendar (?from=&to=) keeps the list, and its counts, to leave whose days fall in it.
+  const [dates, setDates] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const history = useApprovalsHistory(page, seg === 'all' ? undefined : (seg === 'pending' ? undefined : (seg.toUpperCase() as DecidedStatus)), dates)
   const recent = useRecentDecisions({ enabled: canLeave })
   const decide = useLeaveDecision()
   const decideL2 = useLeaveL2Decision()
@@ -510,6 +520,9 @@ function Approvals({ toast, decided = false }: { toast: (m: string, err?: boolea
             )
           })}
         </div>
+        {seg !== 'pending' && (
+          <RangeFilter value={dates} onChange={(r) => { setDates(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Leave dates" filterKey="decided-leave-dates" align="end" />
+        )}
         {seg === 'pending' && cleanPending.length > 1 && (
           <Button variant="primary" icon="check" onClick={onBulkApprove} disabled={bulk.isPending}>
             {bulk.isPending ? 'Approving…' : `Approve all without conflicts (${cleanPending.length})`}
@@ -523,6 +536,7 @@ function Approvals({ toast, decided = false }: { toast: (m: string, err?: boolea
         : (seg !== 'pending' && history.error) ? <State kind="error" title="Couldn’t load decisions" description={errMsg(history.error)} onRetry={() => history.refetch()} />
         : (seg === 'pending' && l1.error && wq.error) ? <State kind="error" title="Couldn’t load requests" description="Leave and work-from-home requests didn’t load." onRetry={() => { l1.refetch(); wq.refetch() }} />
           : (seg === 'pending' && visiblePending.length === 0) ? <State kind="empty" icon="checkCircle" title="All caught up" description="No requests are waiting for you." />
+            : (seg !== 'pending' && decidedShown.length === 0 && dates) ? <State kind="empty" icon="fileText" title="No decided leave on these dates" description="Pick other dates, or clear them to see every decision." />
             : (seg !== 'pending' && decidedShown.length === 0) ? <State kind="empty" icon="fileText" title="No decisions yet" description="Leave you decide shows up here." />
               : (
                 <div style={{ display: 'grid', gap: 10 }}>
