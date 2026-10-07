@@ -3,6 +3,7 @@ package com.hrms.api.saasguard;
 import com.hrms.api.saasguard.SubscriptionAccessGuard.SubStatus;
 import com.unifiedtree.saas.payment.RazorpayClient;
 import com.unifiedtree.saas.payment.subscription.SubscriptionStateReconciler;
+import com.unifiedtree.security.tenant.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -96,6 +97,26 @@ class RazorpayCheckBeforePauseTest {
         assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isTrue();
         assertThat(call("/v1/payroll/settings", new MockHttpServletResponse())).isTrue();
         verify(reconciler, times(1)).reconcileFromRazorpay(anyString(), any());
+    }
+
+    @Test
+    void theReconcilerWritesWithTheTenantUnboundSoTheyCommit() throws Exception {
+        // A tenant-bound connection is not auto-committing (TenantAwareDataSource): the paid -> ACTIVE
+        // update would be lost. The guard asks with the tenant unbound and binds it again after.
+        ledgerSays(unpaid, paid);
+        UUID[] seen = new UUID[1];
+        when(reconciler.reconcileFromRazorpay("sub_1", razorpay)).thenAnswer(i -> {
+            seen[0] = TenantContext.getTenantId();
+            return "active";
+        });
+        TenantContext.setTenantId(tenant);
+        try {
+            assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isTrue();
+            assertThat(seen[0]).isNull();
+            assertThat(TenantContext.getTenantId()).isEqualTo(tenant);
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     @Test
