@@ -14,6 +14,7 @@ import { AuthProvider } from './providers/AuthProvider'
 import { NotificationProvider } from './core/notifications/NotificationProvider'
 import { ConfirmDialogProvider } from './shared/components/ConfirmDialog'
 import { CurrentCompanyProvider } from './modules/hrms/company/CurrentCompany'
+import { AppCrashBoundary } from './shared/components/AppCrashBoundary'
 import App from './App'
 
 // In production builds import.meta.env.DEV is a static `false`, so Vite/Rollup
@@ -31,6 +32,8 @@ const enableMocking = import.meta.env.DEV
 enableMocking().then(() => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
+      {/* Above everything: a crash in a provider or the shell shows "Something went wrong", never a white page. */}
+      <AppCrashBoundary>
       <ThemeProvider>
         <QueryProvider>
           <BrowserRouter>
@@ -49,6 +52,7 @@ enableMocking().then(() => {
           </BrowserRouter>
         </QueryProvider>
       </ThemeProvider>
+      </AppCrashBoundary>
     </React.StrictMode>
   )
 })
