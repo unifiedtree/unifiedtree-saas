@@ -15,6 +15,8 @@ import { ModulePage, Views, useView, StatRow, SubHeading, State, DecisionCard, P
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { DataTable } from '@/shared/components/DataTable'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from './api/shared/listRange'
 import { useCompanies } from './api/useOrg'
 import { useCurrentCompany } from './company/CurrentCompany'
 import { ReimbursementBatches } from './expense/ReimbursementBatches'
@@ -116,7 +118,9 @@ function ExpenseDashboardCards({ stats }: { stats: ReturnType<typeof useExpenseD
 
 function MyClaimsTab() {
   const [page, setPage] = useState(0)
-  const { data, isLoading, isError, refetch } = useMyClaims(page, 20)
+  // The start / end calendar (?from=&to=): the server keeps the list to claims submitted on those days (paging still works).
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const { data, isLoading, isError, refetch } = useMyClaims(page, 20, range)
   useClampedPage(page, data?.totalPages, setPage)
   const claims = useMemo(() => data?.content ?? [], [data])
   const total = data?.totalElements ?? claims.length
@@ -144,6 +148,10 @@ function MyClaimsTab() {
         { icon: 'creditCard', color: 'teal', label: 'Reimbursed', value: inr(stats.reimbursed), sub: 'Paid back (this page)' },
       ]} />}
 
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <SubHeading>Your claims</SubHeading>
+        <RangeFilter value={range} onChange={(r) => { setExpandedMyId(null); setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Submitted" filterKey="my-claim-dates" align="end" />
+      </div>
       <TableCard footer={hrPaginationFooter({ page, pageSize: 20, totalElements: total, totalPages: data?.totalPages ?? 0, onPageChange: setPage })}>
         <DataTable
           columns={[
@@ -167,7 +175,7 @@ function MyClaimsTab() {
           data={claims}
           keyField="id"
           loading={isLoading}
-          emptyMessage="No expense claims yet. Use “Submit Claim” to file your first reimbursement."
+          emptyMessage={range ? 'No claims submitted on these dates. Pick other dates, or clear them to see every claim.' : 'No expense claims yet. Use “Submit Claim” to file your first reimbursement.'}
           expandedRowIds={expandedMyId ? [expandedMyId] : []}
           renderSubRow={(c: any) => (
             <div className="bg-bg-base/40 p-4">
@@ -679,7 +687,9 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(EXPENSE_APPROVALS_PAGE_SIZE)
   const [filter, setFilter] = useState<ExpenseApprovalFilter>('ALL')
-  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(page, true, pageSize, filter)
+  // The start / end calendar (?from=&to=): the server keeps the queue to claims submitted on those days.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(page, true, pageSize, filter, range)
   const decide = useExpenseDecision()
   const reimburse = useReimburseClaim()
   const claims = data?.content ?? []
@@ -717,6 +727,7 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   // the user paged back.
   const goToPage = (next: number) => { setExpandedId(null); setPage(next) }
   const changeFilter = (next: ExpenseApprovalFilter) => { setExpandedId(null); setPage(0); setFilter(next) }
+  const changeRange = (next: typeof range) => { setExpandedId(null); setPage(0); setRange(next) }
 
   // The claim whose "Reject claim" drawer is open. Closing the drawer (Cancel,
   // Escape, backdrop) must abort the rejection, never fall through to it — the
@@ -787,6 +798,7 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
             {APPROVAL_FILTERS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
         </label>
+        <RangeFilter value={range} onChange={changeRange} maxSpan={LIST_MAX_DAYS} label="Submitted" filterKey="claim-approval-dates" align="end" size="md" />
       </div>
       {expenseDecisions.length > 0 && (
         <div style={{ display: 'grid', gap: 8 }}>
@@ -807,6 +819,7 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
       )}
       {isLoading ? <State kind="loading" />
         : isError ? <State kind="error" title="Couldn’t load the approvals queue" onRetry={() => refetch()} />
+          : claims.length === 0 && range ? <State kind="empty" icon="checkCircle" title="Nothing submitted on these dates" description="Pick other dates, or clear them to see the whole queue." />
           : claims.length === 0 ? <State kind="empty" icon="checkCircle" title="Nothing waiting" description="Submitted claims wait here to be approved; approved claims wait here to be paid." />
             : (
               <div style={{ display: 'grid', gap: 16 }}>

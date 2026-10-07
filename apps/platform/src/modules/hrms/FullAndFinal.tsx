@@ -12,6 +12,8 @@ import { useCompanies } from './api/useOrg'
 import { useCurrentCompany } from './company/CurrentCompany'
 import { useEmployeeDirectory, useWorkforceEmployee, type WorkforceEmployee } from './api/useWorkforce'
 import { FNF_PAGE_SIZE, inr, useApproveSettlement, useCancelSettlement, useFnfSettlement, useFnfSettlements, usePaySettlement, useProcessSettlement, type FnfComponentType, type FnfSettlement, type FnfStatus } from './api/useFnf'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from './api/shared/listRange'
 
 const tones: Record<FnfStatus, PillTone> = { INITIATED: 'gray', PROCESSED: 'warn', APPROVED: 'ok', PAID: 'teal', CANCELLED: 'gray' }
 const date = (value?: string) => value ? new Date(value.length === 10 ? value + 'T12:00:00' : value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not recorded'
@@ -56,7 +58,9 @@ export function FullAndFinal() {
 
 function Settlements({ tab, onTab, canProcess, create, onOpen }: { tab: string; onTab: (key: string) => void; canProcess: boolean; create: ReactNode; onOpen: (id: string) => void }) {
   const [page, setPage] = useState(0)
-  const query = useFnfSettlements(page)
+  // The start / end calendar (?from=&to=): the server keeps the ledger to settlements whose last working day is in it.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const query = useFnfSettlements(page, range)
   useClampedPage(page, query.data?.totalPages, setPage)
   const pageRows = query.data?.content ?? []
   // GET /v1/fnf/settlements takes no status parameter (FnfController#list passes only
@@ -69,14 +73,15 @@ function Settlements({ tab, onTab, canProcess, create, onOpen }: { tab: string; 
   const rows = ledgerTab?.status ? pageRows.filter(row => row.status === ledgerTab.status) : pageRows
   const tabs = [...LEDGER_TABS.map(item => ({ key: item.key, label: item.label, count: query.data && singlePage ? (item.status ? pageRows.filter(row => row.status === item.status).length : query.data.totalElements) || undefined : undefined, urgent: item.key !== 'all' && item.key !== 'settled' })), ...(canProcess ? [{ key: 'create', label: 'Create settlement', icon: 'plus' }] : [])]
   const paid = pageRows.filter(row => row.status === 'PAID').reduce((sum, row) => sum + row.netSettlement, 0)
-  const empty = !query.data?.totalElements || !ledgerTab?.status ? 'No settlements yet. Create a settlement after recording the employee\'s exit.' : singlePage ? `${ledgerTab.empty}.` : `${ledgerTab.empty} on this page.`
+  const empty = range && !query.data?.totalElements ? 'No settlement has a last working day on these dates. Pick other dates, or clear them to see the whole ledger.'
+    : !query.data?.totalElements || !ledgerTab?.status ? 'No settlements yet. Create a settlement after recording the employee\'s exit.' : singlePage ? `${ledgerTab.empty}.` : `${ledgerTab.empty} on this page.`
   return <><Views items={tabs} active={tab} onChange={onTab} label="Settlement views" />
     {tab === 'create' ? create : query.isError ? <State kind="error" title="Couldn’t load settlements" description={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} /> : <div style={{ display: 'grid', gap: 16 }}>{query.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
-    { icon: 'fileText', color: 'blue', label: 'Settlements', value: String(query.data?.totalElements ?? 0), sub: 'In the ledger' },
+    { icon: 'fileText', color: 'blue', label: 'Settlements', value: String(query.data?.totalElements ?? 0), sub: range ? 'Last working day on these dates' : 'In the ledger' },
     { icon: 'clock', color: 'orange', label: 'Waiting for approval', value: String(pageRows.filter(row => row.status === 'PROCESSED').length), sub: 'On this page', onClick: () => onTab('pending-approval') },
     { icon: 'checkCircle', color: 'green', label: 'Approved, to be paid', value: String(pageRows.filter(row => row.status === 'APPROVED').length), sub: 'On this page', onClick: () => onTab('pending-payment') },
     { icon: 'creditCard', color: 'teal', label: 'Payment recorded', value: inr(paid), sub: 'On this page', onClick: () => onTab('settled') },
-  ]} />}{ledgerTab?.status && !singlePage && <Note>Showing {rows.length} of the {pageRows.length} settlements on this page. Use the pager for older settlements.</Note>}<TableCard footer={<HrPagination page={page} pageSize={FNF_PAGE_SIZE} totalElements={query.data?.totalElements ?? 0} totalPages={query.data?.totalPages ?? 0} onPageChange={setPage} />}><DataTable<FnfSettlement> data={rows} keyField="id" loading={query.isLoading} emptyMessage={empty} columns={[
+  ]} />}<div className="flex flex-wrap items-center justify-end gap-3"><RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Last working day" filterKey="fnf-dates" align="end" size="md" /></div>{ledgerTab?.status && !singlePage && <Note>Showing {rows.length} of the {pageRows.length} settlements on this page. Use the pager for older settlements.</Note>}<TableCard footer={<HrPagination page={page} pageSize={FNF_PAGE_SIZE} totalElements={query.data?.totalElements ?? 0} totalPages={query.data?.totalPages ?? 0} onPageChange={setPage} />}><DataTable<FnfSettlement> data={rows} keyField="id" loading={query.isLoading} emptyMessage={empty} columns={[
     { key: 'employeeName', header: 'Employee', render: row => <HrAvatar name={row.employeeName || 'Employee record unavailable'} sub={row.employeeCode} /> },
     { key: 'lastWorkingDay', header: 'Last working day', render: row => date(row.lastWorkingDay) },
     { key: 'netSettlement', header: 'Net settlement', render: row => <span className="whitespace-nowrap font-semibold tabular-nums">{inr(row.netSettlement)}</span> },

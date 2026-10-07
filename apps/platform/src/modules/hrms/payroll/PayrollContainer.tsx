@@ -13,6 +13,7 @@ import { apiBlob, apiJson } from '@/core/api/client'
 import { HrDrawer } from '@/shared/components/hr'
 import { useRangeParam } from '@/design/kit/RangeFilter'
 import { monthRange } from '@/design/kit/rangeFilterModel'
+import { LIST_MAX_DAYS, rangeKey, rangeQs } from '../api/shared/listRange'
 import { PayrollModule } from '@/design/dc/PayrollModule'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, addDays, fmtShort, MON, MONTHS } from '@/design/dc/dates'
@@ -101,6 +102,8 @@ export function PayrollContainer() {
   const monthLink = /^\d{4}-(0[1-9]|1[0-2])$/.test(params.get('month') || '') ? monthRange(params.get('month') as string) : null
   // The runs list's pay periods (?from=&to=); a new range replaces an older ?month= link.
   const [runsRange, setRunsRange] = useRangeParam({ fallback: monthLink, resetKeys: ['month'] })
+  // Advances & loans (/hrms/advances): the days the advances were asked for (?from=&to=), kept by the server.
+  const [advRange, setAdvRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
   const mobile = useIsMobile()
   const qc = useQueryClient()
   const today = istToday()
@@ -231,7 +234,7 @@ export function PayrollContainer() {
   const pliSave = useMutation({ mutationFn: ({ id, body }: { id: string | null; body: Record<string, unknown> }) => apiJson<PliTarget>(id ? `/v1/pli/targets/${id}` : '/v1/pli/targets', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) }), onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'pli'] }) })
 
   // ── Advances ──
-  const advQ = useQuery({ queryKey: ['hrms', 'advance', 'company', 0, undefined, 100], queryFn: () => apiJson<Page<AdvanceRequest>>('/v1/advance/requests?page=0&size=100'), enabled: advAdmin && section === 'advances', staleTime: 30_000 })
+  const advQ = useQuery({ queryKey: ['hrms', 'advance', 'company', 0, undefined, 100, ...(advRange ? [rangeKey(advRange)] : [])], queryFn: () => apiJson<Page<AdvanceRequest>>(`/v1/advance/requests?page=0&size=100${rangeQs(advRange)}`), enabled: advAdmin && section === 'advances', staleTime: 30_000 })
   const [advView, setAdvView] = useState<string | null>(null)
   const [recoveryFor, setRecoveryFor] = useState<string | null>(null)
   const scheduleQ = useQuery({ queryKey: ['hrms', 'advance', 'schedule', advView], queryFn: () => apiJson<AdvanceScheduleRow[]>(`/v1/advance/${advView}/schedule`), enabled: !!advView && canAdvRead, staleTime: 30_000 })
@@ -512,6 +515,7 @@ export function PayrollContainer() {
     const plan: AdvPlanRow[] | null = scheduleQ.data ? scheduleQ.data.map((r) => ({ month: r.scheduledMonth, amount: num(r.scheduledAmount), status: r.status })) : null
     px.PayAdvances = {
       state: stateOf(advQ), rows, plan, me: me.employee_id || '', meLabel: me.name || me.given_name || '', canApprove: canAdvApprove, canRequest: canAdvRequest,
+      range: advRange, onRange: setAdvRange, maxSpan: LIST_MAX_DAYS,
       // Issue advance for someone else: everyone active in the directory (the server checks the permission and the person).
       canRequestOthers: canAdvOthers,
       people: canAdvOthers ? directory.filter((e) => e.id !== me.employee_id && e.employmentStatus !== 'EXITED' && e.employmentStatus !== 'TERMINATED')
