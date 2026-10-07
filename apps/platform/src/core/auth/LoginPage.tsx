@@ -20,7 +20,7 @@ type MfaSetupInfo = { secret: string; qrSvg: string; issuer: string }
  * ({@link mobileSignInUrl}), which hands the session back to this page's business.
  */
 const GOOGLE_SIGN_IN = true
-const MOBILE_SIGN_IN = true
+const MOBILE_SIGN_IN = false
 
 /** What a refused Google sign-in comes back with (/login?error=…), in plain words. */
 const SIGN_IN_ERRORS: Record<string, string> = {
