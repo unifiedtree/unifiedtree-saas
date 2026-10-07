@@ -11,13 +11,20 @@ import { useRecentDecisions } from '../../api/shared/useRecentDecisions'
 import { useDecisionUndo } from '../../api/shared/useDecisionUndo'
 import type { ShiftPolicy } from '../../api/useShiftPolicies'
 import { changeRange, statusOf, timeRange } from './shiftModel'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../../api/shared/listRange'
 
 const first = (n?: string | null) => (n || 'Employee').split(' ')[0]
+/** "Already decided" keeps its own start / end in the URL: the Overtime tab of this page uses ?from=&to=. */
+const DECIDED_KEYS = { from: 'decidedFrom', to: 'decidedTo' } as const
 
 export function RequestsView({ canApprove, shifts }: { canApprove: boolean; shifts: ShiftPolicy[] }) {
   const toast = useToast()
   const pending = usePendingShiftRequests({ enabled: canApprove })
-  const decided = useDecidedShiftRequests(30, { enabled: canApprove })
+  // The start / end calendar: requests whose start date (the "Starting from" column) is in it; none = decided in
+  // the last 30 days, as before.
+  const [range, setRange] = useRangeParam({ keys: DECIDED_KEYS, maxSpan: LIST_MAX_DAYS })
+  const decided = useDecidedShiftRequests(30, { enabled: canApprove, range })
   const recent = useRecentDecisions({ enabled: canApprove })
   const decide = useDecideShiftRequest()
   const undo = useDecisionUndo()
@@ -98,9 +105,10 @@ export function RequestsView({ canApprove, shifts }: { canApprove: boolean; shif
           </div>
         )}
       </Section>
-      <Section title="Already decided" sub="The last 30 days: who decided, when, and their note." body="flush" error={decided.error} onRetry={() => decided.refetch()}>
-        <Table label="Shift change requests decided in the last 30 days" columns={columns} rows={done} rowKey={(r) => r.id} loading={decided.isLoading} mobile="cards"
-          empty="Nothing decided in the last 30 days." />
+      <Section title="Already decided" sub={range ? 'Starting on these dates: who decided, when, and their note.' : 'The last 30 days: who decided, when, and their note.'} body="flush" error={decided.error} onRetry={() => decided.refetch()}
+        actions={<RangeFilter value={range} onChange={setRange} maxSpan={LIST_MAX_DAYS} label="Starting from" placeholder="Last 30 days" filterKey="decided-shift-dates" align="end" />}>
+        <Table label={range ? 'Shift change requests decided, starting on these dates' : 'Shift change requests decided in the last 30 days'} columns={columns} rows={done} rowKey={(r) => r.id} loading={decided.isLoading} mobile="cards"
+          empty={range ? 'Nothing decided starts on these dates.' : 'Nothing decided in the last 30 days.'} />
       </Section>
     </>
   )

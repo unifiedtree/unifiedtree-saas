@@ -21,6 +21,8 @@ import {
   type HiringOffer, type OfferStatus,
 } from '../api/useHiring'
 import { OFFER_ACTION, OFFER_LABEL, OFFER_NEXT, OFFER_TONE, istTodayIso, weekdayDay } from './hiringModel'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../api/shared/listRange'
 
 const PAGE = 20
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
@@ -32,7 +34,9 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
   const canHiringWrite = usePermission('hrms.hiring.write')
   const canWrite = canOfferWrite || canHiringWrite
   const [page, setPage] = useState(0)
-  const query = useHiringOffers(page)
+  // The start / end calendar (?from=&to=): the server keeps the list to offers made on those days.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const query = useHiringOffers(page, range)
   const update = useUpdateHiringOfferStatus()
   const [editing, setEditing] = useState<HiringOffer | null>(null)
   const [emailing, setEmailing] = useState<HiringOffer | null>(null)
@@ -100,7 +104,10 @@ export function OffersTab({ creating, onCreateDone }: { creating: boolean; onCre
   return (
     <>
       <Section title="Offers" body="flush" loading={query.isLoading} skeleton="table" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching}
-        empty={!query.isLoading && !query.error && total === 0 ? { title: 'No offers yet. Create a draft to begin tracking an offer.', icon: 'fileText' } : undefined}
+        actions={<RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Offer made" filterKey="offer-dates" align="end" />}
+        empty={!query.isLoading && !query.error && total === 0 ? (range
+          ? { title: 'No offers made on these dates.', hint: 'Pick other dates, or clear them to see every offer.', icon: 'fileText' }
+          : { title: 'No offers yet. Create a draft to begin tracking an offer.', icon: 'fileText' }) : undefined}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="offers" /> : undefined}>
         <Table label="Offers" columns={columns} rows={offers} rowKey={(o) => o.id} mobile="cards" minWidth={960} />
       </Section>

@@ -20,6 +20,8 @@ import {
   EMPLOYMENT_TYPES, type JobRequisition,
 } from '../api/useHiring'
 import { REQUISITION_LABEL, REQUISITION_TONE, dayMon, fmtEnum, istTodayIso } from './hiringModel'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from '../api/shared/listRange'
 
 const PAGE = 20
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message) || fallback
@@ -45,7 +47,9 @@ export function RequisitionsTab({ creating, onCreateDone }: { creating: boolean;
   const toast = useToast()
   const canWrite = usePermission('hrms.hiring.write')
   const [page, setPage] = useState(0)
-  const { data, isLoading, error, refetch, isFetching } = useRequisitions(page)
+  // The start / end calendar (?from=&to=): the server keeps the list to requisitions opened on those days.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const { data, isLoading, error, refetch, isFetching } = useRequisitions(page, undefined, { range })
   const requisitions = useMemo(() => data?.content ?? [], [data])
   const total = data?.totalElements ?? 0
   const close = useCloseRequisition()
@@ -87,7 +91,10 @@ export function RequisitionsTab({ creating, onCreateDone }: { creating: boolean;
   return (
     <>
       <Section title="Requisitions" body="flush" loading={isLoading} skeleton="table" error={error} onRetry={() => refetch()} retrying={isFetching}
-        empty={!isLoading && !error && total === 0 ? { title: 'No requisitions yet', hint: 'Open your first requisition to start hiring.', icon: 'briefcase' } : undefined}
+        actions={<RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Opened" filterKey="requisition-dates" align="end" />}
+        empty={!isLoading && !error && total === 0 ? (range
+          ? { title: 'No requisitions opened on these dates', hint: 'Pick other dates, or clear them to see every requisition.', icon: 'briefcase' }
+          : { title: 'No requisitions yet', hint: 'Open your first requisition to start hiring.', icon: 'briefcase' }) : undefined}
         footer={total > PAGE ? <Pager page={page} pageSize={PAGE} total={total} onPageChange={setPage} noun="requisitions" /> : undefined}>
         <Table label="Requisitions" columns={columns} rows={requisitions} rowKey={(r) => r.id} mobile="cards" />
       </Section>

@@ -20,6 +20,8 @@ import { Pager, SectionCell, SectionGrid, UploadDrop, UploadFile } from '@/desig
 import { DateInput, FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { todayIso, useView } from '@/design/module/ModuleKit'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { LIST_MAX_DAYS } from './api/shared/listRange'
 import { apiJson } from '@/core/api/client'
 import { LetterTemplates } from './letters/LetterTemplates'
 import { PersonSearch, fullName } from './letters/components/PersonSearch'
@@ -107,7 +109,9 @@ function AllDocumentsTab() {
   const [employee, setEmployee] = useState({ id: '', name: '' })
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DOCUMENT_PAGE_SIZE)
-  const { data, isLoading, error, refetch, isFetching } = useEmployeeDocuments(employee.id || undefined, page, true, pageSize)
+  // The start / end calendar (?from=&to=): the server keeps the file to documents uploaded on those days.
+  const [range, setRange] = useRangeParam({ maxSpan: LIST_MAX_DAYS })
+  const { data, isLoading, error, refetch, isFetching } = useEmployeeDocuments(employee.id || undefined, page, true, pageSize, range)
   const summary = useEmployeeDocumentSummary(employee.id || undefined)
   const documents = (data?.content ?? []) as EmployeeDocumentV2[]
   const total = data?.totalElements ?? 0
@@ -176,7 +180,11 @@ function AllDocumentsTab() {
       {employee.id && (
         <Section title={`${employee.name}’s file`} body="flush" cardClass={false}
           loading={isLoading} skeleton="table" error={error} onRetry={() => refetch()} retrying={isFetching}
-          empty={!isLoading && !error && documents.length === 0 ? {
+          actions={<RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} maxSpan={LIST_MAX_DAYS} label="Uploaded" filterKey="document-dates" align="end" />}
+          empty={!isLoading && !error && documents.length === 0 ? range ? {
+            title: 'No documents uploaded on these dates',
+            hint: 'Pick other dates, or clear them to see their whole file.',
+          } : {
             title: 'No documents on their file yet',
             hint: canWrite ? 'Use “Add document” to store their offer letter, contract, ID proofs or certificates. They see them under My documents.' : 'Nothing has been added to their file yet.',
           } : undefined}

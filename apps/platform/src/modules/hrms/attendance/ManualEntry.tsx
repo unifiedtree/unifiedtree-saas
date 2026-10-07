@@ -25,6 +25,11 @@ import { useChangeDayStatus } from '../api/useAttendanceReview'
 import { MARK_AS, istInstant } from './daily/BulkMarkPanel'
 import { hhmmIst } from './daily/dailyModel'
 import './daily/daily.css'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { rangeKey, rangeQs } from '../api/shared/listRange'
+
+/** The longest range GET /v1/attendance/manual-entries answers (ManualEntryLog.MAX_DAYS). */
+const MANUAL_ENTRY_MAX_DAYS = 92
 
 const fullName = (e: WorkforceEmployee) => [e.firstName, e.middleName, e.lastName].filter(Boolean).join(' ') || e.email
 interface PickerEmployee { id: string; code?: string; name: string; employmentStatus?: WorkforceEmployee['employmentStatus'] }
@@ -69,9 +74,12 @@ export function ManualEntry() {
   const pickerLoading = useTeam ? team.isLoading : dir.isLoading
   const selected = employees.find((e) => e.id === employeeId)
 
+  // The card's start / end calendar (?from=&to=): the server already takes the days entered (at most 92, not after
+  // today). None = its default, the last 30 days.
+  const [range, setRange] = useRangeParam({ max: today, maxSpan: MANUAL_ENTRY_MAX_DAYS })
   const recent = useQuery({
-    queryKey: ['hrms', 'attendance', 'manual-entries', 'recent'],
-    queryFn: () => apiJson<RecentEntry[]>('/v1/attendance/manual-entries?limit=20'),
+    queryKey: ['hrms', 'attendance', 'manual-entries', 'recent', ...(range ? [rangeKey(range)] : [])],
+    queryFn: () => apiJson<RecentEntry[]>(`/v1/attendance/manual-entries?limit=20${rangeQs(range)}`),
     enabled: canTeam,
     retry: false,
   })
@@ -162,8 +170,9 @@ export function ManualEntry() {
         </Section>
         {canTeam && (
           <Section title="Recent manual entries" variant="section" body="flush" className="udt-side"
+            actions={<RangeFilter value={range} onChange={setRange} max={today} maxSpan={MANUAL_ENTRY_MAX_DAYS} label="Days entered" placeholder="Last 30 days" filterKey="manual-entry-dates" align="end" />}
             loading={recent.isLoading} error={recent.isError && (recent.error as { status?: number })?.status !== 404 ? recent.error : undefined} onRetry={() => void recent.refetch()}
-            empty={!recent.isLoading && (recent.data ?? []).length === 0 ? { title: recent.isError ? 'Not available yet' : 'No manual entries lately', hint: recent.isError ? undefined : 'Entries from the last 30 days show here.' } : undefined}>
+            empty={!recent.isLoading && (recent.data ?? []).length === 0 ? { title: recent.isError ? 'Not available yet' : range ? 'No manual entries on these dates' : 'No manual entries lately', hint: recent.isError ? undefined : range ? 'Pick other dates, or clear them for the last 30 days.' : 'Entries from the last 30 days show here.' } : undefined}>
             <Table<RecentEntry> label="Recent manual entries" columns={recentCols} rows={recent.data ?? []} rowKey={(r) => r.recordId} mobile="cards" minWidth={520} />
           </Section>
         )}
