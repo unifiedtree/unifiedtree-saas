@@ -135,3 +135,17 @@ BEGIN
         GRANT SELECT, INSERT, UPDATE ON platform.company_modules TO hrms_app;
     END IF;
 END $$;
+
+-- Entitlement rows are retired (status CANCELLED / SUSPENDED), never deleted.
+-- Explicit, because V089's ALTER DEFAULT PRIVILEGES (where its owner role ran it) hands DELETE on every new
+-- platform table to the app roles; production has no default privileges, so this makes both the same.
+DO $$
+DECLARE r text;
+BEGIN
+    FOREACH r IN ARRAY ARRAY['ut_app', 'hrms_app', 'app_user'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+            EXECUTE format('REVOKE DELETE ON platform.company_modules FROM %I', r);
+        END IF;
+    END LOOP;
+END $$;
+

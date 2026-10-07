@@ -149,3 +149,17 @@ BEGIN
         GRANT SELECT, INSERT, UPDATE, DELETE ON platform.sso_handoff_tickets TO hrms_app;
     END IF;
 END $$;
+
+-- A mapping is RETIRED, never deleted (SSO tickets keep DELETE: expired ones are purged).
+-- Explicit, because V089's ALTER DEFAULT PRIVILEGES (where its owner role ran it) hands DELETE on every new
+-- platform table to the app roles; production has no default privileges, so this makes both the same.
+DO $$
+DECLARE r text;
+BEGIN
+    FOREACH r IN ARRAY ARRAY['ut_app', 'hrms_app', 'app_user'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+            EXECUTE format('REVOKE DELETE ON platform.marketing_identity_map FROM %I', r);
+        END IF;
+    END LOOP;
+END $$;
+

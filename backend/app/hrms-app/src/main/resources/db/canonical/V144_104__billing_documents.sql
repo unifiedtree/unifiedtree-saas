@@ -203,6 +203,14 @@ CREATE TABLE IF NOT EXISTS platform.invoice_lines (
 CREATE OR REPLACE FUNCTION platform.guard_issued_invoice() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    IF TG_OP = 'DELETE' THEN
+        -- Only a draft that never left DRAFT may go; anything numbered or discarded stays on record
+        IF OLD.status <> 'DRAFT' THEN
+            RAISE EXCEPTION 'Invoice % is % and cannot be deleted. Void it instead.',
+                COALESCE(OLD.invoice_number, OLD.id::text), OLD.status USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN OLD;
+    END IF;
     IF OLD.status IN ('ISSUED', 'PAID', 'VOID', 'DISCARDED') THEN
         IF NEW.invoice_number   IS DISTINCT FROM OLD.invoice_number
         OR NEW.tenant_id        IS DISTINCT FROM OLD.tenant_id
@@ -234,7 +242,7 @@ END $$;
 
 DROP TRIGGER IF EXISTS trg_guard_issued_invoice ON platform.invoices;
 CREATE TRIGGER trg_guard_issued_invoice
-    BEFORE UPDATE ON platform.invoices
+    BEFORE UPDATE OR DELETE ON platform.invoices
     FOR EACH ROW EXECUTE FUNCTION platform.guard_issued_invoice();
 
 CREATE OR REPLACE FUNCTION platform.guard_issued_invoice_lines() RETURNS trigger
@@ -268,3 +276,17 @@ BEGIN
             platform.invoice_number_series, platform.invoices, platform.invoice_lines TO hrms_app;
     END IF;
 END $$;
+
+-- Invoices are voided or discarded, never deleted; a series number is never given back.
+-- Explicit, because V089's ALTER DEFAULT PRIVILEGES (where its owner role ran it) hands DELETE on every new
+-- platform table to the app roles; production has no default privileges, so this makes both the same.
+DO $$
+DECLARE r text;
+BEGIN
+    FOREACH r IN ARRAY ARRAY['ut_app', 'hrms_app', 'app_user'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+            EXECUTE format('REVOKE DELETE ON platform.company_billing_profiles, platform.invoice_number_series, platform.invoices, platform.invoice_lines FROM %I', r);
+        END IF;
+    END LOOP;
+END $$;
+
