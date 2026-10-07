@@ -98,9 +98,9 @@ public class DocumentController {
             @PageableDefault(size = 20) Pageable pageable,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
+        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         // Calendar everywhere (7 Oct 2026): the day the document was uploaded; none = the list as before.
         ListDateRange range = ListDateRange.parse(from, to);
-        RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
         return ResponseEntity.ok(enrichPage(range == null ? documentService.getEmployeeDocuments(employeeId, pageable)
                 : documentService.getEmployeeDocuments(employeeId, range.startsAt(), range.endsBefore(), pageable)));
     }

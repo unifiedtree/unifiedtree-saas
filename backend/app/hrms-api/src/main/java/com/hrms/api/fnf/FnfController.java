@@ -93,8 +93,8 @@ public class FnfController {
             @PageableDefault(size = 20) Pageable pageable,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        ListDateRange range = ListDateRange.parse(from, to);
         RecordCompanyGuard.checkEmployee(recordGuard, employeeId);
+        ListDateRange range = ListDateRange.parse(from, to);
         // No filter = today's call exactly (BW-64 adds the two optional filters; calendar everywhere, 7 Oct 2026, the range).
         return ResponseEntity.ok(enrichPage(range == null ? fnfService.getSettlements(status, employeeId, pageable)
                 : fnfService.getSettlements(status, employeeId, range.from(), range.to(), pageable)));

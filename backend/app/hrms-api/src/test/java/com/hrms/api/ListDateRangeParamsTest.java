@@ -513,9 +513,10 @@ class ListDateRangeParamsTest {
             controller.employeeDocuments(person, page, FROM, TO);
             verify(documents).getEmployeeDocuments(person, START, END, page);
             verify(guard, times(2)).checkEmployee(person);
+            refused(BACKWARDS, () -> controller.employeeDocuments(person, page, TO, FROM));
+            // Someone in a company the caller may not work in: refused first, whatever the dates.
             doThrow(new AccessDeniedException("other company")).when(guard).checkEmployee(person);
             assertThrows(AccessDeniedException.class, () -> controller.employeeDocuments(person, page, FROM, TO));
-            refused(BACKWARDS, () -> controller.employeeDocuments(person, page, TO, FROM));
             verifyNoMoreInteractions(documents);
         }
     }
