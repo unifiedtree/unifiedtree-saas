@@ -3,6 +3,7 @@ package com.hrms.api.saasguard;
 import com.unifiedtree.saas.billing.SubscriptionStanding;
 import com.unifiedtree.saas.payment.RazorpayClient;
 import com.unifiedtree.saas.payment.subscription.SubscriptionStateReconciler;
+import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -226,7 +227,7 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                 return true;
             }
             if (!recentlyChecked(tenantId, now)) {
-                String upstream = reconciler.reconcileFromRazorpay(sub.razorpaySubscriptionId(), razorpay);
+                String upstream = reconcileUnbound(sub.razorpaySubscriptionId());
                 if (upstream == null) {
                     recentUnreachableCache.put(tenantId, now.getEpochSecond());
                     log.warn("subscription-guard NOT PAUSING (Razorpay unreachable, can't confirm non-payment)  tenant={} status={}",
@@ -282,6 +283,24 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                 + "\"graceEndedOn\":" + (graceEnd == null ? "null" : "\"" + graceEnd.atZone(ist).toLocalDate() + "\"") + ","
                 + "\"canPay\":" + canPay + ","
                 + "\"message\":\"" + escape(d.reason()) + "\"}";
+    }
+
+    /**
+     * The reconciler's writes with the request's tenant UNBOUND. On a tenant-bound connection
+     * TenantAwareDataSource turns auto-commit off for SET LOCAL, so without a transaction the
+     * reconciler's UPDATE (paid -> ACTIVE) was never committed and the re-read still saw the old
+     * status: a paying business stayed paused (review 7 Oct 2026, live probe P1). platform.subscriptions
+     * has no row-level security, so unbound statements auto-commit one by one, and no connection is
+     * held while Razorpay is asked.
+     */
+    private String reconcileUnbound(String razorpaySubscriptionId) {
+        UUID bound = TenantContext.getTenantId();
+        TenantContext.clear();
+        try {
+            return reconciler.reconcileFromRazorpay(razorpaySubscriptionId, razorpay);
+        } finally {
+            if (bound != null) TenantContext.setTenantId(bound);
+        }
     }
 
     private boolean recentlyUnreachable(UUID tenantId, Instant now) {
