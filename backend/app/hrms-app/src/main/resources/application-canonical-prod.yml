@@ -83,6 +83,13 @@ unifiedtree:
   subscription:
     grandfather-tenant-ids: ${UNIFIEDTREE_SUBSCRIPTION_GRANDFATHER_TENANT_IDS:}
 
+  # Marketing Automation (Node) calls /v1/internal/marketing/** with this shared
+  # token in X-UnifiedTree-Service-Token. Empty (the default) refuses every internal
+  # call with 503 — set it from Secret Manager, at least 32 random characters, and
+  # give Marketing the same value (UNIFIEDTREE_MARKETING_SERVICE_TOKEN on its side too).
+  marketing:
+    service-token: ${UNIFIEDTREE_MARKETING_SERVICE_TOKEN:}
+
   cors:
     # PRODUCTION must set this. Empty/missing -> the canonical-prod CORS
     # config rejects every cross-origin request (fail-safe). Comma-separated
