@@ -356,15 +356,18 @@ export function useAttendanceSources(date?: string, departmentId?: string, enabl
  * always dense — the chart never has to guess at missing dates.
  * `opts.includeSelf`: a company-wide viewer is counted too, as on the day roster (the admin dashboard);
  * a server without it leaves them out, as before.
+ * `opts.includeLeavers`: people who have left since count on the days they still worked, as
+ * useTeamDashboard's `includeLeavers` (the admin dashboard's trend ending today, 7 Oct 2026).
  */
-export function useAttendanceTrend(from?: string, to?: string, departmentId?: string, enabled: boolean = true, opts: Pick<TeamDayOptions, 'includeSelf'> = {}) {
+export function useAttendanceTrend(from?: string, to?: string, departmentId?: string, enabled: boolean = true, opts: Pick<TeamDayOptions, 'includeSelf'> & { includeLeavers?: boolean } = {}) {
   const params = new URLSearchParams()
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (departmentId) params.set('departmentId', departmentId)
+  if (opts.includeLeavers) params.set('includeLeavers', 'true')
   if (opts.includeSelf) params.set('includeSelf', 'true')
   return useQuery({
-    queryKey: ['hrms', 'attendance', 'dashboard', 'trend', from, to, departmentId, ...(opts.includeSelf ? ['self'] : [])],
+    queryKey: ['hrms', 'attendance', 'dashboard', 'trend', from, to, departmentId, ...(opts.includeLeavers ? ['leavers'] : []), ...(opts.includeSelf ? ['self'] : [])],
     queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?${params}`),
     staleTime: 60_000,
     enabled,

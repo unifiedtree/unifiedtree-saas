@@ -164,7 +164,8 @@ export function AdminDashboardContainer() {
   const teamToday = useTeamDashboard(sel, undefined, canReadTeam && !isPast, false, { includeSelf: true, refetchOnFocus: true })
   const teamPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'history', sel, 'self'], queryFn: () => apiJson<TeamDashboardResponse>(`/v1/attendance/dashboard?date=${sel}&includeLeavers=true&includeSelf=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
   const team = isPast ? teamPast : teamToday
-  const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast, { includeSelf: true })
+  // The 30 days up to today count leavers on the days they worked too, as a past day's trend and a range do.
+  const trendToday = useAttendanceTrend(addDays(today, -30), today, undefined, canReadTeam && !isPast, { includeSelf: true, includeLeavers: true })
   const trendPast = useQuery({ queryKey: ['hrms', 'attendance', 'dashboard', 'trend', 'history', sel, 'self'], queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?from=${addDays(sel, -30)}&to=${sel}&includeLeavers=true&includeSelf=true`), enabled: canReadTeam && isPast, staleTime: 60_000 })
   const trend = isPast ? trendPast : trendToday
   // A range: the period's per-day counts (the chart's own endpoint; people who left during it count on the days they worked).
