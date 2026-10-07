@@ -141,6 +141,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // for two weeks with nothing to say so.
         "com.hrms.api.platform.partition",
         "com.hrms.api.platform.maintenance",
+        // UnifiedTree admin console: HRMS as a product (subscription, seats bought vs
+        // used) for platform operators. Read-only; the rest of the console lives in
+        // com.unifiedtree.saas (scanned below).
+        "com.hrms.api.platformadmin",
         "com.hrms.api.modulereq",
         "com.hrms.api.access",
         "com.hrms.api.me",

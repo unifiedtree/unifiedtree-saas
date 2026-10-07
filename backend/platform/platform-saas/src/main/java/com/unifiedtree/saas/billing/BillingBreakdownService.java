@@ -27,15 +27,20 @@ import java.util.UUID;
  *
  * <p>This is a breakdown statement, not a GST tax invoice: Razorpay issues the business's
  * invoice for each charge. Per-company invoices come with per-company subscriptions (next week).
+ *
+ * <p>Each company's legal name, GSTIN, PAN and address come from {@link CompanyBillingDetails}, the
+ * same resolver the invoice snapshot uses, so both show the same details for a company.
  */
 @Service
 public class BillingBreakdownService {
 
     private final JdbcTemplate jdbc;
+    private final CompanyBillingDetails details;
     private final ExtraUsersService extras;
 
-    public BillingBreakdownService(JdbcTemplate jdbc, ExtraUsersService extras) {
+    public BillingBreakdownService(JdbcTemplate jdbc, CompanyBillingDetails details, ExtraUsersService extras) {
         this.jdbc = jdbc;
+        this.details = details;
         this.extras = extras;
     }
 
@@ -111,30 +116,26 @@ public class BillingBreakdownService {
 
     /** The business's companies with their active employees (RLS: read with the tenant bound). */
     private List<CompanyRow> companies(UUID tenantId) {
+        java.util.Map<UUID, CompanyBillingDetails.Details> billing = details.companies(tenantId);
         UUID before = TenantContext.getTenantId();
         UUID beforeCore = com.hrms.core.tenant.TenantContext.getTenantId();
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
         try {
             return jdbc.query("""
-                    SELECT c.id, c.name, c.legal_name, c.gstin, c.pan_number, c.is_active,
-                           hq.address_line, hq.city, hq.state, hq.pincode,
+                    SELECT c.id, c.name, c.is_active,
                            (SELECT count(*) FROM hrms.employees e
                              WHERE e.tenant_id = c.tenant_id AND e.company_id = c.id AND e.is_active = TRUE) AS employees
                       FROM org.companies c
-                      LEFT JOIN LATERAL (
-                            SELECT b.address_line, b.city, b.state, b.pincode
-                              FROM org.branches b
-                             WHERE b.company_id = c.id
-                             ORDER BY b.is_headquarters DESC, b.created_at
-                             LIMIT 1) hq ON TRUE
                      WHERE c.tenant_id = ?
                      ORDER BY c.name
-                    """, (rs, n) -> new CompanyRow(
-                            rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("legal_name"),
-                            rs.getString("gstin"), rs.getString("pan_number"), rs.getBoolean("is_active"),
-                            join(rs.getString("address_line"), rs.getString("city"), rs.getString("state"), rs.getString("pincode")),
-                            rs.getInt("employees")), tenantId);
+                    """, (rs, n) -> {
+                        UUID id = rs.getObject("id", UUID.class);
+                        CompanyBillingDetails.Details d = billing.get(id);
+                        return new CompanyRow(id, rs.getString("name"), d == null ? null : d.legalName(),
+                                d == null ? null : d.gstin(), d == null ? null : d.pan(), rs.getBoolean("is_active"),
+                                d == null ? null : d.address(), rs.getInt("employees"));
+                    }, tenantId);
         } finally {
             if (before == null) TenantContext.clear(); else TenantContext.setTenantId(before);
             if (beforeCore == null) com.hrms.core.tenant.TenantContext.clear(); else com.hrms.core.tenant.TenantContext.setTenantId(beforeCore);
