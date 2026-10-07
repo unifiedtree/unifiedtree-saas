@@ -31,7 +31,11 @@ const check = (name, ok, detail = '') => { results.push({ name, ok }); console.l
 const istToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
 const TODAY = istToday()
 
-/** Active employees and headcount on a day, by the headcount report's rules (status history). */
+/**
+ * Active employees and headcount on a past day, by the headcount report's rules (status history). Every day asked
+ * for here is a past one: since 6 Oct a leaver is on the roll through their last working day (EMPLOYED_THROUGH),
+ * and a missing joining date is the day the record was created.
+ */
 const activeOn = (day) => sql(`
   WITH status_on AS (
     SELECT DISTINCT ON (h.employee_id) h.employee_id, h.status FROM hrms.employee_status_history h
@@ -42,8 +46,8 @@ const activeOn = (day) => sql(`
        AND (h.recorded_at AT TIME ZONE 'Asia/Kolkata')::date <= DATE '${day}')
   SELECT count(*) FILTER (WHERE l.employee_id IS NULL AND COALESCE(s.status, e.employment_status) = 'ACTIVE') || '|' || count(*)
     FROM hrms.employees e LEFT JOIN status_on s ON s.employee_id = e.id LEFT JOIN leaving_on l ON l.employee_id = e.id
-   WHERE e.tenant_id = '${tenant}' AND e.company_id = '${company}' AND e.date_of_joining <= DATE '${day}'
-     AND NOT (e.employment_status IN ('EXITED','TERMINATED','RESIGNED') AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') <= DATE '${day}')`).split('|').map(Number)
+   WHERE e.tenant_id = '${tenant}' AND e.company_id = '${company}' AND COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= DATE '${day}'
+     AND NOT (e.employment_status IN ('EXITED','TERMINATED','RESIGNED') AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') < DATE '${day}')`).split('|').map(Number)
 
 async function token(email) {
   const headers = { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, 'X-Tenant-Subdomain': 'demo' }
@@ -200,8 +204,12 @@ try {
   check('today: Active employees (the Total employees note) shows the database count', todayTile.n.startsWith(`${todayActive} confirmed`), todayTile.n.slice(0, 80))
   check('today: no past-date banner', (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0)
   check('today: no "As of today" label', (await page.getByText('As of today', { exact: false }).count()) === 0)
-  const dated = calls.filter((c) => c.includes('includeLeavers') || (/^\/v1\/(admin\/dashboard|hrms\/projects|probation\/upcoming|audit\/events|reports\/headcount)/.test(c) && /[?&](date|asOf|to)=/.test(c)))
-  check('today: the same requests as before (no date, no includeLeavers)', dated.length === 0, dated.join(' | ').slice(0, 200))
+  // Since 7 Oct today's 30-day trend asks for leavers (they count on the days they worked, as on a past day's
+  // trend); today's roster and every other card still ask without a date or includeLeavers.
+  const dated = calls.filter((c) => (c.includes('includeLeavers') && !c.startsWith('/v1/attendance/dashboard/trend'))
+    || (/^\/v1\/(admin\/dashboard|hrms\/projects|probation\/upcoming|audit\/events|reports\/headcount)/.test(c) && /[?&](date|asOf|to)=/.test(c)))
+  check('today: the same requests as before (no date, no includeLeavers on the roster)', dated.length === 0, dated.join(' | ').slice(0, 200))
+  check('today: the trend ending today asks for leavers', calls.some((c) => c.startsWith('/v1/attendance/dashboard/trend') && c.includes(`to=${TODAY}`) && c.includes('includeLeavers=true')))
   check('today: weekly trend says Last 7 days', (await page.getByText('Last 7 days · IST').count()) > 0)
   // Today's payroll chart: the last six months with a run, whatever they are. The redesign also draws months still
   // in review (paid vs in review, G16), so every run but a cancelled one counts.
