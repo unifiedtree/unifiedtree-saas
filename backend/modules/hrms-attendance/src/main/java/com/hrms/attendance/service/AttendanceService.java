@@ -689,7 +689,11 @@ public class AttendanceService {
         return out;
     }
 
-    /** Bulk joining-date lookup — the team dashboard filters out future hires. */
+    /**
+     * Bulk joining-date lookup — the team dashboard filters out future hires.
+     * No joining date: the day the record was created (India time), as the
+     * admin dashboard's headcount and the headcount report count them.
+     */
     @Transactional(readOnly = true)
     public java.util.Map<UUID, LocalDate> joiningDatesFor(java.util.List<UUID> employeeIds) {
         java.util.Map<UUID, LocalDate> out = new java.util.HashMap<>();
@@ -697,7 +701,8 @@ public class AttendanceService {
         String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
         try {
             jdbcTemplate.query(
-                    "SELECT id, date_of_joining FROM hrms.employees WHERE id IN (" + inClause + ")",
+                    "SELECT id, COALESCE(date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date) AS date_of_joining"
+                            + " FROM hrms.employees WHERE id IN (" + inClause + ")",
                     (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
                         java.sql.Date d = rs.getDate("date_of_joining");
                         if (d != null) out.put((UUID) rs.getObject("id"), d.toLocalDate());

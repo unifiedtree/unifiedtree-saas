@@ -127,6 +127,44 @@ class TeamDayWeeklyOffTest {
         assertEquals(2, team.scheduled(), "a manager's team never includes the manager");
     }
 
+    /**
+     * Production, 7 Oct 2026: HR set someone ABSENT on their weekly off, and no tile counted it, because the
+     * roster keeps a person on their day off only if they punched. A reviewer's status now counts as a punch
+     * does, on the day's tiles and in the trend; someone merely off that day still is not counted.
+     */
+    @Test void aReviewersStatusOnAWeeklyOffIsCountedOnTheTilesAndInTheTrend() {
+        com.hrms.attendance.policy.EffectiveDayStatusService policy = mock(com.hrms.attendance.policy.EffectiveDayStatusService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "effectiveDays", policy);
+        Map<UUID, EffectiveDay> sunday = Map.of(
+                me.getId(), effective(me, EffectiveDay.WEEKLY_OFF, null, false),
+                asha.getId(), effective(asha, EffectiveDay.ABSENT, null, true),              // set by HR on her day off
+                bala.getId(), effective(bala, EffectiveDay.PRESENT, Instant.parse("2026-10-04T04:00:00Z"), false),
+                chitra.getId(), effective(chitra, EffectiveDay.ABSENT, null, false));
+        when(policy.effectiveStatuses(any(), eq(SUNDAY), eq(SUNDAY))).thenAnswer(inv -> {
+            java.util.Collection<UUID> ids = inv.getArgument(0);
+            Map<UUID, Map<LocalDate, EffectiveDay>> out = new java.util.HashMap<>();
+            for (UUID id : ids) if (sunday.containsKey(id)) out.put(id, Map.of(SUNDAY, sunday.get(id)));
+            return out;
+        });
+
+        TeamDashboardResponse day = controller.teamDay(admin(), SUNDAY, null, false, true, true);
+        assertEquals(List.of("Asha Rao", "Bala Iyer", "Chitra Das", "Zed Viewer"), names(day));
+        assertEquals("ABSENT", row(day, asha).status());
+        assertEquals(1, day.counts().present(), "bala, who came in on his day off");
+        assertEquals(2, day.counts().absent(), "chitra, and asha whom HR marked absent on her weekly off");
+        assertEquals(EffectiveDay.WEEKLY_OFF, row(day, me).effectiveStatus(), "the viewer is only off: listed, not counted");
+
+        // The mobile app's roster (no flags) counts her too.
+        TeamDashboardResponse plain = controller.teamDay(admin(), SUNDAY, null, false);
+        assertEquals(List.of("Asha Rao", "Bala Iyer", "Chitra Das"), names(plain));
+        assertEquals(2, plain.counts().absent());
+
+        when(attendance.getRecordsForEmployeesBetween(anyList(), eq(SUNDAY), eq(SUNDAY))).thenReturn(List.of());
+        AttendanceController.DailyAttendanceCounts trend = controller.dashboardTrend(SUNDAY, SUNDAY, null, false, true, admin()).getBody().get(0);
+        assertEquals(2, trend.absent(), "the trend counts the same people as the tiles");
+        assertEquals(1, trend.scheduled(), "expected in: chitra only; a status on a day off does not make it a working day");
+    }
+
     @Test void withoutThePolicyServiceAWeeklyOffRowStillSaysWeeklyOff() {
         StaffStatusResponse bare = new StaffStatusResponse(asha.getId(), "E1", "Asha Rao", null, null, null, null, "NOT_MARKED",
                 null, null, null, null, null, false, null, false, null, null, null, null, null, null, false, false, false,
@@ -140,6 +178,13 @@ class TeamDayWeeklyOffTest {
                 null, null, null, null, null, false, null, true, null, null, null, null, EffectiveDay.ON_LEAVE, "On approved leave.", false, false, false,
                 false, false, null, null);
         assertEquals(EffectiveDay.ON_LEAVE, AttendanceController.asWeeklyOff(onLeave).effectiveStatus());
+    }
+
+    /** A day's effective status; {@code reviewed}: set by a reviewer (the policy said weekly off). */
+    private static EffectiveDay effective(Employee e, String status, Instant in, boolean reviewed) {
+        return new EffectiveDay(e.getId(), SUNDAY, status, reviewed ? EffectiveDay.WEEKLY_OFF : status, in, null, "OFFICE",
+                null, null, false, null, false, null, null, null, false, null, reviewed, reviewed ? "SET" : null,
+                null, reviewed ? "HR" : null, null, false, false, null, null, null, null, null, null);
     }
 
     private Jwt admin() {

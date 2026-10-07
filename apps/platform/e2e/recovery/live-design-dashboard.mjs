@@ -26,6 +26,8 @@ try {
 
   await page.goto(base + '/dashboard')
   await page.waitForLoadState('networkidle')
+  // The check-in prompt after sign-in (an owner without a check-in today) covers the page: set it aside.
+  await page.getByRole('button', { name: 'Continue without checking in' }).click({ timeout: 5000 }).catch(() => {})
   const heading = page.locator('h1', { hasText: /^Good (morning|afternoon|evening), / })
   check('greeting header renders', await heading.count() > 0, (await heading.first().textContent().catch(() => '')) || '')
   // The stat cards can paint a moment after the greeting (seen on 6 Oct): wait for them before counting.
@@ -43,8 +45,9 @@ try {
   const cal = page.getByRole('dialog', { name: 'Choose dashboard date' })
   await cal.waitFor({ timeout: 5000 })
   check('date calendar opens', await cal.isVisible())
-  await cal.getByRole('button', { name: 'Yesterday' }).click()
-  await cal.getByRole('button', { name: /^Show .* on dashboard$/ }).click()
+  // The date range picker (6 Oct): a Yesterday preset, then Apply.
+  await cal.getByRole('button', { name: 'Yesterday', exact: true }).click()
+  await cal.getByRole('button', { name: 'Apply', exact: true }).click()
   await page.waitForLoadState('networkidle')
   const banner = page.getByRole('status').filter({ hasText: 'Viewing' })
   check('past-date banner shows after choosing yesterday', await banner.count() > 0)

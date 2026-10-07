@@ -429,6 +429,20 @@ public class WorkforceEmployeeService {
     }
 
     // -- Create -------------------------------------------------------------
+
+    /**
+     * The joining date a new record is saved with: the one sent, else today (India).
+     * Add employee (web and app), master data and the import always send one (the
+     * forms require it, the import defaults to today); Users & Access invites, a
+     * hire converted from an offer with no joining date and API callers that send
+     * none used to save no date, and the dashboard then left them out of today's
+     * headcount. Today is the day the record is created, which is what every count
+     * reads a missing date as, so nothing counts differently.
+     */
+    static java.time.LocalDate joiningDateOrToday(java.time.LocalDate sent) {
+        return sent != null ? sent : java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+    }
+
     public WorkforceEmployeeResponse create(CreateWorkforceEmployeeRequest req) {
         return create(req, false);
     }
@@ -517,7 +531,7 @@ public class WorkforceEmployeeService {
         String type = EmploymentTypeCodes.resolveForEmployee(jdbc, req.companyId(), req.employmentType(), null);
         e.setEmploymentType(type != null ? type : EmploymentTypeCodes.FULL_TIME);
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.PROBATION);
-        e.setDateOfJoining(req.dateOfJoining());
+        e.setDateOfJoining(joiningDateOrToday(req.dateOfJoining()));
         // Default probation (HR Configuration → Probation → Default probation):
         // the end date is the joining date plus the company's months. 0 months
         // means new hires start confirmed, without probation.

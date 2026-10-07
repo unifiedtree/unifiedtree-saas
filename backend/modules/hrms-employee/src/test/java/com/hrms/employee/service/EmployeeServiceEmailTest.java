@@ -87,6 +87,17 @@ class EmployeeServiceEmailTest {
         verify(repository, never()).save(any());
     }
 
+    /** 7 Oct 2026: a client that sends no joining date gets today (India), the day the record is created, not none. */
+    @Test
+    void noJoiningDateIsSavedAsToday() {
+        java.time.LocalDate before = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        service.createEmployee(request("ravi@x.com", null));
+        ArgumentCaptor<Employee> saved = ArgumentCaptor.forClass(Employee.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getDateOfJoining()).isNotNull().isAfterOrEqualTo(before)
+                .isBeforeOrEqualTo(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+    }
+
     @Test
     void noPersonalEmailIsFine() {
         service.createEmployee(request("ravi@x.com", "  "));

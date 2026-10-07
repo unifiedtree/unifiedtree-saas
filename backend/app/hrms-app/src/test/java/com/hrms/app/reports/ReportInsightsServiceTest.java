@@ -150,6 +150,9 @@ class ReportInsightsServiceTest {
         assertThat(out).containsEntry("headcountFrom", 34L).containsEntry("headcountTo", 36L).containsEntry("change", 2L)
                 .containsEntry("joined", 3L).containsEntry("left", 1L);
         verify(jdbc).queryForMap(org.mockito.ArgumentMatchers.contains("e.tenant_id = ?"), eq(from), eq(TODAY), eq(from), eq(TODAY), eq(TENANT), eq(CO));
+        // Joiners without a joining date count from the day their record was created, as the headcount totals.
+        verify(jdbc).queryForMap(org.mockito.ArgumentMatchers.contains(
+                "COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) > ?"), any(Object[].class));
     }
 
     @Test

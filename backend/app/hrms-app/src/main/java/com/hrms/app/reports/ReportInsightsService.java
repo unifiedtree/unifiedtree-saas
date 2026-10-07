@@ -57,7 +57,8 @@ public class ReportInsightsService {
     /**
      * Headcount on {@code from} and on {@code to} (the headcount report's own
      * totals for those dates), the change between them, and who joined and
-     * who left in between (after {@code from}, up to and including {@code to}).
+     * who left in between (after {@code from}, up to and including {@code to};
+     * no joining date: the day the record was created, as the headcount report).
      */
     @Transactional(readOnly = true)
     public Map<String, Object> headcountChange(UUID companyId, LocalDate from, LocalDate to) {
@@ -67,7 +68,8 @@ public class ReportInsightsService {
         long after = total(reports.headcountReport(companyId, to));
         UUID t = ReportService.tenant();
         Map<String, Object> moved = jdbc.queryForMap("""
-                SELECT COUNT(*) FILTER (WHERE e.date_of_joining > ? AND e.date_of_joining <= ?) AS joined,
+                SELECT COUNT(*) FILTER (WHERE COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) > ?
+                                          AND COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= ?) AS joined,
                        COUNT(*) FILTER (WHERE e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
                                           AND COALESCE(e.last_working_day, e.date_of_termination) > ?
                                           AND COALESCE(e.last_working_day, e.date_of_termination) <= ?) AS left_count

@@ -55,18 +55,23 @@ public class WorkforceBreakdownService {
         return WorkforceBreakdown.build(asOf, people, includeGender);
     }
 
-    /** Joiners in each month of [from, to] (whole months), counted up to {@code today}. */
+    /**
+     * Joiners in each month of [from, to] (whole months), counted up to {@code today}.
+     * No joining date: the day the record was created (India time), as the headcount report.
+     */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> joiners(UUID companyId, LocalDate from, LocalDate to, LocalDate today) {
         LocalDate first = from.withDayOfMonth(1);
         LocalDate last = YearMonth.from(to).atEndOfMonth();
         List<LocalDate> dates = jdbc.query("""
-                SELECT e.date_of_joining
-                  FROM hrms.employees e
-                 WHERE e.tenant_id = ?
-                   AND e.company_id = ?
-                   AND e.date_of_joining BETWEEN ? AND ?
-                """, (rs, i) -> date(rs, "date_of_joining"), ReportService.tenant(), companyId, first, last);
+                SELECT j.joined FROM (
+                    SELECT COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS joined
+                      FROM hrms.employees e
+                     WHERE e.tenant_id = ?
+                       AND e.company_id = ?
+                ) j
+                 WHERE j.joined BETWEEN ? AND ?
+                """, (rs, i) -> date(rs, "joined"), ReportService.tenant(), companyId, first, last);
         return WorkforceBreakdown.joinersPerMonth(dates, from, to, today);
     }
 

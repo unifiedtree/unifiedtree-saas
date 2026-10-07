@@ -113,6 +113,9 @@ public class EmployeeService {
         employee.setTenantId(tenantId);
         employee.setEmployeeCode(employeeCodeGenerator.generate());
         employee.setEmploymentStatus(EmploymentStatus.ACTIVE);
+        // No joining date sent (older API clients of POST /v1/employees and /staff): today (India), the day
+        // the record is created, as every count reads a missing date, rather than no date at all.
+        if (employee.getDateOfJoining() == null) employee.setDateOfJoining(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
 
         Employee saved = employeeRepository.save(employee);
         log.info("Employee created: id={}, code={}, email={}", saved.getId(), saved.getEmployeeCode(), saved.getEmail());

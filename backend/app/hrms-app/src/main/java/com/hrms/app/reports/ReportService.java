@@ -87,13 +87,16 @@ public class ReportService {
             """;
 
     /**
-     * Who is employed on asOf: joined by then, and not gone by then (an exit
+     * Who is employed on asOf: joined by then (no joining date: the day the
+     * record was created, India time, as on a past date and on the attendance
+     * roster; a plain {@code e.date_of_joining <= ?} left them out of today's
+     * headcount and department chart only), and not gone by then (an exit
      * only ends employment once the status says so and the last working day
      * has passed). Takes two parameters: asOf, asOf. Starts with a space: a
      * text block drops the trailing space of the "AND " it is appended to.
      */
     static final String EMPLOYED_ON = " " + """
-            e.date_of_joining <= ?
+            COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= ?
                   AND NOT (
                         e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
                     AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') <= ?
@@ -219,11 +222,12 @@ public class ReportService {
         // resignation, TERMINATION a termination, every other type (and exits
         // recorded before the type existed) is "other". The legacy RESIGNED /
         // TERMINATED statuses still count when no type is recorded. headcount is who was
-        // employed at the month's end (or today, for the current month);
+        // employed at the month's end (or today, for the current month; no joining date:
+        // the day the record was created, as the headcount report);
         // attrition_pct is exits over the month's average headcount.
         String sql = """
                 WITH people AS (
-                    SELECT e.date_of_joining AS joined,
+                    SELECT COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS joined,
                            COALESCE(e.exit_type,
                                     CASE e.employment_status WHEN 'RESIGNED' THEN 'RESIGNATION'
                                                              WHEN 'TERMINATED' THEN 'TERMINATION' END) AS exit_type,

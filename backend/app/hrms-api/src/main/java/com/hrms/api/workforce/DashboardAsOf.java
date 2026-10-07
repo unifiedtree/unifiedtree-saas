@@ -18,8 +18,9 @@ import java.util.UUID;
  * ({@code ReportService.headcountReport}), so the "Active employees" tile and
  * the department chart on the same dashboard agree:
  * <ul>
- *   <li>on the roll: joined on or before the date, and not a leaver whose last
- *       working day (else termination date) is on or before it;</li>
+ *   <li>on the roll: joined on or before the date (no joining date: the day the
+ *       record was created, {@code DashboardHistory.joinedOrCreated}), and not a
+ *       leaver whose last working day (else termination date) is on or before it;</li>
  *   <li>status: the latest entry of {@code hrms.employee_status_history} in force
  *       on the date; an exit already recorded by then but taking effect later
  *       means "on notice"; no history falls back to the current status.</li>
