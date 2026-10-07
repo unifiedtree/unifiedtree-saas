@@ -178,3 +178,25 @@
 .urf-pop { padding: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
 .urf-title { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: var(--u-ink, #0E1B16); }
 @media (prefers-reduced-motion: reduce) { .urf-box { transition: none; } }
+
+/* The quick picks as a plain list beside the calendar (RangeFilter's wide popover); chips above it on a phone. */
+.udr.udr--side { grid-template-columns: 132px minmax(0, 1fr); column-gap: 16px; }
+.udr.udr--side > * { grid-column: 2; }
+.udr.udr--side > .udr-presets {
+  grid-column: 1; grid-row: 1 / span 3; align-self: start; flex-direction: column; flex-wrap: nowrap; gap: 2px;
+  padding-right: 12px; border-right: 1px solid var(--u-ln2, #EDF1EF);
+}
+/* Apply / Clear / Cancel run under both columns. */
+.udr.udr--side > .udr-footrow { grid-column: 1 / -1; }
+.udr--side .udr-presets .udr-chip { height: 34px; padding: 0 10px; border: 0; border-radius: 8px; text-align: left; background: transparent; }
+.udr--side .udr-presets .udr-chip:hover:not(:disabled) { background: var(--u-hv, #F0F4F2); }
+.udr--side .udr-presets .udr-chip[aria-pressed="true"] { background: var(--u-brs, #E8F3EE); }
+@media (max-width: 632px) {
+  .udr.udr--side { grid-template-columns: minmax(0, 1fr); }
+  .udr.udr--side > *, .udr.udr--side > .udr-presets, .udr.udr--side > .udr-footrow { grid-column: 1; grid-row: auto; }
+  .udr.udr--side > .udr-presets { flex-direction: row; flex-wrap: wrap; gap: 8px; padding-right: 0; border-right: 0; }
+  .udr--side .udr-presets .udr-chip { border: 1px solid var(--u-ln, #E3E9E6); border-radius: 999px; height: 32px; padding: 0 12px; }
+}
+/* Footer buttons stay together: when the line is full they move down as one group, right-aligned. */
+.udr-btns { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+.udr-foot:empty { display: none; }

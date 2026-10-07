@@ -73,6 +73,8 @@ export interface DateRangeDialogProps {
   onClear?: () => void
   /** Open on the month or year grid (tests; the month title opens them). */
   initialView?: CalView
+  /** The quick picks as a list beside the calendar (a wide popover); chips above it on a phone. */
+  presetsSide?: boolean
 }
 
 /** What the calendar shows: a month's days, a year's months (the month title), or 12 years (the year title). */
@@ -90,7 +92,7 @@ export function DateRangeDialog(props: DateRangeDialogProps) {
 /** The dialog's content (exported for tests: it renders without a document). */
 export function DateRangeBody({
   mode = 'range', from, to, min, max, calendar, halfDay, onDone, onDraftChange, serverDays, noun = 'request', today: todayProp,
-  presets: ownPresets, footerText, legend = true, maxSpan, onCancel, doneLabel = 'Done', clearable = false, onClear, initialView = 'days',
+  presets: ownPresets, footerText, legend = true, maxSpan, onCancel, doneLabel = 'Done', clearable = false, onClear, initialView = 'days', presetsSide = false,
 }: Omit<DateRangeDialogProps, 'open' | 'onClose' | 'title'>) {
   const uid = useId()
   const today = todayProp ?? istToday()
@@ -241,7 +243,7 @@ export function DateRangeBody({
   const cursorShown = cursor.slice(0, 7) === month ? cursor : `${month}-01`
 
   return (
-    <div className="udr">
+    <div className={presetsSide ? 'udr udr--side' : 'udr'}>
       <div className="udr-sum" aria-live="polite">
         {single ? (
           <div><span className="udr-sum-k">Date</span><span className="udr-sum-v">{effective ? weekdayDdmmyyyy(effective.from) : 'DD/MM/YYYY'}</span></div>
@@ -382,9 +384,11 @@ export function DateRangeBody({
       {note && <p className="udr-note">{note}</p>}
       <div className="udr-footrow">
         <span className={`udr-foot${allOff || problem ? ' is-warn' : ''}`} role={problem ? 'alert' : undefined} aria-live="polite">{footer}</span>
-        {(clearable || onClear) && <button type="button" className="udr-clear" onClick={clear} disabled={!onClear && !draft.from}>Clear</button>}
-        {onCancel && <PanelButton variant="secondary" onClick={onCancel}>Cancel</PanelButton>}
-        <PanelButton variant="primary" onClick={done} disabled={!effective || !!problem}>{doneLabel}</PanelButton>
+        <span className="udr-btns">
+          {(clearable || onClear) && <button type="button" className="udr-clear" onClick={clear} disabled={!onClear && !draft.from}>Clear</button>}
+          {onCancel && <PanelButton variant="secondary" onClick={onCancel}>Cancel</PanelButton>}
+          <PanelButton variant="primary" onClick={done} disabled={!effective || !!problem}>{doneLabel}</PanelButton>
+        </span>
       </div>
     </div>
   )

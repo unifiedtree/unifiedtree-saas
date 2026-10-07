@@ -15,8 +15,10 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarRange, ChevronDown } from 'lucide-react'
 import { Popover } from './Popover'
+import { Dialog } from './Dialog'
+import { useIsMobile } from '@/design/dc/DesignFrame'
 import { DateRangeBody } from './DateRangePicker'
-import { spanDays, type ViewPreset, type WorkCalendar } from './dateRangeModel'
+import type { ViewPreset, WorkCalendar } from './dateRangeModel'
 import { historyPresets, rangeProblem, rangeText, rangeWords, readRange, writeRange, type DayRange, type RangeKeys } from './rangeFilterModel'
 import { istToday } from '@/design/dc/dates'
 import './dateRange.css'
@@ -59,11 +61,21 @@ export function RangeFilter({
 }: RangeFilterProps) {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
+  const phone = useIsMobile()
   const today = todayProp ?? istToday()
   const picks = useMemo(() => presets ?? historyPresets(today, { min, max }), [presets, today, min, max])
   const close = useCallback(() => setOpen(false), [])
+  const back = () => anchor.current?.focus({ preventScroll: true })
   const text = rangeText(value)
-  const width = typeof window !== 'undefined' ? Math.min(400, window.innerWidth - 32) : 400
+  // Wide enough for the quick picks beside the calendar.
+  const width = typeof window !== 'undefined' ? Math.min(600, window.innerWidth - 32) : 600
+  const body = (
+    <DateRangeBody from={value?.from ?? ''} to={value?.to ?? ''} min={min} max={max} today={today} calendar={PLAIN}
+      presets={picks} presetsSide={!phone} legend={false} maxSpan={maxSpan} doneLabel="Apply" onCancel={() => { close(); back() }}
+      clearable={clearable} onClear={clearable ? () => { close(); if (onClear) onClear(); else onChange(null); back() } : undefined}
+      footerText={(r) => (r ? '' : 'Pick a start date, then an end date')}
+      onDone={(p) => { close(); onChange({ from: p.from, to: p.to }); back() }} />
+  )
   return (
     <>
       <button ref={anchor} type="button" className={`urf-box urf-${size}${value ? ' is-on' : ''}`} data-filter={filterKey}
@@ -74,15 +86,18 @@ export function RangeFilter({
         <span className={`urf-text${value ? '' : ' is-ph'}`}>{text || placeholder}</span>
         <ChevronDown size={14} aria-hidden="true" className="urf-chev" />
       </button>
-      <Popover open={open} onClose={close} anchorRef={anchor} role="dialog" aria-label={`Choose ${label.toLowerCase()}`}
-        placement={align === 'end' ? 'bottom-end' : 'bottom-start'} width={width} className="urf-pop">
-        <p className="urf-title">{label}</p>
-        <DateRangeBody from={value?.from ?? ''} to={value?.to ?? ''} min={min} max={max} today={today} calendar={PLAIN}
-          presets={picks} legend={false} maxSpan={maxSpan} doneLabel="Apply" onCancel={() => { close(); anchor.current?.focus({ preventScroll: true }) }}
-          clearable={clearable} onClear={clearable ? () => { close(); if (onClear) onClear(); else onChange(null); anchor.current?.focus({ preventScroll: true }) } : undefined}
-          footerText={(r) => (r ? `${spanDays(r.from, r.to)} ${spanDays(r.from, r.to) === 1 ? 'day' : 'days'} · ${rangeWords(r)}` : 'Pick a start date, then an end date')}
-          onDone={(p) => { close(); onChange({ from: p.from, to: p.to }); anchor.current?.focus({ preventScroll: true }) }} />
-      </Popover>
+      {/* A phone gets the calendar as a dialog (it fits the screen, Apply in reach); wider screens a popover under the box. */}
+      {phone ? (
+        <Dialog open={open} onClose={close} title={label} width={440} closeLabel="Close">
+          {open && body}
+        </Dialog>
+      ) : (
+        <Popover open={open} onClose={close} anchorRef={anchor} role="dialog" aria-label={`Choose ${label.toLowerCase()}`}
+          placement={align === 'end' ? 'bottom-end' : 'bottom-start'} width={width} className="urf-pop">
+          <p className="urf-title">{label}</p>
+          {body}
+        </Popover>
+      )}
     </>
   )
 }

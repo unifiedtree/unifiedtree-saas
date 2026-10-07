@@ -122,7 +122,8 @@ export function WorkforceAnalytics() {
   const avgHead = months.length ? months.reduce((a, m) => a + m.headcount, 0) / months.length : 0
   /** Exits over the average month-end headcount, scaled to a year. */
   const annualised = months.length && avgHead ? (ex.exits / avgHead) * (12 / months.length) * 100 : 0
-  const range = months.length ? (months[0].m.slice(0, 4) === months[months.length - 1].m.slice(0, 4)
+  const range = months.length ? (months.length === 1 ? `${MONTHS[Number(months[0].m.slice(5)) - 1]} ${months[0].m.slice(0, 4)}`
+    : months[0].m.slice(0, 4) === months[months.length - 1].m.slice(0, 4)
     ? `${MONTHS[Number(months[0].m.slice(5)) - 1]} – ${MONTHS[Number(months[months.length - 1].m.slice(5)) - 1]} ${months[0].m.slice(0, 4)}`
     : `${monthLabel(months[0].m)} – ${monthLabel(months[months.length - 1].m)}`) : ''
   const gender = useMemo(() => {
