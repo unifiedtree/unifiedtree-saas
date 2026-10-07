@@ -38,6 +38,20 @@ public class PlatformAdminBootstrapWriter {
     }
 
     /**
+     * Counts the platform tenant's users. auth.user_credentials is FORCE-RLS,
+     * so the count only sees rows when the caller has set TenantContext to the
+     * platform-tenant id (same contract as insertPlatformAdminAndGrant);
+     * without that it is always 0 and the bootstrap re-inserts on every boot.
+     */
+    @Transactional(readOnly = true)
+    public int countPlatformUsers(UUID platformTenantId) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM auth.user_credentials WHERE tenant_id = ?",
+                Integer.class, platformTenantId);
+        return n == null ? 0 : n;
+    }
+
+    /**
      * Inserts the platform admin user_credentials + PLATFORM_SUPER_ADMIN
      * role grant in a single transaction. Caller MUST set TenantContext to
      * the platform-tenant id BEFORE invoking, so the @Transactional
