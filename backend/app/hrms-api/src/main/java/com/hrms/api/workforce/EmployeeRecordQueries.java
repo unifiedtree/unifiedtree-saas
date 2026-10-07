@@ -105,6 +105,17 @@ public class EmployeeRecordQueries {
      */
     @Transactional(readOnly = true)
     public PageResponse<ExitRow> exits(UUID companyId, String status, String search, int page, int pageSize) {
+        return exits(companyId, status, search, null, page, pageSize);
+    }
+
+    /**
+     * {@link #exits(UUID, String, String, int, int)}, also kept to people whose
+     * last working day is in {@code range} (calendar everywhere, 7 Oct 2026;
+     * nobody without a last working day then). Null = no range.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ExitRow> exits(UUID companyId, String status, String search, com.hrms.core.dto.ListDateRange range,
+                                       int page, int pageSize) {
         List<String> statuses = exitStatuses(status);
         int size = pageSize <= 0 ? 50 : Math.min(pageSize, 200);
         int p = Math.max(0, page);
@@ -122,7 +133,8 @@ public class EmployeeRecordQueries {
                         OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE ? ESCAPE '\\'
                         OR lower(coalesce(e.employee_code, '')) LIKE ? ESCAPE '\\'
                         OR lower(coalesce(d.name, '')) LIKE ? ESCAPE '\\')
-                   AND e.employment_status IN (""" + in + ")\n";
+                   AND e.employment_status IN (""" + in + ")\n"
+                + (range == null ? "" : "   AND e.last_working_day BETWEEN ? AND ?\n");
         List<Object> args = new java.util.ArrayList<>();
         args.add(tenant);
         args.add(cid);   // null = every company
@@ -132,6 +144,10 @@ public class EmployeeRecordQueries {
         args.add(like);
         args.add(like);
         args.addAll(statuses);
+        if (range != null) {
+            args.add(range.from());
+            args.add(range.to());
+        }
         Long total = jdbc.queryForObject("SELECT count(*) " + where, Long.class, args.toArray());
         List<Object> pageArgs = new java.util.ArrayList<>(args);
         pageArgs.add(size);

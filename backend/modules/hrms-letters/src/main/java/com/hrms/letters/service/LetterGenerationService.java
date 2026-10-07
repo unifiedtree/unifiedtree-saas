@@ -222,6 +222,16 @@ public class LetterGenerationService {
         return toPage(page);
     }
 
+    /**
+     * {@link #listGenerated(Pageable)} (employeeId null) or {@link #getMyLetters} kept to
+     * letters generated in [start, end) (calendar everywhere, 7 Oct 2026).
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<GeneratedLetterDto> listGenerated(UUID employeeId, Instant start, Instant end, Pageable pageable) {
+        return toPage(employeeId == null ? generatedRepo.findAllActiveCreatedIn(start, end, pageable)
+                : generatedRepo.findActiveByEmployeeIdCreatedIn(employeeId, start, end, pageable));
+    }
+
     @Transactional(readOnly = true)
     public GeneratedLetterDto getGenerated(UUID id) {
         return toDto(requireLetter(id));

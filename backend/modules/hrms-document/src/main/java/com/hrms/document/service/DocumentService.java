@@ -142,6 +142,15 @@ public class DocumentService {
         return toPage(documentRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));
     }
 
+    /** {@link #getEmployeeDocuments(UUID, Pageable)} kept to documents uploaded in [start, end) (calendar everywhere, 7 Oct 2026). */
+    @Transactional(readOnly = true)
+    public PageResponse<DocumentResponse> getEmployeeDocuments(UUID employeeId, java.time.Instant start, java.time.Instant end,
+                                                               Pageable pageable) {
+        if (start == null || end == null) return getEmployeeDocuments(employeeId, pageable);
+        return toPage(documentRepository.findByEmployeeIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                employeeId, start, end, pageable));
+    }
+
     @Transactional(readOnly = true)
     public DocumentResponse getDocument(UUID documentId) {
         EmployeeDocument document = documentRepository.findById(documentId)

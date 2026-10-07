@@ -218,11 +218,22 @@ public class ShiftController {
                 : pending.stream().filter(r -> scope.contains(r.employeeId())).toList());
     }
 
-    @Operation(summary = "Shift-change requests decided in the last N days (HR/manager): who decided, when, and their note")
+    @Operation(summary = "Shift-change requests decided in the last N days, or with an effective date in ?from=&to= (HR/manager): who decided, when, and their note")
     @GetMapping("/change-requests/decided")
     @PreAuthorize("hasAuthority('attendance.regularization.approve')")
     public ResponseEntity<List<ShiftChangeRequestResponse>> decidedChangeRequests(@AuthenticationPrincipal Jwt jwt,
-                                                                                  @RequestParam(defaultValue = "30") int days) {
+                                                                                  @RequestParam(defaultValue = "30") int days,
+                                                                                  @RequestParam(required = false) String from,
+                                                                                  @RequestParam(required = false) String to) {
+        // Calendar everywhere (7 Oct 2026): ?from=&to= (India days, both included) is about the effective
+        // date and replaces ?days=; without them the list is the last `days` days of decisions, as before.
+        com.hrms.core.dto.ListDateRange range = com.hrms.core.dto.ListDateRange.parse(from, to);
+        if (range != null) {
+            java.util.Set<UUID> scope = approverScope(jwt);
+            List<ShiftChangeRequestResponse> decided = changeRequestService.listDecided(range.from(), range.to());
+            return ResponseEntity.ok(scope == null ? decided
+                    : decided.stream().filter(r -> scope.contains(r.employeeId())).toList());
+        }
         if (days < 1 || days > ShiftChangeRequestService.MAX_DECIDED_DAYS) {
             throw new com.hrms.core.exception.BusinessRuleException(
                     "Choose between 1 and " + ShiftChangeRequestService.MAX_DECIDED_DAYS + " days", "SHIFT_CHANGE_RANGE_INVALID");

@@ -183,6 +183,17 @@ public class LetterDistributionService {
                 page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
     }
 
+    /** {@link #list(Pageable)} kept to distributions started in [start, end) (calendar everywhere, 7 Oct 2026). */
+    @Transactional(readOnly = true)
+    public PageResponse<DistributionJobDto> list(java.time.Instant start, java.time.Instant end, Pageable pageable) {
+        PageResponse<DistributionJobDto> page = PageResponse.from(
+                jobRepo.findByCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(start, end, pageable),
+                DistributionJobDto::summary);
+        Map<UUID, String> names = templateNames(page.content().stream().map(DistributionJobDto::templateId).toList());
+        return new PageResponse<>(page.content().stream().map(j -> j.withTemplateName(names.get(j.templateId()))).toList(),
+                page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
+    }
+
     @Transactional(readOnly = true)
     public DistributionJobDto get(UUID jobId) {
         DistributionJob job = jobRepo.findById(jobId)

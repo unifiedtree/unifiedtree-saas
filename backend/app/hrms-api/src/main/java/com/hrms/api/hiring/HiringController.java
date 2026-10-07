@@ -70,9 +70,14 @@ public class HiringController {
     @PreAuthorize("hasAuthority('hrms.hiring.offer.read')") // offers carry salary: offer.read only, not general hiring.read
     public ResponseEntity<PageResponse<HiringOfferResponse>> listOffers(
             @RequestParam(required = false) UUID companyId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            // Calendar everywhere (7 Oct 2026): optional ?from=&to=, the day the offer was made; none = as before.
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        com.hrms.core.dto.ListDateRange range = com.hrms.core.dto.ListDateRange.parse(from, to);
         companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
-        return ResponseEntity.ok(hiringService.getOffers(companyId, pageable));
+        return ResponseEntity.ok(range == null ? hiringService.getOffers(companyId, pageable)
+                : hiringService.getOffers(companyId, range.startsAt(), range.endsBefore(), pageable));
     }
 
     @Operation(summary = "Create a hiring offer")
@@ -133,9 +138,14 @@ public class HiringController {
     @PreAuthorize("hasAuthority('hrms.hiring.read')")
     public ResponseEntity<PageResponse<JobRequisitionResponse>> listRequisitions(
             @RequestParam(required = false) UUID companyId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            // Calendar everywhere (7 Oct 2026): optional ?from=&to=, the day the requisition was opened; none = as before.
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        com.hrms.core.dto.ListDateRange range = com.hrms.core.dto.ListDateRange.parse(from, to);
         companyId = CompanyAccessService.listCompanyId(companyAccess, companyId);
-        return ResponseEntity.ok(enrichPage(hiringService.getRequisitions(companyId, pageable)));
+        return ResponseEntity.ok(enrichPage(range == null ? hiringService.getRequisitions(companyId, pageable)
+                : hiringService.getRequisitions(companyId, range.startsAt(), range.endsBefore(), pageable)));
     }
 
     @Operation(summary = "Get a single job requisition")
