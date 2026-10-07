@@ -59,7 +59,8 @@ export function LettersHub() {
     if (employeeIdParam) setParams((p) => { const n = new URLSearchParams(p); n.delete('employeeId'); return n }, { replace: true })
   }
   // Whether signatures are switched on, read from the letters already loaded (their signatureRequested field).
-  const firstPage = qc.getQueryData<PageResponse<GeneratedLetterDto>>(['hrms', 'letters', 'generated', 0])
+  // The first page with or without the list's date range (the range joins the key after the page).
+  const firstPage = qc.getQueriesData<PageResponse<GeneratedLetterDto>>({ queryKey: ['hrms', 'letters', 'generated', 0] }).find(([, d]) => d)?.[1]
 
   const onlyMine = views.length === 1 && views[0] === 'my'
   const action = active === 'templates' && canCreateTemplate
