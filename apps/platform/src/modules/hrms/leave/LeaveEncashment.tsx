@@ -7,6 +7,8 @@ import { Field, Input } from '@unifiedtree/ui-kit'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { dashIcon } from '@/design/dc/icons'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { keepInRange } from '@/design/kit/rangeFilterModel'
 import {
   StatRow, SubHeading, State, ApprovalList, RowList, Row, Panel, Note, Facts, days, stamp, dmy, type Approval,
 } from '@/design/module/ModuleKit'
@@ -144,6 +146,9 @@ export function EncashmentAdmin({ toast }: { toast: Toast }) {
     reason: r.reason || '—', raised: stamp(r.createdAt),
   }))
   const approvedUnpaid = done.filter((r) => r.status === 'APPROVED')
+  // "Already decided": the start / end calendar (?from=&to=) keeps it to the days decided (asked, when no decision day); the list comes whole.
+  const [range, setRange] = useRangeParam()
+  const doneShown = keepInRange(done, range, (r) => r.decidedAt || r.createdAt)
   const onDecide = async (id: string, status: 'APPROVED' | 'REJECTED', note: string) => {
     try {
       const r = await decide.mutateAsync({ id, approved: status === 'APPROVED', note: note.trim() || undefined })
@@ -178,10 +183,14 @@ export function EncashmentAdmin({ toast }: { toast: Toast }) {
             : <RequestForm key={emp} options={empOpts.data ?? []} loading={empOpts.isLoading} busy={request.isPending} cta="Raise request" onSubmit={onRaise} />)}
         </div>
       </Panel>
-      <SubHeading>Already decided</SubHeading>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <SubHeading>Already decided</SubHeading>
+        {done.length > 0 && <RangeFilter value={range} onChange={setRange} label="Decision dates" filterKey="encash-dates" align="end" />}
+      </div>
       {decided.isLoading ? <State kind="loading" />
         : done.length === 0 ? <State kind="empty" icon="fileText" title="No decisions yet" description="Encashments you approve or reject are listed here." />
-          : <RowList>{done.map((r) => <EncashRow key={r.id} r={r} showName />)}</RowList>}
+          : doneShown.length === 0 ? <State kind="empty" icon="fileText" title="Nothing on these dates" description="No encashment was decided on these days." />
+            : <RowList>{doneShown.map((r) => <EncashRow key={r.id} r={r} showName />)}</RowList>}
     </div>
   )
 }

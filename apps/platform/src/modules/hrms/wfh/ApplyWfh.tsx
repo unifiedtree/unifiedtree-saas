@@ -15,6 +15,8 @@ import { useApplyWfhBatch, useCancelWfh, useMyWfhRequests, type WfhApprovalStatu
 import { useMeEmployee } from '../ess/home/homeApi'
 import { dayRangeLong, leaveDays, monthOf, sentWhen, weeklyOffSet, wfhDaysInMonth } from '../ess/home/homeModel'
 import { addRange, blockOf, chipDay, nextWorkingDay, pickLine, spanDays, wfhDayMap, withLine, workingDays } from './wfhModel'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { overlapsRange, wholeList } from '@/design/kit/rangeFilterModel'
 import { DateRangeDialog } from '@/design/kit/DateRangePicker'
 import './wfh.css'
 
@@ -58,6 +60,11 @@ export function ApplyWfh() {
   }), [holidays.data, holidaysNext.data, leaves.data, list])
   const days = useMemo(() => workingDays(start, PAGE, off), [start, off])
   const lastDay = addDays(today, 365)
+  // "Your requests": the start / end calendar (?from=&to=) keeps them to the requests that touch those days. The
+  // list comes whole (up to 100), so it's kept here; a longer one says only the latest are searched.
+  const [range, setRange] = useRangeParam()
+  const shownList = useMemo(() => (range ? list.filter((w) => overlapsRange(w.fromDate, w.toDate, range)) : list), [list, range])
+  const partial = !!range && !wholeList(list.length, mine.data?.totalElements)
   const usedThisMonth = useMemo(() => wfhDaysInMonth(list, monthOf(today), off).length, [list, today, off])
   const who = approver.data?.approver?.name ?? null
   const noApprover = !approver.notAvailable && !!approver.data && !approver.data.approver
@@ -154,9 +161,12 @@ export function ApplyWfh() {
         </Section>
 
         <Section variant="panel" title="Your requests" body="list" loading={mine.isLoading} error={mine.error} onRetry={() => mine.refetch()}
-          empty={!list.length ? { title: 'No work-from-home requests yet', hint: 'Requests you send show here with their status.', icon: 'home' } : undefined}>
+          sub={partial ? `Only your latest ${list.length} requests are searched.` : undefined}
+          actions={list.length ? <RangeFilter value={range} onChange={setRange} label="Request dates" filterKey="wfh-dates" align="end" /> : undefined}
+          empty={!list.length ? { title: 'No work-from-home requests yet', hint: 'Requests you send show here with their status.', icon: 'home' }
+            : !shownList.length ? { title: 'Nothing on these dates', hint: 'None of your requests touch these days.', icon: 'home' } : undefined}>
           <ListRows label="Your work-from-home requests">
-            {list.slice(0, 20).map((w) => {
+            {shownList.slice(0, range ? 100 : 20).map((w) => {
               const [label, tone] = STATUS[w.status] ?? [w.status, 'muted' as StatusTone]
               const n = spanDays(w.fromDate, w.toDate)
               const line = [withLine(w), w.reason ? `“${w.reason}”` : '', w.decisionNote ? `Note: “${w.decisionNote}”` : '', `Sent ${sentWhen(w.createdAt, today)}`].filter(Boolean).join(' · ')

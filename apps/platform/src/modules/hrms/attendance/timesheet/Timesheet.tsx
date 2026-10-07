@@ -18,6 +18,8 @@ import type { TimesheetWeek } from '../../api/shared/contracts'
 import { useMyDay } from '../webpunch/useMyDay'
 import type { DailyPerms } from '../daily/DailyTracking'
 import { hours, mondayOf, shiftWeek, submitBlocker, weekDays, weekGrid, weekLabel, type TimeEntry } from './week'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { overlapsRange, wholeList } from '@/design/kit/rangeFilterModel'
 
 interface Project { id: string; name: string; code: string | null }
 const WEEK_STATE: Record<string, { label: string; tone: StatusTone }> = {
@@ -216,8 +218,13 @@ function Approvals() {
       .catch((e) => { toast.error('Couldn’t record the decision', { detail: (e as Error)?.message }); void waiting.refetch() })
       .finally(() => setBusy((b) => { const n = { ...b }; delete n[w.id]; return n }))
   }
+  // The start / end calendar (?from=&to=) keeps the queue to weeks that touch those days. Up to 50 weeks come
+  // at once, so the queue is kept here; a longer one says only the oldest 50 are searched.
+  const [range, setRange] = useRangeParam()
   if (waiting.isError && isFeatureNotReady(waiting.error)) return null
-  const list = waiting.data?.content ?? []
+  const all = waiting.data?.content ?? []
+  const list = range ? all.filter((w) => overlapsRange(w.weekStart, weekDays(w.weekStart)[6], range)) : all
+  const partial = !!range && !wholeList(all.length, waiting.data?.totalElements)
   const facts = (w: TimesheetWeek) => {
     const days = weekDays(w.weekStart)
     const base = [{ label: 'Week', value: weekLabel(days, false) }, { label: 'Logged', value: hours(w.totalMinutes) }]
@@ -228,8 +235,10 @@ function Approvals() {
   }
   return (
     <Section title="Waiting for approval" count={list.length || null} countTone="gold" variant="section" body="list"
+      sub={partial ? `Only the first ${all.length} weeks waiting are searched.` : undefined}
+      actions={all.length > 0 ? <RangeFilter value={range} onChange={setRange} label="Week dates" filterKey="timesheet-dates" align="end" /> : undefined}
       loading={waiting.isLoading} error={waiting.isError ? waiting.error : undefined} onRetry={() => void waiting.refetch()}
-      empty={list.length === 0 ? { title: 'No timesheets waiting', hint: 'Weeks your team submits show here.', variant: 'success' } : undefined}>
+      empty={list.length === 0 ? (all.length ? { title: 'Nothing on these dates', hint: 'No weeks waiting touch these days.' } : { title: 'No timesheets waiting', hint: 'Weeks your team submits show here.', variant: 'success' }) : undefined}>
       <div className="udt-cards">
         {list.map((w) => (
           <ApprovalRow key={w.id} variant="card" withNote notePlaceholder="Note (needed to send it back)" name={w.employeeName} kind="Timesheet"

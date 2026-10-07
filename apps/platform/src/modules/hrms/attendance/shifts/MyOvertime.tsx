@@ -11,6 +11,11 @@ import { addDays, fmtShort } from '@/design/dc/dates'
 import { useMyOvertimeRequests, useRequestOvertime, useWithdrawOvertimeRequest, type OvertimeRequest } from '../../api/useOvertime'
 import { hm, statusOf, toMinutes } from './shiftModel'
 import { useMyWorkCalendar } from '../useMyWorkCalendar'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { keepInRange } from '@/design/kit/rangeFilterModel'
+
+/** Your own requests' dates in the URL: their own keys, so they never mix with the team list's ?from=&to=. */
+const MINE_KEYS = { from: 'mineFrom', to: 'mineTo' }
 
 export function MyOvertime({ today, minimumMinutes }: { today: string; minimumMinutes: number | null }) {
   const toast = useToast()
@@ -18,6 +23,8 @@ export function MyOvertime({ today, minimumMinutes }: { today: string; minimumMi
   const withdraw = useWithdrawOvertimeRequest()
   const [open, setOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // The list comes whole (GET /overtime/requests/my), so the start / end calendar keeps it to the range here.
+  const [range, setRange] = useRangeParam({ keys: MINE_KEYS })
   if (mine.notAvailable) return null
 
   const take = async (r: OvertimeRequest) => {
@@ -30,13 +37,19 @@ export function MyOvertime({ today, minimumMinutes }: { today: string; minimumMi
       toast.error('Couldn’t withdraw the request', { detail: errorText(e, 'Try again in a moment.') })
     } finally { setBusyId(null) }
   }
-  const rows = mine.data ?? []
+  const all = mine.data ?? []
+  const rows = keepInRange(all, range, (r) => r.date)
   return (
     <>
       <Section title="Your overtime requests" sub={`Ask for overtime on any day. ${minimumMinutes ? `It counts from ${hm(minimumMinutes)}; then all of it counts. ` : ''}Approved overtime is recorded, not paid.`}
-        actions={<Button icon="plus" onClick={() => setOpen(true)}>Request overtime</Button>}
+        actions={<>
+          {all.length > 0 && <RangeFilter value={range} onChange={setRange} label="Your overtime dates" filterKey="my-overtime-dates" align="end" />}
+          <Button icon="plus" onClick={() => setOpen(true)}>Request overtime</Button>
+        </>}
         error={mine.error} onRetry={() => mine.refetch()}>
-        {mine.isLoading ? <SkeletonList rows={2} /> : rows.length === 0 ? (
+        {mine.isLoading ? <SkeletonList rows={2} /> : rows.length === 0 && all.length > 0 ? (
+          <EmptyState variant="plain" title="Nothing on these dates" hint="None of your overtime requests are for these days." />
+        ) : rows.length === 0 ? (
           <EmptyState variant="dashed" title="No overtime requests yet" hint="Stayed late or working extra on a day? Ask for it here." />
         ) : (
           <ul className="apl-past">

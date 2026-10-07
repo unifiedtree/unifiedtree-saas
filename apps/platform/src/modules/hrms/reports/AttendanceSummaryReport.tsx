@@ -1,23 +1,19 @@
 // Present days, late days, average hours and recorded overtime per person, in
 // the Workforce Analytics design's report layout (ReportKit). Overtime is
 // shown as recorded minutes: it is approval-only and isn't paid through payroll.
-import { useSearchParams } from 'react-router-dom'
 import { useAttendanceSummaryReport } from '@/modules/hrms/api/useReports'
 import { StatusPill } from '@/design/kit/display'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, monthStartIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
+import { useReportRange, ReportRangeFilter, monthStartIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const long = longDate
 const hm = (mins: number) => (mins ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : '—')
 const SERIES: [string, string][] = [['On time', 'var(--u-br,#0F6E56)'], ['Late', 'var(--u-g2,#5FB39C)']]
 
 export function AttendanceSummaryReport() {
-  const [params, setParams] = useSearchParams()
   const co = useReportCompany()
-  const TODAY = todayIso()
-  const from = params.get('from') ?? monthStartIso(), to = params.get('to') ?? TODAY
-  const set = (k: string, v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set(k, v); return n }, { replace: true })
+  const { from, to, setRange, TODAY } = useReportRange(monthStartIso())
   const q = useAttendanceSummaryReport(co.company || null, from, to)
 
   const rows = (q.data ?? []).map((r) => ({
@@ -45,7 +41,7 @@ export function AttendanceSummaryReport() {
 
   return (
     <ReportPage title="Attendance summary" subtitle="Present days, late days, average hours and recorded overtime per person" report="attendance-summary" co={co} skeleton="bars"
-      filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
+      filters={<ReportRangeFilter from={from} to={to} max={TODAY} onChange={setRange} />}
       note={range}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{

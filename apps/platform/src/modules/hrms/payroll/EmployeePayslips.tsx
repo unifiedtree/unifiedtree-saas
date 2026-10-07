@@ -7,6 +7,8 @@
 // real BW-55 data, and the month being prepared has NO figures.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { monthRange, overlapsRange } from '@/design/kit/rangeFilterModel'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { AmountMask, AmountToggle } from '@/design/kit/AmountMask'
 import { Button, PageFrame, PageHeader, Skeleton, EmptyState, errorText } from '@/design/kit/display'
@@ -195,6 +197,16 @@ function MyPayslipsBody() {
     }
   }, [rows, sel])
 
+  // The start / end calendar (?from=&to=) keeps the list to the pay months it overlaps; the list comes whole.
+  const [range, setRange] = useRangeParam()
+  const shown = useMemo(() => (range ? rows.filter((r) => {
+    const p = monthRange(`${r.periodYear}-${String(r.periodMonth).padStart(2, '0')}`)
+    return overlapsRange(p.from, p.to, range)
+  }) : rows), [rows, range])
+  useEffect(() => {
+    if (range && shown.length > 0 && !shown.some((r) => r.runId === sel)) setSel((shown.find((r) => final(r.status)) ?? shown[0]).runId)
+  }, [range, shown, sel])
+
   const selected = useMemo(() => rows.find((r) => r.runId === sel) ?? null, [rows, sel])
 
   const pdf = async (r: MyPayslip) => {
@@ -263,8 +275,11 @@ function MyPayslipsBody() {
     <div id="my-payslips-amounts" style={{ display: 'grid', gap: 20 }}>
       {header}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
-        <div style={{ flex: '1 1 240px', minWidth: 0, maxWidth: 340 }}>
-          <MonthList rows={rows} selected={sel} onPick={(r) => setSel(r.runId)} hide={hide} />
+        <div style={{ flex: '1 1 240px', minWidth: 0, maxWidth: 340, display: 'grid', gap: 10 }}>
+          <RangeFilter value={range} onChange={setRange} label="Pay months" placeholder="All months" filterKey="payslip-dates" />
+          {shown.length > 0
+            ? <MonthList rows={shown} selected={sel} onPick={(r) => setSel(r.runId)} hide={hide} />
+            : <EmptyState variant="plain" icon="receipt" title="No payslips on these dates" hint="Pick other dates, or clear them to see every month." />}
         </div>
         <SlipArticle slip={selected} hide={hide}
           loading={list.isFetching} error={null} onRetry={() => list.refetch()}

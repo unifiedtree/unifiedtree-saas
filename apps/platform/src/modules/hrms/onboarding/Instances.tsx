@@ -31,6 +31,8 @@ import {
   tasksText, type RunStatusKey,
 } from './onboardingModel'
 import './onboarding.css'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { inDayRange } from '@/design/kit/rangeFilterModel'
 
 const PAGE_SIZE = 10
 type Tab = 'hires' | 'assets' | 'templates'
@@ -152,7 +154,11 @@ function HiresBody({ data, loading, error, retrying, onRetry }: { data?: Onboard
   const updateStatus = useUpdateInstanceStatus()
   const rows = useMemo(() => data?.rows ?? [], [data])
   const counts = data?.counts
-  const filtered = useMemo(() => (status === 'all' ? rows : rows.filter((r) => r.status === status)), [rows, status])
+  // The start / end calendar (?from=&to=) keeps the list to the hires joining on those days (the run's start when
+  // the hire has no joining date, as the Joining column shows). The overview comes whole, so it's kept here.
+  const [range, setRange] = useRangeParam()
+  const pickRange = (r: typeof range) => { setRange(r); setPage(0) }
+  const filtered = useMemo(() => rows.filter((r) => (status === 'all' || r.status === status) && inDayRange(r.dateOfJoining ?? r.startedAt, range)), [rows, status, range])
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, pages - 1)
   const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
@@ -215,14 +221,19 @@ function HiresBody({ data, loading, error, retrying, onRetry }: { data?: Onboard
       <Section title="New hires" body="flush" loading={loading} skeleton="table" error={error} onRetry={onRetry} retrying={retrying}
         empty={!loading && !error && rows.length === 0 ? { title: 'No onboarding runs yet.', hint: 'Use “Start onboarding” when someone accepts an offer, to give them a joining checklist.', icon: 'clipboard', variant: 'plain' } : undefined}
         actions={rows.length > 0 && counts ? (
-          <SegmentedControl label="Onboarding status" semantics="toggle" size="sm" value={status} onChange={pick}
-            options={[{ value: 'all' as const, label: 'All', count: counts.all }, ...RUN_STATUS_KEYS.map((k) => ({
-              value: k, label: RUN_STATUS[k].label, count: k === 'IN_PROGRESS' ? counts.inProgress : k === 'ON_HOLD' ? counts.onHold : counts.completed,
-            }))]} />
+          <>
+            <SegmentedControl label="Onboarding status" semantics="toggle" size="sm" value={status} onChange={pick}
+              options={[{ value: 'all' as const, label: 'All', count: counts.all }, ...RUN_STATUS_KEYS.map((k) => ({
+                value: k, label: RUN_STATUS[k].label, count: k === 'IN_PROGRESS' ? counts.inProgress : k === 'ON_HOLD' ? counts.onHold : counts.completed,
+              }))]} />
+            <RangeFilter value={range} onChange={pickRange} label="Joining dates" filterKey="joining-dates" align="end" />
+          </>
         ) : undefined}
         footer={filtered.length > PAGE_SIZE ? <Pager page={safePage} pageSize={PAGE_SIZE} total={filtered.length} onPageChange={setPage} noun="new hires" /> : undefined}>
         <Table label="New hires" columns={columns} rows={pageRows} rowKey={(r) => r.instanceId} onRowClick={open} mobile="cards"
-          empty={<EmptyState variant="plain" icon="clipboard" title="No onboarding with this status" hint="Choose All to see every run." />} />
+          empty={range
+            ? <EmptyState variant="plain" icon="clipboard" title="Nobody joining on these dates" hint="Pick other dates, or clear them to see every run." />
+            : <EmptyState variant="plain" icon="clipboard" title="No onboarding with this status" hint="Choose All to see every run." />} />
       </Section>
     </>
   )

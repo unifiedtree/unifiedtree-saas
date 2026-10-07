@@ -7,6 +7,8 @@ import { PayRunsView } from './PayRuns.view'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { dashIcon, dashIconComponent } from './icons'
 import { inr } from './PayslipDrawer'
+import { rangeValue } from '@/shared/components/hr'
+import { monthRange, overlapsRange, type DayRange } from '@/design/kit/rangeFilterModel'
 
 export type RunStatus = 'draft' | 'processing' | 'locked' | 'paid' | 'cancelled'
 export interface RunRow {
@@ -19,15 +21,13 @@ export const RUN_STATUS: Record<RunStatus, { tone: string; label: string }> = {
 }
 const NEXT: Record<string, string> = { draft: 'Next: process payroll', processing: 'Next: review & lock', locked: 'Next: pay salaries' }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-/** "2026-08" (the dashboard's payroll chart link, ?month=) → the year and month filters. */
-const monthFilter = (ym: unknown) => { const m = /^(\d{4})-(\d{2})$/.exec(String(ym || '')); return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? { year: m[1], month: String(Number(m[2])) } : null }
+// The pay periods shown: a start / end range from the calendar filter (props.range, kept in the URL by
+// PayrollContainer as ?from=&to=; ?month= from the dashboard's chart is that month). A run is shown when its
+// pay month overlaps the range.
+const runPeriod = (r: { year: number; month: number }): DayRange => monthRange(`${r.year}-${String(r.month).padStart(2, '0')}`)
 
 export class PayRuns extends DCLogic {
-  state: any = { company: '', year: monthFilter(this.props.month)?.year || '', month: monthFilter(this.props.month)?.month || '', status: '', modalOpen: false, w: typeof window !== 'undefined' ? Math.max(320, window.innerWidth - 170) : 1200 }
-  componentDidUpdate(prev: any) {
-    if (prev.month !== this.props.month) { const f = monthFilter(this.props.month); if (f) this.setState({ year: f.year, month: f.month }) }
-  }
+  state: any = { company: '', status: '', modalOpen: false, w: typeof window !== 'undefined' ? Math.max(320, window.innerWidth - 170) : 1200 }
   rootRef = createRef<HTMLDivElement>()
   private ro?: ResizeObserver
   componentDidMount() {
@@ -57,7 +57,9 @@ export class PayRuns extends DCLogic {
         sortKey: (r.year || 0) * 100 + (r.month || 0),
       }
     }).sort((a, b) => b.sortKey - a.sortKey || a.company.localeCompare(b.company))
-    const scope = all.filter((r) => (!s.company || r.companyId === s.company) && (!s.year || String(r.year) === s.year) && (!s.month || String(r.month) === s.month))
+    const range: DayRange | null = p.range ?? null
+    const setRange = (v: DayRange | null) => p.onRange && p.onRange(v)
+    const scope = all.filter((r) => (!s.company || r.companyId === s.company) && (!range || (r.year && r.month && overlapsRange(runPeriod(r).from, runPeriod(r).to, range))))
     const shown = scope.filter((r) => !s.status || r.status === s.status)
     const dim = '#64748b', ink = '#0f172a', na = (v: string) => v === '—'
     const rows = shown.map((r, i) => ({
@@ -65,7 +67,6 @@ export class PayRuns extends DCLogic {
       empOk: !na(r.employeesL), empNa: na(r.employeesL), grossOk: !na(r.grossL), grossNa: na(r.grossL), dedOk: !na(r.dedL), dedNa: na(r.dedL),
       netOk: !na(r.netL), netNa: na(r.netL), procOk: !na(r.processedL), procNa: na(r.processedL),
     }))
-    const thisYear = new Date().getFullYear(), years = [...new Set(all.map((r) => r.year).concat([thisYear]))].sort((a, b) => b - a)
     const unit = (n: number) => (n === 1 ? 'run' : 'runs')
     const openModal = () => this.setState({ modalOpen: true })
     const pick = (k: string) => (isError ? undefined : () => this.setState((ss: any) => ({ status: ss.status === k ? '' : k })))
@@ -86,8 +87,7 @@ export class PayRuns extends DCLogic {
     const opt = (v: string, l?: string) => ({ value: v, label: l || v })
     const filters = [
       { key: 'company', allLabel: 'All companies', ariaLabel: 'Company', value: s.company, options: companies.map((c) => opt(c.id, c.name)), onChange: (v: string) => this.setState({ company: v }) },
-      { key: 'year', allLabel: 'All years', ariaLabel: 'Year', value: s.year, options: years.map((y) => opt(String(y))), onChange: (v: string) => this.setState({ year: v }) },
-      { key: 'month', allLabel: 'All months', ariaLabel: 'Month', value: s.month, options: MONTHS.map((m, i) => opt(String(i + 1), m)), onChange: (v: string) => this.setState({ month: v }) },
+      { key: 'dates', type: 'range', allLabel: 'All pay periods', ariaLabel: 'Pay period', value: rangeValue(range), onChange: (v: string) => { const [a, b] = v.split('/'); setRange(a && b ? { from: a, to: b } : null) } },
       { key: 'status', allLabel: 'All statuses', ariaLabel: 'Status', value: s.status, options: (['draft', 'processing', 'locked', 'paid', 'cancelled'] as RunStatus[]).map((k) => opt(k, RUN_STATUS[k].label)), onChange: (v: string) => this.setState({ status: v }) },
     ]
     const num = (v: string, weight: number) => createElement('span', { style: { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: v === '—' ? dim : ink, fontWeight: v === '—' ? 500 : weight } }, v)
@@ -130,7 +130,7 @@ export class PayRuns extends DCLogic {
       stages, asideStage, isLoading, isError, isEmpty, live, asTable: !narrow, asRows: narrow,
       noStepFilter: !s.status, hasStepFilter: !!s.status, statusFilterLabel: s.status ? (RUN_STATUS as any)[s.status].label.toLowerCase() : '', clearStatus: () => this.setState({ status: '' }),
       countLabel: isLoading ? 'Loading…' : isError ? 'Unavailable' : shown.length === all.length ? `${all.length} ${unit(all.length)}` : `${shown.length} of ${all.length} runs`,
-      filters, clearFilters: () => this.setState({ company: '', year: '', month: '', status: '' }),
+      filters, clearFilters: () => { this.setState({ company: '', status: '' }); setRange(null) },
       rows, noRows: rows.length === 0, columns, openRow: (r: any) => r.onOpen(), skelColumns, skelData,
       errIcon: dashIconComponent('alertTriangle'), emptyIcon: dashIconComponent('receipt'),
       retryAction: { label: 'Retry', onClick: () => p.onRetry && p.onRetry() },

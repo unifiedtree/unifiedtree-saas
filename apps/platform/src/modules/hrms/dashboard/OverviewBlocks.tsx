@@ -65,7 +65,7 @@ export function DashRangeBody({ sel, from, today, calendar, presets, onApply, on
     <>
       <p className="ud-range-pop__t">Dashboard dates</p>
       <DateRangeBody from={from ?? sel} to={sel} max={today} today={today} calendar={calendar} presets={presets}
-        legend={false} maxSpan={MAX_RANGE_DAYS} doneLabel="Apply" onCancel={onCancel}
+        legend={false} maxSpan={MAX_RANGE_DAYS} doneLabel="Apply" onCancel={onCancel} clearable
         footerText={(r) => (r ? `${dayCount(spanDays(r.from, r.to))} · ${periodLabel(r.from, r.to)}` : 'Pick a start, then an end date')}
         onDone={(p) => onApply({ from: p.from, to: p.to })} />
     </>

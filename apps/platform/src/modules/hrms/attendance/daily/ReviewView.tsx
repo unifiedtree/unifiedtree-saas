@@ -1,5 +1,6 @@
 // Review (PgTime a-daily "Review"): days and punches that need a second look before payroll locks,
-// from the last 7 days. GET /v1/attendance/review/exceptions (late past the allowance, half days,
+// from the last 7 days, or the start / end dates picked on the calendar (?from=&to=, up to 62 days, the server's
+// longest; nothing after today). GET /v1/attendance/review/exceptions (late past the allowance, half days,
 // absences, early leaving, no check-out, outside the zone, a rejected face punch; with the branch,
 // zone and method, BW-14) and the face punches the camera wasn't sure about
 // (/review/face-events, status REVIEW). Decisions need attendance.status.override:
@@ -17,6 +18,11 @@ import {
 import { StatusChangeDrawer, type StatusTarget } from '../StatusChangeDrawer'
 import { hhmmIst, hm, methodLabel } from './dailyModel'
 import type { DailyPerms } from './DailyTracking'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { rangeWords } from '@/design/kit/rangeFilterModel'
+
+/** The longest range GET /review/exceptions answers (AttendanceReviewService.MAX_RANGE_DAYS). */
+const REVIEW_MAX_DAYS = 62
 
 type Group = 'all' | 'late' | 'absent' | 'hours' | 'zone' | 'face'
 const GROUP: Record<Exclude<Group, 'all' | 'face'>, string[]> = {
@@ -50,9 +56,11 @@ export function ReviewView({ perms }: { perms: DailyPerms }) {
   const [group, setGroup] = useState<Group>('all')
   const [target, setTarget] = useState<StatusTarget | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const days = useReviewExceptions(addDays(today, -6), today, true)
+  const [picked, setPicked] = useRangeParam({ max: today, maxSpan: REVIEW_MAX_DAYS })
+  const range = picked ?? { from: addDays(today, -6), to: today }
+  const days = useReviewExceptions(range.from, range.to, true)
   const month = useReviewExceptions(today.slice(0, 8) + '01', today, true)
-  const faces = useFaceReviewEvents(addDays(today, -6), today, true)
+  const faces = useFaceReviewEvents(range.from, range.to, true)
   const change = useChangeDayStatus()
   const decideFace = useDecideFacePunch()
 
@@ -138,9 +146,12 @@ export function ReviewView({ perms }: { perms: DailyPerms }) {
 
   return (
     <>
-      <PageHeader eyebrow="Attendance & time" title="Daily tracking" sub="Punches that need a second look before payroll locks. From the last 7 days." />
+      <PageHeader eyebrow="Attendance & time" title="Daily tracking" sub={`Punches that need a second look before payroll locks. ${picked ? `From ${rangeWords(range)}.` : 'From the last 7 days.'}`} />
       <Section title="Review list" count={loading ? null : items.length} countTone="gold" variant="section" body="flush"
-        actions={<FilterPills label="Review views" size="sm" options={options} value={group} onChange={(v) => setGroup(v as Group)} />}
+        actions={<>
+          <FilterPills label="Review views" size="sm" options={options} value={group} onChange={(v) => setGroup(v as Group)} />
+          <RangeFilter value={range} onChange={setPicked} max={today} maxSpan={REVIEW_MAX_DAYS} label="Review dates" filterKey="review-dates" align="end" clearable={!!picked} />
+        </>}
         error={days.isError ? days.error : faces.isError ? faces.error : undefined} onRetry={() => { void days.refetch(); void faces.refetch() }}>
         <Table<Item> label="Review list" columns={columns} rows={shown} rowKey={(it) => it.key} loading={loading} mobile="cards" minWidth={860}
           empty={items.length ? 'Nothing in this group.' : 'Nothing to review: no late arrivals past the allowance, absences, half days, early leaving, missing check-outs, zone problems or unsure face punches.'} />

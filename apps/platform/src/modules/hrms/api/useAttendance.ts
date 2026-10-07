@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import { SHARED_KEYS } from './shared/contracts'
+import { monthsOf } from '@/design/kit/rangeFilterModel'
 import type { PageResponse } from './useWorkforce'
 
 export interface AttendanceDto {
@@ -278,6 +279,35 @@ export function useAttendanceHistory(year?: number, month?: number, options?: { 
     staleTime: 30_000,
     enabled: options?.enabled ?? true,
   })
+}
+
+/**
+ * Your attendance for a start / end range: GET /v1/attendance/history answers a month at a time, so each month the
+ * range touches is asked for (the same cache as useAttendanceHistory; at most 12 months) and the days are kept to
+ * the range, newest first.
+ */
+export function useAttendanceHistoryRange(range: { from: string; to: string }, options?: { enabled?: boolean }) {
+  const months = monthsOf(range, 12)
+  const qs = useQueries({
+    queries: months.map((ym) => {
+      const [y, m] = ym.split('-').map(Number)
+      return {
+        queryKey: ['hrms', 'attendance', 'history', y, m],
+        queryFn: () => apiJson<DayRecordResponse[]>(`/v1/attendance/history?${new URLSearchParams({ year: String(y), month: String(m) })}`),
+        staleTime: 30_000,
+        enabled: options?.enabled ?? true,
+      }
+    }),
+  })
+  const failed = qs.find((q) => q.isError)
+  const data = qs.every((q) => q.data) ? qs.flatMap((q) => q.data ?? []).filter((d) => d.date >= range.from && d.date <= range.to).sort((a, b) => b.date.localeCompare(a.date)) : undefined
+  return {
+    data,
+    isLoading: qs.some((q) => q.isLoading),
+    isError: !!failed,
+    error: failed?.error ?? null,
+    refetch: () => Promise.all(qs.map((q) => q.refetch())),
+  }
 }
 
 export function useMyAttendance() {

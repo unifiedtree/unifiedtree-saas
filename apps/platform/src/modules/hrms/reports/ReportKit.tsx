@@ -13,6 +13,7 @@ import {
 import { Pager } from '@/design/kit/data'
 import { Input, Menu, Select, useToast } from '@/design/kit/overlays'
 import { DateField } from '@/shared/components/calendar'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
 import { apiBlob } from '@/core/api/client'
 import { saveAndRecord, saveServerFile, svgToPng, xlsxBlob, type ExportFilters, type ExportReportKey, type Sheet } from '@/shared/export/fileExport'
 import { EXPORT_SPEC, type ReportKey } from './reportSpec'
@@ -87,6 +88,22 @@ export function DateFilter({ label, value, onChange, min, max }: { label: string
         style={{ flex: 1, minWidth: 0, width: 'auto', height: '100%', padding: 0, border: 0, borderRadius: 0, boxShadow: 'none', background: 'transparent', font: '500 13px var(--u-font)', color: 'var(--u-ink,#0E1B16)' }} />
     </label>
   )
+}
+
+/**
+ * A report's period, kept in the URL (?from=&to=) with the report's own default (e.g. this month to today) when
+ * there is none. Nothing after today. The CSV / PDF / Excel downloads take the same from / to.
+ */
+export function useReportRange(defaultFrom: string) {
+  const TODAY = todayIso()
+  const fallback = { from: defaultFrom, to: TODAY }
+  const [range, setRange] = useRangeParam({ fallback, max: TODAY })
+  return { from: range?.from ?? fallback.from, to: range?.to ?? fallback.to, setRange, TODAY }
+}
+
+/** The report's start / end calendar (one box, click a start day then an end day); Clear goes back to the default. */
+export function ReportRangeFilter({ from, to, max, onChange }: { from: string; to: string; max: string; onChange: (r: { from: string; to: string } | null) => void }) {
+  return <RangeFilter value={{ from, to }} onChange={onChange} max={max} label="Report dates" filterKey="report-dates" />
 }
 
 /** The company picker every report page and Workforce analytics share (?co=). None with two or more companies: the top bar's selector picks. */

@@ -6,7 +6,8 @@
 // Reports Center's download history and in this trail.
 import React, { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone, type FilterDef } from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, HrDrawer, rangeValue, type PillTone, type FilterDef } from '@/shared/components/hr'
+import { useRangeParam } from '@/design/kit/RangeFilter'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { apiBlob } from '@/core/api/client'
@@ -34,8 +35,9 @@ const actorOf = (e: AuditEventDto) => e.actorName ?? e.actorEmail ?? (e.actorUse
 export const AuditLogs: React.FC = () => {
   const { show, node } = useDesignToast()
   const [actionFilter, setActionFilter] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  // The start / end calendar, kept in the URL (?from=&to=) so links and Back keep it.
+  const [range, setRange] = useRangeParam({ max: todayIso() })
+  const from = range?.from ?? '', to = range?.to ?? ''
   const [actor, setActor] = useState('')
   const [resource, setResource] = useState('')
   const [resourceId, setResourceId] = useState('')
@@ -65,8 +67,7 @@ export const AuditLogs: React.FC = () => {
     { key: 'resource', allLabel: 'All resources', value: resource, options: RESOURCES.map((r) => ({ value: r, label: words(r) })), onChange: (v) => { setResource(v); resetPage() } },
     { key: 'actor', type: 'text', allLabel: 'Who (email)', value: actor, onChange: (v) => { setActor(v); resetPage() } },
     { key: 'resourceId', type: 'text', allLabel: 'Record ID', value: resourceId, onChange: (v) => { setResourceId(v); resetPage() } },
-    { key: 'from', type: 'date', allLabel: 'From', value: from, onChange: (v) => { setFrom(v); resetPage() } },
-    { key: 'to', type: 'date', allLabel: 'To', value: to, onChange: (v) => { setTo(v); resetPage() } },
+    { key: 'dates', type: 'range', allLabel: 'All dates', ariaLabel: 'Dates', max: todayIso(), value: rangeValue(range), onChange: (v) => { const [a, b] = v.split('/'); setRange(a && b ? { from: a, to: b } : null); resetPage() } },
   ]
   useClampedPage(page, totalPages || undefined, setPage)
   const hasFilters = auditFilters.some((f) => f.value !== '')

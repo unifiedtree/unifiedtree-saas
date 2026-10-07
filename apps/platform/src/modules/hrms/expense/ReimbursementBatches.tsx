@@ -11,6 +11,8 @@ import { useCurrentCompany } from '../company/CurrentCompany'
 import { useExpenseClaim } from '../api/useExpense'
 import { expenseStatusLabel } from './expenseStatus'
 import { useBuildExpenseBatch, useExpenseBatch, useExpenseBatches, useExpenseBatchAction, type ExpenseBatch } from '../api/useExpenseBatches'
+import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
+import { keepInRange } from '@/design/kit/rangeFilterModel'
 
 const tones: Record<string, PillTone> = { DRAFT: 'gray', POSTED: 'info', PAID: 'ok', CANCELLED: 'gray', APPROVED: 'ok', APPROVED_FOR_PAY: 'info', REIMBURSED: 'teal', REJECTED: 'red', SUBMITTED: 'warn' }
 // Batch, claim and category enums share one readable mapping with the Expense Center pills.
@@ -37,13 +39,16 @@ export function ReimbursementBatches() {
   const batches = useExpenseBatches(companyId || undefined, status || undefined)
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState('')
-  const total = batches.data?.length ?? 0
+  // The start / end calendar (?from=&to=) keeps the batches to those approved through a day in the range; the list comes whole.
+  const [range, setRange] = useRangeParam()
+  const shown = keepInRange(batches.data ?? [], range, (b) => b.cutoffDate)
+  const total = shown.length
   useClampedPage(page, Math.ceil(total / 25), setPage)
   return <div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Reimbursement batches</h2><p className="mt-1 text-sm text-text-secondary">Group approved expenses, review the claimants, and record completed payments.</p></div>{canBuild && <HrButton onClick={() => setCreating(true)}><Plus size={16} /> Build batch</HrButton>}</div>
-    <div className="flex flex-wrap gap-3">{!multi && <label className="text-xs font-medium text-text-secondary">Company<select aria-label="Filter company" className="ut-select mt-1" value={companyId} onChange={event => { setCompanyId(event.target.value); setPage(0) }}><option value="">All companies</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>}<label className="text-xs font-medium text-text-secondary">Batch status<select aria-label="Batch status" className="ut-select mt-1" value={status} onChange={event => { setStatus(event.target.value); setPage(0) }}><option value="">All statuses</option>{['DRAFT','POSTED','PAID','CANCELLED'].map(status => <option key={status} value={status}>{label(status)}</option>)}</select></label></div>
+    <div className="flex flex-wrap gap-3">{!multi && <label className="text-xs font-medium text-text-secondary">Company<select aria-label="Filter company" className="ut-select mt-1" value={companyId} onChange={event => { setCompanyId(event.target.value); setPage(0) }}><option value="">All companies</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>}<label className="text-xs font-medium text-text-secondary">Batch status<select aria-label="Batch status" className="ut-select mt-1" value={status} onChange={event => { setStatus(event.target.value); setPage(0) }}><option value="">All statuses</option>{['DRAFT','POSTED','PAID','CANCELLED'].map(status => <option key={status} value={status}>{label(status)}</option>)}</select></label><span className="flex flex-col text-xs font-medium text-text-secondary">Approved through<span className="mt-1"><RangeFilter value={range} onChange={(r) => { setRange(r); setPage(0) }} label="Approved through" filterKey="batch-dates" size="md" /></span></span></div>
     {companies.isError && <ErrorMessage error={companies.error} retry={() => companies.refetch()} />}
-    {batches.isError ? <ErrorMessage error={batches.error} retry={() => batches.refetch()} /> : <TableCard footer={<HrPagination page={page} pageSize={25} totalElements={total} totalPages={Math.ceil(total / 25)} onPageChange={setPage} />}><DataTable<ExpenseBatch> data={(batches.data ?? []).slice(page * 25, (page + 1) * 25)} keyField="id" loading={batches.isLoading} emptyMessage="No reimbursement batches match this selection." columns={[
+    {batches.isError ? <ErrorMessage error={batches.error} retry={() => batches.refetch()} /> : <TableCard footer={<HrPagination page={page} pageSize={25} totalElements={total} totalPages={Math.ceil(total / 25)} onPageChange={setPage} />}><DataTable<ExpenseBatch> data={shown.slice(page * 25, (page + 1) * 25)} keyField="id" loading={batches.isLoading} emptyMessage="No reimbursement batches match this selection." columns={[
       { key: 'batchReference', header: 'Batch', render: batch => <button className="text-left font-semibold text-[#0F6E56] hover:underline" onClick={() => setSelectedId(batch.id)}>{batch.batchReference}<span className="mt-1 block text-xs font-normal text-text-secondary">{companies.data?.find(company => company.id === batch.companyId)?.name || 'Company expenses'}</span></button> },
       { key: 'cutoffDate', header: 'Approved through', render: batch => <span className="whitespace-nowrap">{date(batch.cutoffDate)}</span> },
       { key: 'claimCount', header: 'Claims' },

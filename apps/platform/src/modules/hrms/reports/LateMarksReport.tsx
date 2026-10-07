@@ -1,12 +1,11 @@
 // Every late arrival in a date range, with minutes late and check-in time, in
 // the Workforce Analytics design's report layout (ReportKit). A check-in is
 // late after its shift's start plus that shift's grace.
-import { useSearchParams } from 'react-router-dom'
 import { useLateMarksReport } from '@/modules/hrms/api/useReports'
 import { StatusPill } from '@/design/kit/display'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
+import { useReportRange, ReportRangeFilter, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const long = longDate, dayShort = dayMonth
 const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—')
@@ -14,11 +13,8 @@ const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m %
 const SERIES: [string, string][] = [['Late marks', 'var(--u-br,#0F6E56)']]
 
 export function LateMarksReport() {
-  const [params, setParams] = useSearchParams()
   const co = useReportCompany()
-  const TODAY = todayIso()
-  const from = params.get('from') ?? monthStartIso(), to = params.get('to') ?? TODAY
-  const set = (k: string, v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set(k, v); return n }, { replace: true })
+  const { from, to, setRange, TODAY } = useReportRange(monthStartIso())
   const q = useLateMarksReport(co.company || null, from, to)
 
   const rows = (q.data ?? []).map((r) => ({
@@ -47,7 +43,7 @@ export function LateMarksReport() {
 
   return (
     <ReportPage title="Late marks report" subtitle="Every late arrival, with minutes late and check-in time" report="late-marks" co={co}
-      filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
+      filters={<ReportRangeFilter from={from} to={to} max={TODAY} onChange={setRange} />}
       note={range}
       state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
       exports={{
