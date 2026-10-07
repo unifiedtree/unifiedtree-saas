@@ -1,6 +1,29 @@
--- Behaviour tests for V144_101..V144_106. Runs against a DISPOSABLE database only.
+-- Behaviour tests for V144_101..V144_107. Runs against a DISPOSABLE database only:
+--   psql -X -d <disposable db> -c "SET ut.disposable = 'yes'" -f v144_constraints_test.sql
+-- Two passes inside one transaction that is rolled back: the checks as the migration owner, then the
+-- application's own role (ut_app: no BYPASSRLS, no DELETE on most platform tables) with a workspace bound.
 -- Each check prints PASS or FAIL; the script never stops on an expected error.
+
+-- Guard: stop BEFORE writing anything unless this is a throwaway database. It needs the explicit
+-- opt-in above, and refuses any database holding a workspace created more than a day ago (real tenants;
+-- a fresh migrate + seed + fixtures database has none), or one named like production.
+\set ON_ERROR_STOP 1
+DO $guard$
+BEGIN
+    IF current_setting('ut.disposable', true) IS DISTINCT FROM 'yes' THEN
+        RAISE EXCEPTION 'Refusing to run: not marked disposable (psql -c "SET ut.disposable = ''yes''" -f ...)';
+    END IF;
+    IF current_database() IN ('railway', 'postgres', 'unifiedtree', 'hrms') THEN
+        RAISE EXCEPTION 'Refusing to run on database %', current_database();
+    END IF;
+    IF EXISTS (SELECT 1 FROM platform.tenants
+                WHERE created_at < now() - interval '1 day'
+                  AND id <> '00000000-0000-0000-0000-000000000000') THEN
+        RAISE EXCEPTION 'Refusing to run: this database has real workspaces (created before yesterday)';
+    END IF;
+END $guard$;
 \set ON_ERROR_STOP 0
+
 BEGIN;
 SET LOCAL client_min_messages = warning;
 
@@ -32,17 +55,43 @@ BEGIN
     END;
 END $$;
 
+-- Runs stmt as the application role with app.tenant_id bound (what TenantAwareDataSource does), then
+-- records the outcome as the owner. expect = 'ok' or a SQLSTATE pattern.
+CREATE OR REPLACE FUNCTION pg_temp.as_app(label text, tenant uuid, stmt text, expect text)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE outcome text;
+BEGIN
+    BEGIN
+        SET LOCAL ROLE ut_app;
+        PERFORM set_config('app.tenant_id', tenant::text, true);
+        EXECUTE stmt;
+        outcome := CASE WHEN expect = 'ok' THEN 'PASS' ELSE 'FAIL (no error)' END;
+        RESET ROLE;
+    EXCEPTION WHEN OTHERS THEN
+        outcome := CASE WHEN expect <> 'ok' AND SQLSTATE LIKE expect THEN 'PASS (' || SQLSTATE || ')'
+                        ELSE 'FAIL (' || SQLSTATE || ': ' || SQLERRM || ')' END;
+    END;
+    RESET ROLE;
+    PERFORM set_config('app.tenant_id', '', true);
+    INSERT INTO results(check_name, outcome) VALUES ('[ut_app] ' || label, outcome);
+END $$;
+
 -- Fixtures: workspace A with companies A1, A2; workspace B with company B1.
 -- RLS on org.companies: this script runs as superuser, which bypasses it.
 INSERT INTO platform.tenants (id, subdomain, display_name, status, plan_type)
 VALUES ('aaaaaaaa-0000-0000-0000-00000000000a', 'ws-a', 'Workspace A', 'ACTIVE', 'STARTER'),
-       ('bbbbbbbb-0000-0000-0000-00000000000b', 'ws-b', 'Workspace B', 'ACTIVE', 'STARTER');
+       ('bbbbbbbb-0000-0000-0000-00000000000b', 'ws-b', 'Workspace B', 'ACTIVE', 'STARTER')
+ON CONFLICT DO NOTHING;   -- B and B1 may already exist (the e2e fixtures use the same ids)
 INSERT INTO org.companies (id, tenant_id, name)
 VALUES ('a1a1a1a1-0000-0000-0000-0000000000a1', 'aaaaaaaa-0000-0000-0000-00000000000a', 'A1'),
        ('a2a2a2a2-0000-0000-0000-0000000000a2', 'aaaaaaaa-0000-0000-0000-00000000000a', 'A2'),
-       ('b1b1b1b1-0000-0000-0000-0000000000b1', 'bbbbbbbb-0000-0000-0000-00000000000b', 'B1');
+       ('b1b1b1b1-0000-0000-0000-0000000000b1', 'bbbbbbbb-0000-0000-0000-00000000000b', 'B1')
+ON CONFLICT DO NOTHING;
 INSERT INTO platform.accounts (id, email, display_name, password_hash)
-VALUES ('acc00000-0000-0000-0000-000000000001', 'person@example.test', 'Person', 'x');
+VALUES ('acc00000-0000-0000-0000-000000000001', 'person@example.test', 'Person', 'x')
+ON CONFLICT DO NOTHING;
+INSERT INTO platform.accounts (id, email, display_name, password_hash)
+VALUES ('acc00000-0000-0000-0000-0000000000c9', 'mapped-person@example.test', 'Mapped person', 'x');
 
 -- V144_101 ---------------------------------------------------------------------
 INSERT INTO results(check_name, outcome)
@@ -93,6 +142,16 @@ SELECT pg_temp.expect_error('V144_102 subscription cannot point at another works
 SELECT pg_temp.expect_ok('V144_102 existing-style workspace subscription (company_id NULL) still works',
   $q$INSERT INTO platform.subscriptions (id, tenant_id, plan_keys, current_period_end)
      VALUES ('5a5a0000-0000-0000-0000-000000000001'::uuid, 'aaaaaaaa-0000-0000-0000-00000000000a', ARRAY['hr-employees'], now() + interval '30 days')$q$);
+SELECT pg_temp.expect_ok('V144_102 a company-level subscription for A2',
+  $q$INSERT INTO platform.subscriptions (id, tenant_id, company_id, plan_keys, current_period_end)
+     VALUES ('5a5a0000-0000-0000-0000-000000000002'::uuid, 'aaaaaaaa-0000-0000-0000-00000000000a',
+             'a2a2a2a2-0000-0000-0000-0000000000a2', ARRAY['marketing'], now() + interval '30 days')$q$);
+SELECT pg_temp.expect_error('V144_102 deleting a company with a company-level subscription is refused (not SET NULL: NULL = whole business)',
+  $q$DELETE FROM org.companies WHERE id = 'a2a2a2a2-0000-0000-0000-0000000000a2'$q$, '23001');
+SELECT pg_temp.expect_error('V144_102 deleting a company with entitlement rows is refused (RESTRICT)',
+  $q$DELETE FROM org.companies WHERE id = 'a1a1a1a1-0000-0000-0000-0000000000a1'$q$, '23001');
+SELECT pg_temp.expect_error('V144_102 deleting a workspace with entitlement rows is refused (RESTRICT)',
+  $q$DELETE FROM platform.tenants WHERE id = 'aaaaaaaa-0000-0000-0000-00000000000a'$q$, '23001');
 INSERT INTO results(check_name, outcome)
 SELECT 'V144_102 tenant_modules.seats exists (fresh-database drift fixed)',
        CASE WHEN count(*) = 1 THEN 'PASS' ELSE 'FAIL' END
@@ -117,12 +176,19 @@ SELECT pg_temp.expect_error('V144_103 negative price is refused',
      SELECT key, -5, 'PER_SEAT', now() - interval '2 days', now() - interval '1 day' FROM platform.module_plans LIMIT 1$q$, '23514');
 
 -- V144_104 ---------------------------------------------------------------------
-SELECT pg_temp.expect_error('V144_104 malformed GSTIN is refused',
-  $q$INSERT INTO platform.company_billing_profiles (company_id, tenant_id, gstin)
-     VALUES ('a1a1a1a1-0000-0000-0000-0000000000a1','aaaaaaaa-0000-0000-0000-00000000000a','not-a-gstin')$q$, '23514');
+INSERT INTO results(check_name, outcome)
+SELECT 'V144_104 billing profile holds no legal name / GSTIN / PAN (org.companies owns them)',
+       CASE WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'platform'
+                              AND table_name = 'company_billing_profiles' AND column_name IN ('legal_name', 'gstin', 'pan'))
+            THEN 'PASS' ELSE 'FAIL' END;
+SELECT pg_temp.expect_error('V144_104 a state code is two digits',
+  $q$INSERT INTO platform.company_billing_profiles (company_id, tenant_id, state_code)
+     VALUES ('a1a1a1a1-0000-0000-0000-0000000000a1','aaaaaaaa-0000-0000-0000-00000000000a','KA')$q$, '23514');
 SELECT pg_temp.expect_ok('V144_104 valid billing profile for A1',
-  $q$INSERT INTO platform.company_billing_profiles (company_id, tenant_id, legal_name, gstin, pan, billing_email, state_code)
-     VALUES ('a1a1a1a1-0000-0000-0000-0000000000a1','aaaaaaaa-0000-0000-0000-00000000000a','A One Pvt Ltd','29ABCDE1234F1Z5','ABCDE1234F','billing@a1.test','29')$q$);
+  $q$INSERT INTO platform.company_billing_profiles (company_id, tenant_id, billing_email, state_code, address_line1, city)
+     VALUES ('a1a1a1a1-0000-0000-0000-0000000000a1','aaaaaaaa-0000-0000-0000-00000000000a','billing@a1.test','29','1 MG Road','Bengaluru')$q$);
+SELECT pg_temp.expect_error('V144_104 a SAC code is 6 digits starting with 99',
+  $q$UPDATE platform.billing_settings SET default_sac_code = '123456' WHERE id = 1$q$, '23514');
 SELECT pg_temp.expect_error('V144_104 billing profile cannot attach a company to the wrong workspace',
   $q$INSERT INTO platform.company_billing_profiles (company_id, tenant_id)
      VALUES ('b1b1b1b1-0000-0000-0000-0000000000b1','aaaaaaaa-0000-0000-0000-00000000000a')$q$, '23503');
@@ -137,9 +203,27 @@ SELECT pg_temp.expect_error('V144_104 total must equal subtotal - discount + tax
      VALUES ('aaaaaaaa-0000-0000-0000-00000000000a','DRAFT',100,18,999)$q$, '23514');
 SELECT pg_temp.expect_error('V144_104 issuing without number/date/snapshot is refused',
   $q$UPDATE platform.invoices SET status='ISSUED' WHERE id='11110000-0000-0000-0000-000000000001'$q$, '23514');
-SELECT pg_temp.expect_ok('V144_104 issue the invoice properly',
+SELECT pg_temp.expect_error('V144_104 issuing without a place of supply is refused',
   $q$UPDATE platform.invoices SET status='ISSUED', invoice_number='UT/26-27/00001', issued_at=now(),
+            billing_snapshot='{"legal_name":"A One Pvt Ltd"}'::jsonb WHERE id='11110000-0000-0000-0000-000000000001'$q$, '23514');
+SELECT pg_temp.expect_error('V144_104 a line cannot carry both CGST/SGST and IGST',
+  $q$UPDATE platform.invoice_lines SET cgst_amount = 90, sgst_amount = 0, igst_amount = 90
+      WHERE invoice_id='11110000-0000-0000-0000-000000000001'$q$, '23514');
+SELECT pg_temp.expect_error('V144_104 a line''s GST split must add up to its tax',
+  $q$UPDATE platform.invoice_lines SET cgst_amount = 90, sgst_amount = 80
+      WHERE invoice_id='11110000-0000-0000-0000-000000000001'$q$, '23514');
+SELECT pg_temp.expect_ok('V144_104 an intra-state line: CGST + SGST, with its SAC',
+  $q$UPDATE platform.invoice_lines SET sac_code = '998431', cgst_amount = 90, sgst_amount = 90
+      WHERE invoice_id='11110000-0000-0000-0000-000000000001'$q$);
+SELECT pg_temp.expect_ok('V144_104 issue the invoice properly',
+  $q$UPDATE platform.invoices SET status='ISSUED', invoice_number='UT/26-27/00001', issued_at=now(), place_of_supply='29',
             billing_snapshot='{"legal_name":"A One Pvt Ltd"}'::jsonb WHERE id='11110000-0000-0000-0000-000000000001'$q$);
+SELECT pg_temp.expect_error('V144_104 an issued invoice''s place of supply is frozen (trigger)',
+  $q$UPDATE platform.invoices SET place_of_supply='07' WHERE id='11110000-0000-0000-0000-000000000001'$q$, '23514');
+SELECT pg_temp.expect_error('V144_104 deleting the company of an invoice is refused (RESTRICT)',
+  $q$DELETE FROM platform.company_modules WHERE company_id = 'a1a1a1a1-0000-0000-0000-0000000000a1';
+     DELETE FROM platform.company_billing_profiles WHERE company_id = 'a1a1a1a1-0000-0000-0000-0000000000a1';
+     DELETE FROM org.companies WHERE id = 'a1a1a1a1-0000-0000-0000-0000000000a1'$q$, '23001');
 SELECT pg_temp.expect_error('V144_104 issued invoice amount cannot be edited (trigger)',
   $q$UPDATE platform.invoices SET subtotal=1, total=181 WHERE id='11110000-0000-0000-0000-000000000001'$q$, '23514');
 SELECT pg_temp.expect_error('V144_104 issued invoice snapshot cannot be edited (trigger)',
@@ -168,6 +252,18 @@ SELECT 'V144_104 invoices carry no unused provider/pdf columns',
                               AND table_name = 'invoices'
                               AND column_name IN ('provider', 'provider_invoice_id', 'provider_payment_id', 'pdf_storage_key'))
             THEN 'PASS' ELSE 'FAIL' END;
+SELECT pg_temp.expect_ok('V144_104 a payment draft as InvoiceService first writes it (Rs 49 -> 41.53 + 7.48 = 49.01)',
+  $q$INSERT INTO platform.invoices (id, tenant_id, status, subtotal, tax_total, total)
+     VALUES ('11110000-0000-0000-0000-000000000003','aaaaaaaa-0000-0000-0000-00000000000a','DRAFT',41.53,7.48,49.01)$q$);
+SELECT pg_temp.expect_ok('V144_104 the paisa fix-up (tax and total move together) satisfies ck_invoices_total',
+  $q$UPDATE platform.invoices SET tax_total = tax_total + (-0.01), total = total + (-0.01)
+      WHERE id = '11110000-0000-0000-0000-000000000003' AND status = 'DRAFT'$q$);
+INSERT INTO results(check_name, outcome)
+SELECT 'V144_104 after the fix-up the draft adds up to exactly what was paid',
+       CASE WHEN total = 49.00 AND subtotal - discount_total + tax_total = total THEN 'PASS' ELSE 'FAIL (' || total || ')' END
+  FROM platform.invoices WHERE id = '11110000-0000-0000-0000-000000000003';
+SELECT pg_temp.expect_error('V144_104 a fix-up that moved only the tax would break ck_invoices_total',
+  $q$UPDATE platform.invoices SET tax_total = tax_total + 0.01 WHERE id = '11110000-0000-0000-0000-000000000003'$q$, '23514');
 SELECT pg_temp.expect_ok('V144_104 a draft to discard',
   $q$INSERT INTO platform.invoices (id, tenant_id, status, subtotal, tax_total, total)
      VALUES ('11110000-0000-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-00000000000a','DRAFT',100,18,118)$q$);
@@ -209,6 +305,12 @@ SELECT pg_temp.expect_error('V144_105 quarantine needs a reason (never a silent 
 SELECT pg_temp.expect_error('V144_105 MAPPED member without an account is refused',
   $q$INSERT INTO platform.marketing_identity_map (kind, legacy_marketing_user_id, tenant_id, company_id, status, source)
      VALUES ('MEMBER','65a1b2c3d4e5f60718293a4e','aaaaaaaa-0000-0000-0000-00000000000a','a1a1a1a1-0000-0000-0000-0000000000a1','MAPPED','SSO')$q$, '23514');
+SELECT pg_temp.expect_ok('V144_105 map a person (MEMBER) in A1',
+  $q$INSERT INTO platform.marketing_identity_map (kind, legacy_marketing_user_id, account_id, tenant_id, company_id, status, source, mapped_at)
+     VALUES ('MEMBER','65a1b2c3d4e5f60718293a4f','acc00000-0000-0000-0000-0000000000c9','aaaaaaaa-0000-0000-0000-00000000000a',
+             'a1a1a1a1-0000-0000-0000-0000000000a1','MAPPED','SSO',now())$q$);
+SELECT pg_temp.expect_error('V144_105 deleting the account of a mapped person is refused (the only identity record)',
+  $q$DELETE FROM platform.accounts WHERE id = 'acc00000-0000-0000-0000-0000000000c9'$q$, '23001');
 SELECT pg_temp.expect_ok('V144_105 60-second SSO ticket',
   $q$INSERT INTO platform.sso_handoff_tickets (ticket_hash, audience, account_id, tenant_id, company_id, auth_user_id, expires_at)
      VALUES (repeat('a',64),'marketing','acc00000-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-00000000000a',
@@ -257,6 +359,85 @@ SELECT pg_temp.expect_error('V144_106 a row cannot be RATED without a rate card 
 SELECT pg_temp.expect_error('V144_106 usage cannot be filed against another workspace''s company',
   $q$INSERT INTO platform.usage_ledger (idempotency_key, tenant_id, company_id, provider, usage_type, occurred_at)
      VALUES ('meta:wamid.2:conversation','aaaaaaaa-0000-0000-0000-00000000000a','b1b1b1b1-0000-0000-0000-0000000000b1','META_WHATSAPP','CONVERSATION',now())$q$, '23503');
+SELECT pg_temp.expect_error('V144_106 a payload hash is a hex SHA-256',
+  $q$INSERT INTO platform.usage_ledger (idempotency_key, payload_hash, tenant_id, company_id, provider, usage_type, occurred_at)
+     VALUES ('meta:wamid.3:conversation','not-a-hash','aaaaaaaa-0000-0000-0000-00000000000a','a1a1a1a1-0000-0000-0000-0000000000a1','META_WHATSAPP','CONVERSATION',now())$q$, '23514');
+SELECT pg_temp.expect_error('V144_106 one event cannot claim an unbounded quantity',
+  $q$INSERT INTO platform.usage_ledger (idempotency_key, tenant_id, company_id, provider, usage_type, occurred_at, quantity)
+     VALUES ('meta:wamid.4:conversation','aaaaaaaa-0000-0000-0000-00000000000a','a1a1a1a1-0000-0000-0000-0000000000a1','META_WHATSAPP','CONVERSATION',now(),20000)$q$, '23514');
+INSERT INTO results(check_name, outcome)
+SELECT 'V144_102-106 no new foreign key cascades or nulls (only SSO tickets and invoice lines cascade)',
+       CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL (' || string_agg(conrelid::regclass || '.' || conname, ', ') || ')' END
+  FROM pg_constraint
+ WHERE contype = 'f'
+   AND conrelid IN ('platform.company_modules'::regclass, 'platform.subscriptions'::regclass,
+                    'platform.module_plan_prices'::regclass, 'platform.company_billing_profiles'::regclass,
+                    'platform.invoices'::regclass, 'platform.invoice_lines'::regclass,
+                    'platform.marketing_identity_map'::regclass, 'platform.marketing_channel_accounts'::regclass,
+                    'platform.usage_ledger'::regclass)
+   AND confdeltype NOT IN ('r', 'a')   -- RESTRICT or NO ACTION: both refuse the delete
+   AND NOT (conrelid = 'platform.invoice_lines'::regclass AND confrelid = 'platform.invoices'::regclass)
+   AND NOT (conrelid = 'platform.subscriptions'::regclass AND conname <> 'fk_subscriptions_company');
+SELECT pg_temp.expect_error('V144_104 an issued (now void) invoice cannot be deleted, even by the owner (trigger)',
+  $q$DELETE FROM platform.invoices WHERE id = '11110000-0000-0000-0000-000000000001'$q$, '23514');
+SELECT pg_temp.expect_error('V144_104 a discarded draft stays on record (trigger)',
+  $q$DELETE FROM platform.invoices WHERE id = '11110000-0000-0000-0000-000000000002'$q$, '23514');
+
+-- V144_107 ---------------------------------------------------------------------
+INSERT INTO results(check_name, outcome)
+SELECT 'V144_107 the Razorpay plan cache is keyed by price (old module+cycle key gone)',
+       CASE WHEN to_regclass('platform.uq_razorpay_plans_module_cycle_price') IS NOT NULL
+                 AND to_regclass('platform.razorpay_plans_module_key_billing_cycle_key') IS NULL
+            THEN 'PASS' ELSE 'FAIL' END;
+SELECT pg_temp.expect_ok('V144_107 two prices of one module and cycle are both cached',
+  $q$INSERT INTO platform.razorpay_plans (module_key, billing_cycle, razorpay_plan_id, unit_price_paise)
+     VALUES ('ctest-mod','MONTHLY','plan_ctest_old',4000), ('ctest-mod','MONTHLY','plan_ctest_new',4900)$q$);
+SELECT pg_temp.expect_error('V144_107 the same price is cached once',
+  $q$INSERT INTO platform.razorpay_plans (module_key, billing_cycle, razorpay_plan_id, unit_price_paise)
+     VALUES ('ctest-mod','MONTHLY','plan_ctest_dup',4900)$q$, '23505');
+
+-- ── Second pass: as the application role (ut_app), workspace bound ───────────────
+-- Production's ut_app reads org.companies and writes audit.events (grants applied by hand before V142); a
+-- fresh migrate-only database lacks them, so they are given here, inside this rolled-back transaction.
+-- Nothing on platform.* is granted: the platform checks below see exactly what the migrations grant.
+GRANT USAGE ON SCHEMA org, audit TO ut_app;
+GRANT SELECT ON org.companies TO ut_app;
+GRANT SELECT, INSERT ON audit.events TO ut_app;
+SELECT pg_temp.as_app('sees its own workspace''s companies only (RLS)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$DO $x$ BEGIN
+       IF (SELECT count(*) FROM org.companies
+            WHERE id IN ('a1a1a1a1-0000-0000-0000-0000000000a1','a2a2a2a2-0000-0000-0000-0000000000a2',
+                         'b1b1b1b1-0000-0000-0000-0000000000b1')) <> 2 THEN
+         RAISE EXCEPTION 'RLS let another workspace''s company through';
+       END IF;
+     END $x$$q$, 'ok');
+SELECT pg_temp.as_app('switches Marketing on for a company of its workspace', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$INSERT INTO platform.company_modules (tenant_id, company_id, module_key, source, reason, granted_by)
+     VALUES ('aaaaaaaa-0000-0000-0000-00000000000a','a2a2a2a2-0000-0000-0000-0000000000a2','whatsapp','MANUAL','ut_app pass check','ops@test')$q$, 'ok');
+SELECT pg_temp.as_app('cannot DELETE an entitlement row (retired by status instead)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$DELETE FROM platform.company_modules WHERE company_id = 'a2a2a2a2-0000-0000-0000-0000000000a2'$q$, '42501');
+SELECT pg_temp.as_app('cannot DELETE an invoice, not even a draft (no grant)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$DELETE FROM platform.invoices WHERE id = '11110000-0000-0000-0000-000000000003'$q$, '42501');
+SELECT pg_temp.as_app('cannot edit an issued invoice either (trigger)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$UPDATE platform.invoices SET total = 1 WHERE id = '11110000-0000-0000-0000-000000000001'$q$, '23514');
+SELECT pg_temp.as_app('writes an audit row for its bound workspace', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$INSERT INTO audit.events (id, tenant_id, occurred_at, occurred_date, module, action, summary)
+     VALUES (gen_random_uuid(), 'aaaaaaaa-0000-0000-0000-00000000000a', now(), current_date, 'platform', 'CTEST', 'ut_app pass')$q$, 'ok');
+SELECT pg_temp.as_app('cannot write an audit row for another workspace (insert policy)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$INSERT INTO audit.events (id, tenant_id, occurred_at, occurred_date, module, action, summary)
+     VALUES (gen_random_uuid(), 'bbbbbbbb-0000-0000-0000-00000000000b', now(), current_date, 'platform', 'CTEST', 'ut_app pass')$q$, '42501');
+SELECT pg_temp.as_app('cannot DELETE usage or an identity mapping (no grant)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$DELETE FROM platform.usage_ledger WHERE false; DELETE FROM platform.marketing_identity_map WHERE false$q$, '42501');
+SELECT pg_temp.as_app('records usage and reads it back', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$INSERT INTO platform.usage_ledger (idempotency_key, payload_hash, tenant_id, company_id, provider, usage_type, occurred_at)
+     VALUES ('meta:wamid.ut:conversation', repeat('ab', 32), 'aaaaaaaa-0000-0000-0000-00000000000a',
+             'a2a2a2a2-0000-0000-0000-0000000000a2','META_WHATSAPP','CONVERSATION',now())$q$, 'ok');
+SELECT pg_temp.as_app('consumes an SSO ticket and deletes expired ones (the only DELETE it has)', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$UPDATE platform.sso_handoff_tickets SET consumed_at = now() WHERE ticket_hash = repeat('a',64);
+     DELETE FROM platform.sso_handoff_tickets WHERE expires_at < now() - interval '1 day'$q$, 'ok');
+SELECT pg_temp.as_app('publishes a price version and caches a Razorpay plan by price', 'aaaaaaaa-0000-0000-0000-00000000000a',
+  $q$INSERT INTO platform.razorpay_plans (module_key, billing_cycle, razorpay_plan_id, unit_price_paise)
+     VALUES ('ctest-mod','ANNUAL','plan_ctest_annual',47000) ON CONFLICT DO NOTHING$q$, 'ok');
 
 \echo
 SELECT n, outcome, check_name FROM results ORDER BY n;
