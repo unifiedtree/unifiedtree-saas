@@ -46,8 +46,13 @@ class ExtraUsersJobTest {
     private final UUID owner = UUID.randomUUID();
     private final Instant charge = Instant.parse("2026-11-06T04:30:00Z");   // 6 Nov, 10:00 IST
 
-    private ExtraUsersJob.Cycle cycle() {
-        return new ExtraUsersJob.Cycle(sub, tenant, 10, new BigDecimal("400.00"), charge, null, "sub_rzp_1");
+    private ExtraUsersService.HrmsSubscription cycle() {
+        return cycle("ACTIVE", new BigDecimal("400.00"));
+    }
+
+    private ExtraUsersService.HrmsSubscription cycle(String status, BigDecimal unit) {
+        return new ExtraUsersService.HrmsSubscription(sub, tenant, status, 10, unit, charge,
+                LocalDate.of(2026, 10, 6), LocalDate.of(2026, 11, 6), "sub_rzp_1");
     }
 
     @BeforeEach
@@ -117,6 +122,48 @@ class ExtraUsersJobTest {
 
         job.handle(cycle(), charge.minus(Duration.ofMinutes(30)));   // no exception escapes
         verify(razorpay, times(1)).createSubscriptionAddon(anyString(), anyString(), anyString(), anyLong(), anyInt());
+    }
+
+    @Test
+    void anUnknownOutcomeIsRecordedUnknownAndNeverRetried() {
+        noticeRowIsNew(false);
+        claim(true);
+        when(razorpay.createSubscriptionAddon(anyString(), anyString(), anyString(), anyLong(), anyInt()))
+                .thenThrow(new RazorpayClient.AddonOutcomeUnknown("Read timed out"));
+
+        job.handle(cycle(), charge.minus(Duration.ofMinutes(30)));
+
+        // finish(): seats, peak, peak day, extras, unit, amount, by company, STATUS, add-on id, error, STATUS, sub, cycle.
+        verify(jdbc).update(contains("by_company = ?::jsonb, status = ?"), any(), any(), any(), any(), any(), any(), any(),
+                eq("UNKNOWN"), any(), any(), eq("UNKNOWN"), eq(sub), any());
+        // UNKNOWN is not among the statuses a run may claim (NOTIFIED, NONE, FAILED), so no later run
+        // calls Razorpay for this cycle.
+    }
+
+    @Test
+    void aBusinessWithAnAddOnForAnOverlappingCycleIsNotChargedAgain() {
+        when(jdbc.queryForObject(contains("cycle_end <> ?"), eq(Integer.class), any(Object[].class))).thenReturn(1);
+        job.handle(cycle(), charge.minus(Duration.ofMinutes(30)));
+        verify(jdbc, never()).update(contains("INSERT INTO platform.extra_user_charges"), any(Object[].class));
+        verify(razorpay, never()).createSubscriptionAddon(anyString(), anyString(), anyString(), anyLong(), anyInt());
+    }
+
+    @Test
+    void aSubscriptionRazorpayIsRetryingIsLeftAlone() {
+        when(extras.ready()).thenReturn(true);
+        when(extras.hrmsSubscriptions()).thenReturn(List.of(cycle("PAST_DUE", new BigDecimal("400.00"))));
+        job.runAt(charge.minus(Duration.ofMinutes(30)));
+        verify(jdbc, never()).update(contains("INSERT INTO platform.extra_user_charges"), any(Object[].class));
+        verify(razorpay, never()).createSubscriptionAddon(anyString(), anyString(), anyString(), anyLong(), anyInt());
+    }
+
+    @Test
+    void withoutAPriceNobodyIsToldZeroAndNothingIsSentToRazorpay() {
+        noticeRowIsNew(true);
+        claim(true);
+        job.handle(cycle("ACTIVE", BigDecimal.ZERO), charge.minus(Duration.ofMinutes(30)));
+        verifyNoInteractions(dispatcher);
+        verify(razorpay, never()).createSubscriptionAddon(anyString(), anyString(), anyString(), anyLong(), anyInt());
     }
 
     @Test

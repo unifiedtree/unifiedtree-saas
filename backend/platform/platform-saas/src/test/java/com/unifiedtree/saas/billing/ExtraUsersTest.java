@@ -5,6 +5,7 @@ import com.unifiedtree.saas.billing.ExtraUsers.DayCount;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -58,5 +59,29 @@ class ExtraUsersTest {
         assertThat(r.extraUsers()).isZero();
         assertThat(r.peakDay()).isNull();
         assertThat(r.byCompany()).isEmpty();
+    }
+
+    private static Instant ist(String date) { return Instant.parse(date + "T04:30:00Z"); }   // 10:00 IST
+
+    @Test
+    void theCycleIsTheSubscriptionsPeriodAndARetryDoesNotMoveIt() {
+        // Period 6 Oct - 6 Nov; the charge failed and Razorpay retries on 8 Nov: still the same cycle.
+        var c = ExtraUsersService.cycle(ist("2026-10-06"), ist("2026-11-06"), ist("2026-11-08"), null);
+        assertThat(c).containsExactly(LocalDate.of(2026, 10, 6), LocalDate.of(2026, 11, 6));
+    }
+
+    @Test
+    void withoutARecordedPeriodTheCycleIsTheMonthUpToTheCharge() {
+        var c = ExtraUsersService.cycle(null, null, ist("2026-11-06"), null);
+        assertThat(c).containsExactly(LocalDate.of(2026, 10, 6), LocalDate.of(2026, 11, 6));
+        // A stale period that doesn't end near the charge is not trusted.
+        var stale = ExtraUsersService.cycle(ist("2026-08-06"), ist("2026-09-06"), ist("2026-11-06"), null);
+        assertThat(stale).containsExactly(LocalDate.of(2026, 10, 6), LocalDate.of(2026, 11, 6));
+    }
+
+    @Test
+    void trialDaysNeverCount() {
+        var c = ExtraUsersService.cycle(ist("2026-10-06"), ist("2026-11-06"), ist("2026-11-06"), ist("2026-10-13"));
+        assertThat(c).containsExactly(LocalDate.of(2026, 10, 13), LocalDate.of(2026, 11, 6));
     }
 }

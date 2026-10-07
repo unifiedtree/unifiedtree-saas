@@ -407,16 +407,29 @@ public class RazorpayClient {
                     .retrieve()
                     .body(Map.class);
             Object id = resp == null ? null : resp.get("id");
-            if (id == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Razorpay returned no add-on");
-            }
+            if (id == null) throw new AddonOutcomeUnknown("Razorpay answered without an add-on id");
             return id.toString();
-        } catch (ResponseStatusException e) {
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // A 4xx is a definite "no": nothing was created, so trying again later is safe.
+            log.warn("Razorpay createSubscriptionAddon refused: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Razorpay refused the add-on (" + e.getStatusCode().value() + "): " + e.getResponseBodyAsString());
+        } catch (AddonOutcomeUnknown e) {
             throw e;
         } catch (Exception e) {
-            log.warn("Razorpay createSubscriptionAddon failed: {}", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not add the extra users to the next charge");
+            // No answer, a timeout or a 5xx: Razorpay may have created the add-on anyway.
+            log.warn("Razorpay createSubscriptionAddon outcome unknown: {}", e.getMessage());
+            throw new AddonOutcomeUnknown(e.getMessage());
         }
+    }
+
+    /**
+     * {@link #createSubscriptionAddon}'s outcome is not known: no answer, a timeout or a 5xx. Razorpay
+     * may have created the add-on, so it must NOT be tried again without checking Razorpay first
+     * (a second try could charge the customer twice).
+     */
+    public static class AddonOutcomeUnknown extends RuntimeException {
+        public AddonOutcomeUnknown(String message) { super(message); }
     }
 
     /**

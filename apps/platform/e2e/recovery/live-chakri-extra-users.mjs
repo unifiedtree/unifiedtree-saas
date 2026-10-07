@@ -15,6 +15,7 @@
 // Everything planted is removed at the end.
 /* global process, console, fetch, setTimeout */
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const db = process.env.RECOVERY_DB || 'ut_w3_dev'
@@ -25,7 +26,7 @@ const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', [
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const id = crypto.randomUUID()
+const id = randomUUID()
 const start = new Date(Date.now() - 5000).toISOString()
 const yesterday = sql(`select (now() at time zone 'Asia/Kolkata')::date - 1`)
 
@@ -34,7 +35,7 @@ try {
   sql(`insert into platform.subscriptions (id, tenant_id, subdomain, plan_keys, modules, seats, unit_price_inr, amount_inr, billing_cycle, status,
          current_period_start, current_period_end, next_charge_at, razorpay_subscription_id, created_at, updated_at)
        values ('${id}', '${tenant}', 'demo', '{hr-employees}', '{hrms,attendance,leave,payroll}', 40, 400, 16000, 'MONTHLY', 'ACTIVE',
-         now() - interval '29 days', now() + interval '90 minutes', now() + interval '90 minutes', 'sub_qa_${id.slice(0, 8)}', '2000-01-01', '2000-01-01')`)
+         now() - interval '29 days', now() + interval '90 minutes', now() + interval '90 minutes', 'sub_qa_${id.slice(0, 8)}', '2000-01-01', now() + interval '1 day')`)   // the newest: the business's HRMS subscription
   sql(`insert into platform.seat_usage_daily (tenant_id, day, company_id, active) values ('${tenant}', '${yesterday}', '${company}', 43)
        on conflict (tenant_id, day, company_id) do update set active = 43`)
 
@@ -64,7 +65,8 @@ try {
   check('test ran to the end', false, e.message.split('\n')[0])
 } finally {
   sql(`delete from notif.notifications where tenant_id='${tenant}' and type='PAYMENT_DUE_SOON' and created_at >= '${start}'`)
-  sql(`delete from platform.subscriptions where id='${id}'`)   // its extra_user_charges row cascades
+  sql(`delete from platform.extra_user_charges where subscription_id='${id}'`)   // RESTRICT: the charge first
+  sql(`delete from platform.subscriptions where id='${id}'`)
   sql(`delete from platform.seat_usage_daily where tenant_id='${tenant}' and day >= '${yesterday}'`)
   check('cleanup: nothing planted is left', sql(`select count(*) from platform.subscriptions where id='${id}'`) === '0'
     && sql(`select count(*) from platform.seat_usage_daily where tenant_id='${tenant}' and day >= '${yesterday}'`) === '0')

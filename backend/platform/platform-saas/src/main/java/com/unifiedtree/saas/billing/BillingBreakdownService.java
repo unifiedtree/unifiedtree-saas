@@ -74,36 +74,26 @@ public class BillingBreakdownService {
      */
     ExtraCharge extraCharge(UUID tenantId) {
         if (!extras.ready()) return null;
-        List<Map<String, Object>> subs = jdbc.queryForList("""
-                SELECT id, seats, unit_price_inr, next_charge_at, trial_ends_at
-                  FROM platform.subscriptions
-                 WHERE tenant_id = ? AND billing_cycle = 'MONTHLY' AND status IN ('ACTIVE', 'PAST_DUE')
-                   AND next_charge_at IS NOT NULL AND razorpay_subscription_id IS NOT NULL
-                 ORDER BY ('hrms' = ANY(modules)) DESC, updated_at DESC NULLS LAST
-                 LIMIT 1
-                """, tenantId);
-        if (subs.isEmpty()) return null;
-        Map<String, Object> sub = subs.get(0);
-        Instant nextCharge = ((Timestamp) sub.get("next_charge_at")).toInstant();
-        Timestamp trial = (Timestamp) sub.get("trial_ends_at");
-        LocalDate cycleEnd = nextCharge.atZone(ExtraUsersService.IST).toLocalDate();
+        // The same subscription, cycle and price the job charges (ExtraUsersService.hrmsSubscription).
+        ExtraUsersService.HrmsSubscription sub = extras.hrmsSubscription(tenantId).orElse(null);
+        if (sub == null) return null;
+        LocalDate chargeOn = sub.nextChargeAt().atZone(ExtraUsersService.IST).toLocalDate();
 
         List<Map<String, Object>> recorded = jdbc.queryForList("""
                 SELECT extra_users, amount_inr, status, peak_active, peak_day, by_company::text AS by_company
-                  FROM platform.extra_user_charges WHERE subscription_id = ? AND cycle_end = ?
-                """, sub.get("id"), cycleEnd);
+                  FROM platform.extra_user_charges WHERE tenant_id = ? AND cycle_end = ?
+                """, tenantId, sub.cycleEnd());
         if (!recorded.isEmpty()) {
             Map<String, Object> r = recorded.get(0);
-            return new ExtraCharge(cycleEnd, (String) r.get("status"), ((Number) r.get("extra_users")).intValue(),
+            return new ExtraCharge(chargeOn, (String) r.get("status"), ((Number) r.get("extra_users")).intValue(),
                     (BigDecimal) r.get("amount_inr"), ((Number) r.get("peak_active")).intValue(),
                     r.get("peak_day") == null ? null : ((java.sql.Date) r.get("peak_day")).toLocalDate(),
                     parseShares((String) r.get("by_company")));
         }
-        LocalDate[] window = ExtraUsersService.cycle(nextCharge, trial == null ? null : trial.toInstant());
-        if (!window[0].isBefore(window[1])) return null;   // still in the free trial
-        ExtraUsers.Result r = ExtraUsers.compute(((Number) sub.get("seats")).intValue(), (BigDecimal) sub.get("unit_price_inr"),
-                extras.readings(tenantId, window[0], window[1]));
-        return new ExtraCharge(cycleEnd, "SO_FAR", r.extraUsers(), r.amountInr(), r.peakActive(), r.peakDay(), r.byCompany());
+        if (!sub.cycleStart().isBefore(sub.cycleEnd())) return null;   // still in the free trial
+        ExtraUsers.Result r = ExtraUsers.compute(sub.seats(), sub.unitPriceInr(),
+                extras.readings(tenantId, sub.cycleStart(), sub.cycleEnd()));
+        return new ExtraCharge(chargeOn, "SO_FAR", r.extraUsers(), r.amountInr(), r.peakActive(), r.peakDay(), r.byCompany());
     }
 
     private static List<ExtraUsers.CompanyShare> parseShares(String json) {
