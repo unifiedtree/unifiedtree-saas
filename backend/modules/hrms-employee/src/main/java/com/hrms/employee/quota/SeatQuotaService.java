@@ -101,6 +101,21 @@ public class SeatQuotaService {
     }
 
     /**
+     * The same seat position as {@link #getUsage}, read only: no over-cap event, so no customer is
+     * messaged. For readers that only look (the platform admin console's HRMS overview).
+     *
+     * <p>JDBC with the tenant passed in (no JPA, no {@code com.hrms.core} TenantContext), so it is safe
+     * inside the platform's workspace-bound reader; hrms.employees is row-level secured, so the caller
+     * must have bound {@code tenantId} for the count to see that workspace's rows.
+     */
+    @Transactional(readOnly = true)
+    public Usage peekUsage(UUID tenantId) {
+        int purchased = seatCap(tenantId);
+        int used      = activeEmployees(tenantId);
+        return new Usage(purchased, used, Math.max(0, purchased - used));
+    }
+
+    /**
      * Convenience for the current-request tenant.
      */
     @Transactional(readOnly = true)
