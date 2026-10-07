@@ -100,7 +100,10 @@ function inferRecipientRoleFromHint(data?: Record<string, unknown> | null): Reci
     (typeof data?.audience === 'string' ? (data.audience as string) : undefined) ??
     (typeof data?.recipient_role === 'string' ? (data.recipient_role as string) : undefined) ??
     (typeof data?.recipientRole === 'string' ? (data.recipientRole as string) : undefined)
-  if (!hintRaw) return null
+  // The server sends a cancellation to the approver with the app's approvals inbox as its route
+  // (DomainEventListener onLeaveCancelled / onWfhCancelled), so that route says which side this is.
+  // Without it an owner, whose role isn't in APPROVER_ROLES, was sent to their own leave list.
+  if (!hintRaw) return typeof data?.route === 'string' && data.route.split(/[?#]/)[0] === '/requests-tab' ? 'approver' : null
   const hint = hintRaw.toLowerCase()
   if (hint === 'requester' || hint === 'employee' || hint === 'owner' || hint === 'self') return 'requester'
   if (hint === 'approver' || hint === 'manager' || hint === 'admin' || hint === 'hr' || hint === 'hr_manager') return 'approver'
@@ -216,6 +219,11 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
     case 'TRIAL_ENDING_SOON': case 'TRIAL_EXPIRED': case 'SUBSCRIPTION_HALTED': case 'BILLING_OVER_CAP':
     case 'PAYMENT_DUE_SOON': case 'PAYMENT_OVERDUE': return '/plan'
     case 'WELCOME': return '/'
+    // A colleague's birthday or work anniversary (MilestoneReminderService: a GENERAL row whose
+    // data.type is MILESTONE_*, with the app's /milestones): Celebrations, not Home.
+    case 'GENERAL':
+      if (typeof data?.type === 'string' && data.type.startsWith('MILESTONE_') && data.route === '/milestones') return '/me/celebrations'
+      break
   }
   if (type.startsWith('LEAVE_')) return '/hrms/leave?tab=my'
   if (type.startsWith('CORRECTION_')) return '/hrms/attendance?tab=corrections'

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Camera, Eye, EyeOff, Smartphone } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { API_BASE_URL, apiJson, AuthResponse, currentSubdomain, HttpError, WorkspaceStatus } from '@/core/api/client'
 import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
+import { returnPathFrom } from '@/core/auth/returnPath'
 import { usePageTitle, useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
 import { MonogramTile } from '@/shared/components/WorkspaceMark'
 
@@ -62,6 +63,7 @@ function workspaceLoginUrl(slug: string): string {
  */
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const loginWithCredentials = useSdkStore((state) => state.loginWithCredentials)
 
@@ -196,7 +198,8 @@ export const LoginPage: React.FC = () => {
       // animation. AuthProvider consumes this flag exactly once, so reloads
       // afterwards stay silent.
       markWelcomeIntent()
-      navigate('/')
+      // Back to the page that asked for a sign-in (a notification link, say), else Home.
+      navigate(returnPathFrom(location.state))
   }
 
   /** The two-factor step: a code from the app, a recovery code, or the first code after set-up. */
