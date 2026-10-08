@@ -96,4 +96,22 @@ class BusinessGoogleSignInTest {
         assertThatThrownBy(() -> signIn.signIn("gone", "ravi@acme.test"))
                 .isInstanceOfSatisfying(BusinessGoogleSignIn.Refused.class, e -> assertThat(e.code()).isEqualTo("BUSINESS_NOT_FOUND"));
     }
+
+    @Test
+    void thePlatformTenantsAddressIsNoBusiness() {
+        // F1: the platform tenant (subdomain "unifiedtree") is ACTIVE, but its operators sign in at the operator door only.
+        UUID platform = com.unifiedtree.security.tenant.TenantContext.PLATFORM_TENANT_ID;
+        when(jdbc.queryForList(contains("FROM platform.tenants"), eq(UUID.class), eq("unifiedtree"))).thenReturn(List.of(platform));
+        assertThat(signIn.isOpen("unifiedtree")).isFalse();
+        assertThatThrownBy(() -> signIn.signIn("unifiedtree", "ops@unifiedtree.test"))
+                .isInstanceOfSatisfying(BusinessGoogleSignIn.Refused.class, e -> assertThat(e.code()).isEqualTo("BUSINESS_NOT_FOUND"));
+        verify(auth, never()).issueWorkspaceSession(any(), any());
+        verify(mfa, never()).requirementFor(any(), any(), any());
+    }
+
+    @Test
+    void aRealBusinessIsStillOpen() {
+        when(jdbc.queryForList(contains("FROM platform.tenants"), eq(UUID.class), eq("acme"))).thenReturn(List.of(acme));
+        assertThat(signIn.isOpen("acme")).isTrue();
+    }
 }

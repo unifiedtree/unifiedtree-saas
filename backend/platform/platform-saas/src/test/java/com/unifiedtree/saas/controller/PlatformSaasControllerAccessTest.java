@@ -94,9 +94,15 @@ class PlatformSaasControllerAccessTest {
 
     /** Signs in with the authorities CanonicalProdSecurityConfig builds: ROLE_<role> plus each permission. */
     private static void signIn(String tenantId, List<String> roles, List<String> permissions) {
-        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"),
-                Map.of("sub", UUID.randomUUID().toString(), "tenant_id", tenantId,
-                        "roles", roles, "permissions", permissions));
+        signIn(null, tenantId, roles, permissions);
+    }
+
+    /** {@code tokenType} null = a workspace token; "platform" = the operator door's token. */
+    private static void signIn(String tokenType, String tenantId, List<String> roles, List<String> permissions) {
+        Map<String, Object> claims = new java.util.HashMap<>(Map.of("sub", UUID.randomUUID().toString(),
+                "tenant_id", tenantId, "roles", roles, "permissions", permissions));
+        if (tokenType != null) claims.put("token_type", tokenType);
+        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"), claims);
         List<GrantedAuthority> authorities = new ArrayList<>();
         roles.forEach(r -> authorities.add(new SimpleGrantedAuthority("ROLE_" + r)));
         permissions.forEach(p -> authorities.add(new SimpleGrantedAuthority(p)));
@@ -142,21 +148,29 @@ class PlatformSaasControllerAccessTest {
 
     @Test
     void aPlatformTenantTokenWithoutThePlatformRoleIsRefused() throws Exception {
-        signIn(PLATFORM_TENANT, List.of("SUPER_ADMIN"), PLATFORM_PERMS);
+        signIn("platform", PLATFORM_TENANT, List.of("SUPER_ADMIN"), PLATFORM_PERMS);
         expectAll(status().isForbidden());
         expectNothingRead();
     }
 
     @Test
     void aPlatformAdminWithoutTheCodeIsRefused() throws Exception {
-        signIn(PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), List.of("platform.admin"));
+        signIn("platform", PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), List.of("platform.admin"));
+        expectAll(status().isForbidden());
+        expectNothingRead();
+    }
+
+    @Test
+    void aWorkspaceSessionInThePlatformTenantIsRefused() throws Exception {
+        // F1: what /v1/canonical-auth/login and refresh minted for an operator before 9 Oct 2026.
+        signIn(PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), PLATFORM_PERMS);
         expectAll(status().isForbidden());
         expectNothingRead();
     }
 
     @Test
     void thePlatformAdminListsApprovesAndRejects() throws Exception {
-        signIn(PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), PLATFORM_PERMS);
+        signIn("platform", PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), PLATFORM_PERMS);
         expectAll(status().isOk());
         verify(saas).listTenantRequests(null);
         verify(saas).approveTenant(any(), any(), any());
