@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
-import { Lock, Users, UserCog, type LucideIcon } from 'lucide-react'
+import { Lock, Megaphone, Users, UserCog, type LucideIcon } from 'lucide-react'
 import { Button, EmptyState, ErrorState, PageFrame, PageHeader } from '@/design/kit/display'
 import { Input } from '@/design/kit/overlays'
 import '@/design/shell/shell.css'
@@ -10,6 +10,11 @@ import { APPS } from '@/layouts/appConfig'
 import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import { useBusinessSettings } from '@/layouts/businessSettings'
+import { useMarketingLauncher } from '@/core/marketing/useMarketingLauncher'
+import { MarketingAppTile, MarketingLaunchDialog } from '@/core/marketing/MarketingLaunch'
+
+/** Marketing Automation's catalogue module (the plan `marketing` includes it). */
+const MARKETING_MODULE = 'whatsapp'
 
 type Status = 'active' | 'coming-soon' | 'locked'
 
@@ -25,6 +30,7 @@ interface Tile {
   status: Status
   home: string                         // route when opened (active tiles only)
   sortOrder: number                    // preserved from module_plans.sort_order
+  launch?: boolean                     // the Marketing tile: opens Marketing (another app), not a route
 }
 
 /**
@@ -120,6 +126,8 @@ export const Modules: React.FC = () => {
   const { data: plans = [], isLoading: plansLoading, isError: plansError, isFetching: plansFetching, refetch: reloadPlans } = useModulePlans()
 
   const [query, setQuery] = useState('')
+  // Marketing (another app): a tile only when this build names it and the person has a company with it.
+  const marketing = useMarketingLauncher()
   // Business settings (master context §11): they open in the business frame (/business/*), not in HRMS.
   const settingsCards = useBusinessSettings()
 
@@ -134,8 +142,11 @@ export const Modules: React.FC = () => {
   // pseudo-tile (client feedback: real modules only; Settings lives in the
   // shell header). DB sort_order preserved (matches /pricing; HR first).
   const tiles = useMemo<Tile[]>(() => {
-    const catalog = plans
-      .filter(p => p.status !== 'RETIRED')
+    const live = plans.filter(p => p.status !== 'RETIRED')
+    // With the Marketing tile showing, the catalog's own Marketing plan would be a second Marketing tile.
+    const marketingPlan = live.find(p => p.includedModules.includes(MARKETING_MODULE))
+    const catalog = live
+      .filter(p => !(marketing.visible && p === marketingPlan))
       .map(p => planToTile(p, activeModules))
     // A public catalog outage must not lock people out of apps that the
     // authenticated workspace response already confirms are enabled.
@@ -147,12 +158,16 @@ export const Modules: React.FC = () => {
     // they keep the request-module flow; everyone else sees just the apps
     // their workspace has and they can open.
     const mine = isAdmin ? list : list.filter(t => t.status === 'active')
+    if (marketing.visible) {
+      mine.push({ key: 'marketing-launch', label: 'Marketing', description: 'Opens Marketing, signed in as you',
+        icon: Megaphone, status: 'active', home: '', sortOrder: marketingPlan?.sortOrder ?? 999, launch: true })
+    }
     const q = query.trim().toLowerCase()
     const filtered = q
       ? mine.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
       : mine
     return filtered.slice().sort((a, b) => a.sortOrder - b.sortOrder)
-  }, [plans, query, activeModules, isAdmin])
+  }, [plans, query, activeModules, isAdmin, marketing.visible])
 
   const greeting = (() => {
     const h = new Date().getHours()
@@ -218,6 +233,7 @@ export const Modules: React.FC = () => {
       ) : (
         <div className="ut-apps__grid">
           {tiles.map((tile, i) => {
+            if (tile.launch) return <MarketingAppTile key={tile.key} launcher={marketing} />
             const { status } = tile
             const locked = status === 'locked'
             const soon = status === 'coming-soon'
@@ -253,6 +269,7 @@ export const Modules: React.FC = () => {
           })}
         </div>
       )}
+      <MarketingLaunchDialog launcher={marketing} />
 
       {/* Locked hint for admins, quiet, under the grid */}
       {isAdmin && tiles.some(t => t.status === 'locked') && (
