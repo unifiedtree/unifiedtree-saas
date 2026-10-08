@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -128,13 +129,33 @@ class RazorpayCheckBeforePauseTest {
 
     @Test
     void razorpaySayingNoPausesInsteadOfFailingOpen() throws Exception {
-        // Wrong or rotated keys, unknown subscription: a fault on our side, not "can't reach Razorpay".
-        ledgerSays(unpaid);
-        when(quick.fetchSubscription(anyString())).thenThrow(new RazorpayClient.Refused(401, "bad keys"));
-        MockHttpServletResponse res = new MockHttpServletResponse();
+        // Razorpay doesn't know this subscription (400 / 404): it can't vouch for a payment, so the rule applies.
+        for (int status : new int[] {400, 404}) {
+            SubscriptionAccessGuard g = new SubscriptionAccessGuard(jdbc, razorpay, reconciler, "");
+            ledgerSays(unpaid);
+            doThrow(new RazorpayClient.Refused(status, "unknown subscription")).when(quick).fetchSubscription(anyString());
+            MockHttpServletResponse res = new MockHttpServletResponse();
 
-        assertThat(call("/v1/leave/types", res)).isFalse();
-        assertThat(res.getStatus()).isEqualTo(402);
+            assertThat(g.preHandle(new MockHttpServletRequest("GET", "/v1/leave/types"), res, null)).as("Razorpay %s", status).isFalse();
+            assertThat(res.getStatus()).isEqualTo(402);
+        }
+    }
+
+    @Test
+    void ourKeysRefusedOrRateLimitedFailOpenUntilTheCap() throws Exception {
+        // 401 (wrong / rotated keys) and 429 (rate limit) say nothing about this business's payment.
+        for (int status : new int[] {401, 429}) {
+            SubscriptionAccessGuard g = new SubscriptionAccessGuard(jdbc, razorpay, reconciler, "");
+            ledgerSays(unpaid);
+            doThrow(new RazorpayClient.Refused(status, "refused")).when(quick).fetchSubscription(anyString());
+            assertThat(g.preHandle(new MockHttpServletRequest("GET", "/v1/leave/types"), new MockHttpServletResponse(), null))
+                    .as("Razorpay %s inside the cap", status).isTrue();
+
+            g = new SubscriptionAccessGuard(jdbc, razorpay, reconciler, "");
+            ledgerSays(due(Duration.ofDays(10)));
+            assertThat(g.preHandle(new MockHttpServletRequest("GET", "/v1/leave/types"), new MockHttpServletResponse(), null))
+                    .as("Razorpay %s past the cap", status).isFalse();
+        }
     }
 
     @Test

@@ -323,6 +323,13 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         try {
             view = quickRazorpay.fetchSubscription(sub.razorpaySubscriptionId());
         } catch (RazorpayClient.Refused e) {
+            if (e.razorpayStatus() == 401 || e.razorpayStatus() == 429) {
+                // Our keys refused (401: wrong / rotated) or Razorpay rate-limiting us (429): nothing about this
+                // business's payment. Not paused until FAIL_OPEN_CAP past the pause point, as when unreachable.
+                log.error("SUBSCRIPTION_GUARD_RAZORPAY_REFUSED tenant={} sub={} razorpayStatus={} : {} — NOT pausing yet; check the Razorpay keys",
+                        tenantId, sub.razorpaySubscriptionId(), e.razorpayStatus(), e.getReason());
+                return Answer.UNREACHABLE;
+            }
             log.error("SUBSCRIPTION_GUARD_RAZORPAY_REFUSED tenant={} sub={} razorpayStatus={} : {} — pausing; check the Razorpay keys",
                     tenantId, sub.razorpaySubscriptionId(), e.razorpayStatus(), e.getReason());
             return Answer.REFUSED;
