@@ -60,7 +60,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Every {@code /v1/platform/admin/**} endpoint, through the controllers' real
  * {@code @PreAuthorize} and Spring's method security: a business OWNER / SUPER_ADMIN token is
  * refused (403) even when it carries every platform.* permission, and nothing behind the
- * controllers is touched. Only a platform-tenant PLATFORM_SUPER_ADMIN token gets in.
+ * controllers is touched. Only the operator door's token (token_type=platform, the platform tenant, PLATFORM_SUPER_ADMIN)
+ * gets in.
  */
 class PlatformAdminAccessMockMvcTest {
 
@@ -177,9 +178,15 @@ class PlatformAdminAccessMockMvcTest {
     }
 
     private static void signIn(String tenantId, List<String> roles, List<String> permissions) {
-        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"),
-                Map.of("sub", UUID.randomUUID().toString(), "tenant_id", tenantId, "email", "x@example.com",
-                        "roles", roles, "permissions", permissions));
+        signIn(null, tenantId, roles, permissions);
+    }
+
+    /** {@code tokenType} null = a workspace token (canonical sign-in mints no token_type). */
+    private static void signIn(String tokenType, String tenantId, List<String> roles, List<String> permissions) {
+        Map<String, Object> claims = new java.util.HashMap<>(Map.of("sub", UUID.randomUUID().toString(),
+                "tenant_id", tenantId, "email", "x@example.com", "roles", roles, "permissions", permissions));
+        if (tokenType != null) claims.put("token_type", tokenType);
+        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"), claims);
         List<GrantedAuthority> authorities = new ArrayList<>();
         roles.forEach(r -> authorities.add(new SimpleGrantedAuthority("ROLE_" + r)));
         permissions.forEach(p -> authorities.add(new SimpleGrantedAuthority(p)));
@@ -215,8 +222,28 @@ class PlatformAdminAccessMockMvcTest {
     }
 
     @Test
-    void thePlatformOperatorGetsIn() throws Exception {
+    void aWorkspaceSessionInThePlatformTenantIsRefusedEverywhere() throws Exception {
+        // F1: what the business sign-in (/v1/canonical-auth/login, refresh) minted for an operator before
+        // 9 Oct 2026: the platform tenant and PLATFORM_SUPER_ADMIN, but no token_type=platform.
         signIn(PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), ALL_PLATFORM_PERMS);
+        expectEveryEndpointRefused();
+    }
+
+    @Test
+    void anotherTokenTypeInThePlatformTenantIsRefusedEverywhere() throws Exception {
+        signIn("station", PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), ALL_PLATFORM_PERMS);
+        expectEveryEndpointRefused();
+    }
+
+    @Test
+    void aPlatformTokenTypeForABusinessIsRefusedEverywhere() throws Exception {
+        signIn("platform", WORKSPACE, List.of("PLATFORM_SUPER_ADMIN"), ALL_PLATFORM_PERMS);
+        expectEveryEndpointRefused();
+    }
+
+    @Test
+    void thePlatformOperatorGetsIn() throws Exception {
+        signIn("platform", PLATFORM_TENANT, List.of("PLATFORM_SUPER_ADMIN"), ALL_PLATFORM_PERMS);
         mvc.perform(request(HttpMethod.GET, "/v1/platform/admin/settings/billing")).andExpect(status().isOk());
         mvc.perform(request(HttpMethod.GET, "/v1/platform/admin/marketing/channels")).andExpect(status().isOk());
     }

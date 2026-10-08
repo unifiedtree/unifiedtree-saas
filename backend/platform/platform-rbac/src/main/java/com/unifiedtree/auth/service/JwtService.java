@@ -102,6 +102,35 @@ public class JwtService {
         return new IssuedToken(builder.signWith(signingKey, Jwts.SIG.HS256).compact(), exp, accessTokenTtl);
     }
 
+    /** The {@code token_type} of a platform operator's token (see {@link #issuePlatformToken}). */
+    public static final String PLATFORM_TOKEN_TYPE = "platform";
+
+    /**
+     * The sign-in of a UnifiedTree platform operator ({@code POST /v1/platform/auth/login}): the
+     * platform tenant, the operator's roles and permissions, and {@code token_type=platform}.
+     * PlatformAdminAccess lets only this token into the operator console; a workspace token
+     * ({@link #issueAccessToken}) never carries that claim, so even a workspace session in the
+     * platform tenant cannot pass. No session id and no refresh token.
+     */
+    public IssuedToken issuePlatformToken(UUID userId, UUID platformTenantId, String email,
+                                          List<String> roleCodes, List<String> permissions) {
+        Instant now = Instant.now();
+        Instant exp = now.plus(accessTokenTtl);
+        String token = Jwts.builder()
+            .issuer(issuer)
+            .subject(userId.toString())
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(exp))
+            .claim("token_type",  PLATFORM_TOKEN_TYPE)
+            .claim("tenant_id",   platformTenantId.toString())
+            .claim("email",       email)
+            .claim("roles",       roleCodes)
+            .claim("permissions", permissions)
+            .signWith(signingKey, Jwts.SIG.HS256)
+            .compact();
+        return new IssuedToken(token, exp, accessTokenTtl);
+    }
+
     public IssuedToken issueAccountToken(UUID accountId, String email) {
         Instant now = Instant.now();
         Instant exp = now.plus(accessTokenTtl);

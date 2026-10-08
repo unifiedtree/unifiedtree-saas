@@ -127,6 +127,44 @@ class PasswordResetTest {
         assertEquals(otherWorkspace, issuedTokenWorkspace());
     }
 
+    // ---- platform operators (F1, 9 Oct 2026) ---------------------------------
+
+    private static final UUID PLATFORM = TenantContext.PLATFORM_TENANT_ID;
+
+    @Test
+    void aPlatformOperatorAddressGetsNoLinkWhenThePlatformTenantIsNamed() {
+        when(auth.resolveLoginTenant(EMAIL)).thenReturn(null);   // routing never names the platform tenant
+
+        service.requestPasswordReset(EMAIL, PLATFORM, null);
+
+        verify(auth).resolveLoginTenant(EMAIL);
+        verify(credRepo, never()).findByEmailIgnoreCase(any());
+        verify(tokenRepo, never()).save(any());
+    }
+
+    @Test
+    void aPlatformOperatorAddressGetsNoLinkFromThePlatformAddress() {
+        when(auth.resolveLoginTenant(EMAIL)).thenReturn(null);
+        when(jdbc.queryForList(startsWith("SELECT id FROM platform.tenants"), eq(UUID.class), eq("unifiedtree")))
+                .thenReturn(List.of(PLATFORM));
+        when(jdbc.queryForObject(contains("FROM auth.user_credentials WHERE tenant_id = ?"), eq(Integer.class),
+                eq(PLATFORM), eq(EMAIL))).thenReturn(1);
+
+        service.requestPasswordReset(EMAIL, null, "unifiedtree");
+
+        verify(credRepo, never()).findByEmailIgnoreCase(any());
+        verify(tokenRepo, never()).save(any());
+    }
+
+    @Test
+    void anOperatorAddressThatIsAlsoABusinessLoginStillGetsThatBusinesssLink() {
+        credentialIn(otherWorkspace);
+
+        service.requestPasswordReset(EMAIL, PLATFORM, null);
+
+        assertEquals(otherWorkspace, issuedTokenWorkspace());
+    }
+
     @Test
     void controllerPassesThePagesWorkspaceThrough() {
         InvitationService svc = mock(InvitationService.class);

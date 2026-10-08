@@ -131,13 +131,20 @@ public class AuthService {
      * step. Returns null when the email matches no workspace (caller surfaces a
      * generic invalid-credentials error); when it matches several, returns the
      * most-recently-logged-into one (see the loop below).
+     *
+     * <p>Never the platform tenant: platform operators are not workspace users
+     * ({@link WorkspaceSignInRule#isPlatformOperator}).
      */
     public UUID resolveLoginTenant(String email) {
         if (email == null || email.isBlank()) return null;
         final String norm = email.trim();
         if (singleLookupAvailable()) {
             // One indexed lookup (V143.2) instead of two queries per workspace.
-            return jdbc.queryForObject("SELECT auth.login_tenant_for_email(?)", UUID.class, norm);
+            UUID found = jdbc.queryForObject("SELECT auth.login_tenant_for_email(?)", UUID.class, norm);
+            // The lookup can still name the platform tenant (an operator's email). Then look
+            // again among the businesses only, so an address that is also a business login
+            // still reaches that business; the scan below skips the platform tenant.
+            if (!TenantContext.PLATFORM_TENANT_ID.equals(found)) return found;
         }
         List<UUID> tenantIds;
         try {
@@ -159,6 +166,7 @@ public class AuthService {
         UUID match = null;
         double bestEpoch = Double.NEGATIVE_INFINITY;
         for (UUID t : tenantIds) {
+            if (TenantContext.PLATFORM_TENANT_ID.equals(t)) continue;
             try {
                 jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)",
                         String.class, t.toString());
@@ -223,6 +231,12 @@ public class AuthService {
         // boundary, so honor that when the request omits it.
         UUID tenantId = req.tenantId() != null ? req.tenantId() : TenantContext.getTenantId();
 
+        // Platform operators sign in at /v1/platform/auth/login only: here the
+        // platform tenant answers exactly like an unknown email.
+        if (TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
+            throw new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS");
+        }
+
         // Bind the resolved tenant id BEFORE touching the repos so RLS can scope
         // auth.user_credentials and rbac.user_roles correctly.
         TenantContext.setTenantId(tenantId);
@@ -244,7 +258,11 @@ public class AuthService {
             throw new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS");
         }
 
-        MfaService.Requirement need = mfa.requirementFor(tenantId, creds.getId(), roleCodesFor(creds.getId()));
+        List<String> roleCodes = roleCodesFor(creds.getId());
+        if (WorkspaceSignInRule.isPlatformOperator(tenantId, roleCodes)) {
+            throw new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS");
+        }
+        MfaService.Requirement need = mfa.requirementFor(tenantId, creds.getId(), roleCodes);
         if (need == MfaService.Requirement.NONE) {
             return new LoginOutcome(issueSession(creds, tenantId), null, null, creds.getEmail());
         }
@@ -271,6 +289,9 @@ public class AuthService {
      * checked the code). Same account checks as a password sign-in.
      */
     public LoginResponse completeMfaLogin(UUID tenantId, UUID userId) {
+        if (TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
+            throw new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS");
+        }
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
         UserCredentials creds = credentialsRepo.findByIdForSession(userId)
@@ -314,7 +335,9 @@ public class AuthService {
             // One indexed lookup (V143.2) names the token's workspace; the loop
             // below then runs once, for that workspace only.
             UUID owner = jdbc.queryForObject("SELECT auth.refresh_token_tenant(?)", UUID.class, hash);
-            if (owner == null) {
+            // A platform-tenant token (only the workspace door ever minted one, before F1 was
+            // closed) is answered like an unknown token: operators get no workspace session.
+            if (owner == null || TenantContext.PLATFORM_TENANT_ID.equals(owner)) {
                 throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_NOT_FOUND");
             }
             tenantIds = List.of(owner);
@@ -327,6 +350,7 @@ public class AuthService {
         }
 
         for (UUID t : tenantIds) {
+            if (TenantContext.PLATFORM_TENANT_ID.equals(t)) continue;
             try {
                 jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)",
                         String.class, t.toString());
@@ -402,6 +426,10 @@ public class AuthService {
      * service before calling this method.
      */
     public LoginResponse issueWorkspaceSession(UUID tenantId, UUID authUserId) {
+        // Phone, Google and account hand-over: the platform tenant is no workspace.
+        if (TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
+            throw new BusinessRuleException("Workspace account not found", "WORKSPACE_USER_NOT_FOUND");
+        }
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
 
@@ -423,11 +451,6 @@ public class AuthService {
     }
 
     private LoginResponse issueSession(UserCredentials creds, UUID tenantId, SessionCarry carry) {
-        // Reset failure counter on success and update audit-friendly login time.
-        creds.setFailedLoginCount(0);
-        creds.setLastLoginAt(OffsetDateTime.now());
-        credentialsRepo.save(creds);
-
         List<UUID> roleIds = userRoleRepo.findAllByUserId(creds.getId())
             .stream().map(UserRole::getRoleId).toList();
 
@@ -437,6 +460,17 @@ public class AuthService {
                 .map(com.unifiedtree.rbac.entity.Role::getCode)
                 .sorted()
                 .collect(Collectors.toList());
+
+        // The last line for every way in: never a workspace session for a platform
+        // operator (each door above already refuses them with its own answer).
+        if (WorkspaceSignInRule.isPlatformOperator(tenantId, roleCodes)) {
+            throw new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS");
+        }
+
+        // Reset failure counter on success and update audit-friendly login time.
+        creds.setFailedLoginCount(0);
+        creds.setLastLoginAt(OffsetDateTime.now());
+        credentialsRepo.save(creds);
 
         // Effective permissions = assigned-role grants UNION the employee
         // baseline. Being an employee is a fact (the credential carries an
@@ -519,6 +553,9 @@ public class AuthService {
     /** Issue a session for a user that just activated via invitation/password reset. */
     @Transactional
     public LoginResponse issueSessionForActivatedUser(UUID userId, UUID tenantId) {
+        if (TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
+            throw new BusinessRuleException("User not found", "USER_NOT_FOUND");
+        }
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
         UserCredentials creds = credentialsRepo.findByIdForSession(userId)

@@ -803,7 +803,7 @@ public class SaasService {
                     rs -> rs.next() ? rs.getString(1) : "Platform Admin",
                     PLATFORM_TENANT_ID);
 
-            JwtService.IssuedToken issued = jwt.issueAccessToken(
+            JwtService.IssuedToken issued = jwt.issuePlatformToken(
                     userId, PLATFORM_TENANT_ID, email, roleCodes, permissions);
             return new PlatformLoginResponse(
                     issued.token(),

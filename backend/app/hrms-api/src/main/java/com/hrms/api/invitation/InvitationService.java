@@ -384,6 +384,12 @@ public class InvitationService {
         if (tenantId == null) {
             tenantId = workspaceWithAccount(workspaceSubdomain, email);
         }
+        // Platform operators are not workspace users (WorkspaceSignInRule.isPlatformOperator):
+        // a workspace page never sends them a reset link. An address that is also a business
+        // login is routed to that business below (resolveLoginTenant skips the platform tenant).
+        if (TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
+            tenantId = null;
+        }
         // auth.user_credentials runs FORCE ROW LEVEL SECURITY with the policy
         // `tenant_id = current_tenant_id()`. This endpoint is unauthenticated, so
         // unless a tenant is bound on the DB session BEFORE the lookup, the query

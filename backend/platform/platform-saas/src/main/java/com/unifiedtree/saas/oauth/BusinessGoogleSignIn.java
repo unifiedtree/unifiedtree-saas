@@ -59,12 +59,15 @@ public class BusinessGoogleSignIn {
         return SUBDOMAIN.matcher(s).matches() ? s : null;
     }
 
-    /** Whether an ACTIVE business holds this address (the same test {@link #signIn} starts with). */
+    /**
+     * Whether an ACTIVE business holds this address (the same test {@link #signIn} starts with). The platform
+     * tenant is not a business: its operators sign in at /v1/platform/auth/login only.
+     */
     public boolean isOpen(String subdomain) {
         if (subdomain == null) return false;
-        return !jdbc.queryForList(
+        return jdbc.queryForList(
                 "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?) AND status = 'ACTIVE'",
-                UUID.class, subdomain).isEmpty();
+                UUID.class, subdomain).stream().anyMatch(id -> !TenantContext.PLATFORM_TENANT_ID.equals(id));
     }
 
     public String businessUrl(String subdomain) {
@@ -80,7 +83,7 @@ public class BusinessGoogleSignIn {
         List<UUID> tenants = jdbc.queryForList(
                 "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?) AND status = 'ACTIVE'",
                 UUID.class, subdomain);
-        if (tenants.isEmpty()) throw new Refused("BUSINESS_NOT_FOUND");
+        if (tenants.isEmpty() || TenantContext.PLATFORM_TENANT_ID.equals(tenants.get(0))) throw new Refused("BUSINESS_NOT_FOUND");
         UUID tenantId = tenants.get(0);
         if (verifiedEmail == null || verifiedEmail.isBlank()) throw new Refused("GOOGLE_NOT_REGISTERED");
 
