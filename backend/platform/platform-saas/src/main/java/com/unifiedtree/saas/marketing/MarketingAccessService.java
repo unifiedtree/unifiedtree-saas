@@ -61,6 +61,11 @@ public class MarketingAccessService {
     public static final String AUDIENCE = "marketing";
     public static final Duration TICKET_TTL = Duration.ofSeconds(60);
 
+    /** Why a ticket was refused (401), in the body's {@code code}: unknown or malformed, already redeemed, past its minute */
+    public static final String TICKET_INVALID = "TICKET_INVALID";
+    public static final String TICKET_USED = "TICKET_USED";
+    public static final String TICKET_EXPIRED = "TICKET_EXPIRED";
+
     /** Roles that make someone an administrator of the company's Marketing (owner principal). */
     static final Set<String> MARKETING_ADMIN_ROLES = Set.of("OWNER", "SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN");
     static final Set<String> MARKETING_ADMIN_WORKSPACE_ROLES = Set.of("OWNER", "ADMIN");
@@ -123,7 +128,7 @@ public class MarketingAccessService {
                 "SELECT is_active FROM org.companies WHERE id = ?", (rs, i) -> rs.getBoolean(1), companyId)
                 .stream().findFirst().orElse(null));
         if (active == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+            throw new MarketingRefusal(HttpStatus.NOT_FOUND, "COMPANY_NOT_FOUND",
                     "COMPANY_NOT_FOUND: That company is not in that workspace");
         }
         if (!active) throw forbidden("COMPANY_INACTIVE", "That company has been archived");
@@ -223,21 +228,24 @@ public class MarketingAccessService {
 
     /**
      * Redeem a ticket once, then re-verify the account, company and entitlement.
-     * 401 when the ticket is unknown, expired or already used. The ticket is consumed in its
-     * own committed transaction first: a re-verify that refuses (403) leaves it used, not
-     * redeemable again.
+     * 401 when the ticket is unknown ({@value #TICKET_INVALID}), already used ({@value #TICKET_USED}) or expired
+     * ({@value #TICKET_EXPIRED}). The ticket is consumed in its own committed transaction first: a re-verify that
+     * refuses (403) leaves it used, not redeemable again.
      */
     public MarketingIdentity redeem(String ticket) {
         if (ticket == null || ticket.length() < 20 || ticket.length() > 100) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid handoff ticket");
+            throw new MarketingRefusal(HttpStatus.UNAUTHORIZED, TICKET_INVALID, "Invalid handoff ticket");
         }
+        String hash = sha256(ticket);
         List<Map<String, Object>> used = consumeTx.execute(status -> jdbc.queryForList("""
                 UPDATE platform.sso_handoff_tickets SET consumed_at = now()
                  WHERE ticket_hash = ? AND audience = ? AND consumed_at IS NULL AND expires_at > now()
                 RETURNING account_id, tenant_id, company_id
-                """, sha256(ticket), AUDIENCE));
+                """, hash, AUDIENCE));
         if (used.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Handoff ticket is invalid, expired or already used");
+            // One message for all three, as before; the code says which
+            throw new MarketingRefusal(HttpStatus.UNAUTHORIZED, whyNotRedeemable(hash),
+                    "Handoff ticket is invalid, expired or already used");
         }
         Map<String, Object> t = used.get(0);
         return verify((UUID) t.get("account_id"), (UUID) t.get("tenant_id"), (UUID) t.get("company_id"));
@@ -348,6 +356,20 @@ public class MarketingAccessService {
 
     // ── internals ───────────────────────────────────────────────────────────
 
+    /**
+     * Why a ticket could not be consumed, read after the refused UPDATE: used wins over expired; no row (never minted,
+     * another audience, or expired over a day ago and cleaned up) is invalid. Only the hash is looked up.
+     */
+    private String whyNotRedeemable(String hash) {
+        Map<String, Object> row = jdbc.queryForList("""
+                SELECT consumed_at IS NOT NULL AS used, expires_at <= now() AS expired
+                  FROM platform.sso_handoff_tickets WHERE ticket_hash = ? AND audience = ?
+                """, hash, AUDIENCE).stream().findFirst().orElse(null);
+        if (row == null) return TICKET_INVALID;
+        if (Boolean.TRUE.equals(row.get("used"))) return TICKET_USED;
+        return Boolean.TRUE.equals(row.get("expired")) ? TICKET_EXPIRED : TICKET_INVALID;
+    }
+
     private Map<String, Object> membership(UUID accountId, UUID tenantId) {
         List<Map<String, Object>> m = jdbc.queryForList("""
                 SELECT aw.auth_user_id, aw.role::text AS role, a.email, a.display_name, a.status::text AS acct_status,
@@ -435,7 +457,7 @@ public class MarketingAccessService {
     }
 
     private static ResponseStatusException forbidden(String code, String message) {
-        return new ResponseStatusException(HttpStatus.FORBIDDEN, code + ": " + message);
+        return new MarketingRefusal(HttpStatus.FORBIDDEN, code, code + ": " + message);
     }
 
     private static String clip(String s, int max) {

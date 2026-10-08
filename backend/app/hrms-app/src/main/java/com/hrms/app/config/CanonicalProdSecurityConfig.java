@@ -17,15 +17,22 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
+import org.springframework.security.oauth2.server.resource.web.access.BearerTokenAccessDeniedHandler;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
+import org.springframework.security.web.access.DelegatingAccessDeniedHandler;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.SecretKey;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -237,7 +244,8 @@ public class CanonicalProdSecurityConfig {
                 // Server-to-server API for Marketing Automation (Node): no user JWT, the
                 // shared service token instead. Checked HERE, with the same (decoded-path)
                 // matcher that routes the request, so no encoding of the path can skip it;
-                // 401 here when the token is missing, wrong or not configured; MarketingServiceTokenFilter checks again.
+                // 401 here when the token is missing, wrong or not configured (JSON body, code SERVICE_TOKEN_REJECTED:
+                // see the entry point below); MarketingServiceTokenFilter checks again.
                 .requestMatchers("/v1/internal/marketing/**")
                     .access((authentication, context) ->
                             new AuthorizationDecision(marketingServiceToken.hasValidToken(context.getRequest())))
@@ -258,6 +266,13 @@ public class CanonicalProdSecurityConfig {
             )
             .oauth2ResourceServer(oauth -> oauth
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                // Spring's own defaults, wrapped: a refused /v1/internal/marketing/** call keeps its status and
+                // headers and also gets a JSON body with code SERVICE_TOKEN_REJECTED (it was empty). Every other
+                // path is answered by the defaults alone, exactly as before.
+                .authenticationEntryPoint(marketingServiceToken.entryPoint(new BearerTokenAuthenticationEntryPoint()))
+                .accessDeniedHandler(marketingServiceToken.accessDeniedHandler(new DelegatingAccessDeniedHandler(
+                        new LinkedHashMap<>(Map.of(CsrfException.class, new AccessDeniedHandlerImpl())),
+                        new BearerTokenAccessDeniedHandler())))
             )
             // TenantContextFilter must run AFTER BearerTokenAuthenticationFilter
             // so SecurityContext has the parsed JWT principal by the time the
