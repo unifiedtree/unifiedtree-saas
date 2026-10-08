@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UrlPathHelper;
@@ -38,6 +40,10 @@ import java.time.Instant;
  * 503 if the chain ever let an unconfigured request through). Deciding on the
  * raw request URI alone let {@code /v1/inte%72nal/...} skip the check while still routing to
  * the controller.
+ *
+ * <p>Every refusal answers JSON with {@code code} {@value #REJECTED} (docs/redesign/MARKETING_SSO_CODES.md), also
+ * when the security chain refuses: it uses {@link #entryPoint} and {@link #accessDeniedHandler}. The presented token
+ * is never echoed or logged.
  */
 @Component
 public class MarketingServiceTokenFilter extends OncePerRequestFilter {
@@ -45,6 +51,8 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
     public static final String HEADER = "X-UnifiedTree-Service-Token";
     static final String PREFIX = "/v1/internal/marketing/";
     static final int MIN_LENGTH = 32;
+    /** The {@code code} of every service-token refusal: missing, wrong, or none configured on this server */
+    public static final String REJECTED = "SERVICE_TOKEN_REJECTED";
 
     private static final Logger log = LoggerFactory.getLogger(MarketingServiceTokenFilter.class);
     /** Decodes %-escapes and drops ;path-parameters, like request routing does */
@@ -64,7 +72,7 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         // Internal when either the decoded or the raw path is under the prefix
-        return !path(request).startsWith(PREFIX) && !rawPath(request).startsWith(PREFIX);
+        return !isInternal(request);
     }
 
     /** Whether the request carries the configured service token. Also the security chain's rule for the prefix. */
@@ -82,12 +90,42 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
             return;
         }
         if (!hasValidToken(request)) {
-            log.warn("Refused internal API call to {} from {}: bad or missing service token", path(request),
-                    request.getRemoteAddr());
-            deny(response, 401, "INVALID_SERVICE_TOKEN", "A valid service token is required");
+            refuse(request, response, 401);
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * The security chain's entry point. For the internal API (which the chain refuses before this filter runs):
+     * {@code fallback}'s status and headers, as before, then this filter's JSON body instead of an empty one. Any
+     * other path gets {@code fallback} alone.
+     */
+    public AuthenticationEntryPoint entryPoint(AuthenticationEntryPoint fallback) {
+        return (request, response, failure) -> {
+            fallback.commence(request, response, failure);
+            if (isInternal(request) && !response.isCommitted()) refuse(request, response, response.getStatus());
+        };
+    }
+
+    /** The same for a caller signed in with a user's token but without the service token (403, as before) */
+    public AccessDeniedHandler accessDeniedHandler(AccessDeniedHandler fallback) {
+        return (request, response, denied) -> {
+            fallback.handle(request, response, denied);
+            if (isInternal(request) && !response.isCommitted()) refuse(request, response, response.getStatus());
+        };
+    }
+
+    /** Under the internal prefix, on the decoded or the raw path (what this filter guards) */
+    static boolean isInternal(HttpServletRequest request) {
+        return path(request).startsWith(PREFIX) || rawPath(request).startsWith(PREFIX);
+    }
+
+    private static void refuse(HttpServletRequest request, HttpServletResponse response, int status)
+            throws IOException {
+        log.warn("Refused internal API call to {} from {}: bad or missing service token", path(request),
+                request.getRemoteAddr());
+        deny(response, status, "INVALID_SERVICE_TOKEN", "A valid service token is required");
     }
 
     /** The decoded path within the application (context path removed): what routing and the security chain see */
@@ -101,10 +139,12 @@ public class MarketingServiceTokenFilter extends OncePerRequestFilter {
         return ctx != null && !ctx.isEmpty() && uri.startsWith(ctx) ? uri.substring(ctx.length()) : uri;
     }
 
-    private static void deny(HttpServletResponse response, int status, String code, String message) throws IOException {
+    private static void deny(HttpServletResponse response, int status, String errorCode, String message)
+            throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write("{\"timestamp\":\"" + Instant.now() + "\",\"status\":" + status
-                + ",\"errorCode\":\"" + code + "\",\"message\":\"" + message + "\"}");
+                + ",\"errorCode\":\"" + errorCode + "\",\"message\":\"" + message + "\",\"code\":\"" + REJECTED
+                + "\"}");
     }
 }
