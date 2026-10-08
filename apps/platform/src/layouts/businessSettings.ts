@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { Building2, CreditCard, History, Palette, ShieldCheck, Users, type LucideIcon } from 'lucide-react'
+import { Building2, CreditCard, History, KeyRound, Palette, ShieldCheck, Users, type LucideIcon } from 'lucide-react'
+import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useVisibleEntries } from '@/shared/navigation/useAccess'
 
 /**
@@ -25,6 +26,7 @@ const BUSINESS_SETTINGS: { id: string; label: string; desc: string; icon: Lucide
 /** The business settings this person can open, in order. */
 export function useBusinessSettings(): BusinessSettingsItem[] {
   const { ctx, entries } = useVisibleEntries()
+  const isOwner = useSdkStore((st) => (st.user?.roles ?? []).includes('OWNER'))
   return useMemo(() => {
     const byId = new Map(entries.map(e => [e.id, e]))
     const items: BusinessSettingsItem[] = []
@@ -35,6 +37,8 @@ export function useBusinessSettings(): BusinessSettingsItem[] {
       const e = byId.get(s.id)
       if (e && e.state !== 'locked') items.push({ key: s.id, label: s.label, desc: s.desc, icon: s.icon, path: s.path })
     }
+    // Only the owner can hand the business over (the person offered reaches it from their notification).
+    if (isOwner) items.push({ key: 'ownership', label: 'Ownership', desc: 'Hand the business to someone else', icon: KeyRound, path: '/business/ownership' })
     return items
-  }, [entries, ctx])
+  }, [entries, ctx, isOwner])
 }

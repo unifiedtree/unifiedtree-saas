@@ -53,6 +53,7 @@ const Settings = lazyPage(() => import('@/pages/Settings').then(m => ({ default:
 const Profile = lazyPage(() => import('@/pages/Profile').then(m => ({ default: m.Profile })))
 const AuditLogs = lazyPage(() => import('@/pages/AuditLogs').then(m => ({ default: m.AuditLogs })))
 const Users = lazyPage(() => import('@/pages/Users').then(m => ({ default: m.Users })))
+const Ownership = lazyPage(() => import('@/pages/business/Ownership').then(m => ({ default: m.Ownership })))
 const Roles = lazyPage(() => import('@/pages/Roles').then(m => ({ default: m.Roles })))
 const Modules = lazyPage(() => import('@/pages/Modules').then(m => ({ default: m.Modules })))
 const Plan = lazyPage(() => import('@/pages/Plan').then(m => ({ default: m.Plan })))
@@ -241,6 +242,8 @@ export const ROUTE_TREE = (
         <Route path="/business/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
         <Route path="/business/billing"    element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings tab="billing" /></RequirePermission>} />
         <Route path="/business/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
+        {/* Ownership transfer: the owner starts it; the person offered answers it here (their notification links here). */}
+        <Route path="/business/ownership"  element={<Ownership />} />
       </Route>
 
       {/* Protected shell */}

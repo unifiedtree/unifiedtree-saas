@@ -102,6 +102,7 @@ public final class AccessPolicy {
     public static void requireCanGrantRole(Actor actor, String roleCode, String roleName,
                                            Collection<String> rolePermissions, Map<String, String> riskByCode) {
         String label = roleName == null || roleName.isBlank() ? roleCode : roleName;
+        requireNotOwnerRole(roleCode);
         if (NEVER_ASSIGNABLE_ROLES.contains(roleCode)) {
             throw refused("The " + label + " role can’t be given here.", "ROLE_NOT_ASSIGNABLE");
         }
@@ -128,8 +129,19 @@ public final class AccessPolicy {
         }
     }
 
+    /**
+     * Exactly one owner (owner decision, 6 Oct 2026): the Owner role is never given or taken away
+     * here — only by Transfer ownership (OwnershipTransferService), which moves it in one step.
+     */
+    public static void requireNotOwnerRole(String roleCode) {
+        if ("OWNER".equals(roleCode)) {
+            throw refused("The owner changes only through Transfer ownership in Business settings.", "OWNER_BY_TRANSFER_ONLY");
+        }
+    }
+
     /** Rule 2 for taking a role away: OWNER / SUPER_ADMIN only by an OWNER. */
     public static void requireCanRevokeRole(Actor actor, String roleCode, String roleName) {
+        requireNotOwnerRole(roleCode);
         if (OWNER_ONLY_ROLES.contains(roleCode) && !actor.owner()) {
             String label = roleName == null || roleName.isBlank() ? roleCode : roleName;
             throw refused("Only the workspace owner can take away the " + label + " role.", "OWNER_ONLY");
