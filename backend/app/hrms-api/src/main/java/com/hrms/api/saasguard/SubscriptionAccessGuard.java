@@ -137,6 +137,8 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
      *  ConcurrentHashMap is fine; the guard runs on the request thread, no
      *  cross-request sharing beyond the map itself. */
     private final ConcurrentHashMap<UUID, Long> recentDenyCache = new ConcurrentHashMap<>();
+    /** Per-tenant "Razorpay couldn't be asked" cache: not paused, and not re-asked for DENY_CACHE_TTL_SECONDS. */
+    private final ConcurrentHashMap<UUID, Long> recentUnreachableCache = new ConcurrentHashMap<>();
 
     @Autowired
     public SubscriptionAccessGuard(JdbcTemplate jdbc,
@@ -201,44 +203,50 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         AccessDecision d = evaluate(sub, now);
         if (d.allowed()) return true;
 
-        // SAFETY CHECK — before writing 402, if we can talk to Razorpay
-        // verify the customer really is unpaid. Client's explicit ask
-        // (2026-08-07): "we should not stop giving access even though we
-        // got received amount". Motivation: a lost / delayed subscription.charged
-        // webhook would leave OUR ledger in HALTED past grace while Razorpay
-        // has the customer as ACTIVE. Without this check, we'd 402 a paying
-        // customer. With it, we detect the mismatch, promote our row to
-        // ACTIVE via the shared reconciler, and let the request through.
-        //
-        // Only fires for HALTED subscriptions with a razorpay_subscription_id
-        // and only once every DENY_CACHE_TTL_SECONDS per tenant so a hammered
-        // 402 loop can't hammer Razorpay too. Terminal statuses (CANCELLED /
-        // COMPLETED / EXPIRED) are NEVER auto-restored — a customer who
-        // legitimately cancelled must re-subscribe.
-        if ("HALTED".equals(sub.status())
+        // Only the unpaid modules pause: a call that needs no module (sign-in, /me, settings,
+        // users, notifications…) or a module this subscription doesn't cover goes through —
+        // decided first, so those calls never reach Razorpay.
+        String moduleKey = TenantModuleGuard.moduleForPath(path);
+        if (!pauses(sub, moduleKey)) return true;
+
+        // CHECK WITH RAZORPAY BEFORE PAUSING (owner, 7 Oct 2026; client's ask of 2026-08-07: "we
+        // should not stop giving access even though we got received amount"). A lost / delayed
+        // subscription.charged webhook would leave OUR ledger PAST_DUE or HALTED while Razorpay has
+        // the customer paid. So before pausing for non-payment we ask Razorpay; when it says paid,
+        // the shared reconciler promotes our row to ACTIVE and the request goes through. When
+        // Razorpay can't be reached we do NOT pause (a paying business must never be paused); we
+        // retry after DENY_CACHE_TTL_SECONDS. Once per tenant per DENY_CACHE_TTL_SECONDS either way,
+        // so a busy page can't hammer Razorpay. Terminal statuses (CANCELLED / COMPLETED /
+        // EXPIRED) are not non-payment and are never auto-restored.
+        if (("HALTED".equals(sub.status()) || "PAST_DUE".equals(sub.status()))
                 && sub.razorpaySubscriptionId() != null
                 && !sub.razorpaySubscriptionId().isBlank()
-                && razorpay != null && reconciler != null
-                && !recentlyChecked(tenantId, now)) {
-            String upstream = reconciler.reconcileFromRazorpay(sub.razorpaySubscriptionId(), razorpay);
-            recentDenyCache.put(tenantId, now.getEpochSecond());
-            // Re-read our ledger — reconcileFromRazorpay may have promoted us
-            // to ACTIVE if Razorpay says the charge went through.
-            SubStatus fresh = loadStatus(tenantId);
-            if (fresh != null) {
-                AccessDecision d2 = evaluate(fresh, now);
-                if (d2.allowed()) {
-                    log.info("subscription-guard AUTO-RESTORE  tenant={} was={} now={} razorpay={}",
-                            tenantId, sub.status(), fresh.status(), upstream);
+                && razorpay != null && reconciler != null) {
+            if (recentlyUnreachable(tenantId, now)) {
+                return true;
+            }
+            if (!recentlyChecked(tenantId, now)) {
+                String upstream = reconciler.reconcileFromRazorpay(sub.razorpaySubscriptionId(), razorpay);
+                if (upstream == null) {
+                    recentUnreachableCache.put(tenantId, now.getEpochSecond());
+                    log.warn("subscription-guard NOT PAUSING (Razorpay unreachable, can't confirm non-payment)  tenant={} status={}",
+                            tenantId, sub.status());
                     return true;
+                }
+                recentDenyCache.put(tenantId, now.getEpochSecond());
+                // Re-read our ledger — reconcileFromRazorpay may have promoted us
+                // to ACTIVE if Razorpay says the charge went through.
+                SubStatus fresh = loadStatus(tenantId);
+                if (fresh != null) {
+                    AccessDecision d2 = evaluate(fresh, now);
+                    if (d2.allowed()) {
+                        log.info("subscription-guard AUTO-RESTORE  tenant={} was={} now={} razorpay={}",
+                                tenantId, sub.status(), fresh.status(), upstream);
+                        return true;
+                    }
                 }
             }
         }
-
-        // Only the unpaid modules pause: a call that needs no module (sign-in, /me, settings,
-        // users, notifications…) or a module this subscription doesn't cover goes through.
-        String moduleKey = TenantModuleGuard.moduleForPath(path);
-        if (!pauses(sub, moduleKey)) return true;
 
         log.info("subscription-guard MODULE_PAUSED  tenant={} status={} module={} graceUntil={} path={}",
                 tenantId, sub.status(), moduleKey, sub.graceUntil(), path);
@@ -274,6 +282,11 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                 + "\"graceEndedOn\":" + (graceEnd == null ? "null" : "\"" + graceEnd.atZone(ist).toLocalDate() + "\"") + ","
                 + "\"canPay\":" + canPay + ","
                 + "\"message\":\"" + escape(d.reason()) + "\"}";
+    }
+
+    private boolean recentlyUnreachable(UUID tenantId, Instant now) {
+        Long last = recentUnreachableCache.get(tenantId);
+        return last != null && (now.getEpochSecond() - last) < DENY_CACHE_TTL_SECONDS;
     }
 
     private boolean recentlyChecked(UUID tenantId, Instant now) {
