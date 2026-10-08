@@ -28,7 +28,7 @@ function fakeFetch(...answers: Array<[number, unknown]>) {
 const login = (email = ME, token = 'acct-token-1') => [200, { accessToken: token, accessTokenExpiresAt: new Date(Date.now() + 3600_000).toISOString(), account: { email, status: 'ACTIVE' } }] as [number, unknown]
 const header = (c: Call, name: string) => new Headers(c.init.headers).get(name)
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => { vi.restoreAllMocks() })
 
 describe('VITE_MARKETING_APP_URL', () => {
   it('unset (production today): the launcher is off and may make no call', () => {

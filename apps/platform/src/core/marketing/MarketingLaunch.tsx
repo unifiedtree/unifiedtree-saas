@@ -93,6 +93,7 @@ export function MarketingLaunchDialog({ launcher }: { launcher: MarketingLaunche
       open
       onClose={dismiss}
       role="alertdialog"
+      hideClose
       tone="danger"
       icon="alert"
       title="Marketing couldn’t be opened"
