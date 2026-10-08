@@ -18,6 +18,7 @@ import { Navbar } from '../components/layout/Navbar'
 import { Eyebrow } from '../components/marketing/PageHero'
 import { COUNTRIES } from '../data/countries'
 import { PhoneField } from '../components/forms/PhoneField'
+import { handOverUrl } from '../lib/handOver'
 import { useSubdomainAvailability } from '../lib/subdomainCheck'
 
 // -- constants -------------------------------------------------------------
@@ -333,7 +334,7 @@ export function UnifiedSignupPage() {
               const base = isLocal
                 ? `http://${r.subdomain}.localhost:${DEV_PLATFORM_PORT}`
                 : (r.workspaceUrl || `https://${r.subdomain}.unifiedtree.com`).replace(/\/$/, '')
-              window.location.href = `${base}/?token=${encodeURIComponent(token)}`
+              window.location.href = handOverUrl(base, token)
               return
             }
           } catch { /* fall through to the login page below */ }

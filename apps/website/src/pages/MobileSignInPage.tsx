@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, Smartphone } from 'lucide-react'
 import { API_BASE_URL } from '../lib/api'
 import { firebaseCode, sendCode, type SentCode } from '../lib/firebasePhone'
+import { handOverUrl } from '../lib/handOver'
 
 /**
  * "Continue with mobile" from a business's login page (owner, 6 Oct 2026):
@@ -11,7 +12,8 @@ import { firebaseCode, sendCode, type SentCode } from '../lib/firebasePhone'
  * Firebase sends an SMS code only on its authorized domains, so this one step runs here, on the
  * website: the person types their mobile, gets a code, types it; /v1/auth/firebase-verify (the call the
  * mobile app makes) finds them inside THAT business (X-Tenant-Subdomain) and starts their session,
- * which is handed back to <business>.unifiedtree.com/?token= the way sign-up hands over a new business.
+ * which is handed back to <business>.unifiedtree.com the way sign-up hands over a new business (lib/handOver:
+ * by its refresh cookie, no token in the address).
  *
  * White label: the page shows only the business's logo and name, no site header or vendor credit.
  * The hand-back address is built from the business name alone (never taken from the link), so a
@@ -61,8 +63,13 @@ async function post(path: string, business: string, body: unknown): Promise<{ st
   return { status: r.status, text, json }
 }
 
+const SEVERAL = 'This mobile number is on more than one login here, so it can’t say which one is yours. Sign in with your email.'
+
 /** What firebase-verify refused with, in plain words. */
 function verifyRefusal(status: number, text: string): string {
+  if (text.includes('PHONE_ON_SEVERAL_LOGINS')) return SEVERAL
+  if (text.includes('USE_EMAIL_FOR_ADMIN')) return 'Admins sign in with their email and password.'
+  if (text.includes('USE_PASSWORD_FOR_TWO_FACTOR')) return 'Your login uses two-factor sign-in. Sign in with your email and password, then enter your code.'
   if (text.includes('PHONE_NOT_REGISTERED')) return 'This mobile number isn’t on any login at this business. Ask your administrator to add it to your profile, or sign in with your email.'
   if (text.includes('ACCOUNT_INACTIVE')) return 'This login is switched off. Ask your administrator.'
   if (text.includes('ACCOUNT_LOCKED')) return 'This login is locked for a while after too many attempts. Try again later.'
@@ -130,6 +137,7 @@ export function MobileSignInPage() {
       const check = await post('/v1/auth/phone/check', business, { mobile: m })
       if (check.status === 429) { setError('Too many tries. Wait a few minutes and try again.'); return }
       if (check.status !== 200) { setError('We couldn’t check that number just now. Try again.'); return }
+      if (check.json?.reason === 'PHONE_ON_SEVERAL_LOGINS') { setError(SEVERAL); return }
       if (check.json?.registered !== true) {
         setError('This mobile number isn’t on any login at this business. Ask your administrator to add it to your profile, or sign in with your email.')
         return
@@ -157,7 +165,7 @@ export function MobileSignInPage() {
       const r = await post('/v1/auth/firebase-verify', business, { idToken })
       const token = typeof r.json?.accessToken === 'string' ? r.json.accessToken : ''
       if (r.status !== 200 || !token) { setError(verifyRefusal(r.status, r.text)); setBusy(false); return }
-      window.location.replace(`${home}/?token=${encodeURIComponent(token)}`)
+      window.location.replace(handOverUrl(home, token))
     } catch {
       setError('Could not reach the server. Check your connection and try again.'); setBusy(false)
     }
