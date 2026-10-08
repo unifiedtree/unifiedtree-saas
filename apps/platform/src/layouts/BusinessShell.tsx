@@ -9,6 +9,8 @@ import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
 import { PageSkeleton } from '@/shared/components/PageSkeleton'
 import { preloadPath } from '@/shared/routing/lazyPage'
 import { useBusinessSettings } from './businessSettings'
+import { useMarketingLauncher } from '@/core/marketing/useMarketingLauncher'
+import { MarketingLaunchDialog, MarketingShellLink } from '@/core/marketing/MarketingLaunch'
 import '@/design/shell/shell.css'
 
 /**
@@ -25,6 +27,8 @@ export function BusinessShell() {
   usePageTitle(active?.label ?? 'Business settings')
   const go = (to: string) => guardedGo(() => navigate(to))
   const tabs = items.map((i) => ({ label: i.label, href: i.path, active: i === active }))
+  // Marketing (another app), next to All apps: only when this build names it and the person has a company with it.
+  const marketing = useMarketingLauncher()
 
   return (
     <div className="company-workspace ut-shell">
@@ -39,6 +43,7 @@ export function BusinessShell() {
             )}
           </div>
           <div className="ut-topbar__right">
+            {marketing.visible && <MarketingShellLink launcher={marketing} />}
             <a href="/modules" className="ut-biz__apps" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); go('/modules') }}>
               <ShellIcon name="layers" size={16} />
               <span>All apps</span>
@@ -51,6 +56,7 @@ export function BusinessShell() {
           </RouteErrorBoundary>
         </div>
       </main>
+      <MarketingLaunchDialog launcher={marketing} />
     </div>
   )
 }

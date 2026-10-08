@@ -498,6 +498,14 @@
 .ut-biz__apps:hover { border-color: var(--u-brl, #BFDFD1); background: var(--u-brs, #E8F3EE); }
 .ut-biz__apps:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); border-color: var(--u-brl, #BFDFD1); }
 @media (max-width: 767px) { .ut-biz__apps { margin-right: 4px; } }
+/* Marketing (core/marketing): the business frame's button next to All apps, and the company chooser. */
+.ut-biz__mkt { font-family: inherit; cursor: pointer; }
+@media (max-width: 767px) { .ut-biz__mkt { margin-right: 6px; padding: 0 11px; } .ut-biz__mkt span { display: none; } }
+.ut-mkt { display: flex; flex-direction: column; gap: 12px; }
+.ut-mkt__list { display: grid; gap: 8px; }
+.ut-mkt__co { width: 100%; }
+.ut-mkt__co:disabled { cursor: default; opacity: .7; }
+.ut-mkt__msg { margin: 0; font-size: 14px; line-height: 1.5; color: var(--u-ink2, #4A5A54); }
 @keyframes ut-skel { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { .ut-app, .ut-app__icon--skel, .ut-app__skeltext { transition: none; animation: none; } }
 
