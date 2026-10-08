@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -34,10 +36,12 @@ public class BillingBreakdownService {
 
     private final JdbcTemplate jdbc;
     private final CompanyBillingDetails details;
+    private final ExtraUsersService extras;
 
-    public BillingBreakdownService(JdbcTemplate jdbc, CompanyBillingDetails details) {
+    public BillingBreakdownService(JdbcTemplate jdbc, CompanyBillingDetails details, ExtraUsersService extras) {
         this.jdbc = jdbc;
         this.details = details;
+        this.extras = extras;
     }
 
     public Breakdown forTenant(UUID tenantId) {
@@ -60,7 +64,44 @@ public class BillingBreakdownService {
                         instant(rs.getTimestamp("current_period_end")), instant(rs.getTimestamp("trial_ends_at"))) : null, tenantId);
 
         List<CompanyRow> rows = companies(tenantId);
-        return split(business, cycle, rows);
+        return split(business, cycle, rows).withExtraCharge(extraCharge(tenantId));
+    }
+
+    /**
+     * This cycle's extra users (owner, 7 Oct 2026; ExtraUsersJob): from the cycle's record once the
+     * notice has gone out (3 days before the charge), otherwise counted so far from the daily readings.
+     * Monthly plans only; null without V144_4, without a monthly paid subscription, or in the trial.
+     */
+    ExtraCharge extraCharge(UUID tenantId) {
+        if (!extras.ready()) return null;
+        // The same subscription, cycle and price the job charges (ExtraUsersService.hrmsSubscription).
+        ExtraUsersService.HrmsSubscription sub = extras.hrmsSubscription(tenantId).orElse(null);
+        if (sub == null) return null;
+        LocalDate chargeOn = sub.nextChargeAt().atZone(ExtraUsersService.IST).toLocalDate();
+
+        List<Map<String, Object>> recorded = jdbc.queryForList("""
+                SELECT extra_users, amount_inr, status, peak_active, peak_day, by_company::text AS by_company
+                  FROM platform.extra_user_charges WHERE tenant_id = ? AND cycle_end = ?
+                """, tenantId, sub.cycleEnd());
+        if (!recorded.isEmpty()) {
+            Map<String, Object> r = recorded.get(0);
+            return new ExtraCharge(chargeOn, (String) r.get("status"), ((Number) r.get("extra_users")).intValue(),
+                    (BigDecimal) r.get("amount_inr"), ((Number) r.get("peak_active")).intValue(),
+                    r.get("peak_day") == null ? null : ((java.sql.Date) r.get("peak_day")).toLocalDate(),
+                    parseShares((String) r.get("by_company")));
+        }
+        if (!sub.cycleStart().isBefore(sub.cycleEnd())) return null;   // still in the free trial
+        ExtraUsers.Result r = ExtraUsers.compute(sub.seats(), sub.unitPriceInr(),
+                extras.readings(tenantId, sub.cycleStart(), sub.cycleEnd()));
+        return new ExtraCharge(chargeOn, "SO_FAR", r.extraUsers(), r.amountInr(), r.peakActive(), r.peakDay(), r.byCompany());
+    }
+
+    private static List<ExtraUsers.CompanyShare> parseShares(String json) {
+        try {
+            return List.of(new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, ExtraUsers.CompanyShare[].class));
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     /** The business's companies with their active employees (RLS: read with the tenant bound). */
@@ -171,5 +212,26 @@ public class BillingBreakdownService {
     public record Breakdown(Business business, String billingCycle, String status, Instant periodStart, Instant periodEnd,
                             BigDecimal pricePerSeatInr, int seatsBought, int seatsUsed, BigDecimal amountInr,
                             List<CompanyLine> companies, int unusedSeats, BigDecimal unusedSeatsAmountInr,
-                            int extraUsers, BigDecimal extraUsersAmountInr, String note) {}
+                            int extraUsers, BigDecimal extraUsersAmountInr, String note, ExtraCharge extraCharge) {
+        Breakdown(Business business, String billingCycle, String status, Instant periodStart, Instant periodEnd,
+                  BigDecimal pricePerSeatInr, int seatsBought, int seatsUsed, BigDecimal amountInr,
+                  List<CompanyLine> companies, int unusedSeats, BigDecimal unusedSeatsAmountInr,
+                  int extraUsers, BigDecimal extraUsersAmountInr, String note) {
+            this(business, billingCycle, status, periodStart, periodEnd, pricePerSeatInr, seatsBought, seatsUsed, amountInr,
+                    companies, unusedSeats, unusedSeatsAmountInr, extraUsers, extraUsersAmountInr, note, null);
+        }
+
+        Breakdown withExtraCharge(ExtraCharge e) {
+            return new Breakdown(business, billingCycle, status, periodStart, periodEnd, pricePerSeatInr, seatsBought, seatsUsed,
+                    amountInr, companies, unusedSeats, unusedSeatsAmountInr, extraUsers, extraUsersAmountInr, note, e);
+        }
+    }
+
+    /**
+     * This cycle's extra users: {@code status} SO_FAR (counted so far, before the notice), NOTIFIED (the
+     * owner was told; added just before the charge), ADDING / ADDED (on the charge on {@code chargeOn}),
+     * FAILED (being retried) or NONE.
+     */
+    public record ExtraCharge(LocalDate chargeOn, String status, int extraUsers, BigDecimal amountInr,
+                              int peakActive, LocalDate peakDay, List<ExtraUsers.CompanyShare> byCompany) {}
 }

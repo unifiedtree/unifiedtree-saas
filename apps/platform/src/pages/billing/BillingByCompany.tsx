@@ -16,6 +16,12 @@ export interface BillingBreakdown {
   seatsBought: number; seatsUsed: number; amountInr: number | null
   companies: CompanyLine[]; unusedSeats: number; unusedSeatsAmountInr: number | null
   extraUsers: number; extraUsersAmountInr: number | null; note: string | null
+  /** This cycle's extra users (ExtraUsersJob); null without a monthly paid plan. */
+  extraCharge?: {
+    chargeOn: string; status: 'SO_FAR' | 'NOTIFIED' | 'NONE' | 'ADDING' | 'ADDED' | 'FAILED'
+    extraUsers: number; amountInr: number | null; peakActive: number; peakDay: string | null
+    byCompany: { companyId: string; name: string; active: number; extra: number }[]
+  } | null
 }
 
 const inr = (n: number | null | undefined) => n == null ? '—' : '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -86,11 +92,12 @@ export const BillingByCompany: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-              {data.extraUsers > 0 && (
-                <SettingsNote tone="amber">
-                  {data.extraUsers} more {data.extraUsers === 1 ? 'person' : 'people'} than the seats bought: {inr(data.extraUsersAmountInr)} is billed at the end of the cycle.
-                </SettingsNote>
-              )}
+              {data.extraCharge && data.extraCharge.extraUsers > 0 ? <ExtraUsersNote e={data.extraCharge} />
+                : data.extraUsers > 0 && (
+                  <SettingsNote tone="amber">
+                    {data.extraUsers} more {data.extraUsers === 1 ? 'person' : 'people'} than the seats bought: {inr(data.extraUsersAmountInr)} is billed at the end of the cycle.
+                  </SettingsNote>
+                )}
               <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>
                 One subscription covers the whole business; this splits it by company. Razorpay emails the invoice for each charge.
               </p>
@@ -98,6 +105,25 @@ export const BillingByCompany: React.FC = () => {
             </>
           )}
     </SettingsSection>
+  )
+}
+
+/**
+ * This cycle's extra users (owner, 7 Oct 2026): the highest active employees on any day of the cycle
+ * minus the seats bought, at the full-month price, added to the next autopay charge — and which
+ * companies they came from (shared by their people on the busiest day).
+ */
+const ExtraUsersNote: React.FC<{ e: NonNullable<BillingBreakdown['extraCharge']> }> = ({ e }) => {
+  const users = `${e.extraUsers} extra ${e.extraUsers === 1 ? 'user' : 'users'}`
+  const when = day(e.chargeOn)
+  const lead = e.status === 'ADDED' || e.status === 'ADDING' ? `${users} (${inr(e.amountInr)}) added to the charge on ${when}.`
+    : e.status === 'SO_FAR' ? `${users} so far this cycle (${inr(e.amountInr)}), billed with the charge on ${when}.`
+      : `${users} (${inr(e.amountInr)}) will be billed on ${when}.`
+  const from = e.byCompany.filter((c) => c.extra > 0).map((c) => `${c.name} ${c.extra}`).join(', ')
+  return (
+    <SettingsNote tone="amber">
+      {lead} The busiest day had {e.peakActive} active employees{e.peakDay ? ` (${day(e.peakDay)})` : ''}.{from && <> From: {from}.</>}
+    </SettingsNote>
   )
 }
 
@@ -110,7 +136,11 @@ export function printBreakdown(d: BillingBreakdown) {
     + `<td>${esc(c.gstin) || '—'}</td><td class="n">${c.employees}</td><td class="n">${inr(c.amountInr)}</td></tr>`).join('')
   const unused = d.unusedSeats > 0 ? `<tr class="muted"><td colspan="2">Unused seats</td><td class="n">${d.unusedSeats}</td><td class="n">${inr(d.unusedSeatsAmountInr)}</td></tr>` : ''
   const total = d.amountInr != null ? `<tr class="total"><td colspan="2">Total for ${esc(period)}</td><td class="n">${d.seatsBought} seats</td><td class="n">${inr(d.amountInr)}</td></tr>` : ''
-  const extra = d.extraUsers > 0 ? `<p>${d.extraUsers} more ${d.extraUsers === 1 ? 'person' : 'people'} than the seats bought: ${inr(d.extraUsersAmountInr)} is billed at the end of the cycle.</p>` : ''
+  const ec = d.extraCharge
+  const extra = ec && ec.extraUsers > 0
+    ? `<p>${ec.extraUsers} extra ${ec.extraUsers === 1 ? 'user' : 'users'} this cycle (busiest day ${ec.peakActive} active): ${inr(ec.amountInr)} on the charge of ${esc(day(ec.chargeOn))}.`
+      + ` From: ${ec.byCompany.filter((c) => c.extra > 0).map((c) => `${esc(c.name)} ${c.extra}`).join(', ')}.</p>`
+    : d.extraUsers > 0 ? `<p>${d.extraUsers} more ${d.extraUsers === 1 ? 'person' : 'people'} than the seats bought: ${inr(d.extraUsersAmountInr)} is billed at the end of the cycle.</p>` : ''
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Billing by company${period ? ' – ' + esc(period) : ''}</title>
 <style>body{font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;margin:32px}h1{font-size:20px;margin:0 0 4px}
 .sub{color:#475569;margin:0 0 20px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}

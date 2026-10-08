@@ -10,8 +10,9 @@
 // Extra-users scenarios use made-up business ids (platform.subscriptions has no tenant FK), so they
 // never touch the demo business; the pause scenarios use the demo business (they need a sign-in).
 // Everything planted is removed at the end.
-// chakri/razorpay-check-before-pause: the pause scenarios are due 8 days ago (1 day past grace): the guard now
-// stops failing open 48 h past the pause point (review should-fix 3), which 9 days would just reach.
+// The pause scenarios are due 8 days ago (1 day past grace): the guard stops failing open 48 h past the
+// pause point (chakri/razorpay-check-before-pause, review should-fix 3), which 9 days would just reach.
+// b7/batch has both parts: PROBE_PAUSE_ONLY=1 skips the extra-users part, PROBE_EXTRA_ONLY=1 the pause part.
 /* global process, console, fetch, setTimeout, crypto */
 import { execFileSync } from 'node:child_process'
 import http from 'node:http'
@@ -90,7 +91,7 @@ const reading = (tenant, dayExpr, n) => sql(`insert into platform.seat_usage_dai
 const chargeRow = (sub) => sql(`select status || '|' || extra_users || '|' || peak_active || '|' || amount_inr || '|' || coalesce(razorpay_addon_id,'') || '|' || coalesce(error,'') from platform.extra_user_charges where subscription_id='${sub}' order by cycle_end`)
 
 try {
-  // PROBE_PAUSE_ONLY=1 (chakri/razorpay-check-before-pause): no V144_4 on this branch, so no extra-users part.
+  // PROBE_PAUSE_ONLY=1: the pause part only (a database without V144_4).
   if (!process.env.PROBE_PAUSE_ONLY) {
   check('V144_4 applied', sql(`select to_regclass('platform.extra_user_charges') is not null`) === 't')
   const ce = cycleEnd()
@@ -159,6 +160,8 @@ try {
     `${a5.length} add-ons; row: ${chargeRow(s5)}`)
 
   }
+  // PROBE_EXTRA_ONLY=1: the extra-users part only.
+  if (!process.env.PROBE_EXTRA_ONLY) {
   // ── Pause: Razorpay asked before pausing (demo business; its newest subscription row) ──
   const call = await as('owner@unifiedtree.demo')
   const leave = `/v1/leave/types?companyId=${demoCompany}`
@@ -200,6 +203,7 @@ try {
     `${gets.filter((g) => g === 'sub_probeP4').length} GETs`)
   check('P4 a paused request waits < 5 s for Razorpay', slowest < 5000, `slowest ${slowest} ms`)
   sql(`delete from platform.subscriptions where id='${p4}'`)
+  }
 } catch (e) {
   check('probe ran to the end', false, e.message.split('\n')[0])
 } finally {
@@ -208,7 +212,9 @@ try {
   if (sql(`select to_regclass('platform.extra_user_charges') is not null`) === 't') sql(`delete from platform.extra_user_charges where subscription_id in (${ids})`)
   sql(`delete from platform.subscriptions where id in (${ids})`)
   if (sql(`select to_regclass('platform.seat_usage_daily') is not null`) === 't') sql(`delete from platform.seat_usage_daily where tenant_id in (${ts})`)
-  check('cleanup: nothing planted is left', sql(`select (select count(*) from platform.subscriptions where id in (${ids}))`) === '0')
+  const seatsLeft = sql(`select to_regclass('platform.seat_usage_daily') is not null`) === 't'
+    ? ` + (select count(*) from platform.seat_usage_daily where tenant_id in (${ts}))` : ''
+  check('cleanup: nothing planted is left', sql(`select (select count(*) from platform.subscriptions where id in (${ids}))${seatsLeft}`) === '0')
   console.log('mock add-ons:', JSON.stringify(addons))
   console.log('mock GETs (UTC):', getLog.join(', '))
   mock.closeAllConnections?.(); mock.close()
