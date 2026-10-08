@@ -470,6 +470,16 @@ public class SubscriptionStateReconciler {
      *         stamps last_reconciled_at + reconcile_error so the queue
      *         advances instead of starving on a permanently-broken row).
      */
+    /**
+     * Applies what Razorpay said about a subscription that the CALLER fetched (same mapping as
+     * {@link #reconcileFromRazorpay}). For the access guard, which asks Razorpay itself with short
+     * timeouts so it can tell "unpaid" from "couldn't ask". Returns Razorpay's status.
+     */
+    public String applyFetched(String subscriptionId, RazorpayClient.SubscriptionView v) {
+        applyRazorpayStatus(subscriptionId, v);
+        return v.status();
+    }
+
     public String reconcileFromRazorpay(String subscriptionId, RazorpayClient razorpay) {
         try {
             RazorpayClient.SubscriptionView v = razorpay.fetchSubscription(subscriptionId);

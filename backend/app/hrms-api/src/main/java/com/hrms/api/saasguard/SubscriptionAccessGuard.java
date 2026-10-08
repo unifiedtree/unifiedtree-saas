@@ -134,12 +134,27 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
      *  (comma-separated UUIDs); defaults to empty = fully fail-closed. */
     private final Set<UUID> grandfatheredTenantIds;
 
-    /** Per-tenant recent-deny cache: tenantId -> epoch-seconds-of-last-check.
-     *  ConcurrentHashMap is fine; the guard runs on the request thread, no
-     *  cross-request sharing beyond the map itself. */
-    private final ConcurrentHashMap<UUID, Long> recentDenyCache = new ConcurrentHashMap<>();
-    /** Per-tenant "Razorpay couldn't be asked" cache: not paused, and not re-asked for DENY_CACHE_TTL_SECONDS. */
-    private final ConcurrentHashMap<UUID, Long> recentUnreachableCache = new ConcurrentHashMap<>();
+    /** What the last check with Razorpay for a business found, and when (epoch seconds). */
+    enum CheckState { IN_FLIGHT, ANSWERED, UNREACHABLE }
+    record Check(long at, CheckState state) {}
+
+    /**
+     * Per-business check with Razorpay, at most one per DENY_CACHE_TTL_SECONDS. The slot is CLAIMED
+     * (IN_FLIGHT) before Razorpay is asked, so a page load of five calls asks once (review 7 Oct, P4);
+     * the others go through while the answer is awaited (never paused on an unconfirmed lapse).
+     */
+    private final ConcurrentHashMap<UUID, Check> checks = new ConcurrentHashMap<>();
+
+    /** The guard's own Razorpay client: short timeouts, so a paused request never waits 20 s (P4). */
+    static final java.time.Duration CHECK_CONNECT_TIMEOUT = java.time.Duration.ofSeconds(2);
+    static final java.time.Duration CHECK_READ_TIMEOUT = java.time.Duration.ofSeconds(3);
+    private final RazorpayClient quickRazorpay;
+
+    /**
+     * How long past the pause point Razorpay being unreachable still lets requests through. After that
+     * a business that hasn't paid is paused even while Razorpay can't be asked (logged as an alert).
+     */
+    static final java.time.Duration FAIL_OPEN_CAP = java.time.Duration.ofHours(48);
 
     @Autowired
     public SubscriptionAccessGuard(JdbcTemplate jdbc,
@@ -149,6 +164,7 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.reconciler = reconciler;
+        this.quickRazorpay = razorpay == null ? null : razorpay.withTimeouts(CHECK_CONNECT_TIMEOUT, CHECK_READ_TIMEOUT);
         this.dueDateSchema = new com.unifiedtree.saas.billing.BillingReminderSchema(jdbc);
         this.grandfatheredTenantIds = parseGrandfatherList(grandfatherCsv);
         if (!this.grandfatheredTenantIds.isEmpty()) {
@@ -222,28 +238,36 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         if (("HALTED".equals(sub.status()) || "PAST_DUE".equals(sub.status()))
                 && sub.razorpaySubscriptionId() != null
                 && !sub.razorpaySubscriptionId().isBlank()
-                && razorpay != null && reconciler != null) {
-            if (recentlyUnreachable(tenantId, now)) {
-                return true;
-            }
-            if (!recentlyChecked(tenantId, now)) {
-                String upstream = reconcileUnbound(sub.razorpaySubscriptionId());
-                if (upstream == null) {
-                    recentUnreachableCache.put(tenantId, now.getEpochSecond());
-                    log.warn("subscription-guard NOT PAUSING (Razorpay unreachable, can't confirm non-payment)  tenant={} status={}",
-                            tenantId, sub.status());
-                    return true;
+                && quickRazorpay != null && reconciler != null) {
+            Instant pausePoint = pausePoint(sub);
+            boolean capped = pausePoint != null && now.isAfter(pausePoint.plus(FAIL_OPEN_CAP));
+            Check claimed = new Check(now.getEpochSecond(), CheckState.IN_FLIGHT);
+            Check current = checks.compute(tenantId, (k, prev) ->
+                    prev == null || now.getEpochSecond() - prev.at() >= DENY_CACHE_TTL_SECONDS ? claimed : prev);
+            if (current != claimed) {
+                // Asked within the last minute (or being asked right now by another request).
+                if (current.state() == CheckState.ANSWERED) {
+                    // Razorpay said not paid (a "paid" answer made our row ACTIVE, so we'd not be here).
+                } else if (!capped) {
+                    return true;   // being asked, or couldn't be asked: never pause on an unconfirmed lapse
                 }
-                recentDenyCache.put(tenantId, now.getEpochSecond());
-                // Re-read our ledger — reconcileFromRazorpay may have promoted us
-                // to ACTIVE if Razorpay says the charge went through.
-                SubStatus fresh = loadStatus(tenantId);
-                if (fresh != null) {
-                    AccessDecision d2 = evaluate(fresh, now);
-                    if (d2.allowed()) {
-                        log.info("subscription-guard AUTO-RESTORE  tenant={} was={} now={} razorpay={}",
-                                tenantId, sub.status(), fresh.status(), upstream);
+            } else {
+                switch (askRazorpay(tenantId, sub)) {
+                    case PAID -> {
+                        checks.put(tenantId, new Check(now.getEpochSecond(), CheckState.ANSWERED));
                         return true;
+                    }
+                    case UNPAID -> checks.put(tenantId, new Check(now.getEpochSecond(), CheckState.ANSWERED));
+                    case REFUSED -> checks.put(tenantId, new Check(now.getEpochSecond(), CheckState.ANSWERED));
+                    case UNREACHABLE -> {
+                        checks.put(tenantId, new Check(now.getEpochSecond(), CheckState.UNREACHABLE));
+                        if (!capped) {
+                            log.warn("subscription-guard NOT PAUSING (Razorpay unreachable, can't confirm non-payment)  tenant={} status={}",
+                                    tenantId, sub.status());
+                            return true;
+                        }
+                        log.error("SUBSCRIPTION_GUARD_FAIL_OPEN_CAPPED tenant={} status={} pausePoint={} : Razorpay still unreachable "
+                                + "{} past the pause point; pausing", tenantId, sub.status(), pausePoint, FAIL_OPEN_CAP);
                     }
                 }
             }
@@ -285,32 +309,70 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                 + "\"message\":\"" + escape(d.reason()) + "\"}";
     }
 
+    enum Answer { PAID, UNPAID, REFUSED, UNREACHABLE }
+
+    /**
+     * Asks Razorpay about this subscription (short timeouts) and saves what it says through the shared
+     * reconciler. PAID when our row is now in good standing; UNPAID when Razorpay answered and it isn't;
+     * REFUSED when Razorpay said no (4xx: wrong or rotated keys, unknown subscription) or the gateway
+     * isn't configured — a fault on our side, logged as an alert, and the business IS paused (it would
+     * otherwise never be paused); UNREACHABLE for no answer, a timeout or a 5xx.
+     */
+    private Answer askRazorpay(UUID tenantId, SubStatus sub) {
+        RazorpayClient.SubscriptionView view;
+        try {
+            view = quickRazorpay.fetchSubscription(sub.razorpaySubscriptionId());
+        } catch (RazorpayClient.Refused e) {
+            log.error("SUBSCRIPTION_GUARD_RAZORPAY_REFUSED tenant={} sub={} razorpayStatus={} : {} — pausing; check the Razorpay keys",
+                    tenantId, sub.razorpaySubscriptionId(), e.razorpayStatus(), e.getReason());
+            return Answer.REFUSED;
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            if (e.getStatusCode().value() == HttpStatus.SERVICE_UNAVAILABLE.value()) {
+                log.error("SUBSCRIPTION_GUARD_RAZORPAY_REFUSED tenant={} sub={} : payment gateway not configured — pausing",
+                        tenantId, sub.razorpaySubscriptionId());
+                return Answer.REFUSED;
+            }
+            return Answer.UNREACHABLE;
+        } catch (RuntimeException e) {
+            return Answer.UNREACHABLE;
+        }
+        String upstream = applyUnbound(sub.razorpaySubscriptionId(), view);
+        if (upstream == null) return Answer.UNREACHABLE;
+        // Re-read our ledger: the reconciler may have promoted us to ACTIVE.
+        SubStatus fresh = loadStatus(tenantId);
+        if (fresh != null && evaluate(fresh, Instant.now()).allowed()) {
+            log.info("subscription-guard AUTO-RESTORE  tenant={} was={} now={} razorpay={}",
+                    tenantId, sub.status(), fresh.status(), upstream);
+            return Answer.PAID;
+        }
+        return Answer.UNPAID;
+    }
+
     /**
      * The reconciler's writes with the request's tenant UNBOUND. On a tenant-bound connection
      * TenantAwareDataSource turns auto-commit off for SET LOCAL, so without a transaction the
      * reconciler's UPDATE (paid -> ACTIVE) was never committed and the re-read still saw the old
      * status: a paying business stayed paused (review 7 Oct 2026, live probe P1). platform.subscriptions
      * has no row-level security, so unbound statements auto-commit one by one, and no connection is
-     * held while Razorpay is asked.
+     * held while Razorpay is asked (it is asked before this).
      */
-    private String reconcileUnbound(String razorpaySubscriptionId) {
+    private String applyUnbound(String razorpaySubscriptionId, RazorpayClient.SubscriptionView view) {
         UUID bound = TenantContext.getTenantId();
         TenantContext.clear();
         try {
-            return reconciler.reconcileFromRazorpay(razorpaySubscriptionId, razorpay);
+            return reconciler.applyFetched(razorpaySubscriptionId, view);
+        } catch (RuntimeException e) {
+            log.warn("subscription-guard could not save Razorpay's answer for {}: {}", razorpaySubscriptionId, e.getMessage());
+            return null;
         } finally {
             if (bound != null) TenantContext.setTenantId(bound);
         }
     }
 
-    private boolean recentlyUnreachable(UUID tenantId, Instant now) {
-        Long last = recentUnreachableCache.get(tenantId);
-        return last != null && (now.getEpochSecond() - last) < DENY_CACHE_TTL_SECONDS;
-    }
-
-    private boolean recentlyChecked(UUID tenantId, Instant now) {
-        Long last = recentDenyCache.get(tenantId);
-        return last != null && (now.getEpochSecond() - last) < DENY_CACHE_TTL_SECONDS;
+    /** When this subscription's access pauses: the grace end (grace_until, or due date + 7 days). */
+    private static Instant pausePoint(SubStatus sub) {
+        return sub.graceUntil() != null ? sub.graceUntil()
+                : sub.pastDueSince() != null ? sub.pastDueSince().plus(GRACE) : null;
     }
 
     // -- decision -------------------------------------------------------------

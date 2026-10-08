@@ -7,6 +7,7 @@ import com.unifiedtree.security.tenant.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -14,12 +15,18 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,17 +45,26 @@ class RazorpayCheckBeforePauseTest {
     private final UUID tenant = UUID.randomUUID();
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final RazorpayClient razorpay = mock(RazorpayClient.class);
+    /** The guard's short-timeout client (RazorpayClient.withTimeouts). */
+    private final RazorpayClient quick = mock(RazorpayClient.class);
     private final SubscriptionStateReconciler reconciler = mock(SubscriptionStateReconciler.class);
+    private final RazorpayClient.SubscriptionView view = mock(RazorpayClient.SubscriptionView.class);
     private SubscriptionAccessGuard guard;
 
-    private final SubStatus unpaid = new SubStatus("PAST_DUE", null, "sub_1",
-            List.of("hrms", "attendance", "leave", "payroll"), new BigDecimal("4000"), Instant.now().minus(Duration.ofDays(9)));
+    /** Due 8 days ago: past the 7-day grace (1 day), inside the 48 h fail-open cap. */
+    private final SubStatus unpaid = due(Duration.ofDays(8));
     private final SubStatus paid = new SubStatus("ACTIVE", null, "sub_1",
             List.of("hrms", "attendance", "leave", "payroll"), new BigDecimal("4000"), null);
+
+    private static SubStatus due(Duration ago) {
+        return new SubStatus("PAST_DUE", null, "sub_1",
+                List.of("hrms", "attendance", "leave", "payroll"), new BigDecimal("4000"), Instant.now().minus(ago));
+    }
 
     @BeforeEach
     void setUp() {
         when(jdbc.queryForObject(contains("information_schema"), eq(Boolean.class))).thenReturn(true);
+        when(razorpay.withTimeouts(any(), any())).thenReturn(quick);
         guard = new SubscriptionAccessGuard(jdbc, razorpay, reconciler, "");
         Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").claim("tenant_id", tenant.toString()).build();
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
@@ -69,19 +85,30 @@ class RazorpayCheckBeforePauseTest {
         return guard.preHandle(new MockHttpServletRequest("GET", path), res, null);
     }
 
+    private void razorpayAnswers(String status) {
+        when(quick.fetchSubscription("sub_1")).thenReturn(view);
+        when(reconciler.applyFetched("sub_1", view)).thenReturn(status);
+    }
+
+    @Test
+    void theCheckUsesShortTimeouts() {
+        verify(razorpay).withTimeouts(SubscriptionAccessGuard.CHECK_CONNECT_TIMEOUT, SubscriptionAccessGuard.CHECK_READ_TIMEOUT);
+        assertThat(SubscriptionAccessGuard.CHECK_READ_TIMEOUT).isLessThanOrEqualTo(Duration.ofSeconds(3));
+    }
+
     @Test
     void razorpaySaysPaidSoNothingIsPaused() throws Exception {
         ledgerSays(unpaid, paid);
-        when(reconciler.reconcileFromRazorpay("sub_1", razorpay)).thenReturn("active");
+        razorpayAnswers("active");
 
         assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isTrue();
-        verify(reconciler).reconcileFromRazorpay("sub_1", razorpay);
+        verify(reconciler).applyFetched("sub_1", view);
     }
 
     @Test
     void razorpaySaysUnpaidSoTheModulePauses() throws Exception {
         ledgerSays(unpaid, unpaid);
-        when(reconciler.reconcileFromRazorpay("sub_1", razorpay)).thenReturn("pending");
+        razorpayAnswers("pending");
         MockHttpServletResponse res = new MockHttpServletResponse();
 
         assertThat(call("/v1/leave/types", res)).isFalse();
@@ -92,20 +119,75 @@ class RazorpayCheckBeforePauseTest {
     @Test
     void razorpayUnreachableMeansNoPauseAndNoHammering() throws Exception {
         ledgerSays(unpaid);
-        when(reconciler.reconcileFromRazorpay(anyString(), any())).thenReturn(null);
+        when(quick.fetchSubscription(anyString())).thenThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "timeout"));
 
         assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isTrue();
         assertThat(call("/v1/payroll/settings", new MockHttpServletResponse())).isTrue();
-        verify(reconciler, times(1)).reconcileFromRazorpay(anyString(), any());
+        verify(quick, times(1)).fetchSubscription(anyString());
+    }
+
+    @Test
+    void razorpaySayingNoPausesInsteadOfFailingOpen() throws Exception {
+        // Wrong or rotated keys, unknown subscription: a fault on our side, not "can't reach Razorpay".
+        ledgerSays(unpaid);
+        when(quick.fetchSubscription(anyString())).thenThrow(new RazorpayClient.Refused(401, "bad keys"));
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        assertThat(call("/v1/leave/types", res)).isFalse();
+        assertThat(res.getStatus()).isEqualTo(402);
+    }
+
+    @Test
+    void missingKeysPauseToo() throws Exception {
+        ledgerSays(unpaid);
+        when(quick.fetchSubscription(anyString()))
+                .thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment gateway not configured"));
+        assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isFalse();
+    }
+
+    @Test
+    void failingOpenStopsTwoDaysPastThePausePoint() throws Exception {
+        // Due 10 days ago: grace ended 3 days ago, past the 48 h cap. Razorpay down: paused anyway.
+        ledgerSays(due(Duration.ofDays(10)));
+        when(quick.fetchSubscription(anyString())).thenThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "timeout"));
+        assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isFalse();
+    }
+
+    @Test
+    void aPageLoadOfManyCallsAsksRazorpayOnce() throws Exception {
+        ledgerSays(unpaid);
+        CountDownLatch asked = new CountDownLatch(1), release = new CountDownLatch(1);
+        when(quick.fetchSubscription(anyString())).thenAnswer(i -> {
+            asked.countDown();
+            release.await(5, TimeUnit.SECONDS);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "timeout");
+        });
+        ExecutorService pool = Executors.newFixedThreadPool(5);
+        try {
+            Future<Boolean> first = pool.submit(() -> {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new JwtAuthenticationToken(Jwt.withTokenValue("t").header("alg", "none").claim("tenant_id", tenant.toString()).build()));
+                return call("/v1/leave/types", new MockHttpServletResponse());
+            });
+            assertThat(asked.await(5, TimeUnit.SECONDS)).isTrue();
+            // While the first is waiting for Razorpay, the rest go straight through without asking.
+            for (int n = 0; n < 4; n++) assertThat(call("/v1/leave/types", new MockHttpServletResponse())).isTrue();
+            release.countDown();
+            assertThat(first.get(5, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+        verify(quick, times(1)).fetchSubscription(anyString());
     }
 
     @Test
     void theReconcilerWritesWithTheTenantUnboundSoTheyCommit() throws Exception {
         // A tenant-bound connection is not auto-committing (TenantAwareDataSource): the paid -> ACTIVE
-        // update would be lost. The guard asks with the tenant unbound and binds it again after.
+        // update would be lost. The guard saves with the tenant unbound and binds it again after.
         ledgerSays(unpaid, paid);
+        when(quick.fetchSubscription("sub_1")).thenReturn(view);
         UUID[] seen = new UUID[1];
-        when(reconciler.reconcileFromRazorpay("sub_1", razorpay)).thenAnswer(i -> {
+        when(reconciler.applyFetched("sub_1", view)).thenAnswer(i -> {
             seen[0] = TenantContext.getTenantId();
             return "active";
         });
@@ -124,6 +206,6 @@ class RazorpayCheckBeforePauseTest {
         ledgerSays(unpaid);
         assertThat(call("/v1/me/companies", new MockHttpServletResponse())).isTrue();
         assertThat(call("/v1/notifications", new MockHttpServletResponse())).isTrue();
-        verify(reconciler, never()).reconcileFromRazorpay(anyString(), any());
+        verify(quick, never()).fetchSubscription(anyString());
     }
 }
