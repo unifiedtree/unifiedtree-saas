@@ -23,7 +23,7 @@ class PublicBrandingLookupTest {
     @Test
     void aBusinessGetsItsBrandingAndStatus() {
         when(service.publicView("tatagroups")).thenReturn(Optional.of(
-                new BrandingService.PublicView("Tata Groups", "T", null, null, "ACTIVE")));
+                new BrandingService.PublicView("Tata Groups", "T", null, null, null, "ACTIVE")));
 
         ResponseEntity<?> r = controller.lookup("tatagroups", null, null);
 
@@ -36,7 +36,7 @@ class PublicBrandingLookupTest {
     @Test
     void aSuspendedBusinessSaysSo() {
         when(service.publicView("acme")).thenReturn(Optional.of(
-                new BrandingService.PublicView("Acme", "A", null, null, "SUSPENDED")));
+                new BrandingService.PublicView("Acme", "A", null, null, null, "SUSPENDED")));
 
         BrandingService.PublicView v = (BrandingService.PublicView) controller.lookup("acme", null, null).getBody();
 
@@ -72,7 +72,7 @@ class PublicBrandingLookupTest {
     void aBusinessThatAlreadyHoldsAReservedNameKeepsWorking() {
         // e.g. the local "demo" business, created before "demo" was reserved for sign-up.
         when(service.publicView("demo")).thenReturn(Optional.of(
-                new BrandingService.PublicView("UnifiedTree Demo", "U", null, null, "ACTIVE")));
+                new BrandingService.PublicView("UnifiedTree Demo", "U", null, null, null, "ACTIVE")));
 
         assertThat(controller.lookup("demo", null, null).getStatusCode().value()).isEqualTo(200);
     }

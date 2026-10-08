@@ -175,4 +175,18 @@ class BrandingImageTest {
         // The same image is still a fine wide logo: the rule is the letterhead's alone.
         assertNotNull(BrandingImage.check(png(400, 300), Kind.LOGO));
     }
+
+    // ── V144_3: the business's sign-in picture ───────────────────────────────
+
+    @Test void theSignInPictureIsAKindOfItsOwn() {
+        assertEquals(Kind.LOGIN, Kind.parse("login"));
+        assertEquals("login", Kind.LOGIN.key());
+    }
+
+    @Test void aSignInPictureMustBeLargeEnoughForABigScreen() throws Exception {
+        assertEquals(1600, BrandingImage.check(png(1600, 1000), Kind.LOGIN).width());
+        assertNotNull(BrandingImage.check(jpeg(900, 1200), Kind.LOGIN));   // portrait is fine
+        var small = assertThrows(ResponseStatusException.class, () -> BrandingImage.check(png(800, 400), Kind.LOGIN));
+        assertTrue(small.getReason().contains("at least 600"));
+    }
 }

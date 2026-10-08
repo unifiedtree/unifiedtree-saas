@@ -22,6 +22,7 @@ import {
   type Crop, type Source,
 } from './brandingImage'
 import { LetterheadSection } from './LetterheadSection'
+import { SignInPictureSection } from './SignInPictureSection'
 
 type Show = (kind: 'ok' | 'error', title: string, msg?: string) => void
 type Kind = 'mark' | 'logo'
@@ -185,6 +186,8 @@ export const BrandingTab: React.FC<{ show: Show }> = ({ show }) => {
       </SettingsSection>
 
       {dto !== null && <LetterheadSection dto={dto} name={name} logo={logoUrl || markUrl} canEdit={canEdit} show={show} onSaved={onSaved} />}
+
+      {dto !== null && <SignInPictureSection dto={dto} canEdit={canEdit} show={show} onSaved={onSaved} />}
 
       <Modal open={confirmRemove !== null} onOpenChange={(o: boolean) => { if (!o && !busy) setConfirmRemove(null) }}
         title={confirmRemove === 'mark' ? 'Remove the square mark?' : 'Remove the wide logo?'}
