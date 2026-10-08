@@ -15,11 +15,11 @@ type MfaChallenge = { mfaRequired?: boolean; mfaSetupRequired?: boolean; mfaToke
 type MfaSetupInfo = { secret: string; qrSvg: string; issuer: string }
 
 /**
- * Google and mobile (SMS code) sign-in on the business page (owner, 6 Oct 2026). Each turns on once
- * its backend is live: Google needs /v1/accounts/auth/google/start?business= (branch
- * chakri/login-backend); mobile also needs the Firebase web sign-in step.
+ * Google and mobile (SMS code) sign-in on the business page (owner, 6 Oct 2026). Google goes through
+ * /v1/accounts/auth/google/start?business=; mobile goes to the SMS step on the website
+ * ({@link mobileSignInUrl}), which hands the session back to this page's business.
  */
-const GOOGLE_SIGN_IN = false
+const GOOGLE_SIGN_IN = true
 const MOBILE_SIGN_IN = false
 
 /** What a refused Google sign-in comes back with (/login?error=…), in plain words. */
@@ -30,6 +30,18 @@ const SIGN_IN_ERRORS: Record<string, string> = {
   ACCOUNT_LOCKED: 'This login is locked for a while after too many attempts. Try again later.',
   BUSINESS_NOT_FOUND: 'This business isn’t available.',
   oauth_cancelled: 'Google sign-in was cancelled.',
+}
+
+/**
+ * The website's SMS sign-in step for this business. Firebase sends codes only on its authorized
+ * domains (the website, localhost), never on <business>.unifiedtree.com, so the step lives there.
+ * In dev it is the website's vite (VITE_WEBSITE_URL, default :3000), told which port to come back to.
+ */
+function mobileSignInUrl(business: string): string {
+  const { hostname, port } = window.location
+  const local = hostname === 'localhost' || hostname.endsWith('.localhost')
+  const site = ((import.meta.env.VITE_WEBSITE_URL as string | undefined) || (local ? 'http://localhost:3000' : 'https://www.unifiedtree.com')).replace(/\/$/, '')
+  return `${site}/mobile-sign-in?business=${encodeURIComponent(business)}${local && port ? `&port=${port}` : ''}`
 }
 
 /** The UnifiedTree HRMS app on Google Play (Android only). */
@@ -516,7 +528,11 @@ export const LoginPage: React.FC = () => {
               <span className="h-px flex-1 bg-gray-100" />or<span className="h-px flex-1 bg-gray-100" />
             </div>
             {MOBILE_SIGN_IN && (
-              <button type="button" className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50">
+              <button
+                type="button"
+                onClick={() => { window.location.href = mobileSignInUrl(subdomain) }}
+                className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[14.5px] font-semibold text-gray-800 hover:bg-gray-50"
+              >
                 <Smartphone size={18} className="text-emerald-700" aria-hidden /> Continue with mobile
               </button>
             )}

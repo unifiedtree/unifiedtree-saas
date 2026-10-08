@@ -5,6 +5,7 @@ import { ModulesPage } from './pages/ModulesPage'
 import { PricingPage } from './pages/PricingPage'
 import { RefundPolicyPage } from './pages/RefundPolicyPage'
 import { LoginPage } from './pages/LoginPage'
+import { MobileSignInPage } from './pages/MobileSignInPage'
 import { UnifiedSignupPage } from './pages/UnifiedSignupPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { TalkToUsPage } from './pages/TalkToUsPage'
@@ -61,6 +62,8 @@ function AnimatedRoutes() {
       <Route path="/start-free-trial"  element={<PageTransition><StartFreeTrialPage /></PageTransition>} />
       <Route path="/login"             element={<PageTransition><LoginPage /></PageTransition>} />
       <Route path="/signup"            element={<PageTransition><UnifiedSignupPage /></PageTransition>} />
+      {/* A business's "Continue with mobile" (SMS code), handed back to the business after. */}
+      <Route path="/mobile-sign-in"    element={<MobileSignInPage />} />
       {/* Legacy trial URL — bookmarks + marketing links preserved. */}
       <Route path="/trial-signup"      element={<Navigate to="/signup?mode=trial" replace />} />
 
