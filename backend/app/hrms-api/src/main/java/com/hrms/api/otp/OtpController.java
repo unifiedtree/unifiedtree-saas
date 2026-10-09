@@ -9,6 +9,7 @@ import com.unifiedtree.auth.otp.OtpService;
 import com.unifiedtree.auth.otp.OtpService.NewOtp;
 import com.unifiedtree.auth.otp.OtpService.VerifyOutcome;
 import com.unifiedtree.auth.phone.PhoneLookupService;
+import com.unifiedtree.auth.phone.PhoneSignInRule;
 import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -43,7 +44,9 @@ import java.util.UUID;
  * <p>Enum-leak protection: {@code /request} always returns 200 with an
  * opaque request id, even for unregistered numbers. Membership disclosure
  * is deferred to {@code /verify} — which only fires AFTER the caller
- * proved possession of the phone.
+ * proved possession of the phone. Two exceptions, refused before any SMS
+ * (owner's decision Q-21, 9 Oct, {@link PhoneSignInRule#forTheApp}): a number
+ * on more than one active login, and a login with two-factor sign-in.
  */
 @RestController
 @RequestMapping("/v1/auth/otp")
@@ -62,7 +65,7 @@ public class OtpController {
 
     private final OtpService otpService;
     private final Msg91Client msg91;
-    private final PhoneLookupService phoneLookup;
+    private final PhoneSignInRule signInRule;
     private final AuthService auth;
     private final PublicEndpointRateLimiter rateLimiter;
 
@@ -70,13 +73,13 @@ public class OtpController {
 
     public OtpController(OtpService otpService,
                          Msg91Client msg91,
-                         PhoneLookupService phoneLookup,
+                         PhoneSignInRule signInRule,
                          AuthService auth,
                          PublicEndpointRateLimiter rateLimiter,
                          @Value("${otp.resend-cooldown-seconds:60}") int resendCooldownSeconds) {
         this.otpService = otpService;
         this.msg91 = msg91;
-        this.phoneLookup = phoneLookup;
+        this.signInRule = signInRule;
         this.auth = auth;
         this.rateLimiter = rateLimiter;
         this.resendCooldownSeconds = resendCooldownSeconds;
@@ -94,6 +97,9 @@ public class OtpController {
 
         // Layer 2 — per-phone sliding window against otp_requests.
         checkPhoneRateLimits(phoneLast10);
+
+        // No SMS for a number the code couldn't sign in with (several logins, two-factor).
+        signInRule.forTheApp(phone);
 
         NewOtp newOtp = otpService.createNewOtp(
                 phoneLast10, phone, req.purposeOrDefault(), clientIp(http), safeUserAgent(http));
@@ -155,8 +161,9 @@ public class OtpController {
             case OK -> { /* fall through */ }
         }
 
-        // Success — resolve phone → tenant + user, issue session.
-        Optional<PhoneLookupService.Match> match = phoneLookup.findByPhone(outcome.phoneE164());
+        // Success — resolve phone → tenant + user, issue session. Checked again: the logins may have
+        // changed since the code was sent.
+        Optional<PhoneLookupService.Match> match = signInRule.forTheApp(outcome.phoneE164());
         if (match.isEmpty()) {
             log.info("otp/verify: no employee found for verified phone requestId={}", requestId);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
@@ -202,6 +209,8 @@ public class OtpController {
 
         // Sliding-window caps count resends too.
         checkPhoneRateLimits(phoneLast10);
+
+        signInRule.forTheApp(phoneE164);
 
         NewOtp newOtp = otpService.createNewOtp(
                 phoneLast10, phoneE164, existing.getPurpose(), clientIp(http), safeUserAgent(http));
