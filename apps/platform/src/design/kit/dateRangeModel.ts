@@ -123,6 +123,27 @@ export function tapDay(sel: DraftRange, day: string, single: boolean): DraftRang
   return { from: sel.from, to: day }
 }
 
+/** The form's date box that opened the picker: "From" or "To". */
+export type RangeEnd = 'from' | 'to'
+
+/**
+ * A range tap when the picker knows which end it is changing (it was opened from the form's
+ * "From" or "To" box). The end: a day on or after the start becomes the end (and the next tap
+ * changes the end again); a day before the start starts again from there. The start, with both
+ * ends set: a day on or before the end becomes the start, the end stays, and the next tap changes
+ * the end; a day after the end starts again from there. Anything else: tapDay's rules.
+ * Returns the draft and the end the next tap changes (null: tapDay's rules).
+ */
+export function tapEnd(sel: DraftRange, day: string, end: RangeEnd | null): { draft: DraftRange; next: RangeEnd | null } {
+  if (end === 'to' && sel.from) {
+    return day >= sel.from ? { draft: { from: sel.from, to: day }, next: 'to' } : { draft: { from: day, to: null }, next: null }
+  }
+  if (end === 'from' && sel.from && sel.to) {
+    return day <= sel.to ? { draft: { from: day, to: sel.to }, next: 'to' } : { draft: { from: day, to: null }, next: null }
+  }
+  return { draft: tapDay(sel, day, false), next: null }
+}
+
 /** The range a draft stands for: a start alone is that one day. */
 export function settled(sel: DraftRange): { from: string; to: string } | null {
   if (!sel.from) return null

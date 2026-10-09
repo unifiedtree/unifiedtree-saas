@@ -9,9 +9,11 @@
 // longest range (maxSpan) says so in plain words when a range is longer, instead of blocking days.
 // A list's start / end filter uses the same body in a popover: RangeFilter.tsx.
 //
-//   <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" onOpen={() => setPicking(true)} />
-//   <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end}
+//   <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" onOpen={(box) => { setBox(box); setPicking(true) }} />
+//   <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} openedFrom={box}
 //     min={today} calendar={cal} onDone={(r) => …} />
+// openedFrom: the box that was clicked, so a tap after opening from "To" moves the end (and from
+// "From" the start) instead of starting a new range.
 //
 // Mobile app twin: components/ui/DateRangeSheet.tsx.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
@@ -21,13 +23,13 @@ import { PanelButton } from './PanelButton'
 import { istToday } from '@/design/dc/dates'
 import {
   WEEK_HEADS, allowed, countWorkingDays, datePresets, ddmmyyyy, isWeeklyOff, monthTitle, monthWeeks,
-  settled, shiftMonth, spanDays, tapDay, weekdayDdmmyyyy, workingDaysLabel,
-  type DraftRange, type ViewPreset, type WorkCalendar,
+  settled, shiftMonth, spanDays, tapDay, tapEnd, weekdayDdmmyyyy, workingDaysLabel,
+  type DraftRange, type RangeEnd, type ViewPreset, type WorkCalendar,
 } from './dateRangeModel'
 import { dayKeyStep, monthCells, monthKeyStep, rangeProblem, yearCells, yearKeyStep, yearPageStart } from './rangeFilterModel'
 import './dateRange.css'
 
-export type { WorkCalendar } from './dateRangeModel'
+export type { RangeEnd, WorkCalendar } from './dateRangeModel'
 
 export interface PickedDates { from: string; to: string; halfDay: boolean }
 
@@ -40,6 +42,8 @@ export interface DateRangeDialogProps {
   /** The form's current dates, yyyy-MM-dd ('' when none). */
   from: string
   to?: string
+  /** The form's box that opened it (DateRangeButton's onOpen): the first tap changes that end. Left out: a tap starts a new range. */
+  openedFrom?: RangeEnd | null
   /** The form's own earliest / latest day: days outside are disabled and presets are clamped. */
   min?: string | null
   max?: string | null
@@ -91,7 +95,7 @@ export function DateRangeDialog(props: DateRangeDialogProps) {
 
 /** The dialog's content (exported for tests: it renders without a document). */
 export function DateRangeBody({
-  mode = 'range', from, to, min, max, calendar, halfDay, onDone, onDraftChange, serverDays, noun = 'request', today: todayProp,
+  mode = 'range', from, to, openedFrom = null, min, max, calendar, halfDay, onDone, onDraftChange, serverDays, noun = 'request', today: todayProp,
   presets: ownPresets, footerText, legend = true, maxSpan, onCancel, doneLabel = 'Done', clearable = false, onClear, initialView = 'days', presetsSide = false,
 }: Omit<DateRangeDialogProps, 'open' | 'onClose' | 'title'>) {
   const uid = useId()
@@ -101,9 +105,13 @@ export function DateRangeBody({
   const first = from || null
   const [draft, setDraft] = useState<DraftRange>({ from: first, to: first ? (single ? first : to || first) : null })
   const [half, setHalf] = useState(!!halfDay)
-  const startMonth = (first ?? (min && min > today ? min : max && max < today ? max : today)).slice(0, 7)
+  // Which end the next tap changes (opened from the form's From / To box); null: a tap starts a new range.
+  const [editing, setEditing] = useState<RangeEnd | null>(single ? null : openedFrom)
+  // Opened from "To": the calendar shows the end's month.
+  const shownFirst = !single && openedFrom === 'to' && first && to ? to : first
+  const startMonth = (shownFirst ?? (min && min > today ? min : max && max < today ? max : today)).slice(0, 7)
   const [month, setMonth] = useState(startMonth)
-  const [cursor, setCursor] = useState(first ?? (allowed(today, min, max) ? today : `${startMonth}-01`))
+  const [cursor, setCursor] = useState(shownFirst ?? (allowed(today, min, max) ? today : `${startMonth}-01`))
   const [note, setNote] = useState<string | null>(null)
   const [view, setView] = useState<CalView>(initialView)
   // The month / year grids' cursor: a month 'yyyy-MM' and a year.
@@ -196,19 +204,22 @@ export function DateRangeBody({
   }
   const pick = (day: string) => {
     if (!can(day)) return
-    setDraft(tapDay(draft, day, single || half))
+    if (single || half || !editing) setDraft(tapDay(draft, day, single || half))
+    else { const t = tapEnd(draft, day, editing); setDraft(t.draft); setEditing(t.next) }
     setCursor(day)
     setNote(describe(day))
   }
   const applyPreset = (p: { from: string; to: string }) => {
     if (half && p.from !== p.to) setHalf(false)
     setDraft({ from: p.from, to: p.to })
+    setEditing(null)
     setMonth(p.from.slice(0, 7))
     setCursor(p.from)
     setNote(null)
   }
   const toggleHalf = (on: boolean) => {
     setHalf(on)
+    setEditing(null)
     if (on && draft.from) setDraft({ from: draft.from, to: draft.from })
   }
   const problem = single ? null : rangeProblem(effective, maxSpan)
@@ -216,6 +227,7 @@ export function DateRangeBody({
   const clear = () => {
     if (onClear) { onClear(); return }
     setDraft({ from: null, to: null })
+    setEditing(null)
     setHalf(false)
     setNote(null)
   }
@@ -403,7 +415,8 @@ export function DateRangeButton({
 }: {
   from: string
   to?: string
-  onOpen: () => void
+  /** Which half was clicked: pass it on as the dialog's openedFrom. */
+  onOpen: (box: RangeEnd) => void
   single?: boolean
   startLabel?: string
   endLabel?: string
@@ -412,9 +425,9 @@ export function DateRangeButton({
   endDisabled?: boolean
   invalid?: boolean
 }) {
-  const half = (label: string, value: string | undefined, off: boolean) => (
+  const half = (box: RangeEnd, label: string, value: string | undefined, off: boolean) => (
     <button type="button" className="udr-field" disabled={disabled || off} aria-invalid={invalid || undefined}
-      aria-haspopup="dialog" aria-label={`${label.replace(/\s*\*$/, '')}: ${value ? weekdayDdmmyyyy(value) : 'not picked'}`} onClick={onOpen}>
+      aria-haspopup="dialog" aria-label={`${label.replace(/\s*\*$/, '')}: ${value ? weekdayDdmmyyyy(value) : 'not picked'}`} onClick={() => onOpen(box)}>
       <CalendarDays size={16} aria-hidden="true" />
       <span className="udr-field-t">
         <span className="udr-field-k">{label}</span>
@@ -424,8 +437,8 @@ export function DateRangeButton({
   )
   return (
     <div className="udr-fields">
-      {half(startLabel, from, false)}
-      {!single && half(endLabel, to, endDisabled)}
+      {half('from', startLabel, from, false)}
+      {!single && half('to', endLabel, to, endDisabled)}
     </div>
   )
 }

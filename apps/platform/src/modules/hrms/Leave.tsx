@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
-import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit/DateRangePicker'
+import { DateRangeButton, DateRangeDialog, type PickedDates, type RangeEnd } from '@/design/kit/DateRangePicker'
 import { RangeFilter, useRangeParam } from '@/design/kit/RangeFilter'
 import { LIST_MAX_DAYS } from './api/shared/listRange'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
@@ -152,6 +152,8 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
     holidays: new Map([...(hols.data ?? []), ...(holsNext.data ?? [])].filter((h) => h.active !== false).map((h) => [h.holidayDate.slice(0, 10), h.holidayName] as const)),
   }), [off, hols.data, holsNext.data])
   const [picking, setPicking] = useState(false)
+  // The box that opened the picker: a tap from "To" moves the end, from "From" the start.
+  const [pickFrom, setPickFrom] = useState<RangeEnd>('from')
   const [draft, setDraft] = useState<PickedDates | null>(null)
   const [f, setF] = useState({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY' as LeaveDuration, reason: '' })
   const half = f.duration !== 'FULL_DAY'
@@ -220,8 +222,8 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
           </div>
           {/* "Select dates": one dialog picks both ends (presets, weekly offs and holidays marked,
               the working days counted as the server counts them). */}
-          <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" endDisabled={half} onOpen={() => setPicking(true)} />
-          <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} min={today} calendar={cal}
+          <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" endDisabled={half} onOpen={(box) => { setPickFrom(box); setPicking(true) }} />
+          <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} openedFrom={pickFrom} min={today} calendar={cal}
             halfDay={half} noun="leave" onDraftChange={setDraft} serverDays={draftPreview.data?.workingDays ?? null}
             onDone={(r) => {
               setF({ ...f, startDate: r.from, endDate: r.to, duration: r.halfDay ? (half ? f.duration : 'HALF_DAY_MORNING') : 'FULL_DAY' })

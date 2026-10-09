@@ -100,6 +100,22 @@ describe('DateRangeBody for a calendar that only shows dates', () => {
 })
 
 describe('DateRangeButton', () => {
+  it('says which box was clicked, so the dialog knows which end to change', () => {
+    const got: string[] = []
+    const el = DateRangeButton({ from: '2026-11-06', to: '2026-11-10', onOpen: (box) => got.push(box) })
+    const [start, end] = (el.props.children as JSX.Element[])
+    start.props.onClick()
+    end.props.onClick()
+    expect(got).toEqual(['from', 'to'])
+  })
+
+  it('opened from To: the calendar shows the end’s month', () => {
+    const range = { from: '2026-11-27', to: '2026-12-03', calendar: CAL, today: TODAY, onDone: noop }
+    expect(html(<DateRangeBody {...range} openedFrom="to" />)).toContain('December 2026')
+    expect(html(<DateRangeBody {...range} openedFrom="from" />)).toContain('November 2026')
+    expect(html(<DateRangeBody {...range} />)).toContain('November 2026')
+  })
+
   it('shows both ends as DD/MM/YYYY with their labels', () => {
     const s = html(<DateRangeButton from="2026-11-06" to="2026-11-10" startLabel="From *" endLabel="To *" onOpen={noop} />)
     expect(s).toContain('From *')
