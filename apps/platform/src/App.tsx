@@ -111,6 +111,7 @@ const PliRoute = lazyPage(() => import('@/modules/hrms/payroll/PliRoute').then(m
 const AdvancesRoute = lazyPage(() => import('@/modules/hrms/advance/AdvancesRoute').then(m => ({ default: m.AdvancesRoute })))
 const Integrations = lazyPage(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = lazyPage(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
+const HrmsSettingsIndex = lazyPage(() => import('@/modules/hrms/settings/HrmsSettingsIndex').then(m => ({ default: m.HrmsSettingsIndex })))
 const MySalaryStructure = lazyPage(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
 const EmployeePayslips = lazyPage(() => import('@/modules/hrms/payroll/EmployeePayslips').then(m => ({ default: m.EmployeePayslips })))
 const LettersHub = lazyPage(() => import('@/modules/hrms/letters/LettersHub').then(m => ({ default: m.LettersHub })))
@@ -676,6 +677,15 @@ export const ROUTE_TREE = (
           element={
             <RouteGuard anyOf={['hrms.integration.read', 'hrms.integration.write']}>
               <ModuleGate moduleKey="hrms"><Integrations /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* HRMS Settings (Q-06): every HR setting as a card; each card applies its own page's rule. */}
+        <Route
+          path="/hrms/settings-index"
+          element={
+            <RouteGuard>
+              <ModuleGate moduleKey="hrms"><HrmsSettingsIndex /></ModuleGate>
             </RouteGuard>
           }
         />

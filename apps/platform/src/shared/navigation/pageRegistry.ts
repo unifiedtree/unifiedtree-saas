@@ -1,5 +1,6 @@
 import { accessState, personalPagesOn, type Access, type AccessContext, type AccessState } from './access'
 import { ADMIN_HOME_CODES, TEAM_APPROVE_CODES } from './shellCodes'
+import { HRMS_SETTING_CARDS, HRMS_SETTINGS_PATH, mayChange } from './hrmsSettingsIndex'
 
 /**
  * Every page and sub-tab of the workspace, with who may open it.
@@ -98,6 +99,17 @@ function tab(parentId: string, key: string, label: string, query: string, slash:
   entries.push({
     id: `${parentId}:${key}`, label, path: p.path + (p.path.includes('?') ? '&' : '?') + query, area: `${p.area} › ${p.label}`, slash,
     access: [...p.access, ...access], parent: parentId, icon: o.icon || p.icon, aliases: o.aliases || [], keywords: o.keywords || [], pkg: o.pkg,
+  })
+}
+/**
+ * The HRMS Settings index's rule: at least one of its cards is there for this person (open, or locked
+ * for a plan admin when the module isn't active, like every HRMS page). Looked up when asked, so the
+ * order of the entries doesn't matter.
+ */
+function anyHrmsSettingOpen(ctx: AccessContext): boolean {
+  return HRMS_SETTING_CARDS.some((c) => {
+    const e = entries.find((x) => x.id === c.id)
+    return !!e && isReadyPage(e) && accessState(e.access, ctx) !== 'hidden' && mayChange(c, ctx.has)
   })
 }
 function iconOf(slash: string) { const m = SLASH_MODULES.find((x) => x.key === slash.split('/')[0]); return m ? m.icon : 'fileText' }
@@ -284,6 +296,8 @@ tab('fnf', 'settled', 'Settled settlements', 'tab=settled', 'exit/fnf-settled', 
 tab('fnf', 'create', 'Create a settlement', 'tab=create', 'exit/fnf-create', [any('hrms.fnf.process')], { keywords: ['new settlement'] })
 
 // ── HR setup ───────────────────────────────────────────────────────────────
+// The HRMS Settings index (Q-06): open when at least one of its cards would open for this person.
+page('hrms-settings', 'HRMS settings', HRMS_SETTINGS_PATH, 'HR Setup', 'hr-setup', [{ module: HR, when: anyHrmsSettingOpen }], { aliases: ['settings/hrms', 'hrms-settings'], keywords: ['settings', 'configuration', 'setup', 'rules', 'masters'] })
 page('hr-config', 'HR Configuration', '/hrms/settings', 'HR Setup', 'hr-setup/configuration', [{ anyOf: ['settings.hrconfig.write', 'settings.read', 'hrms.probation.config.read', 'attendance.policy.manage'], module: HR }], { aliases: ['hr-setup/hr-configuration', 'hr-config'], keywords: ['probation', 'notice period', 'work week', 'employee id format', 'fiscal year'] })
 page('notif-templates', 'Notification templates', '/hrms/notification-templates', 'HR Setup', 'hr-setup/notification-templates', [{ ...any('hrms.notiftemplate.read', 'hrms.notiftemplate.write'), module: HR }], { aliases: ['hr-setup/templates'], keywords: ['email template', 'message'] })
 page('hr-integrations', 'HR integrations', '/hrms/integrations', 'HR Setup', 'hr-setup/integrations', [{ ...any('hrms.integration.read', 'hrms.integration.write'), module: HR }], { keywords: ['biometric', 'connect'] })
