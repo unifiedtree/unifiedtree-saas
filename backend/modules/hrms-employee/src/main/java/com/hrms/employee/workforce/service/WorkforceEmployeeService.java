@@ -526,6 +526,7 @@ public class WorkforceEmployeeService {
         // Reporting manager: explicit value wins; otherwise auto-derive from the
         // selected department's head. The client no longer ships a chip picker;
         // the rule "you report to the head of your department" is canonical.
+        if (req.reportingManagerId() != null) checkManager(null, req.reportingManagerId());
         e.setReportingManagerId(resolveReportingManager(req.reportingManagerId(), req.departmentId()));
         // Any active employment type of the company (6 Oct 2026), or one of the five defaults; none = Full-time.
         String type = EmploymentTypeCodes.resolveForEmployee(jdbc, req.companyId(), req.employmentType(), null);
@@ -610,6 +611,7 @@ public class WorkforceEmployeeService {
         if (req.phone()            != null) e.setPhone(req.phone());
         if (req.dateOfBirth()      != null) e.setDateOfBirth(req.dateOfBirth());
         if (req.gender()           != null) e.setGender(req.gender());
+        UUID oldDepartmentId = e.getDepartmentId();
         if (req.departmentId()     != null) e.setDepartmentId(req.departmentId());
         if (req.designationId()    != null) e.setDesignationId(req.designationId());
         // Branch / geofence: process together so that assigning a geofence
@@ -623,7 +625,16 @@ public class WorkforceEmployeeService {
                 if (derived != null) e.setBranchId(derived);
             }
         }
-        if (req.reportingManagerId() != null) e.setReportingManagerId(req.reportingManagerId());
+        if (Boolean.TRUE.equals(req.clearReportingManager())) {
+            e.setReportingManagerId(null);
+        } else if (req.reportingManagerId() != null) {
+            // Checked only when it changes: re-saving someone whose manager has
+            // since left must not fail on a manager nobody touched.
+            if (!req.reportingManagerId().equals(e.getReportingManagerId())) checkManager(e.getId(), req.reportingManagerId());
+            e.setReportingManagerId(req.reportingManagerId());
+        } else if (req.departmentId() != null && !req.departmentId().equals(oldDepartmentId)) {
+            followNewDepartmentHead(e, oldDepartmentId);
+        }
         if (req.employmentType()   != null) {
             String type = EmploymentTypeCodes.resolveForEmployee(jdbc, e.getCompanyId(), req.employmentType(), e.getEmploymentType());
             if (type != null) e.setEmploymentType(type);
@@ -750,10 +761,67 @@ public class WorkforceEmployeeService {
     // by passing reportingManagerId in the request.
     private UUID resolveReportingManager(UUID explicit, UUID departmentId) {
         if (explicit != null) return explicit;
+        return headOf(departmentId);
+    }
+
+    private UUID headOf(UUID departmentId) {
         if (departmentId == null) return null;
         return departmentRepository.findById(departmentId)
                 .map(Department::getDepartmentHeadEmployeeId)
                 .orElse(null);
+    }
+
+    /** Most links walked looking for a loop; real reporting lines are a handful deep. */
+    static final int MAX_CHAIN = 50;
+
+    /**
+     * A manager someone can be given: an active employee of this workspace, not
+     * the person themself, and not someone who already reports up to them (that
+     * would make a loop). {@code employeeId} is null for a new hire, who can't be
+     * anyone's manager yet. The same people the approval chain accepts
+     * (ApproverChainService.isValidApprover), so a manager saved here is one
+     * leave and WFH requests can actually go to. The phone's older employee
+     * endpoints (EmployeeService) check with this too.
+     */
+    public void checkManager(UUID employeeId, UUID managerId) {
+        if (managerId.equals(employeeId)) {
+            throw new BusinessRuleException("Someone can't report to themselves.", "MANAGER_SELF");
+        }
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        WorkforceEmployee manager = repository.findById(managerId)
+                .filter(m -> tenantId == null || m.getTenantId() == null || tenantId.equals(m.getTenantId()))
+                .orElseThrow(() -> new BusinessRuleException("That manager wasn't found.", "MANAGER_NOT_FOUND"));
+        WorkforceEmployee.EmploymentStatus status = manager.getEmploymentStatus();
+        if (!manager.isActive() || status == WorkforceEmployee.EmploymentStatus.EXITED
+                || status == WorkforceEmployee.EmploymentStatus.TERMINATED
+                || status == WorkforceEmployee.EmploymentStatus.SUSPENDED) {
+            throw new BusinessRuleException("Pick a manager who still works here.", "MANAGER_INACTIVE");
+        }
+        if (employeeId == null) return;
+        // Walk up from the new manager; reaching the employee means they'd manage their own manager.
+        java.util.Set<UUID> seen = new java.util.HashSet<>();
+        UUID next = manager.getReportingManagerId();
+        while (next != null && seen.size() < MAX_CHAIN && seen.add(next)) {
+            if (next.equals(employeeId)) {
+                throw new BusinessRuleException(
+                        "This would make a reporting loop: " + displayName(manager.getFirstName(), manager.getLastName())
+                                + " already reports up to this person.", "MANAGER_LOOP");
+            }
+            next = repository.findById(next).map(WorkforceEmployee::getReportingManagerId).orElse(null);
+        }
+    }
+
+    /**
+     * Someone moved to another department follows its head when their manager
+     * was the one the old department gave them (its head) or they had none; a
+     * manager HR picked by hand stays. Nothing changes when the new department
+     * has no head, or its head is the person themself.
+     */
+    private void followNewDepartmentHead(WorkforceEmployee e, UUID oldDepartmentId) {
+        UUID current = e.getReportingManagerId();
+        if (current != null && !current.equals(headOf(oldDepartmentId))) return;
+        UUID newHead = headOf(e.getDepartmentId());
+        if (newHead != null && !newHead.equals(e.getId())) e.setReportingManagerId(newHead);
     }
 
     // -- Generator: per-company auto-increment (V082) -----------------------

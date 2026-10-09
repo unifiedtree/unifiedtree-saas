@@ -12,6 +12,7 @@ import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useDirectReports } from '../api/useProfileData'
 import { fmtDate } from './profileFormat'
 import { SectionState, SubSection, Facts } from './shared'
+import { ManagerPicker } from '../ManagerPicker'
 import type { EmploymentType } from '../../api/useWorkforce'
 import {
   InfoRow, WorkForm, workSchema,
@@ -45,7 +46,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
   const designation = designations.find((d) => d.id === emp.designationId)
   const branch      = branches.find((b) => b.id === emp.branchId)
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isValid } } = useForm<WorkForm>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty, isValid } } = useForm<WorkForm>({
     resolver: zodResolver(workSchema),
     values: {
       departmentId:       emp.departmentId       ?? '',
@@ -58,6 +59,11 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
   })
 
   const onSubmit = async (values: WorkForm) => {
+    // The manager goes only when it changed: sent unchanged, it would stop a department
+    // change from moving someone to the new department's head. Empty is "no manager".
+    const manager = values.reportingManagerId ?? ''
+    const managerChange = manager === (emp.reportingManagerId ?? '') ? {}
+      : manager ? { reportingManagerId: manager } : { clearReportingManager: true }
     try {
       await updateMut.mutateAsync({
         id: emp.id,
@@ -65,7 +71,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
           departmentId:       values.departmentId       || undefined,
           designationId:      values.designationId      || undefined,
           branchId:           values.branchId           || undefined,
-          reportingManagerId: values.reportingManagerId || undefined,
+          ...managerChange,
           employmentType:     values.employmentType     as EmploymentType | undefined,
           ctcAnnual:          values.ctcAnnual,
         },
@@ -134,9 +140,12 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
                 .map((t) => <option key={t.id} value={t.code!}>{t.name}</option>)}
             </select>
           </div>
-          <Field label="Reporting Manager ID" error={errors.reportingManagerId?.message}>
-            <Input {...register('reportingManagerId')} placeholder="UUID of reporting manager" />
-          </Field>
+          <ManagerPicker companyId={emp.companyId} value={watch('reportingManagerId') ?? ''} excludeId={emp.id}
+            onChange={(v) => setValue('reportingManagerId', v, { shouldDirty: true, shouldValidate: true })}
+            error={errors.reportingManagerId?.message} label="Reporting manager" />
+          {watch('departmentId') !== (emp.departmentId ?? '') && watch('reportingManagerId') === (emp.reportingManagerId ?? '') && (
+            <p className="text-xs text-text-secondary">If they report to the old department’s head, they’ll move to the new department’s head.</p>
+          )}
           <Field label="CTC Annual (₹)" error={errors.ctcAnnual?.message}>
             <Input {...register('ctcAnnual')} type="number" placeholder="1200000" />
           </Field>

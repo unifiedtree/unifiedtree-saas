@@ -91,6 +91,7 @@ public class DepartmentService {
         // Either revive the archived row (keeps its id, and therefore every FK
         // pointing at it) or start a fresh one.
         Department d = existing != null ? existing : new Department();
+        UUID oldHead = d.getDepartmentHeadEmployeeId();
         d.setCompanyId(req.companyId());
         d.setName(req.name());
         d.setCode(req.code());
@@ -107,6 +108,7 @@ public class DepartmentService {
         d.setActive(true);
         // Flushed now: the branch links below are inserted over JDBC and reference this row.
         Department saved = repository.saveAndFlush(d);
+        DepartmentHeadChange.moveReports(jdbc, saved.getId(), oldHead, saved.getDepartmentHeadEmployeeId());
         // 2026-09-25: branchIds used to be accepted and silently dropped.
         if (req.branchIds() != null) replaceBranches(saved, req.branchIds());
         if (costCentre != null) writeCostCentre(saved, costCentre);
@@ -257,8 +259,11 @@ public class DepartmentService {
     public DepartmentResponse setHead(UUID id, UUID employeeId) {
         Department d = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));
+        UUID oldHead = d.getDepartmentHeadEmployeeId();
         d.setDepartmentHeadEmployeeId(employeeId);   // null clears the head
-        return toResponse(repository.save(d));
+        Department saved = repository.save(d);
+        DepartmentHeadChange.moveReports(jdbc, id, oldHead, employeeId);
+        return toResponse(saved);
     }
 
     public void archive(UUID id) {
