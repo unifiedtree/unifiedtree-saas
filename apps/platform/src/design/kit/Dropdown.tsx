@@ -41,6 +41,11 @@ export interface DropdownProps<V extends string = string> {
   hint?: ReactNode
   searchable?: boolean
   searchPlaceholder?: string
+  /**
+   * The caller searches (on the server) instead: told every change of the search text ('' when the
+   * list opens), and `options` are shown as given, already matching.
+   */
+  onSearch?: (query: string) => void
   /** Text next to the search box. Default: "3 total", or "2 of 3" while searching. */
   countLabel?: (shown: number, total: number, query: string) => ReactNode
   emptyText?: ReactNode
@@ -85,7 +90,7 @@ function Tile({ option, size }: { option: DropdownOption<string>; size: 38 | 44 
 
 export function Dropdown<V extends string = string>({
   options, value, onChange, label, variant = 'field', placeholder = 'Select…', eyebrow, hint, searchable = true,
-  searchPlaceholder = 'Search…', countLabel, emptyText = 'Nothing matches that search.', footerAction, disabled, invalid,
+  searchPlaceholder = 'Search…', onSearch, countLabel, emptyText = 'Nothing matches that search.', footerAction, disabled, invalid,
   id, className, menuWidth = 'anchor', placement = 'bottom-start',
 }: DropdownProps<V>) {
   const uid = useId()
@@ -102,11 +107,12 @@ export function Dropdown<V extends string = string>({
   const selectedIndex = options.findIndex((o) => o.value === value)
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined
 
-  const shown = useMemo(() => filterOptions(options, query), [options, query])
+  const shown = useMemo(() => (onSearch ? options : filterOptions(options, query)), [options, query, onSearch])
 
   const openList = () => {
     if (disabled) return
     setQuery('')
+    onSearch?.('')
     setActive(selectedIndex >= 0 ? selectedIndex : firstEnabled(options))
     setOpen(true)
   }
@@ -120,6 +126,12 @@ export function Dropdown<V extends string = string>({
     closeList(true)
     if (o.value !== value) onChange(o.value, o)
   }
+
+  // Searching on the server: when its answer arrives, highlight the first row of it.
+  const answerKey = onSearch ? options.map((o) => o.value).join('|') : ''
+  useEffect(() => {
+    if (open && onSearch) setActive(firstEnabled(options))
+  }, [answerKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the highlighted row in view.
   useEffect(() => {
@@ -200,7 +212,7 @@ export function Dropdown<V extends string = string>({
               value={query}
               autoComplete="off"
               spellCheck={false}
-              onChange={(e) => { setQuery(e.target.value); setActive(firstEnabled(filterOptions(options, e.target.value))) }}
+              onChange={(e) => { setQuery(e.target.value); onSearch?.(e.target.value); setActive(firstEnabled(onSearch ? options : filterOptions(options, e.target.value))) }}
               onKeyDown={onListKey}
             />
             <span className="uko-dd-count" aria-live="polite">{count}</span>

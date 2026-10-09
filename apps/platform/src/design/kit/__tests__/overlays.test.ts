@@ -718,3 +718,46 @@ describe('ConfirmDialog (restyled, same API)', () => {
     await t.done()
   }, T)
 })
+
+describe('Dropdown that searches on the server (onSearch)', () => {
+  it('tells the caller what is typed and shows its rows as given', async () => {
+    const t = await open('dropdown-server')
+    await t.page.locator('.uko-dd-trigger').click()
+    await eventually(() => t.log(), ['search:'])
+    await t.page.getByRole('combobox', { name: 'Search employee' }).fill('zz-hidden')
+    // The "server" matched Ravi on a field the row doesn't show: a client-side filter would have hidden him.
+    await eventually(() => t.page.getByRole('option').locator('.uko-dd-otitle').allInnerTexts(), ['Ravi Kumar'])
+    await t.page.keyboard.press('Enter')
+    await eventually(() => t.log(), ['search:', 'search:zz-hidden', 'pick:p2'])
+    expect(await t.page.locator('.uko-dd-trigger').textContent()).toContain('Ravi Kumar')
+    await t.done()
+  }, T)
+})
+
+describe('Select dates, opened from the From or To box', () => {
+  const day = (t: Opened, iso: string) => t.page.locator(`[role="dialog"] button[data-day="${iso}"]`)
+  const done = (t: Opened) => t.page.getByRole('dialog').getByRole('button', { name: 'Done' })
+  it('a tap from To moves the end; from From moves the start and keeps the end', async () => {
+    const t = await open('daterange')
+    // To: Fri 6 – Tue 10 Nov; tapping Fri 13 makes it the end (it used to start a one-day range).
+    await t.page.getByRole('button', { name: /^To:/ }).click()
+    await day(t, '2026-11-13').click()
+    await done(t).click()
+    // From: tapping Wed 4 moves the start, the end stays Fri 13.
+    await t.page.getByRole('button', { name: /^From:/ }).click()
+    await day(t, '2026-11-04').click()
+    await done(t).click()
+    // From, then two taps: the start, then the end.
+    await t.page.getByRole('button', { name: /^From:/ }).click()
+    await day(t, '2026-11-09').click()
+    await day(t, '2026-11-11').click()
+    await done(t).click()
+    // To, a day before the start: it starts again from there (one day until the end is tapped).
+    await t.page.getByRole('button', { name: /^To:/ }).click()
+    await day(t, '2026-11-05').click()
+    await done(t).click()
+    await eventually(() => t.log(), ['open:to', 'done:2026-11-06..2026-11-13', 'open:from', 'done:2026-11-04..2026-11-13',
+      'open:from', 'done:2026-11-09..2026-11-11', 'open:to', 'done:2026-11-05..2026-11-05'])
+    await t.done()
+  }, T)
+})

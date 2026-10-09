@@ -7,9 +7,10 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/design/kit/display'
 import { SidePanel, Dropdown, FormField, Select, Textarea, useToast } from '@/design/kit/overlays'
-import { DateRangeButton, DateRangeDialog, type PickedDates } from '@/design/kit/DateRangePicker'
+import { DateRangeButton, DateRangeDialog, type PickedDates, type RangeEnd } from '@/design/kit/DateRangePicker'
 import { useApplyLeaveOnBehalf } from '../api/shared/useApplyLeaveOnBehalf'
-import { useEmployeeDirectory } from '../api/useWorkforce'
+import { isCurrentStaff, useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
+import { useDebounce } from '@/shared/hooks/useDebounce'
 import { useEmployeeLeaveBalances, useLeaveTypes, useLeavePreview, type LeaveDuration } from '../api/useLeave'
 import { useCurrentCompany } from '../company/CurrentCompany'
 import { useHolidays, useWeekendDays, jsWeekendDays } from '../api/useSettings'
@@ -22,16 +23,21 @@ interface Props { open: boolean; onClose: () => void; onDone?: () => void }
 export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
   const toast = useToast()
   const [picked, setPicked] = useState<string>('')
+  // The chosen person, kept while a later search no longer lists them.
+  const [chosen, setChosen] = useState<WorkforceEmployee | null>(null)
+  const [search, setSearch] = useState('')
+  const typed = useDebounce(search.trim(), 300)
   const [f, setF] = useState<{ leaveTypeId: string; startDate: string; endDate: string; duration: LeaveDuration; reason: string }>({
     leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY', reason: '',
   })
 
-  // The directory call pages 50 at a time; Dropdown's own search filters this
-  // list client-side. Only run while open. The people of the company the top bar is on.
+  // The people of the company the top bar is on who still work there (probation and notice period
+  // too; not leavers). The typed search goes to the server, 50 at a time. Only run while open.
   const { companyId: currentCompanyId } = useCurrentCompany()
-  const dir = useEmployeeDirectory({ status: 'ACTIVE', pageSize: 50, page: 0, companyId: currentCompanyId || undefined }, { enabled: open })
+  const dir = useEmployeeDirectory({ search: typed || undefined, pageSize: 50, page: 0, companyId: currentCompanyId || undefined }, { enabled: open })
   const options = useMemo(() => {
-    const rows = dir.data?.content ?? []
+    const rows = (dir.data?.content ?? []).filter(isCurrentStaff)
+    if (chosen && !rows.some((e) => e.id === chosen.id)) rows.unshift(chosen)
     return rows.map((e) => ({
       value: e.id,
       label: `${e.firstName}${e.lastName ? ` ${e.lastName}` : ''}`,
@@ -39,9 +45,8 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
       monogram: (e.firstName.charAt(0) + (e.lastName?.charAt(0) || '')).toUpperCase(),
       keywords: `${e.employeeCode ?? ''} ${e.email ?? ''}`,
     }))
-  }, [dir.data])
+  }, [dir.data, chosen])
 
-  const chosen = (dir.data?.content ?? []).find((e) => e.id === picked)
   const companyId = chosen?.companyId ?? currentCompanyId
   const types = useLeaveTypes(companyId)
   const bal = useEmployeeLeaveBalances(picked, new Date().getFullYear(), !!picked)
@@ -56,6 +61,8 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
 
   // "Select dates": the company's weekly offs and holidays, as the server counts leave.
   const [picking, setPicking] = useState(false)
+  // The box that opened the picker: a tap from "To" moves the end, from "From" the start.
+  const [pickFrom, setPickFrom] = useState<RangeEnd>('from')
   const [draft, setDraft] = useState<PickedDates | null>(null)
   const today = todayIso()
   const wk = useWeekendDays(open && companyId ? companyId : undefined)
@@ -100,6 +107,7 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
       toast.success(`Leave filed for ${chosen?.firstName ?? 'the employee'}`,
         { detail: 'They’ve been told and their approver was notified.' })
       setPicked('')
+      setChosen(null)
       setF({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY', reason: '' })
       onDone?.()
       onClose()
@@ -134,9 +142,10 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
             label="Employee"
             value={picked || null}
             options={options}
-            onChange={(v) => setPicked(v)}
+            onChange={(v) => { setPicked(v); setChosen((dir.data?.content ?? []).find((e) => e.id === v) ?? null) }}
             placeholder={dir.isLoading ? 'Loading…' : 'Search by name, code or email'}
             searchable
+            onSearch={setSearch}
             emptyText={dir.error ? 'Couldn’t load the directory.' : 'No one matches.'}
           />
         </div>
@@ -151,8 +160,8 @@ export function ApplyOnBehalfPanel({ open, onClose, onDone }: Props) {
               }),
             ]} />
         </FormField>
-        <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" endDisabled={half} onOpen={() => setPicking(true)} />
-        <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} min={today} calendar={cal}
+        <DateRangeButton from={f.startDate} to={end} startLabel="From *" endLabel="To *" endDisabled={half} onOpen={(box) => { setPickFrom(box); setPicking(true) }} />
+        <DateRangeDialog open={picking} onClose={() => setPicking(false)} from={f.startDate} to={end} openedFrom={pickFrom} min={today} calendar={cal}
           halfDay={half} noun="leave" onDraftChange={setDraft} serverDays={draftPreview.data?.workingDays ?? null}
           onDone={(r) => {
             setF({ ...f, startDate: r.from, endDate: r.to, duration: r.halfDay ? (half ? f.duration : 'HALF_DAY_MORNING') : 'FULL_DAY' })
