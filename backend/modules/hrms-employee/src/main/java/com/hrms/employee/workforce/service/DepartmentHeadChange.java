@@ -54,18 +54,35 @@ public final class DepartmentHeadChange {
                 args.toArray());
     }
 
-    /** What the move needs to know about someone, or null when nobody has this id. */
+    /**
+     * What the move needs to know about someone, or null when nobody has this
+     * id or their status can't be read (missing, or not one we know). Such a
+     * person doesn't count as still working here: as the new head they take
+     * over nobody, and a walk up the reporting line ends at them. Never throws.
+     */
     private static WorkforceEmployee find(JdbcTemplate jdbc, UUID id) {
         List<WorkforceEmployee> rows = jdbc.query(
                 "SELECT tenant_id, is_active, employment_status, reporting_manager_id FROM hrms.employees WHERE id = ?",
                 (rs, n) -> {
+                    WorkforceEmployee.EmploymentStatus status = statusOf(rs.getString("employment_status"));
+                    if (status == null) return null;
                     WorkforceEmployee e = new WorkforceEmployee();
                     e.setTenantId(rs.getObject("tenant_id", UUID.class));
                     e.setActive(rs.getBoolean("is_active"));
-                    e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.valueOf(rs.getString("employment_status")));
+                    e.setEmploymentStatus(status);
                     e.setReportingManagerId(rs.getObject("reporting_manager_id", UUID.class));
                     return e;
                 }, id);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** The saved status, or null when it is missing or not one we know. */
+    private static WorkforceEmployee.EmploymentStatus statusOf(String name) {
+        if (name == null) return null;
+        try {
+            return WorkforceEmployee.EmploymentStatus.valueOf(name);
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
     }
 }

@@ -795,8 +795,7 @@ public class WorkforceEmployeeService {
         }
         if (employeeId == null) return;
         // Walk up from the new manager; reaching the employee means they'd manage their own manager.
-        if (reportsUpTo(manager, id -> repository.findById(id).map(WorkforceEmployee::getReportingManagerId).orElse(null))
-                .contains(employeeId)) {
+        if (reportsUpTo(manager, this::managerOf).contains(employeeId)) {
             throw new BusinessRuleException(
                     "This would make a reporting loop: " + displayName(manager.getFirstName(), manager.getLastName())
                             + " already reports up to this person.", "MANAGER_LOOP");
@@ -831,19 +830,26 @@ public class WorkforceEmployeeService {
         return line;
     }
 
+    /** Someone's manager as saved; null when they have none or nobody has this id. */
+    private UUID managerOf(UUID id) {
+        return repository.findById(id).map(WorkforceEmployee::getReportingManagerId).orElse(null);
+    }
+
     /**
      * Someone moved to another department follows its head when their manager
      * was the one the old department gave them (its head) or they had none; a
      * manager HR picked by hand stays. Nothing changes when the new department
-     * has no head, its head is the person themself, or its head no longer
-     * works here (checkManager's rule; the move itself still saves).
+     * has no head, its head is the person themself, its head no longer works
+     * here (checkManager's rule) or already reports up to them (a loop); the
+     * move itself still saves.
      */
     private void followNewDepartmentHead(WorkforceEmployee e, UUID oldDepartmentId) {
         UUID current = e.getReportingManagerId();
         if (current != null && !current.equals(headOf(oldDepartmentId))) return;
         UUID newHead = headOf(e.getDepartmentId());
         if (newHead == null || newHead.equals(e.getId())) return;
-        if (repository.findById(newHead).filter(h -> inWorkspace(h) && stillWorksHere(h)).isPresent()) e.setReportingManagerId(newHead);
+        WorkforceEmployee head = repository.findById(newHead).filter(h -> inWorkspace(h) && stillWorksHere(h)).orElse(null);
+        if (head != null && !reportsUpTo(head, this::managerOf).contains(e.getId())) e.setReportingManagerId(newHead);
     }
 
     // -- Generator: per-company auto-increment (V082) -----------------------

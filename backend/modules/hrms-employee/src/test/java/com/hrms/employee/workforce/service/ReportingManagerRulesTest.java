@@ -18,6 +18,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.lang.reflect.RecordComponent;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -277,6 +281,23 @@ class ReportingManagerRulesTest {
     }
 
     @Test
+    void movingIntoADepartmentWhoseHeadReportsUpToThePersonKeepsTheirManager() {
+        // Suresh heads Sales and reports to Ravi, who reports to Varsha. Varsha moves into Sales.
+        WorkforceEmployee kavitha = person("Kavitha", ENGINEERING, null);
+        head(ENGINEERING, kavitha);
+        WorkforceEmployee varsha = person("Varsha", ENGINEERING, kavitha.getId());
+        WorkforceEmployee ravi = person("Ravi", SALES, varsha.getId());
+        WorkforceEmployee suresh = person("Suresh", SALES, ravi.getId());
+        head(SALES, suresh);
+
+        service.update(varsha.getId(), edit(Map.of("departmentId", SALES)));
+
+        // Varsha → Suresh would close Suresh → Ravi → Varsha → Suresh, so she keeps Kavitha.
+        assertThat(varsha.getDepartmentId()).isEqualTo(SALES);   // the move itself still saves
+        assertThat(varsha.getReportingManagerId()).isEqualTo(kavitha.getId());
+    }
+
+    @Test
     void theNewHeadThemselfKeepsTheirManager() {
         WorkforceEmployee kavitha = person("Kavitha", ENGINEERING, null);
         head(ENGINEERING, kavitha);
@@ -372,6 +393,33 @@ class ReportingManagerRulesTest {
             assertThat(DepartmentHeadChange.moveReports(jdbc, ENGINEERING, oldHead, head)).isZero();
         }
         verify(jdbc, never()).update(anyString(), any(Object[].class));
+    }
+
+    /** The new head's row as saved, read through DepartmentHeadChange's own mapping: active, no manager, this status. */
+    @SuppressWarnings("unchecked")
+    private static JdbcTemplate headRowWithStatus(String status) throws SQLException {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getString("employment_status")).thenReturn(status);
+        when(rs.getBoolean("is_active")).thenReturn(true);
+        when(jdbc.query(org.mockito.ArgumentMatchers.contains("employment_status"), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(i -> Collections.singletonList(i.<RowMapper<?>>getArgument(1).mapRow(rs, 0)));
+        return jdbc;
+    }
+
+    @Test
+    void aNewHeadWhoseStatusCantBeReadTakesOverNobody() throws SQLException {
+        UUID oldHead = UUID.randomUUID(), newHead = UUID.randomUUID();
+        for (String unreadable : Arrays.asList(null, "RETIRED")) {
+            JdbcTemplate jdbc = headRowWithStatus(unreadable);
+
+            assertThat(DepartmentHeadChange.moveReports(jdbc, ENGINEERING, oldHead, newHead)).isZero();
+            verify(jdbc, never()).update(anyString(), any(Object[].class));
+        }
+        // The same row with a status we know still moves people.
+        JdbcTemplate readable = headRowWithStatus("ACTIVE");
+        DepartmentHeadChange.moveReports(readable, ENGINEERING, oldHead, newHead);
+        verify(readable).update(org.mockito.ArgumentMatchers.contains("SET reporting_manager_id = ?"), any(Object[].class));
     }
 
     @Test
