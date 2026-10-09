@@ -133,7 +133,9 @@ export const NAV_MODULES: readonly NavModule[] = [
     { label: 'Statutory Compliance', path: '/hrms/compliance' },
     { label: 'Muster Roll', path: '/hrms/muster-roll' },
   ] },
-  { key: 'hrsettings', label: 'HR setup', icon: 'sliders', group: 'org', pages: [
+  // One settings entry for HRMS (Q-06): "Settings" opens the index of every HR setting; the pages stay where they are.
+  { key: 'hrsettings', label: 'Settings', icon: 'sliders', group: 'org', pages: [
+    { label: 'All settings', path: '/hrms/settings-index' },
     { label: 'HR Configuration', path: '/hrms/settings' },
     { label: 'Notification Templates', path: '/hrms/notification-templates' },
     { label: 'Integrations', path: '/hrms/integrations' },

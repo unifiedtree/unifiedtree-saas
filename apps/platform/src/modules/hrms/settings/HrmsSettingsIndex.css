@@ -1,0 +1,4 @@
+/* HRMS Settings cards: a quiet hover and a visible keyboard focus (light and dark from the tokens). */
+.uhs-card { transition: border-color .15s ease, box-shadow .15s ease; }
+.uhs-card:hover { border-color: var(--u-br, #0F6E56) !important; box-shadow: var(--u-shc2, 0 4px 14px rgba(14, 27, 22, .08)) !important; }
+.uhs-card:focus-visible { outline: 2px solid var(--u-br, #0F6E56); outline-offset: 2px; }
