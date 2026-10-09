@@ -159,11 +159,15 @@ export function ProgramRoster({ program }: { program: TrainingProgram }) {
   const [q, setQ] = useState('')
   const [dropping, setDropping] = useState<Enrollment | null>(null)
   const closed = program.status === 'COMPLETED' || program.status === 'CANCELLED'
-  const { data: dir } = useEmployeeDirectory({ companyId: program.companyId, search: q.trim() || undefined, pageSize: 200 }, { enabled: !!program.companyId && !closed })
+  const { data: dir, error: dirError } = useEmployeeDirectory({ companyId: program.companyId, search: q.trim() || undefined, pageSize: 200 }, { enabled: !!program.companyId && !closed })
   const seated = useMemo(() => new Set(enrollments.filter((e) => e.status !== 'DROPPED').map((e) => e.employeeId)), [enrollments])
   const candidates = useMemo(() => (dir?.content ?? []).filter((e) => !seated.has(e.id)), [dir, seated])
   const active = enrollments.filter((e) => e.status !== 'DROPPED').length
   const seatsLeft = program.capacity == null ? null : Math.max(program.capacity - program.enrolledCount, 0)
+  // Why no one is listed: a failed load says so (its own reason), not "No employees in this company".
+  const noOne = dirError ? ((dirError as { status?: number }).status === 403 ? 'You need access to the employee directory to enroll people.' : errorText(dirError, 'Couldn’t load the employees.'))
+    : !program.companyId ? 'This program has no company, so no one can be listed.'
+      : (dir?.content ?? []).length === 0 ? (q.trim() ? 'No one matches that search.' : 'No employees in this company.') : 'Everyone matching is already enrolled.'
 
   const onComplete = async (e: Enrollment) => {
     const raw = (scores[e.id] ?? '').trim()
@@ -223,7 +227,7 @@ export function ProgramRoster({ program }: { program: TrainingProgram }) {
           <Input label="Search employees to enroll" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or code" />
           <div className="grw-results" role="group" aria-label="People to enroll">
             {candidates.length === 0 ? (
-              <p className="grw-muted" style={{ margin: 0, padding: 12 }}>{(dir?.content ?? []).length === 0 ? (q.trim() ? 'No one matches that search.' : 'No employees in this company.') : 'Everyone matching is already enrolled.'}</p>
+              <p className="grw-muted" style={{ margin: 0, padding: 12 }} role={dirError ? 'alert' : undefined}>{noOne}</p>
             ) : candidates.map((emp) => (
               <div key={emp.id} style={{ padding: '6px 12px', borderBottom: '1px solid var(--u-ln2, #EDF1EF)' }}>
                 <Checkbox label={`${emp.firstName} ${emp.lastName ?? ''}`.trim()} description={emp.employeeCode || undefined}
