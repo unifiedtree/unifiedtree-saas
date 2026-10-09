@@ -3,7 +3,7 @@
 // and every answer is the same whatever the machine's time zone.
 import { describe, expect, it } from 'vitest'
 import {
-  countWorkingDays, datePresets, ddmmyyyy, inReach, monthWeeks, offDaysFromIso, settled, shiftDay, shiftMonth, tapDay, weekdayOf,
+  countWorkingDays, datePresets, ddmmyyyy, inReach, monthWeeks, offDaysFromIso, settled, shiftDay, shiftMonth, tapDay, tapEnd, weekdayOf,
   workingDaysLabel, type WorkCalendar,
 } from './dateRangeModel'
 import { istToday } from '@/design/dc/dates'
@@ -67,6 +67,29 @@ describe('taps', () => {
     expect(tapDay({ from: '2026-10-07', to: null }, '2026-10-07', false)).toEqual({ from: '2026-10-07', to: '2026-10-07' })
     expect(tapDay({ from: '2026-10-07', to: null }, '2026-10-05', false)).toEqual({ from: '2026-10-05', to: null })
     expect(tapDay({ from: '2026-10-07', to: '2026-10-07' }, '2026-10-09', true)).toEqual({ from: '2026-10-09', to: '2026-10-09' })
+  })
+
+  it('opened from the To box: a tap moves the end (it used to start a new one-day range)', () => {
+    const range = { from: '2026-10-09', to: '2026-10-12' }
+    expect(tapEnd(range, '2026-10-16', 'to')).toEqual({ draft: { from: '2026-10-09', to: '2026-10-16' }, next: 'to' })
+    expect(tapEnd(range, '2026-10-10', 'to')).toEqual({ draft: { from: '2026-10-09', to: '2026-10-10' }, next: 'to' })
+    expect(tapEnd(range, '2026-10-09', 'to')).toEqual({ draft: { from: '2026-10-09', to: '2026-10-09' }, next: 'to' })
+    // Before the start: start again from there; the next tap is the end (tapDay's rules).
+    expect(tapEnd(range, '2026-10-05', 'to')).toEqual({ draft: { from: '2026-10-05', to: null }, next: null })
+    // Nothing picked yet: tapDay's rules.
+    expect(tapEnd({ from: null, to: null }, '2026-10-07', 'to')).toEqual({ draft: { from: '2026-10-07', to: null }, next: null })
+  })
+
+  it('opened from the From box: a tap moves the start and keeps the end; the next tap is the end', () => {
+    const range = { from: '2026-10-09', to: '2026-10-12' }
+    const t = tapEnd(range, '2026-10-05', 'from')
+    expect(t).toEqual({ draft: { from: '2026-10-05', to: '2026-10-12' }, next: 'to' })
+    expect(tapEnd(t.draft, '2026-10-07', t.next)).toEqual({ draft: { from: '2026-10-05', to: '2026-10-07' }, next: 'to' })
+    expect(tapEnd(range, '2026-10-12', 'from').draft).toEqual({ from: '2026-10-12', to: '2026-10-12' })
+    // After the end: a new range from there.
+    expect(tapEnd(range, '2026-10-20', 'from')).toEqual({ draft: { from: '2026-10-20', to: null }, next: null })
+    // No box: tapDay's rules (a tap on a finished range starts a new one).
+    expect(tapEnd(range, '2026-10-16', null)).toEqual({ draft: { from: '2026-10-16', to: null }, next: null })
   })
 })
 

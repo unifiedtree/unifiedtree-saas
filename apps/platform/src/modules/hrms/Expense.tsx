@@ -30,7 +30,9 @@ import {
 } from './api/useExpense'
 import { useRecentDecisions } from './api/shared/useRecentDecisions'
 import { useDecisionUndo } from './api/shared/useDecisionUndo'
-import { useEmployeeDirectory } from './api/useWorkforce'
+import { isCurrentStaff, useEmployeeDirectory, type WorkforceEmployee } from './api/useWorkforce'
+import { Dropdown } from '@/design/kit/Dropdown'
+import { useDebounce } from '@/shared/hooks/useDebounce'
 
 const RECEIPT_ACCEPT = RECEIPT_FORMATS.map((f) => `.${f}`).join(',')
 
@@ -475,12 +477,26 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
 // uploadReceiptForEmployee in useExpense.ts.
 function ClaimOnBehalfTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onSubmitted: () => void }) {
   const { toast } = useToast()
-  // People of the company the top bar's selector is on (one-company workspaces: their company).
+  // People of the company the top bar's selector is on (one-company workspaces: their company) who
+  // still work there (probation and notice period too; not leavers). The typed search goes to the server.
   const activeCompany = useCurrentCompany().companyId
-  const dir = useEmployeeDirectory({ companyId: activeCompany || undefined, pageSize: 200, status: 'ACTIVE' },
+  const [search, setSearch] = useState('')
+  const typed = useDebounce(search.trim(), 300)
+  const dir = useEmployeeDirectory({ companyId: activeCompany || undefined, search: typed || undefined, pageSize: 50 },
     { enabled: !!activeCompany })
-  const employees = dir.data?.content ?? []
   const [employeeId, setEmployeeId] = useState('')
+  // The chosen person, kept while a later search no longer lists them.
+  const [employee, setEmployee] = useState<WorkforceEmployee | null>(null)
+  const employeeOptions = useMemo(() => {
+    const rows = (dir.data?.content ?? []).filter(isCurrentStaff)
+    if (employee && !rows.some((e) => e.id === employee.id)) rows.unshift(employee)
+    return rows.map((e) => ({
+      value: e.id,
+      label: [e.firstName, e.lastName].filter(Boolean).join(' ') || e.employeeCode || 'Employee',
+      sub: [e.employeeCode, e.email].filter(Boolean).join(' · '),
+      keywords: `${e.employeeCode ?? ''} ${e.email ?? ''}`,
+    }))
+  }, [dir.data, employee])
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<DraftItem[]>([emptyItem()])
@@ -491,8 +507,6 @@ function ClaimOnBehalfTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boole
   // Submit does so a hand-rolled role without it still sees the form.
   const { data: policies = [] } = useExpensePolicies(activeCompany, canPolicyRead && !!activeCompany)
   const capByCategory = useMemo(() => buildCapByCategory(policies), [policies])
-
-  const employee = employees.find((e) => e.id === employeeId)
 
   const setItem = (i: number, patch: Partial<DraftItem>) =>
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)))
@@ -561,14 +575,16 @@ function ClaimOnBehalfTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boole
       <Panel title="Claim on behalf" sub="Raise an expense claim for an active employee. It is routed to their usual approver, who is told it was raised for them.">
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">For employee *</label>
-          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select" aria-label="For employee">
-            <option value="">Select employee…</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {[e.firstName, e.lastName].filter(Boolean).join(' ')}{e.employeeCode ? ` · ${e.employeeCode}` : ''}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            label="For employee"
+            value={employeeId || null}
+            options={employeeOptions}
+            onChange={(v) => { setEmployeeId(v); setEmployee((dir.data?.content ?? []).find((e) => e.id === v) ?? null) }}
+            placeholder={dir.isLoading ? 'Loading…' : 'Search by name, code or email'}
+            searchable
+            onSearch={setSearch}
+            emptyText={dir.error ? 'Couldn’t load the directory.' : 'No one matches.'}
+          />
         </div>
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Claim title *</label>

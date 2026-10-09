@@ -6,6 +6,7 @@ import { SidePanel, type SidePanelStep } from '../SidePanel'
 import { Dialog } from '../Dialog'
 import { Menu } from '../Menu'
 import { Dropdown, type DropdownOption } from '../Dropdown'
+import { DateRangeButton, DateRangeDialog, type RangeEnd } from '../DateRangePicker'
 import { ToastProvider, useToast } from '../Toast'
 import { Checkbox, DateInput, FieldGrid, Input, Select, Slider, Textarea, Toggle } from '../FormField'
 import { ApprovalRow, type ApprovalStatus } from '../ApprovalRow'
@@ -164,6 +165,40 @@ function DropdownCase() {
   )
 }
 
+// ── Dropdown that searches on the server (onSearch): the rows are the "server's" answer, shown as given ──
+const PEOPLE: DropdownOption[] = [
+  { value: 'p1', label: 'Asha Rao', sub: 'EMP-001' },
+  { value: 'p2', label: 'Ravi Kumar', sub: 'EMP-002' },
+]
+function DropdownServerCase() {
+  const [who, setWho] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  // The "server" matches EMP-002 by a field the rows don't show (a client-side filter would hide it).
+  const rows = q === 'zz-hidden' ? [PEOPLE[1]] : q ? [] : PEOPLE
+  return (
+    <Frame>
+      <div style={{ width: 'min(480px, 100%)' }}>
+        <Dropdown label="Employee" options={rows} value={who} searchable emptyText="No one matches."
+          onSearch={(s) => { log(`search:${s}`); setQ(s) }} onChange={(v) => { log(`pick:${v}`); setWho(v) }} />
+      </div>
+    </Frame>
+  )
+}
+
+// ── "Select dates" opened from the form's From / To box ──
+function DateRangeCase() {
+  const [r, setR] = useState({ from: '2026-11-06', to: '2026-11-10' })
+  const [box, setBox] = useState<RangeEnd>('from')
+  const [openBox, setOpenBox] = useState(false)
+  return (
+    <Frame>
+      <DateRangeButton from={r.from} to={r.to} startLabel="From *" endLabel="To *" onOpen={(b) => { log(`open:${b}`); setBox(b); setOpenBox(true) }} />
+      <DateRangeDialog open={openBox} onClose={() => setOpenBox(false)} from={r.from} to={r.to} openedFrom={box} today="2026-11-02" min="2026-11-02"
+        calendar={{ off: new Set([0, 6]), holidays: new Map() }} onDone={(p) => { log(`done:${p.from}..${p.to}`); setR({ from: p.from, to: p.to }); setOpenBox(false) }} />
+    </Frame>
+  )
+}
+
 // ── Toasts ──
 function ToastButtons() {
   const toast = useToast()
@@ -298,6 +333,8 @@ export const SCENARIOS: Record<string, ComponentType> = {
   nested: NestedCase,
   menu: MenuCase,
   dropdown: DropdownCase,
+  'dropdown-server': DropdownServerCase,
+  daterange: DateRangeCase,
   toast: ToastCase,
   form: FormCase,
   approval: ApprovalCase,

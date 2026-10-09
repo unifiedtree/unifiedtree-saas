@@ -258,6 +258,13 @@ export function useEmployeeDirectory(filters: EmployeeDirectoryFilters, opts?: {
   })
 }
 
+/**
+ * Still on the staff: everyone but leavers (EXITED, TERMINATED), as the payroll and leave
+ * encashment pickers count it. On probation, notice period and suspended people are included.
+ */
+export const isCurrentStaff = (e: Pick<WorkforceEmployee, 'employmentStatus'>) =>
+  e.employmentStatus !== 'EXITED' && e.employmentStatus !== 'TERMINATED'
+
 export function useWorkforceEmployee(id?: string) {
   return useQuery({
     queryKey: ['hrms', 'employee', id],

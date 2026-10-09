@@ -12,7 +12,7 @@
 // A workspace with one company has no switch: the same company, the same data and no selector.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type Query } from '@tanstack/react-query'
 import { useAnyPermission, useAuthStore } from '@unifiedtree/sdk'
 import { apiJson, setCompanyHeader } from '@/core/api/client'
 import { useAccessContext } from '@/shared/navigation/useAccess'
@@ -97,6 +97,30 @@ export function CurrentCompanyProvider({ children, source = COMPANY_SOURCE, api 
   // server that knows the header; see client.ts).
   const sendHeader = !!query.data?.fromMe
   setCompanyHeader(sendHeader ? companyId : null)
+
+  // What a page loaded before the list arrived went out without the header (for a workspace-wide
+  // person: every company's rows), and its next refetch, after any save, would quietly drop the
+  // other companies' rows. So when the header first turns on, load those again for this company:
+  // on screen the answer replaces the old one in place (no blank list). Only what was in the cache
+  // before this render (taken here, before the pages under it render): what they start from now on
+  // already carries the header.
+  const headerOn = sendHeader && !!companyId
+  const loadedBefore = useRef<Set<string> | null>(null)
+  const refreshed = useRef(false)
+  if (headerOn && !refreshed.current && !loadedBefore.current) {
+    loadedBefore.current = new Set(qc.getQueryCache().getAll().filter((q) => !isCompanyNeutral(q.queryKey)).map((q) => q.queryHash))
+  }
+  useEffect(() => {
+    if (!headerOn) { refreshed.current = false; return }
+    if (refreshed.current) return
+    refreshed.current = true
+    const early = loadedBefore.current
+    loadedBefore.current = null
+    if (!early?.size) return
+    const wasEarly = (q: Query) => early.has(q.queryHash)
+    qc.removeQueries({ predicate: (q) => wasEarly(q) && q.getObserversCount() === 0 })
+    void qc.invalidateQueries({ predicate: wasEarly })
+  }, [headerOn, qc])
 
   const switchTo = useCallback((id: string, fromUrl = false) => {
     if (id === companyId || !companies.some((c) => c.id === id)) return
