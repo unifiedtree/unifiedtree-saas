@@ -150,9 +150,10 @@ public class MarketingAccessService {
 
     /**
      * Verify that the account may work in the company in Marketing, and describe them.
-     * 403 with a specific code when not: not a member, workspace not active, the workspace
-     * user is switched off or locked in HRMS ({@link WorkspaceSignInRule}, the same rule as
-     * the HRMS session), no access to the company, or the company has not bought Marketing.
+     * 403 with a specific code when not: not a member, the account switched off or locked,
+     * workspace not active, the workspace user is switched off or locked in HRMS
+     * ({@link WorkspaceSignInRule}, the same rule as the HRMS session), no access to the
+     * company, or the company has not bought Marketing.
      */
     public MarketingIdentity verify(UUID accountId, UUID tenantId, UUID companyId) {
         Map<String, Object> m = membership(accountId, tenantId);
@@ -342,6 +343,31 @@ public class MarketingAccessService {
                 """, (rs, i) -> (UUID) rs.getObject(1), accountId, tenantId).stream().findFirst().orElse(null);
     }
 
+    /** The person an audit row is about: their account, its sign-in email and their workspace user (null if gone). */
+    public record AuditSubject(UUID accountId, String email, UUID workspaceUserId) {}
+
+    /**
+     * Who a Marketing event about a person (not by them) is about, read here by account id, never from text the caller
+     * sent. They may have just lost access, so any membership counts (any status), or a Marketing mapping in that
+     * workspace when the membership is gone. Null when no account id was given or the account was never in that
+     * workspace, so one workspace's audit trail never names another's people. Neither table has RLS.
+     */
+    public AuditSubject auditSubject(UUID accountId, UUID tenantId) {
+        if (accountId == null || tenantId == null) return null;
+        return jdbc.query("""
+                SELECT a.id, a.email,
+                       (SELECT aw.auth_user_id FROM platform.account_workspaces aw
+                         WHERE aw.account_id = a.id AND aw.tenant_id = ?) AS workspace_user_id
+                  FROM platform.accounts a
+                 WHERE a.id = ?
+                   AND (EXISTS (SELECT 1 FROM platform.account_workspaces aw
+                                 WHERE aw.account_id = a.id AND aw.tenant_id = ?)
+                        OR EXISTS (SELECT 1 FROM platform.marketing_identity_map mm
+                                    WHERE mm.account_id = a.id AND mm.tenant_id = ?))
+                """, (rs, i) -> new AuditSubject((UUID) rs.getObject(1), rs.getString(2), (UUID) rs.getObject(3)),
+                tenantId, accountId, tenantId, tenantId).stream().findFirst().orElse(null);
+    }
+
     public PrincipalMapping principal(UUID accountId, UUID companyId) {
         String owner = jdbc.query("""
                 SELECT legacy_marketing_user_id FROM platform.marketing_identity_map
@@ -381,7 +407,14 @@ public class MarketingAccessService {
                 """, accountId, tenantId);
         if (m.isEmpty()) throw forbidden("NOT_A_MEMBER", "You are not a member of that workspace");
         Map<String, Object> row = m.get(0);
-        if (!"ACTIVE".equals(row.get("acct_status"))) throw forbidden("ACCOUNT_INACTIVE", "This account is not active");
+        // platform.account_status: a LOCKED account is refused as locked, DISABLED (or anything else) as inactive.
+        // Same order as WorkspaceSignInRule. locked_until is not read: it only stops password sign-in after wrong
+        // passwords, and the account's own refresh, Google sign-in and workspace session ignore it too.
+        String accountStatus = (String) row.get("acct_status");
+        if (!"ACTIVE".equals(accountStatus) && !"LOCKED".equals(accountStatus)) {
+            throw forbidden(WorkspaceSignInRule.ACCOUNT_INACTIVE, "This account is not active");
+        }
+        if ("LOCKED".equals(accountStatus)) throw forbidden(WorkspaceSignInRule.ACCOUNT_LOCKED, "This account is locked");
         if (!"ACTIVE".equals(row.get("ws_status"))) throw forbidden("WORKSPACE_INACTIVE", "That workspace is not active");
         return row;
     }

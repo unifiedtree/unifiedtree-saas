@@ -1,5 +1,7 @@
 package com.unifiedtree.saas.admin.support;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unifiedtree.audit.AuditService;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,6 +15,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -37,6 +40,7 @@ public class PlatformAuditTrail {
     public static final String MODULE = "platform";
 
     private static final Pattern IPV4 = Pattern.compile("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$");
+    private static final ObjectMapper DIFF_JSON = new ObjectMapper();
 
     private final AuditService audit;
     private final JdbcTemplate jdbc;
@@ -74,15 +78,32 @@ public class PlatformAuditTrail {
     @Transactional(propagation = Propagation.MANDATORY)
     public void insertInTransaction(UUID actorUserId, String actorEmail, String ip, String userAgent, String module,
                                     String action, String entityType, UUID entityId, String summary) {
+        insertInTransaction(actorUserId, actorEmail, ip, userAgent, module, action, entityType, entityId, summary, null);
+    }
+
+    /** The same, with the row's {@code diff} details (written as JSON; details that cannot be written are left out). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void insertInTransaction(UUID actorUserId, String actorEmail, String ip, String userAgent, String module,
+                                    String action, String entityType, UUID entityId, String summary,
+                                    Map<String, ?> diff) {
         Instant now = Instant.now();
         jdbc.update("""
                 INSERT INTO audit.events
                        (id, tenant_id, occurred_at, occurred_date, actor_user_id, actor_email, actor_ip,
-                        actor_user_agent, module, action, entity_type, entity_id, summary)
-                VALUES (?, ?, ?, ?, ?, ?, CAST(? AS inet), ?, ?, ?, ?, ?, ?)
+                        actor_user_agent, module, action, entity_type, entity_id, summary, diff)
+                VALUES (?, ?, ?, ?, ?, ?, CAST(? AS inet), ?, ?, ?, ?, ?, ?, CAST(? AS jsonb))
                 """, UUID.randomUUID(), TenantContext.getTenantId(), Timestamp.from(now),
                 LocalDate.ofInstant(now, ZoneOffset.UTC), actorUserId, clip(actorEmail, 255), ipLiteral(ip),
-                clip(userAgent, 500), module, action, entityType, entityId, summary);
+                clip(userAgent, 500), module, action, entityType, entityId, summary, json(diff));
+    }
+
+    private static String json(Map<String, ?> diff) {
+        if (diff == null) return null;
+        try {
+            return DIFF_JSON.writeValueAsString(diff);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     /** The caller: first hop of X-Forwarded-For (Cloud Run puts the client there), else the socket address. */
