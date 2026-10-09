@@ -260,7 +260,9 @@ public class AccountController {
     }
 
     @PostMapping("/v1/workspace/modules/{moduleKey}/request-upgrade")
-    @PreAuthorize("hasAuthority('workspace.modules.buy')")
+    // Buying a module is part of "Can buy and manage plans and billing" (Q-26); the older
+    // workspace.modules.buy (owner and super admin) still passes.
+    @PreAuthorize("hasAnyAuthority('workspace.modules.buy', 'workspace.billing.manage')")
     public WorkspaceSummary requestUpgrade(@AuthenticationPrincipal Jwt jwt,
                                            @PathVariable String moduleKey) {
         return accounts.requestModuleUpgrade(jwt, moduleKey);

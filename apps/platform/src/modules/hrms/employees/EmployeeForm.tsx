@@ -49,6 +49,7 @@ import {
   InlineCreateCompanyModal,
   AddNewButton,
 } from './InlineCreateModals'
+import { useCanManageBilling } from '@/shared/navigation/useAccess'
 
 // Mobile-parity validators. Mirror the constants used in the Attendance app's
 // staff-onboarding.tsx so a user filling the same field in either client gets
@@ -213,8 +214,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const [seatLimitMessage, setSeatLimitMessage] = useState<string | null>(null)
   // Only these roles can change the plan; must match WorkspacePlanController's
   // requireAdmin, or we would send an HR manager to a page that 403s them.
-  const canManageBilling = useAuthStore(
-    s => (s.user?.roles ?? []).some(r => ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'].includes(r)))
+  // "Can buy and manage plans and billing" (Q-26): the permission, not role names.
+  const canManageBilling = useCanManageBilling()
   // Mobile parity (staff-onboarding.tsx:119-123): when a DEPT_MANAGER onboards
   // someone, the new hire reports to THAT manager, not to the department head.
   // Web never sent reportingManagerId at all, so a manager-created hire always

@@ -33,9 +33,10 @@ import java.util.UUID;
  * setup — the counterpart to {@link com.unifiedtree.saas.signup.SubscriptionSignupController}
  * for existing tenants.
  *
- * <p>Auth model: the JWT carries tenant + account claims. Only workspace
- * admins may open a plan-change; we enforce that by role at request time
- * (SUPER_ADMIN or COMPANY_ADMIN). Non-admins get 403.
+ * <p>Auth model: the JWT carries tenant + account claims. Every endpoint needs
+ * "Can buy and manage plans and billing" ({@value #BILLING_PERMISSION}, owner Q-26,
+ * 9 Oct 2026), which the owner holds and can give to any custom role or one person
+ * (CRITICAL: only an owner can give it). Anyone else gets 403.
  *
  * <p>Endpoint contract:
  * <pre>
@@ -428,15 +429,24 @@ public class WorkspacePlanController {
         // workspace owner + platform-declared admin roles can do that.
         // (Client clarification, 2026-08-07.)
         //
-        // Permission-based since V143.17: tenant.settings.write ("Owner-level
-        // workspace changes") is held by exactly OWNER and SUPER_ADMIN, the
-        // roles that used to pass by name. It is CRITICAL, so only an owner can
-        // give it to anyone else.
-        boolean isAdmin = claims.permissions().contains("tenant.settings.write");
-        if (!isAdmin) {
+        // "Can buy and manage plans and billing" (Q-26, 9 Oct 2026): the one permission for plan,
+        // seats, autopay and cancelling, so the owner can hand billing to anyone by ticking it on a
+        // custom role (or giving it to one person). Before, these endpoints read tenant.settings.write
+        // ("Owner-level workspace changes"), which the owner holds too and still passes. Both are
+        // CRITICAL: only an owner can give them to anyone else (AccessPolicy).
+        if (!canManageBilling(claims.permissions())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only workspace admins can manage the plan");
+                    "Only people who can manage billing can change the plan");
         }
+    }
+
+    /** The billing permission (Q-26). */
+    public static final String BILLING_PERMISSION = "workspace.billing.manage";
+
+    /** Whether these permissions may buy and manage plans and billing (Q-26). */
+    static boolean canManageBilling(java.util.Collection<String> permissions) {
+        return permissions != null && (permissions.contains(BILLING_PERMISSION)
+                || permissions.contains("tenant.settings.write") || permissions.contains("*"));
     }
 
     private JwtClaims extractClaims(Jwt jwt) {

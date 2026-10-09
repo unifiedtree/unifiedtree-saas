@@ -6,8 +6,13 @@ import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 import { personalPagesShown, type AccessContext } from './access'
 import { visibleEntries, type VisibleEntry } from './pageRegistry'
 
-/** Roles the server lets add modules and change the plan or branding (WorkspacePlanController, BrandingController). */
-export const PLAN_ADMIN_ROLES = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] as const
+/**
+ * "Can buy and manage plans and billing" (owner, Q-26, 9 Oct 2026): one permission, which the owner can
+ * tick on any custom role or give one person. The server checks the same code (WorkspacePlanController,
+ * the module-buy endpoint, the billing breakdown), so the menu, /plan, the Billing tab and the upsell
+ * all follow it. Role names no longer decide billing.
+ */
+export const BILLING_PERMISSION = 'workspace.billing.manage'
 
 /**
  * Whether the signed-in person has an employee record: the access token carries
@@ -44,9 +49,14 @@ export function useAccessContext(): AccessContext {
       self: tokenHasEmployee(),
       adminRole,
       personalPages: personalPagesShown(personalPages, adminRole),
-      planAdmin: wildcard || r.some((x) => (PLAN_ADMIN_ROLES as readonly string[]).includes(x)),
+      planAdmin: wildcard || permissions.has(BILLING_PERMISSION),
     }
   }, [permissions, roleKey, moduleKey, personalPages])
+}
+
+/** Whether the signed-in person may buy and manage plans and billing (see {@link BILLING_PERMISSION}). */
+export function useCanManageBilling(): boolean {
+  return useAccessContext().planAdmin
 }
 
 /** Every page and tab the signed-in person may see (locked-module pages only for plan admins). */

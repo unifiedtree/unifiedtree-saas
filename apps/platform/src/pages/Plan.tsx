@@ -16,6 +16,7 @@ import { apiJson } from '@/core/api/client'
 import { useModulePlans, iconMap, effectiveUnit, type ModulePlan } from '@/core/api/modulePlans'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { useSeatsUsage } from '@/modules/hrms/api/useSeats'
+import { useCanManageBilling } from '@/shared/navigation/useAccess'
 
 /**
  * IN-WORKSPACE plan configurator + autopay setup.
@@ -36,12 +37,11 @@ import { useSeatsUsage } from '@/modules/hrms/api/useSeats'
 
 type BillingCycle = 'monthly' | 'annual'
 
-// STRICT admin-only for plan / billing changes. HR_MANAGER is intentionally
-// excluded — Modules.tsx uses a wider set (adds HR_MANAGER) for tile-click
-// entry into apps, which is a UX permission, not a billing one. Only the
-// workspace owner + explicit admin roles can authorise a mandate that will
-// charge the workspace's account. (Client clarification, 2026-08-07.)
-const ADMIN_ROLES = ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN']
+// Plan and billing changes need "Can buy and manage plans and billing"
+// (workspace.billing.manage, Q-26, 9 Oct 2026): the owner holds it and can give
+// it to any custom role or to one person; nobody else gets it by default (the
+// client, 2026-08-07: an HR manager must not authorise a mandate that charges
+// the business). The server checks the same permission.
 const POLL_INTERVAL_MS = 2500
 const POLL_MAX_MS = 30 * 60 * 1000  // 30 min
 // Survives reload / re-login so the mandate poll can resume. Cleared on any
@@ -197,15 +197,8 @@ export const Plan: React.FC = () => {
   const activeModules  = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
   const tenantName     = useLocalAuthStore(s => s.tenant?.name ?? 'your workspace')
   const refreshTenant  = useLocalAuthStore(s => s.refreshTenant)
-  // Roles + permissions come from the SDK auth store (same source Modules.tsx
-  // reads). The LOCAL auth store's User type has a single `role` field that
-  // is often empty for SUPER_ADMIN sessions — reading it caused a false
-  // "Only admins can manage the plan" gate on 2026-08-07 for admins who
-  // actually held the role in the SDK store.
-  const sdkUser      = useSdkStore(s => s.user)
-  const permissions  = useSdkStore(s => s.permissions)
-  const roles: string[] = sdkUser?.roles ?? []
-  const isAdmin      = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
+  // Holds "Can buy and manage plans and billing" (Q-26), the permission the server checks.
+  const isAdmin      = useCanManageBilling()
 
   // Grandfathered seat-overage warning (Anil punchlist 2026-08-22).
   //
@@ -727,8 +720,8 @@ export const Plan: React.FC = () => {
       <PageFrame width="narrow">
         <section className="ut-noaccess__card ut-plan__guard" aria-labelledby="ut-plan-guard">
           <span className="ut-noaccess__icon" aria-hidden="true">{dashIcon('lock', 26)}</span>
-          <h1 id="ut-plan-guard" className="ut-noaccess__title">Only workspace admins can manage the plan</h1>
-          <p className="ut-noaccess__text">Ask your admin to open Manage Plan and add modules for you.</p>
+          <h1 id="ut-plan-guard" className="ut-noaccess__title">You can’t manage the plan</h1>
+          <p className="ut-noaccess__text">The business owner can give you “Can buy and manage plans and billing”, or open Manage Plan and add modules for you.</p>
           <Button variant="secondary" size={38} icon="chevronLeft" onClick={() => navigate('/modules')}>Back to apps</Button>
         </section>
       </PageFrame>

@@ -343,12 +343,13 @@ public class AccountService {
                    AND aw.auth_user_id = ?
                    AND aw.status = 'ACTIVE'
                 """, rs -> rs.next() ? mapMembership(rs) : null, tenantId, authUserId);
-        // Permission, not the membership role name (V143.17): the endpoint is
-        // already gated on workspace.modules.buy, which only OWNER holds and
-        // which is CRITICAL (only an owner can give it to anyone else).
+        // Permission, not the membership role name (V143.17): workspace.modules.buy, or
+        // "Can buy and manage plans and billing" (workspace.billing.manage, Q-26). Both are
+        // CRITICAL: only an owner can give them to anyone else.
         List<String> tokenPermissions = tenantJwt.getClaimAsStringList("permissions");
-        if (tokenPermissions == null || !tokenPermissions.contains("workspace.modules.buy")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the workspace owner can buy modules");
+        if (tokenPermissions == null || !(tokenPermissions.contains("workspace.modules.buy")
+                || tokenPermissions.contains("workspace.billing.manage"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only people who can manage billing can buy modules");
         }
 
         String normalizedModule = normalizeModuleKey(moduleKey);

@@ -306,7 +306,7 @@ page('hr-integrations', 'HR integrations', '/hrms/integrations', 'HR Setup', 'hr
 page('s-branding', 'Branding', '/settings/branding', 'Workspace settings', 'settings/branding', [any('settings.branding.write')], { keywords: ['logo', 'brand'] })
 page('s-security', 'Security', '/settings/security', 'Workspace settings', 'settings/security', [], { keywords: ['password reset', 'two-factor', 'sessions', '2fa', 'authenticator', 'sign out'] })
 page('s-notifications', 'Notification settings', '/settings/notifications', 'Workspace settings', 'settings/notifications', [{ anyOf: SETTINGS }], { keywords: ['email', 'alerts'] })
-page('s-billing', 'Billing & Plan', '/settings/billing', 'Workspace settings', 'settings/billing', [{ allOf: ['workspace.billing.manage'], when: planAdminOnly }], { aliases: ['billing'], keywords: ['invoice', 'plan', 'seats', 'subscription'] })
+page('s-billing', 'Billing & Plan', '/settings/billing', 'Workspace settings', 'settings/billing', [{ allOf: ['workspace.billing.manage'] }], { aliases: ['billing'], keywords: ['invoice', 'plan', 'seats', 'subscription'] })
 page('s-integrations', 'Integrations', '/settings/integrations', 'Workspace settings', 'settings/integrations', [{ anyOf: SETTINGS }])
 page('s-documents', 'Document types', '/settings/documents', 'Workspace settings', 'settings/document-types', [{ anyOf: SETTINGS }, any('hrms.document.type.read', 'hrms.document.type.write')], { aliases: ['settings/documents'], keywords: ['aadhaar', 'pan', 'required documents'] })
 page('s-danger', 'Danger zone', '/settings/danger', 'Workspace settings', 'settings/danger-zone', [any('workspace.data.export', 'workspace.lifecycle.manage')], { aliases: ['settings/danger'], keywords: ['delete workspace', 'export all data', 'reset'] })

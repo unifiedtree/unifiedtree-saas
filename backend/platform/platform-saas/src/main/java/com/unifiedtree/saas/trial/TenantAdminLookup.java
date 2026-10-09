@@ -19,7 +19,10 @@ import java.util.UUID;
  * user's inbox on the mobile client without any extra plumbing.
  *
  * <p>Signup grants BOTH {@code SUPER_ADMIN} and {@code OWNER} to the workspace
- * admin, so we look up either. {@code DISTINCT} covers the overlap.
+ * admin, so we look up either. Since Q-26 (9 Oct 2026) the owner can give
+ * "Can buy and manage plans and billing" ({@code workspace.billing.manage}) to any
+ * custom role or one person: those people pay, so they are told too (a per-person
+ * DENY of that permission leaves them out). {@code DISTINCT} covers the overlap.
  */
 @Component
 public class TenantAdminLookup {
@@ -59,12 +62,26 @@ public class TenantAdminLookup {
             // header; the toName field in EmailMessage is nullable.
             return jdbc.query("""
                     SELECT DISTINCT uc.employee_id, uc.email
-                      FROM rbac.user_roles ur
-                      JOIN auth.user_credentials uc ON uc.id = ur.user_id
-                     WHERE ur.tenant_id = ?
-                       AND ur.role_id IN (?, ?)
+                      FROM auth.user_credentials uc
+                     WHERE uc.tenant_id = ?
                        AND uc.employee_id IS NOT NULL
                        AND uc.is_active = TRUE
+                       AND (
+                            EXISTS (SELECT 1 FROM rbac.user_roles ur
+                                     WHERE ur.tenant_id = uc.tenant_id AND ur.user_id = uc.id AND ur.role_id IN (?, ?))
+                         OR ((EXISTS (SELECT 1 FROM rbac.user_roles ur
+                                        JOIN rbac.role_permissions rp ON rp.role_id = ur.role_id
+                                       WHERE ur.tenant_id = uc.tenant_id AND ur.user_id = uc.id
+                                         AND rp.permission_code = 'workspace.billing.manage')
+                              OR EXISTS (SELECT 1 FROM rbac.user_permission_overrides o
+                                          WHERE o.tenant_id = uc.tenant_id AND o.user_id = uc.id
+                                            AND o.permission_code = 'workspace.billing.manage' AND o.effect = 'GRANT'
+                                            AND (o.expires_at IS NULL OR o.expires_at > now())))
+                             AND NOT EXISTS (SELECT 1 FROM rbac.user_permission_overrides o
+                                              WHERE o.tenant_id = uc.tenant_id AND o.user_id = uc.id
+                                                AND o.permission_code = 'workspace.billing.manage' AND o.effect = 'DENY'
+                                                AND (o.expires_at IS NULL OR o.expires_at > now())))
+                       )
                      ORDER BY uc.email
                     """,
                     (rs, n) -> new AdminUser(
