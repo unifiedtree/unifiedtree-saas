@@ -5,6 +5,7 @@ import com.unifiedtree.auth.entity.UserCredentials;
 import com.unifiedtree.auth.repository.UserCredentialsRepository;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.auth.service.PasswordService;
+import com.unifiedtree.auth.session.SessionService;
 import com.unifiedtree.notifications.template.NotificationEmailComposer;
 import com.unifiedtree.rbac.repository.RoleRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
@@ -52,6 +53,7 @@ class PasswordResetTest {
     private final AuthService auth = mock(AuthService.class);
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final NotificationEmailComposer composer = mock(NotificationEmailComposer.class);
+    private final SessionService sessions = mock(SessionService.class);
     private final PasswordService passwords = new PasswordService();
     private InvitationService service;
 
@@ -59,7 +61,8 @@ class PasswordResetTest {
     void setUp() {
         service = new InvitationService(credRepo, mock(UserRoleRepository.class), mock(RoleRepository.class),
                 tokenRepo, passwords, auth, mock(InvitationEmailSender.class), jdbc,
-                mock(ApplicationEventPublisher.class), composer, mock(com.hrms.employee.service.EmployeeContactGuard.class));
+                mock(ApplicationEventPublisher.class), composer, mock(com.hrms.employee.service.EmployeeContactGuard.class),
+                sessions);
         ReflectionTestUtils.setField(service, "platformBaseUrl", "https://unifiedtree.com");
         when(composer.compose(any(), any(), anyString(), anyMap(), anyString(), anyString()))
                 .thenReturn(new NotificationEmailComposer.ComposedEmail("Reset", "<p>reset</p>", false));
@@ -216,6 +219,38 @@ class PasswordResetTest {
 
         assertEquals("RESET_NOT_APPLIED", ex.getErrorCode());
         verify(jdbc, never()).update(eq("UPDATE auth.invitation_tokens SET used_at = now() WHERE id = ?"), any(Object[].class));
+        verify(sessions, never()).revokeAll(any(), any());
+    }
+
+    // ---- signing old sessions out (tester triage web-signin-09, 9 Oct 2026) ----
+
+    @Test
+    void resetSignsTheLoginOutOfEverySessionInItsWorkspaceOnly() throws Exception {
+        String raw = tokenFor(pageWorkspace);
+        when(jdbc.queryForList(contains("UPDATE auth.user_credentials"), eq(String.class), any(), any(), any()))
+                .thenReturn(List.of(EMAIL));
+        when(sessions.revokeAll(pageWorkspace, userId)).thenReturn(2);
+
+        service.resetPassword(raw, "NewPass@2026");
+
+        // The token's own login under the token's own workspace - never the other
+        // workspace's login that shares the email.
+        verify(sessions).revokeAll(pageWorkspace, userId);
+        verify(sessions, never()).revokeAll(eq(otherWorkspace), any());
+        verifyNoMoreInteractions(sessions);
+    }
+
+    @Test
+    void sessionsAreSignedOutOnlyAfterThePasswordChanged() throws Exception {
+        String raw = tokenFor(pageWorkspace);
+        when(jdbc.queryForList(contains("UPDATE auth.user_credentials"), eq(String.class), any(), any(), any()))
+                .thenReturn(List.of(EMAIL));
+
+        service.resetPassword(raw, "NewPass@2026");
+
+        var order = inOrder(jdbc, sessions);
+        order.verify(jdbc).queryForList(contains("UPDATE auth.user_credentials"), eq(String.class), any(), any(), any());
+        order.verify(sessions).revokeAll(pageWorkspace, userId);
     }
 
     @Test
@@ -223,5 +258,6 @@ class PasswordResetTest {
         String raw = tokenFor(pageWorkspace);
         assertThrows(BusinessRuleException.class, () -> service.resetPassword(raw, "Abc12"));
         verify(jdbc, never()).queryForList(contains("UPDATE auth.user_credentials"), eq(String.class), any(), any(), any());
+        verify(sessions, never()).revokeAll(any(), any());
     }
 }
