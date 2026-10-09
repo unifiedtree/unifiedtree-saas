@@ -82,9 +82,12 @@ public class TeamEmployeeScope {
     }
 
     /**
-     * The My team rule on its own, whatever permissions the manager holds:
-     * the department(s) they head, else their direct reports; never the
-     * manager themself. {@link #resolve} uses it for callers without the
+     * The My team rule on its own, whatever permissions the manager holds
+     * (owner decision Q-22): a department head sees everyone in the
+     * department(s) they head, and also their direct reports outside those
+     * departments; every other manager sees their direct reports; never the
+     * manager themself. Only the departments they head, not the departments
+     * under them. {@link #resolve} uses it for callers without the
      * company-wide permission; assisted face punch (V143.40) uses it for
      * "punch for their team".
      */
@@ -97,31 +100,44 @@ public class TeamEmployeeScope {
         UUID managerId = manager.getId();
         // With a current company chosen (X-Company-Id), the team is the part of
         // it in that company: department heads see their departments' people
-        // there, others their direct reports there. Without one: as before.
+        // there plus their direct reports there, others their direct reports
+        // there. Without one: as before.
         UUID selected = CompanyContext.getCompanyId();
         UUID companyId = selected != null ? selected : manager.getCompanyId();
         // DEPT_MANAGER: everyone in the department(s) they head — not just
         // direct reports whose reporting_manager_id points at them. A
         // department head "owns" the whole department, so their dashboard
-        // shows every teammate in it. Fall back to legacy direct-report
-        // scope for managers who haven't been set as any dept's head yet.
+        // shows every teammate in it. Managers who head no department see
+        // their direct reports.
         List<UUID> ledDepartmentIds = departmentRepository
                 .findByDepartmentHeadEmployeeId(managerId).stream()
                 .map(d -> d.getId())
                 .toList();
+        List<Employee> directReports = employeeRepository.findByManagerId(managerId);
+        if (selected != null) {
+            directReports = directReports.stream().filter(e -> selected.equals(e.getCompanyId())).toList();
+        }
         List<Employee> employees;
         if (!ledDepartmentIds.isEmpty()) {
             List<Employee> companyEmployees =
                     withFormer(employeeRepository.findActiveByCompany(companyId), formerStaff, companyId);
-            employees = companyEmployees.stream()
+            List<Employee> team = new java.util.ArrayList<>(companyEmployees.stream()
                     .filter(e -> e.getDepartmentId() != null
                             && ledDepartmentIds.contains(e.getDepartmentId()))
-                    .toList();
+                    .toList());
+            // Q-22: a head who is also someone's reporting manager outside the
+            // department(s) they head sees those people too (the union). Their
+            // direct reports inside the department are already in it, as the
+            // department has them.
+            java.util.Set<UUID> seen = new java.util.HashSet<>();
+            team.forEach(e -> seen.add(e.getId()));
+            directReports.stream()
+                    .filter(e -> e.getDepartmentId() == null || !ledDepartmentIds.contains(e.getDepartmentId()))
+                    .filter(e -> seen.add(e.getId()))
+                    .forEach(team::add);
+            employees = team;
         } else {
-            employees = employeeRepository.findByManagerId(managerId);
-            if (selected != null) {
-                employees = employees.stream().filter(e -> selected.equals(e.getCompanyId())).toList();
-            }
+            employees = directReports;
         }
         return employees.stream()
                 .filter(employee -> !employee.getId().equals(managerId))

@@ -36,7 +36,7 @@ import java.util.UUID;
  * their Around you.
  *
  * <p>The team is the My team rule on its own ({@link TeamEmployeeScope#teamOf}):
- * the departments the sender heads, else their direct reports, never the
+ * the departments the sender heads and their direct reports, never the
  * sender, never people who have left. A company-wide permission does not
  * widen it: company announcements are company notices.
  *

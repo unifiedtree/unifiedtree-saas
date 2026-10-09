@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  * on their record until someone approves it:
  * <ul>
  *   <li>their manager, for people in the manager's team (the same team as the
- *       My team page: the departments they head, else their direct reports), or</li>
+ *       My team page: the departments they head and their direct reports), or</li>
  *   <li>HR: anyone holding {@code hrms.learning.write} decides for everyone.</li>
  * </ul>
  * Approving writes the level to {@code learning_mgmt.employee_skills} (the skill

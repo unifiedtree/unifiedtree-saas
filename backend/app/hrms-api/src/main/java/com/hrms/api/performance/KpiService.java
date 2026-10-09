@@ -28,7 +28,7 @@ import java.util.UUID;
  *
  * <p>Manager scoping: MANAGER / DEPT_MANAGER read and record progress only for
  * their team, defined like the My team page (see {@link PerformanceTeamScope}):
- * everyone in the departments they head, else their direct reports. Admin
+ * everyone in the departments they head and their direct reports. Admin
  * roles see the company. (Before 2026-09-25 this was direct reports only.)
  *
  * <p>Progress arithmetic:
