@@ -3,10 +3,12 @@ package com.hrms.employee.workforce.service;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDepartmentRequest;
 import com.hrms.employee.workforce.entity.Department;
+import com.hrms.employee.workforce.entity.WorkforceEmployee;
 import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 import java.util.List;
 import java.util.Optional;
@@ -55,17 +57,40 @@ class DepartmentServiceTest {
         return d;
     }
 
+    /** The new head as DepartmentHeadChange reads them: reporting to nobody, with this status. */
+    @SuppressWarnings("unchecked")
+    private void headIs(UUID employeeId, WorkforceEmployee.EmploymentStatus status) {
+        WorkforceEmployee head = new WorkforceEmployee();
+        head.setEmploymentStatus(status);
+        when(jdbc.query(org.mockito.ArgumentMatchers.contains("employment_status"), any(RowMapper.class), eq(employeeId)))
+                .thenReturn(List.of(head));
+    }
+
     @Test
     void aNewHeadTakesOverThePeopleWhoReportedToTheOldHead() {
         Department eng = dept("Engineering", null, company);
         UUID kavitha = UUID.randomUUID(), ravi = UUID.randomUUID();
         eng.setDepartmentHeadEmployeeId(kavitha);
+        headIs(ravi, WorkforceEmployee.EmploymentStatus.ACTIVE);
 
         service.setHead(eng.getId(), ravi);
 
         assertThat(eng.getDepartmentHeadEmployeeId()).isEqualTo(ravi);
         verify(jdbc).update(org.mockito.ArgumentMatchers.contains("SET reporting_manager_id = ?"),
                 eq(ravi), eq(eng.getId()), eq(kavitha), eq(ravi));
+    }
+
+    @Test
+    void aNewHeadWhoHasLeftIsSavedButTakesOverNobody() {
+        Department eng = dept("Engineering", null, company);
+        UUID kavitha = UUID.randomUUID(), gone = UUID.randomUUID();
+        eng.setDepartmentHeadEmployeeId(kavitha);
+        headIs(gone, WorkforceEmployee.EmploymentStatus.EXITED);
+
+        service.setHead(eng.getId(), gone);
+
+        assertThat(eng.getDepartmentHeadEmployeeId()).isEqualTo(gone);
+        verify(jdbc, never()).update(org.mockito.ArgumentMatchers.contains("reporting_manager_id"), any(Object[].class));
     }
 
     @Test

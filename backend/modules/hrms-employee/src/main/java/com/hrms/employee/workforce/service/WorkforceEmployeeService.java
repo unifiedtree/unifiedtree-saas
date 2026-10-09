@@ -787,41 +787,63 @@ public class WorkforceEmployeeService {
         if (managerId.equals(employeeId)) {
             throw new BusinessRuleException("Someone can't report to themselves.", "MANAGER_SELF");
         }
-        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
         WorkforceEmployee manager = repository.findById(managerId)
-                .filter(m -> tenantId == null || m.getTenantId() == null || tenantId.equals(m.getTenantId()))
+                .filter(WorkforceEmployeeService::inWorkspace)
                 .orElseThrow(() -> new BusinessRuleException("That manager wasn't found.", "MANAGER_NOT_FOUND"));
-        WorkforceEmployee.EmploymentStatus status = manager.getEmploymentStatus();
-        if (!manager.isActive() || status == WorkforceEmployee.EmploymentStatus.EXITED
-                || status == WorkforceEmployee.EmploymentStatus.TERMINATED
-                || status == WorkforceEmployee.EmploymentStatus.SUSPENDED) {
+        if (!stillWorksHere(manager)) {
             throw new BusinessRuleException("Pick a manager who still works here.", "MANAGER_INACTIVE");
         }
         if (employeeId == null) return;
         // Walk up from the new manager; reaching the employee means they'd manage their own manager.
-        java.util.Set<UUID> seen = new java.util.HashSet<>();
-        UUID next = manager.getReportingManagerId();
-        while (next != null && seen.size() < MAX_CHAIN && seen.add(next)) {
-            if (next.equals(employeeId)) {
-                throw new BusinessRuleException(
-                        "This would make a reporting loop: " + displayName(manager.getFirstName(), manager.getLastName())
-                                + " already reports up to this person.", "MANAGER_LOOP");
-            }
-            next = repository.findById(next).map(WorkforceEmployee::getReportingManagerId).orElse(null);
+        if (reportsUpTo(manager, id -> repository.findById(id).map(WorkforceEmployee::getReportingManagerId).orElse(null))
+                .contains(employeeId)) {
+            throw new BusinessRuleException(
+                    "This would make a reporting loop: " + displayName(manager.getFirstName(), manager.getLastName())
+                            + " already reports up to this person.", "MANAGER_LOOP");
         }
+    }
+
+    /** checkManager's workspace rule: someone of the signed-in workspace (no tenant on either side counts as the same). */
+    static boolean inWorkspace(WorkforceEmployee m) {
+        UUID tenantId = com.hrms.core.tenant.TenantContext.getTenantId();
+        return tenantId == null || m.getTenantId() == null || tenantId.equals(m.getTenantId());
+    }
+
+    /** checkManager's "still works here": active, and not exited, terminated or suspended. */
+    static boolean stillWorksHere(WorkforceEmployee m) {
+        WorkforceEmployee.EmploymentStatus status = m.getEmploymentStatus();
+        return m.isActive() && status != WorkforceEmployee.EmploymentStatus.EXITED
+                && status != WorkforceEmployee.EmploymentStatus.TERMINATED
+                && status != WorkforceEmployee.EmploymentStatus.SUSPENDED;
+    }
+
+    /**
+     * Everyone {@code m} reports up to, nearest first: their manager, that
+     * manager's manager and so on ({@code managerOf} gives anyone's manager).
+     * At most {@value #MAX_CHAIN} people; a loop already in the data ends the
+     * walk instead of hanging it. checkManager and a department's new head
+     * (DepartmentHeadChange) both keep clear of reporting loops with this.
+     */
+    static java.util.Set<UUID> reportsUpTo(WorkforceEmployee m, java.util.function.Function<UUID, UUID> managerOf) {
+        java.util.Set<UUID> line = new java.util.LinkedHashSet<>();
+        UUID next = m.getReportingManagerId();
+        while (next != null && line.size() < MAX_CHAIN && line.add(next)) next = managerOf.apply(next);
+        return line;
     }
 
     /**
      * Someone moved to another department follows its head when their manager
      * was the one the old department gave them (its head) or they had none; a
      * manager HR picked by hand stays. Nothing changes when the new department
-     * has no head, or its head is the person themself.
+     * has no head, its head is the person themself, or its head no longer
+     * works here (checkManager's rule; the move itself still saves).
      */
     private void followNewDepartmentHead(WorkforceEmployee e, UUID oldDepartmentId) {
         UUID current = e.getReportingManagerId();
         if (current != null && !current.equals(headOf(oldDepartmentId))) return;
         UUID newHead = headOf(e.getDepartmentId());
-        if (newHead != null && !newHead.equals(e.getId())) e.setReportingManagerId(newHead);
+        if (newHead == null || newHead.equals(e.getId())) return;
+        if (repository.findById(newHead).filter(h -> inWorkspace(h) && stillWorksHere(h)).isPresent()) e.setReportingManagerId(newHead);
     }
 
     // -- Generator: per-company auto-increment (V082) -----------------------

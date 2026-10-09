@@ -15,9 +15,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 import java.lang.reflect.RecordComponent;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -255,6 +257,26 @@ class ReportingManagerRulesTest {
     }
 
     @Test
+    void movingIntoADepartmentWhoseHeadNoLongerWorksHereKeepsTheManager() {
+        WorkforceEmployee kavitha = person("Kavitha", ENGINEERING, null);
+        WorkforceEmployee gone = person("Gone", SALES, null);
+        head(ENGINEERING, kavitha);
+        head(SALES, gone);
+        for (EmploymentStatus status : List.of(EmploymentStatus.EXITED, EmploymentStatus.TERMINATED, EmploymentStatus.SUSPENDED)) {
+            gone.setEmploymentStatus(status);
+            WorkforceEmployee varsha = person("Varsha", ENGINEERING, kavitha.getId());
+            WorkforceEmployee newcomer = person("Newcomer", ENGINEERING, null);
+
+            service.update(varsha.getId(), edit(Map.of("departmentId", SALES)));
+            service.update(newcomer.getId(), edit(Map.of("departmentId", SALES)));
+
+            assertThat(varsha.getDepartmentId()).isEqualTo(SALES);   // the move itself still saves
+            assertThat(varsha.getReportingManagerId()).isEqualTo(kavitha.getId());
+            assertThat(newcomer.getReportingManagerId()).isNull();
+        }
+    }
+
+    @Test
     void theNewHeadThemselfKeepsTheirManager() {
         WorkforceEmployee kavitha = person("Kavitha", ENGINEERING, null);
         head(ENGINEERING, kavitha);
@@ -295,16 +317,61 @@ class ReportingManagerRulesTest {
 
     // ── A department's new head ─────────────────────────────────────────────
 
+    /** DepartmentHeadChange reads people over JDBC; this one sees the people the test made. */
+    @SuppressWarnings("unchecked")
+    private JdbcTemplate jdbcOverPeople() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(org.mockito.ArgumentMatchers.contains("employment_status"), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(i -> Optional.ofNullable(people.get(i.<UUID>getArgument(2))).map(List::of).orElse(List.of()));
+        return jdbc;
+    }
+
     @Test
     void aNewHeadTakesOverThePeopleWhoReportedToTheOldOne() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        UUID oldHead = UUID.randomUUID(), newHead = UUID.randomUUID();
+        JdbcTemplate jdbc = jdbcOverPeople();
+        UUID oldHead = UUID.randomUUID(), newHead = person("Ravi", ENGINEERING, null).getId();
         when(jdbc.update(anyString(), any(), any(), any(), any())).thenReturn(4);
 
         assertThat(DepartmentHeadChange.moveReports(jdbc, ENGINEERING, oldHead, newHead)).isEqualTo(4);
         verify(jdbc).update(org.mockito.ArgumentMatchers.contains("SET reporting_manager_id = ?"),
                 org.mockito.ArgumentMatchers.eq(newHead), org.mockito.ArgumentMatchers.eq(ENGINEERING),
                 org.mockito.ArgumentMatchers.eq(oldHead), org.mockito.ArgumentMatchers.eq(newHead));
+    }
+
+    @Test
+    void promotingSomeoneTwoLevelsDownLeavesTheirOwnManagersOutOfTheMove() {
+        // Kavitha heads Engineering, Ravi reports to her and Asha to Ravi. Asha becomes the head.
+        JdbcTemplate jdbc = jdbcOverPeople();
+        WorkforceEmployee kavitha = person("Kavitha", ENGINEERING, null);
+        WorkforceEmployee ravi = person("Ravi", ENGINEERING, kavitha.getId());
+        WorkforceEmployee asha = person("Asha", ENGINEERING, ravi.getId());
+
+        DepartmentHeadChange.moveReports(jdbc, ENGINEERING, kavitha.getId(), asha.getId());
+
+        // Ravi → Asha would close Asha → Ravi → Asha, so Ravi (and Kavitha above him) stay where they are.
+        verify(jdbc).update(org.mockito.ArgumentMatchers.contains("AND id NOT IN (?,?)"),
+                org.mockito.ArgumentMatchers.eq(asha.getId()), org.mockito.ArgumentMatchers.eq(ENGINEERING),
+                org.mockito.ArgumentMatchers.eq(kavitha.getId()), org.mockito.ArgumentMatchers.eq(asha.getId()),
+                org.mockito.ArgumentMatchers.eq(ravi.getId()), org.mockito.ArgumentMatchers.eq(kavitha.getId()));
+    }
+
+    @Test
+    void aNewHeadWhoNoLongerWorksHereTakesOverNobody() {
+        JdbcTemplate jdbc = jdbcOverPeople();
+        UUID oldHead = UUID.randomUUID();
+        WorkforceEmployee exited = person("Exited", ENGINEERING, null);
+        exited.setEmploymentStatus(EmploymentStatus.EXITED);
+        WorkforceEmployee terminated = person("Terminated", ENGINEERING, null);
+        terminated.setEmploymentStatus(EmploymentStatus.TERMINATED);
+        WorkforceEmployee suspended = person("Suspended", ENGINEERING, null);
+        suspended.setEmploymentStatus(EmploymentStatus.SUSPENDED);
+        WorkforceEmployee stranger = person("Stranger", null, null);
+        stranger.setTenantId(UUID.randomUUID());
+
+        for (UUID head : List.of(exited.getId(), terminated.getId(), suspended.getId(), stranger.getId(), UUID.randomUUID())) {
+            assertThat(DepartmentHeadChange.moveReports(jdbc, ENGINEERING, oldHead, head)).isZero();
+        }
+        verify(jdbc, never()).update(anyString(), any(Object[].class));
     }
 
     @Test
