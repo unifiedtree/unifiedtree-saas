@@ -331,9 +331,11 @@ public class OwnershipTransferService {
     /**
      * The new owner's platform account (plan, autopay and the business list live there), created when
      * they have none, as the design says: same email, and the same password as their business login, so
-     * they sign in to it the way they already do (or with Google, or "Forgot password").
+     * they sign in to it the way they already do (or with Google, or "Forgot password"). A login with no
+     * password (Google sign-in only) gets a random one nobody knows: platform.accounts needs a password or a
+     * Google id (ck_accounts_has_auth), and without one the accept failed.
      */
-    private UUID accountFor(UserCredentials to, String name) {
+    UUID accountFor(UserCredentials to, String name) {
         List<UUID> found = jdbc.queryForList("SELECT id FROM platform.accounts WHERE lower(email) = lower(?)", UUID.class, to.getEmail());
         if (!found.isEmpty()) return found.get(0);
         jdbc.update("""
@@ -341,7 +343,8 @@ public class OwnershipTransferService {
                                                password_updated_at, created_at, updated_at)
                 VALUES (?, lower(?), ?, ?, 'ACTIVE', 0, now(), now(), now())
                 ON CONFLICT DO NOTHING
-                """, UUID.randomUUID(), to.getEmail(), name == null || name.isBlank() ? to.getEmail() : name, to.getPasswordHash());
+                """, UUID.randomUUID(), to.getEmail(), name == null || name.isBlank() ? to.getEmail() : name,
+                to.getPasswordHash() != null ? to.getPasswordHash() : passwords.hash(UUID.randomUUID() + ":" + UUID.randomUUID()));
         return jdbc.queryForObject("SELECT id FROM platform.accounts WHERE lower(email) = lower(?)", UUID.class, to.getEmail());
     }
 
