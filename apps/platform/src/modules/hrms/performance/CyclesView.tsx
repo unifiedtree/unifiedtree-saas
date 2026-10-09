@@ -60,7 +60,7 @@ export function CyclesView({ addKey }: { addKey: number }) {
 
   return (
     <>
-      {!canWrite && !canInitiate && <Callout tone="neutral">Each cycle’s progress shows your team only: everyone in the departments you head, or your direct reports.</Callout>}
+      {!canWrite && <Callout tone="neutral">Each cycle’s progress shows your team only: everyone in the departments you head, or your direct reports.</Callout>}
       {current && (
         <SectionGrid>
           <SectionCell width="half">
