@@ -49,7 +49,8 @@ class OneBusinessPerPersonInviteTest {
         service = new InvitationService(credRepo, mock(UserRoleRepository.class), mock(RoleRepository.class),
                 mock(InvitationTokenRepository.class), new PasswordService(), mock(AuthService.class),
                 mock(InvitationEmailSender.class), jdbc, mock(ApplicationEventPublisher.class),
-                mock(NotificationEmailComposer.class), mock(EmployeeContactGuard.class));
+                mock(NotificationEmailComposer.class), mock(EmployeeContactGuard.class),
+                mock(com.unifiedtree.auth.session.SessionService.class));
         when(jdbc.queryForObject(contains("to_regprocedure"), eq(Boolean.class))).thenReturn(true);
     }
 

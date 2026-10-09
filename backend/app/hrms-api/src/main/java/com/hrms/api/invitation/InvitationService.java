@@ -9,6 +9,7 @@ import com.unifiedtree.auth.entity.UserCredentials;
 import com.unifiedtree.auth.repository.UserCredentialsRepository;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.auth.service.PasswordService;
+import com.unifiedtree.auth.session.SessionService;
 import com.unifiedtree.rbac.entity.Role;
 import com.unifiedtree.rbac.entity.UserRole;
 import com.unifiedtree.rbac.repository.RoleRepository;
@@ -56,6 +57,8 @@ public class InvitationService {
     private final NotificationEmailComposer emailComposer;
     /** A login email follows the employees' work-email rule (one person per address in the workspace). */
     private final EmployeeContactGuard contactGuard;
+    /** Signs a person out everywhere in the workspace after a password reset. */
+    private final SessionService sessions;
 
     @Value("${unifiedtree.mail.invite-url-base:${unifiedtree.invitation.platform-base-url:http://localhost:3001}}")
     private String platformBaseUrl;
@@ -70,7 +73,8 @@ public class InvitationService {
                              JdbcTemplate jdbc,
                              ApplicationEventPublisher eventPublisher,
                              NotificationEmailComposer emailComposer,
-                             EmployeeContactGuard contactGuard) {
+                             EmployeeContactGuard contactGuard,
+                             SessionService sessions) {
         this.credRepo            = credRepo;
         this.userRoleRepo        = userRoleRepo;
         this.roleRepo            = roleRepo;
@@ -82,6 +86,7 @@ public class InvitationService {
         this.eventPublisher      = eventPublisher;
         this.emailComposer       = emailComposer;
         this.contactGuard        = contactGuard;
+        this.sessions            = sessions;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -526,7 +531,14 @@ public class InvitationService {
 
         markTokenUsed(rt.id());
 
-        log.info("Password reset completed for user {}", updated.get(0));
+        // A new password ends every existing sign-in of this login, the same way an
+        // admin's two-factor reset does: whoever held the old password (or a stolen
+        // session) can no longer refresh, and current access tokens stop at the
+        // session check. Only this workspace's login (the token's own user id, under
+        // its workspace); a login elsewhere with the same email is a different row.
+        int signedOut = sessions.revokeAll(tenantId, rt.userId());
+
+        log.info("Password reset completed for user {} (signed out {} session(s))", updated.get(0), signedOut);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
