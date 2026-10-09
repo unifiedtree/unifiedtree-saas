@@ -13,7 +13,7 @@ attendance + leave — this document defines the decisions, not the plumbing.
 
 Source tables the engine reads to derive statuses (read-only — payroll never writes them):
 - Attendance: `attendance.records` (`attendance_date`, `attendance_status`).
-- Leave: `leave_mgmt.leave_requests` (`status='APPROVED'`, `start_date`, `end_date`, `half_day`, `half_day_part`), `leave_mgmt.leave_types` (`code`, `is_paid_leave` — a type with `is_paid_leave=false` is an LOP leave type).
+- Leave: `leave_mgmt.leave_requests` (`status='APPROVED'`, `start_date`, `end_date`, `duration` — `HALF_DAY_MORNING` / `HALF_DAY_AFTERNOON` is a half day; the older `half_day` column also counts, though the leave module never sets it), `leave_mgmt.leave_types` (`code`, `is_paid_leave` — a type with `is_paid_leave=false` is an LOP leave type).
 - Holidays: `settings.holiday_calendar` (`holiday_date`, `is_active`) and/or `leave_mgmt.holiday_calendars` (`holiday_date`, `is_optional`).
 - Shift / working-day: `attendance.shift_policies` + `attendance.employee_shift_assignments` (which days are expected working days).
 
@@ -25,6 +25,19 @@ Tenant config that drives LOP (`payroll.settings`): `sandwich_rule_enabled`, `la
 **Q:** Employee takes a half-day paid leave on the 15th, present otherwise. Does LOP apply?
 **Decision:** No LOP. A half-day **paid** leave is fully paid; the 0.5 comes off the leave balance, not pay. Only `HALF_DAY_LEAVE` (an unpaid/LOP half) splits pay 0.5/0.5. In `LopCalculator`, `HALF_DAY_LEAVE` → 0.5 paid + 0.5 lop; a half-day *paid* leave day is modelled as `PAID_LEAVE` (1.0 paid).
 **Confirmed:** Product default.
+
+**Half-day leave with that day's attendance** (`PayrollCalc.leaveDay`). The leave covers one half; the day's attendance decides the other half, exception-based like any other day: the other half is paid unless attendance marks the day absent (`UNAUTHORIZED_ABSENT` — a record or reviewer status of ABSENT, a punch under the half-day minimum hours, or a late arrival the attendance policy counts as loss of pay). No attendance input (no record, no punch, or an on-time punch) is not an absence.
+
+| Leave on the day | Other half | Day status | Paid | LOP |
+|---|---|---|---|---|
+| Half-day, paid type | worked, or nothing marked | `PAID_LEAVE` | 1 | 0 |
+| Half-day, paid type | absent | `HALF_DAY_LEAVE` | 0.5 | 0.5 |
+| Half-day, unpaid type | worked, or nothing marked | `HALF_DAY_LEAVE` | 0.5 | 0.5 |
+| Half-day, unpaid type | absent | `LOP_LEAVE` | 0 | 1 |
+| Full day | — (attendance not read) | `PAID_LEAVE` / `LOP_LEAVE` | 1 / 0 | 0 / 1 |
+| None, attendance `HALF_DAY` | — | `HALF_DAY_LEAVE` | 0.5 | 0.5 |
+
+The computation log records each day's status and resolution (`PAID` / `HALF` / `LOP`).
 
 ## CASE 2 — Unauthorized absence (no leave, no punch)
 **Q:** Employee doesn't show up on the 12th, no leave application.
@@ -97,8 +110,9 @@ to 2 decimals at the line level**.
 
 ### Attendance defaulting is exception-based
 
-The run service (`PayrollRunService.buildDayStatuses`) resolves each calendar day
-from attendance → approved leave → holiday → weekend, and **a working day with no
+The run service (`PayrollCalc.dayStatuses`) resolves each calendar day
+from approved leave → attendance → holiday → weekend (a half-day leave takes the
+day's attendance for its other half, Case 1), and **a working day with no
 record and no leave defaults to PRESENT (paid)**. This matches how Indian SMEs run
 payroll: pay is full unless an absence / unpaid leave is explicitly marked. Marked
 `ABSENT` and unpaid approved leave still produce LOP. Mid-month join/exit pro-rate

@@ -17,6 +17,7 @@ import java.util.*;
  * ({@code PayrollCalcTest}):
  * <ul>
  *   <li>whose weekly off days count, and which days are working days;</li>
+ *   <li>how a day of approved leave is paid (a half-day leave with that day's attendance);</li>
  *   <li>the pay period of a run on a custom cycle, and its pay date;</li>
  *   <li>which months deduct the Labour Welfare Fund;</li>
  *   <li>fixed-amount components and switched-off components;</li>
@@ -86,8 +87,9 @@ public final class PayrollCalc {
 
     /**
      * One status per day of the pay period, exception-based: approved leave
-     * first, then the attendance record, then holiday, then the employee's
-     * weekly off, and anything else counts as present (paid).
+     * first (a half-day leave's status already includes the other half, see
+     * {@link #leaveDay}), then the attendance record, then holiday, then the
+     * employee's weekly off, and anything else counts as present (paid).
      */
     public static List<DayStatus> dayStatuses(LocalDate start, LocalDate end,
                                               Map<LocalDate, DayStatus> leave,
@@ -181,6 +183,40 @@ public final class PayrollCalc {
             case "ABSENT" -> new AttendancePay(DayStatus.UNAUTHORIZED_ABSENT, false);
             default -> asBefore;
         };
+    }
+
+    // ── Approved leave → pay (docs/PAYROLL-LOP-RULES.md, case 1) ───────────────
+
+    /**
+     * True when an approved leave request covers half a day: its duration is
+     * HALF_DAY_MORNING or HALF_DAY_AFTERNOON (what the leave module saves), or
+     * the older {@code half_day} column is set (the leave module never sets it).
+     */
+    public static boolean halfDayLeave(boolean halfDayColumn, String duration) {
+        return halfDayColumn || "HALF_DAY_MORNING".equals(duration) || "HALF_DAY_AFTERNOON".equals(duration);
+    }
+
+    /**
+     * How a day of approved leave is paid. A full-day leave is its leave type's:
+     * paid leave, or loss of pay. A half-day leave covers one half and the day's
+     * attendance decides the other half, exception-based like any other day: it
+     * is paid unless attendance marks the day absent. No attendance input is not
+     * an absence (an on-time punch has none either).
+     * <ul>
+     *   <li>paid half, other half paid → PAID_LEAVE: the whole day is paid; the
+     *       half comes off the leave balance, not pay;</li>
+     *   <li>paid half, absent → HALF_DAY_LEAVE: half paid, half loss of pay;</li>
+     *   <li>unpaid half, other half paid → HALF_DAY_LEAVE;</li>
+     *   <li>unpaid half, absent → LOP_LEAVE: the whole day is loss of pay.</li>
+     * </ul>
+     *
+     * @param attendance the day's attendance input ({@link #attendanceDay}), null when there is none
+     */
+    public static DayStatus leaveDay(boolean paid, boolean halfDay, DayStatus attendance) {
+        if (!halfDay) return paid ? DayStatus.PAID_LEAVE : DayStatus.LOP_LEAVE;
+        boolean otherHalfAbsent = attendance == DayStatus.UNAUTHORIZED_ABSENT;
+        if (paid) return otherHalfAbsent ? DayStatus.HALF_DAY_LEAVE : DayStatus.PAID_LEAVE;
+        return otherHalfAbsent ? DayStatus.LOP_LEAVE : DayStatus.HALF_DAY_LEAVE;
     }
 
     // ── Pay period and pay date ────────────────────────────────────────────────
