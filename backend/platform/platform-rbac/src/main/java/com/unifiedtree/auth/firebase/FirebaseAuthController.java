@@ -7,6 +7,7 @@ import com.hrms.core.exception.HrmsException;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
 import com.unifiedtree.auth.mfa.MfaService;
 import com.unifiedtree.auth.phone.PhoneLookupService;
+import com.unifiedtree.auth.phone.PhoneSignInRule;
 import com.unifiedtree.auth.ratelimit.ClientIp;
 import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.auth.service.AuthService;
@@ -25,7 +26,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,11 +72,8 @@ public class FirebaseAuthController {
     private final AuthService auth;
     private final PhoneLookupService phoneLookup;
     private final PublicEndpointRateLimiter rateLimiter;
-    private final MfaService mfa;
-    private final JdbcTemplate jdbc;
-
-    /** Roles that never sign in with an SMS code on the web (review 7 Oct, see {@link #refuseOnTheWeb}). */
-    static final List<String> PRIVILEGED = List.of("OWNER", "SUPER_ADMIN", "ADMIN");
+    /** Who an SMS code may sign in, on the web and in the app (shared with the MSG91 OtpController). */
+    private final PhoneSignInRule rule;
 
     public FirebaseAuthController(AuthService auth,
                                   PhoneLookupService phoneLookup,
@@ -86,8 +83,7 @@ public class FirebaseAuthController {
         this.auth = auth;
         this.phoneLookup = phoneLookup;
         this.rateLimiter = rateLimiter;
-        this.mfa = mfa;
-        this.jdbc = jdbc;
+        this.rule = new PhoneSignInRule(phoneLookup, mfa, jdbc);
     }
 
     /**
@@ -128,9 +124,14 @@ public class FirebaseAuthController {
         // findByPhone normalises to last-10-digit lookup across all
         // tenants — same match logic the /firebase-verify path uses on
         // the phone_number claim, so a hit here guarantees a hit there.
+        UUID business = businessFrom(http);
         boolean registered;
         try {
-            registered = phoneLookup.findByPhone(phone, businessFrom(http)).isPresent();
+            // The app (no business named): a number on several logins, or a two-factor login, is refused
+            // here, before the app asks Firebase for an SMS (owner's decision Q-21, 9 Oct).
+            registered = business == null
+                    ? rule.forTheApp(phone).isPresent()
+                    : phoneLookup.findByPhone(phone, business).isPresent();
         } catch (PhoneLookupService.SeveralLogins e) {
             // Several logins here carry this number: no SMS (it couldn't sign anyone in).
             return ResponseEntity.ok(Map.of("registered", false, "reason", "PHONE_ON_SEVERAL_LOGINS"));
@@ -202,7 +203,8 @@ public class FirebaseAuthController {
         UUID business = businessFrom(http);
         Optional<PhoneLookupService.Match> maybe;
         try {
-            maybe = phoneLookup.findByPhone(phone, business);
+            // The app: only the one active login with this number; several, or a two-factor login, are refused.
+            maybe = business == null ? rule.forTheApp(phone) : phoneLookup.findByPhone(phone, business);
         } catch (PhoneLookupService.SeveralLogins e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                     "error", "PHONE_ON_SEVERAL_LOGINS",
@@ -245,17 +247,15 @@ public class FirebaseAuthController {
      *       their own number on an admin's record and sign in as them: USE_EMAIL_FOR_ADMIN;</li>
      *   <li>anyone whose login needs a two-factor code: USE_PASSWORD_FOR_TWO_FACTOR, as Google sign-in.</li>
      * </ul>
-     * The mobile app (no business named) is unchanged: owner to decide.
+     * The mobile app (no business named) refuses the two-factor login too, but not the owner and admins
+     * ({@link PhoneSignInRule#forTheApp}, owner's decision Q-21).
      */
     void refuseOnTheWeb(PhoneLookupService.Match match) {
-        List<String> roles = jdbc.queryForList("""
-                SELECT r.code FROM rbac.user_roles ur JOIN rbac.roles r ON r.id = ur.role_id
-                 WHERE ur.tenant_id = ? AND ur.user_id = ?
-                """, String.class, match.tenantId(), match.authUserId());
-        if (roles.stream().anyMatch(PRIVILEGED::contains)) {
+        PhoneSignInRule.Refusal refusal = rule.refusal(match, true).orElse(null);
+        if (refusal == PhoneSignInRule.Refusal.ADMIN) {
             throw new HrmsException("Admins sign in with their email and password.", HttpStatus.FORBIDDEN, "USE_EMAIL_FOR_ADMIN");
         }
-        if (mfa.requirementFor(match.tenantId(), match.authUserId(), roles) != MfaService.Requirement.NONE) {
+        if (refusal == PhoneSignInRule.Refusal.TWO_FACTOR) {
             throw new HrmsException("Your login uses two-factor sign-in. Sign in with your email and password.",
                     HttpStatus.FORBIDDEN, "USE_PASSWORD_FOR_TWO_FACTOR");
         }

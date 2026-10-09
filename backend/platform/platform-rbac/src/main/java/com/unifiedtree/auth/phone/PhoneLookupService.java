@@ -93,6 +93,53 @@ public class PhoneLookupService {
         public SeveralLogins() { super("This mobile number is on more than one login here"); }
     }
 
+    /**
+     * The mobile app's lookup (owner's decision Q-21, 9 Oct): across businesses, with the web's rule in each
+     * ({@link #matchInTenant} strict: an active employee with an active login), and a number on more than one
+     * such login, in one business or in two, throws {@link SeveralLogins}. The app names no business, so the
+     * code could only sign in to one of them by guessing.
+     *
+     * <p>One indexed lookup first: a number on no active login anywhere costs no scan. The scan is per business
+     * (RLS), like the lookup V143.2 replaced; it only runs for a number that is on file.
+     */
+    @Transactional
+    public Optional<Match> findTheOnlyLogin(String phone) {
+        String last10 = last10(phone);
+        if (last10 == null) return Optional.empty();
+        Map<String, Object> indexed = null;
+        if (Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT to_regprocedure('auth.phone_login_match(text)') IS NOT NULL", Boolean.class))) {
+            List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM auth.phone_login_match(?)", last10);
+            if (rows.isEmpty()) return Optional.empty();
+            indexed = rows.get(0);
+        }
+        List<UUID> tenantIds;
+        try {
+            tenantIds = jdbc.queryForList("SELECT id FROM platform.tenants WHERE status = 'ACTIVE'", UUID.class);
+        } catch (Exception e) {
+            log.warn("phone lookup: could not enumerate tenants", e);
+            tenantIds = List.of();
+        }
+        Match found = null;
+        for (UUID t : tenantIds) {
+            Optional<Match> m = matchInTenant(t, last10, true);
+            if (m.isEmpty()) continue;
+            if (found != null) throw new SeveralLogins();
+            found = m.get();
+        }
+        if (indexed == null) return Optional.ofNullable(found);
+        Match fromIndex = new Match((UUID) indexed.get("tenant_id"), (UUID) indexed.get("user_id"),
+                (UUID) indexed.get("employee_id"), (String) indexed.get("email"));
+        if (found == null) {
+            // The scan couldn't read the login the index found (an unreadable business): today's answer.
+            log.warn("phone lookup: the scan missed the indexed match in tenant {}", fromIndex.tenantId());
+            return Optional.of(fromIndex);
+        }
+        // The index found another person than the scan did: there are two.
+        if (!found.employeeId().equals(fromIndex.employeeId())) throw new SeveralLogins();
+        return Optional.of(fromIndex);
+    }
+
     /** Sentinel for "a business was named but doesn't exist": matches nothing. */
     static final UUID NO_SUCH_BUSINESS = new UUID(0L, 0L);
 
