@@ -2,6 +2,7 @@ package com.unifiedtree.saas.marketing;
 
 import com.unifiedtree.saas.admin.support.PlatformAuditTrail;
 import com.unifiedtree.saas.admin.support.TenantScopedReader;
+import com.unifiedtree.saas.marketing.MarketingAccessService.AuditSubject;
 import com.unifiedtree.saas.marketing.MarketingAccessService.MarketingEntitlement;
 import com.unifiedtree.saas.marketing.MarketingAccessService.MarketingIdentity;
 import com.unifiedtree.saas.marketing.MarketingAccessService.PrincipalMapping;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -39,6 +41,12 @@ import java.util.UUID;
 public class MarketingInternalController {
 
     private static final Set<String> AUDIT_ACTIONS_PREFIXES = Set.of("MARKETING_");
+
+    /** Marketing reports that it ended a person's Marketing session (UnifiedTree refused them). */
+    static final String ACCESS_REVOKED = "MARKETING_SSO_ACCESS_REVOKED";
+
+    /** How the Marketing service is named on the audit rows it writes. */
+    static final String SERVICE = "marketing-service";
 
     private final MarketingAccessService access;
     private final MarketingUsageService usage;
@@ -103,6 +111,7 @@ public class MarketingInternalController {
             // Marketing may only write its own kind of event, never impersonate platform ones.
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "action must start with MARKETING_");
         }
+        if (ACCESS_REVOKED.equals(action)) return auditAccessRevoked(req);
         // The person behind a Marketing action is recorded as their user in that workspace (null if not a member)
         UUID actor = access.actorUserId(req.accountId(), req.tenantId());
         // Only a resolved account's own email is recorded; the caller's actorEmail text is never trusted (null otherwise)
@@ -112,6 +121,36 @@ public class MarketingInternalController {
         scoped.write(req.tenantId(), () -> {
             auditTrail.insertInTransaction(actor, email, null, "marketing-service", "marketing", action,
                     req.entityType(), req.entityId(), clip(req.summary(), 1000));
+            return null;
+        });
+        return Map.of("recorded", true);
+    }
+
+    /**
+     * Marketing ended someone's session because UnifiedTree no longer lets them in. No person did that: the actor is
+     * the Marketing service (no user, no email; {@value #SERVICE} as the row's agent and in its details), and the
+     * person who lost access is the record: their account, with its email read here by the account id (the caller's
+     * actorEmail is never used). What Marketing named as the record moves into the details. When the account id is
+     * missing or was never in that workspace nobody is named, and the row is written as Marketing sent it.
+     */
+    private Map<String, Object> auditAccessRevoked(AuditRequest req) {
+        AuditSubject subject = access.auditSubject(req.accountId(), req.tenantId());
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("by", SERVICE);
+        if (subject != null) {
+            details.put("accountId", subject.accountId().toString());
+            details.put("email", subject.email());
+            if (subject.workspaceUserId() != null) details.put("workspaceUserId", subject.workspaceUserId().toString());
+            if (req.entityType() != null || req.entityId() != null) {
+                details.put("reportedEntityType", req.entityType());
+                details.put("reportedEntityId", req.entityId() == null ? null : req.entityId().toString());
+            }
+        }
+        String entityType = subject != null ? "account" : req.entityType();
+        UUID entityId = subject != null ? subject.accountId() : req.entityId();
+        scoped.write(req.tenantId(), () -> {
+            auditTrail.insertInTransaction(null, null, null, SERVICE, "marketing", ACCESS_REVOKED, entityType,
+                    entityId, clip(req.summary(), 1000), details);
             return null;
         });
         return Map.of("recorded", true);

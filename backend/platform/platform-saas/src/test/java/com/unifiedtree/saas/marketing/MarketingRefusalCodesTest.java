@@ -13,6 +13,7 @@ import com.unifiedtree.saas.entitlement.CompanyEntitlementService.Entitlement;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -43,7 +44,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -54,6 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Every refusal of the Marketing internal and SSO API carries a stable {@code code} (what Node switches on), while
  * the status, errorCode and message stay exactly what they were. docs/redesign/MARKETING_SSO_CODES.md.
+ * Also the audit row Marketing writes when it ends someone's session: who lost access, written by the service.
  */
 class MarketingRefusalCodesTest {
 
@@ -116,6 +122,7 @@ class MarketingRefusalCodesTest {
     private FakeJdbc jdbc;
     private CompanyAccessService companyAccess;
     private CompanyEntitlementService entitlements;
+    private PlatformAuditTrail auditTrail;
     private MockMvc mvc;
 
     @BeforeEach
@@ -125,10 +132,11 @@ class MarketingRefusalCodesTest {
         TenantScopedReader scoped = new TenantScopedReader(tx);
         companyAccess = mock(CompanyAccessService.class);
         entitlements = mock(CompanyEntitlementService.class);
+        auditTrail = mock(PlatformAuditTrail.class);
         MarketingAccessService access = new MarketingAccessService(jdbc, scoped, companyAccess, entitlements,
                 new ObjectMapper(), tx);
         MarketingInternalController internal = new MarketingInternalController(access,
-                mock(MarketingUsageService.class), mock(PlatformAuditTrail.class), scoped);
+                mock(MarketingUsageService.class), auditTrail, scoped);
         mvc = MockMvcBuilders.standaloneSetup(internal, new MarketingSsoController(access))
                 .setControllerAdvice(new MarketingErrorAdvice(), new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
@@ -249,6 +257,51 @@ class MarketingRefusalCodesTest {
     }
 
     @Test
+    void aDisabledAccountIsAccountInactive() throws Exception {
+        aMember("DISABLED", "ACTIVE");
+        mvc.perform(get(ACCESS)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_INACTIVE"))
+                .andExpect(jsonPath("$.message").value("ACCOUNT_INACTIVE: This account is not active"));
+    }
+
+    @Test
+    void aLockedAccountIsAccountLockedNotInactive() throws Exception {
+        aMember("LOCKED", "ACTIVE");
+        mvc.perform(get(ACCESS)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"))
+                .andExpect(jsonPath("$.errorCode").value("403 FORBIDDEN"))
+                .andExpect(jsonPath("$.message").value("ACCOUNT_LOCKED: This account is locked"));
+    }
+
+    @Test
+    void aLockedAccountIsRefusedAtRedeemAndAtTheHandoffToo() throws Exception {
+        aGoodTicket();
+        aMember("LOCKED", "ACTIVE");
+        redeem(TICKET).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
+        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"),
+                Map.of("sub", ACCOUNT.toString(), "roles", List.of("ACCOUNT_USER")));
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
+        mvc.perform(post("/v1/sso/marketing/handoff").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tenantId\":\"" + TENANT + "\",\"companyId\":\"" + COMPANY + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
+    }
+
+    @Test
+    void anActiveAccountWithAccessIsLetIn() throws Exception {
+        aMember("ACTIVE", "ACTIVE");
+        workspaceUser(true, null);
+        companies(List.of(new CompanyEntry(COMPANY, "Acme", null, true, true, "WORKSPACE", List.of())));
+        entitled(true);
+        mvc.perform(get(ACCESS)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.accountId").value(ACCOUNT.toString()))
+                .andExpect(jsonPath("$.email").value("p@example.com"))
+                .andExpect(jsonPath("$.companyId").value(COMPANY.toString()))
+                .andExpect(jsonPath("$.entitlement.entitled").value(true));
+    }
+
+    @Test
     void anInactiveWorkspaceIsWorkspaceInactive() throws Exception {
         aMember("ACTIVE", "SUSPENDED");
         mvc.perform(get(ACCESS)).andExpect(status().isForbidden())
@@ -361,6 +414,75 @@ class MarketingRefusalCodesTest {
         assertThat(r.getBody().errorCode()).isEqualTo("ACCESS_DENIED");
         assertThat(r.getBody().code()).isEqualTo("ACCESS_DENIED");
         assertThat(r.getBody().message()).isEqualTo("You do not have permission to perform this action");
+    }
+
+    // ── The audit row when Marketing ends someone's session ──
+
+    static final String SUBJECT = "AS workspace_user_id";
+    static final String ACTOR = "SELECT auth_user_id FROM platform.account_workspaces";
+    static final String ACCOUNT_EMAIL = "SELECT email FROM platform.accounts WHERE id = ?";
+
+    private ResultActions audit(String action, String entityType, UUID entityId) throws Exception {
+        return mvc.perform(post("/v1/internal/marketing/audit").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tenantId\":\"" + TENANT + "\",\"accountId\":\"" + ACCOUNT + "\","
+                        + "\"actorEmail\":\"not-them@example.com\",\"action\":\"" + action + "\","
+                        + (entityType == null ? "" : "\"entityType\":\"" + entityType + "\",")
+                        + (entityId == null ? "" : "\"entityId\":\"" + entityId + "\",")
+                        + "\"summary\":\"Marketing session ended: ACCOUNT_INACTIVE\"}"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> revokedRow(String entityType, UUID entityId) {
+        ArgumentCaptor<Map<String, Object>> details = ArgumentCaptor.forClass(Map.class);
+        verify(auditTrail).insertInTransaction(isNull(), isNull(), isNull(), eq("marketing-service"), eq("marketing"),
+                eq("MARKETING_SSO_ACCESS_REVOKED"), eq(entityType), eq(entityId),
+                eq("Marketing session ended: ACCOUNT_INACTIVE"), details.capture());
+        verifyNoMoreInteractions(auditTrail);
+        return details.getValue();
+    }
+
+    @Test
+    void theRevokedAccessRowNamesWhoLostAccessAndTheServiceAsActor() throws Exception {
+        jdbc.answer(SUBJECT, List.of(new MarketingAccessService.AuditSubject(ACCOUNT, "p@example.com", AUTH_USER)));
+        jdbc.answer(ACTOR, List.of(AUTH_USER));   // still an active member: they must not become the actor
+        audit("MARKETING_SSO_ACCESS_REVOKED", "company", COMPANY).andExpect(status().isOk())
+                .andExpect(jsonPath("$.recorded").value(true));
+        Map<String, Object> details = revokedRow("account", ACCOUNT);
+        assertThat(details).containsEntry("by", "marketing-service")
+                .containsEntry("accountId", ACCOUNT.toString())
+                .containsEntry("email", "p@example.com")
+                .containsEntry("workspaceUserId", AUTH_USER.toString())
+                .containsEntry("reportedEntityType", "company")
+                .containsEntry("reportedEntityId", COMPANY.toString());
+        assertThat(details.values()).doesNotContain("not-them@example.com");
+        assertThat(jdbc.asked).noneMatch(sql -> sql.contains(ACTOR));
+    }
+
+    @Test
+    void aRevokedPersonWhoseWorkspaceUserIsGoneIsStillNamedByAccount() throws Exception {
+        jdbc.answer(SUBJECT, List.of(new MarketingAccessService.AuditSubject(ACCOUNT, "p@example.com", null)));
+        audit("marketing_sso_access_revoked", null, null).andExpect(status().isOk());
+        Map<String, Object> details = revokedRow("account", ACCOUNT);
+        assertThat(details).containsEntry("accountId", ACCOUNT.toString()).containsEntry("email", "p@example.com")
+                .doesNotContainKeys("workspaceUserId", "reportedEntityType", "reportedEntityId");
+    }
+
+    @Test
+    void anAccountNeverInThatWorkspaceIsNotNamedInItsAuditTrail() throws Exception {
+        audit("MARKETING_SSO_ACCESS_REVOKED", "company", COMPANY).andExpect(status().isOk());
+        Map<String, Object> details = revokedRow("company", COMPANY);
+        assertThat(details).containsOnlyKeys("by").containsEntry("by", "marketing-service");
+    }
+
+    @Test
+    void otherMarketingActionsStillRecordThePersonWhoDidThem() throws Exception {
+        jdbc.answer(ACTOR, List.of(AUTH_USER));
+        jdbc.answer(ACCOUNT_EMAIL, List.of("p@example.com"));
+        audit("MARKETING_CAMPAIGN_SENT", "company", COMPANY).andExpect(status().isOk());
+        verify(auditTrail).insertInTransaction(eq(AUTH_USER), eq("p@example.com"), isNull(), eq("marketing-service"),
+                eq("marketing"), eq("MARKETING_CAMPAIGN_SENT"), eq("company"), eq(COMPANY),
+                eq("Marketing session ended: ACCOUNT_INACTIVE"));
+        verifyNoMoreInteractions(auditTrail);
     }
 
     // ── Nothing else changes ──
