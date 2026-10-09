@@ -461,7 +461,9 @@ export const OnboardingForm: React.FC = () => {
     { enabled: !!companyId },
   )
   const { data: selectedManager } = useWorkforceEmployee(form.reportingManagerId || undefined)
-  const managers = managerQuery.data?.content ?? []
+  // People who have left can't be anyone's manager (the server refuses them).
+  const managers = (managerQuery.data?.content ?? []).filter((m) => m.employmentStatus !== 'EXITED' && m.employmentStatus !== 'TERMINATED')
+  const headOfDepartment = departments.find((d) => d.id === form.departmentId)?.name
   const { data: policyPage } = usePolicies(0, 'ACTIVE')
   const policies = policyPage?.content ?? []
   const saveSupplementary = async (employeeId: string) => {
@@ -1311,13 +1313,14 @@ export const OnboardingForm: React.FC = () => {
               <Field
                 label="Reporting Manager"
                 error={errors.reportingManagerId}
-                hint="Optional. Search across the company or assign a manager later."
+                hint="Optional. Left as it is, they report to the head of their department."
               >
                 <Input aria-label="Search reporting managers" value={managerSearch} placeholder="Search name, email or employee code"
                   onChange={e => { setManagerSearch(e.target.value); setManagerPage(0) }} className="mb-2" />
                 <Sel value={form.reportingManagerId} error={!!errors.reportingManagerId}
                   onChange={(e) => set('reportingManagerId', e.target.value)}>
-                  <option value="">No manager assigned</option>
+                  {/* Not "no manager": the server gives anyone without one their department's head. */}
+                  <option value="">{headOfDepartment ? `Head of ${headOfDepartment} (automatic)` : 'Head of their department (automatic)'}</option>
                   {selectedManager && !managers.some(manager => manager.id === selectedManager.id) && <option value={selectedManager.id}>{[selectedManager.firstName, selectedManager.lastName].filter(Boolean).join(' ')} ({selectedManager.employeeCode})</option>}
                   {managers.map((m) => (
                     <option key={m.id} value={m.id}>

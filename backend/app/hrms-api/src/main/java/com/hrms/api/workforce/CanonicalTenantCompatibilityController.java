@@ -1,8 +1,6 @@
 package com.hrms.api.workforce;
 
-import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.employee.workforce.dto.WorkforceDtos;
-import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import com.hrms.employee.workforce.service.BranchService;
 import com.hrms.employee.workforce.service.CompanyService;
 import com.hrms.employee.workforce.service.DepartmentService;
@@ -46,19 +44,16 @@ public class CanonicalTenantCompatibilityController {
     private final CompanyService companies;
     private final DepartmentService departments;
     private final BranchService branches;
-    private final WorkforceDepartmentRepository departmentRepository;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.unifiedtree.rbac.company.CompanyAccessService companyAccess;
 
     public CanonicalTenantCompatibilityController(
             CompanyService companies,
             @Qualifier("workforceDepartmentService") DepartmentService departments,
-            @Qualifier("workforceBranchService") BranchService branches,
-            WorkforceDepartmentRepository departmentRepository) {
+            @Qualifier("workforceBranchService") BranchService branches) {
         this.companies = companies;
         this.departments = departments;
         this.branches = branches;
-        this.departmentRepository = departmentRepository;
     }
 
     @GetMapping("/companies")
@@ -118,10 +113,8 @@ public class CanonicalTenantCompatibilityController {
     public ResponseEntity<Void> assignDepartmentHead(
             @PathVariable UUID departmentId,
             @RequestParam UUID employeeId) {
-        com.hrms.employee.workforce.entity.Department department = departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Department " + departmentId + " not found"));
-        department.setDepartmentHeadEmployeeId(employeeId);
-        departmentRepository.save(department);
+        // Through the service, so the department's people move to the new head as on the web.
+        departments.setHead(departmentId, employeeId);
         return ResponseEntity.noContent().build();
     }
 

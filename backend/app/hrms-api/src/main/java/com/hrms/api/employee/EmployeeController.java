@@ -402,10 +402,15 @@ public class EmployeeController {
         // roles and when no departmentId provided.
         if ("DEPT_MANAGER".equals(role) && departmentId != null) {
             try {
+                UUID oldHead = jdbcTemplate.query(
+                        "SELECT department_head_employee_id FROM hrms.departments WHERE id = ? AND tenant_id = ?",
+                        rs -> rs.next() ? rs.getObject(1, UUID.class) : null, departmentId, tenantId);
                 jdbcTemplate.update(
                         "UPDATE hrms.departments SET department_head_employee_id = ? "
                                 + "WHERE id = ? AND tenant_id = ?",
                         employeeId, departmentId, tenantId);
+                // The department's people who reported to the old head now report to this one.
+                com.hrms.employee.workforce.service.DepartmentHeadChange.moveReports(jdbcTemplate, departmentId, oldHead, employeeId);
             } catch (Exception e) {
                 // Non-fatal: the role IS assigned, just log — admin can retry the head-set.
                 // Not throwing keeps the primary role change idempotent.

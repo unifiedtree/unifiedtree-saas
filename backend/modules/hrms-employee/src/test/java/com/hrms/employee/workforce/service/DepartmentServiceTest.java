@@ -56,6 +56,29 @@ class DepartmentServiceTest {
     }
 
     @Test
+    void aNewHeadTakesOverThePeopleWhoReportedToTheOldHead() {
+        Department eng = dept("Engineering", null, company);
+        UUID kavitha = UUID.randomUUID(), ravi = UUID.randomUUID();
+        eng.setDepartmentHeadEmployeeId(kavitha);
+
+        service.setHead(eng.getId(), ravi);
+
+        assertThat(eng.getDepartmentHeadEmployeeId()).isEqualTo(ravi);
+        verify(jdbc).update(org.mockito.ArgumentMatchers.contains("SET reporting_manager_id = ?"),
+                eq(ravi), eq(eng.getId()), eq(kavitha), eq(ravi));
+    }
+
+    @Test
+    void clearingTheHeadLeavesEveryonesManagerAsItIs() {
+        Department eng = dept("Engineering", null, company);
+        eng.setDepartmentHeadEmployeeId(UUID.randomUUID());
+
+        service.setHead(eng.getId(), null);
+
+        verify(jdbc, never()).update(org.mockito.ArgumentMatchers.contains("reporting_manager_id"), any(Object[].class));
+    }
+
+    @Test
     void movesUnderAnotherDepartmentAndBackToTheTop() {
         Department eng = dept("Engineering", null, company);
         Department qa = dept("QA", null, company);

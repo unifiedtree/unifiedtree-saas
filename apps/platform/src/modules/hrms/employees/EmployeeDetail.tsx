@@ -42,6 +42,7 @@ import { invitationKey, useEmployeeMonth, useInvitationStatus } from './api/useP
 import { EmployeeFaceEnrollButton, employeeFaceLine, useEmployeeFaceStatus } from '../attendance/face/FaceEnrollment'
 import { faceErrorText } from '../attendance/face/faceEnroll'
 import { EmployeeForm } from './EmployeeForm'
+import { ManagerPicker } from './ManagerPicker'
 import { ProfileFrame, type ProfileField } from './workspace/ProfileFrame'
 import { AccountCard, AttentionList, EmploymentCard, GlanceRow, MonthCard, OnboardingCard, type Attention, type Glance, type OnboardingView } from './workspace/HrOverview'
 import { EditProfilePanel, LifecycleDialog, ShiftPanel, type EditField, type LifecycleCalls, type LifecycleKind } from './workspace/HrPanels'
@@ -316,6 +317,13 @@ export function EmployeeDetail() {
       { key: 'branchId', label: 'Branch', value: emp.branchId || '', options: branches.filter((b) => b.active !== false).map((b) => ({ value: b.id, label: b.name })) },
       { key: 'employmentType', label: 'Employment type', value: emp.employmentType || '', options: withCur(typeOpts, emp.employmentType) },
       { key: 'dateOfJoining', label: 'Date of joining', value: emp.dateOfJoining || '', type: 'date' },
+      {
+        key: 'reportingManagerId', label: 'Reports to', value: emp.reportingManagerId || '',
+        render: (value, onChange, error) => (
+          <ManagerPicker companyId={emp.companyId} value={value} onChange={onChange} excludeId={emp.id} error={error}
+            hint="If you change their department and leave this as it is, someone who reports to the old head moves to the new department’s head." />
+        ),
+      },
     ]
     const financial: EditField[] = [
       { key: 'ctcAnnual', label: 'Annual CTC (₹)', value: emp.ctcAnnual != null ? String(emp.ctcAnnual) : '', type: 'number', placeholder: 'Leave blank to keep the current CTC', check: (v) => (Number(v) > 0 ? '' : 'Enter an amount above 0') },
@@ -327,7 +335,13 @@ export function EmployeeDetail() {
     ]
     const saveEdit = async (v: Record<string, string>) => {
       const patch: UpdateWorkforceEmployeePayload = {}
-      for (const f of basic) { const nv = (v[f.key] ?? '').trim(); if (nv !== (f.value ?? '')) (patch as Record<string, unknown>)[f.key] = nv }
+      for (const f of basic) {
+        const nv = (v[f.key] ?? '').trim()
+        if (nv === (f.value ?? '')) continue
+        // No manager is its own flag: an empty id would read as "keep the manager".
+        if (f.key === 'reportingManagerId' && !nv) patch.clearReportingManager = true
+        else (patch as Record<string, unknown>)[f.key] = nv
+      }
       if (patch.employmentType) patch.employmentType = patch.employmentType as EmploymentType
       const ctc = (v.ctcAnnual ?? '').trim(); if (ctc && ctc !== financial[0].value) patch.ctcAnnual = Number(ctc)
       const acct = (v.bankAccountNumber ?? '').replace(/\s/g, ''); if (acct) patch.bankAccountNumber = acct

@@ -164,6 +164,8 @@ export interface UpdateWorkforceEmployeePayload {
   branchId?: string
   geoFenceZoneId?: string
   reportingManagerId?: string
+  /** Removes the manager (a missing reportingManagerId keeps it); approvals then go to the department head. */
+  clearReportingManager?: boolean
   employmentType?: EmploymentType
   ctcAnnual?: number
   profilePhotoUrl?: string

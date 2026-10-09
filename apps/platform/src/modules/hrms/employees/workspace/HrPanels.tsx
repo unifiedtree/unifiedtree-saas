@@ -2,7 +2,7 @@
 // lifecycle dialogs (confirm / extend probation, start / cancel notice, mark exited).
 // Each one calls the same endpoint it always did (the page passes the calls in) and says what
 // the server did, or why it refused, in a toast.
-import { useState } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Callout } from '@/design/kit/display'
 import { Dialog, FieldGrid, Input, PanelButton, Select, SidePanel, Textarea, useToast } from '@/design/kit/overlays'
 import { emailConflictMessage, useEmailCheck, usePhoneWarning } from '../../api/useContactCheck'
@@ -18,6 +18,8 @@ export interface EditField {
    * (an error, blocks Save); 'phone' — someone else has the number (a warning only).
    */
   remote?: 'email' | 'phone'
+  /** Its own control instead of an input or select (the Reports to picker). */
+  render?: (value: string, onChange: (value: string) => void, error?: string) => ReactNode
 }
 
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
@@ -67,7 +69,9 @@ function OpenEdit({ onClose, basic, financial, onSave, onFullForm, employeeId }:
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const fields = (list: EditField[], errs: Record<string, string>, show: boolean) => (
     <FieldGrid columns={2}>
-      {list.map((f) => f.options && !f.off ? (
+      {list.map((f) => f.render && !f.off ? (
+        <Fragment key={f.key}>{f.render(form[f.key] ?? '', (v) => set(f.key, v), show ? errs[f.key] : undefined)}</Fragment>
+      ) : f.options && !f.off ? (
         <Select key={f.key} label={f.label} value={form[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
           placeholder="Choose" options={f.options} error={show ? errs[f.key] : undefined} hint={f.hint} />
       ) : (

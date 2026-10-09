@@ -467,7 +467,11 @@ public final class WorkforceDtos {
             String salaryFrequency,
             String weeklyOffDays,
             // V143.13: correct the recorded exit type from the separation editor.
-            WorkforceEmployee.ExitType exitType
+            WorkforceEmployee.ExitType exitType,
+            // A null reportingManagerId means "keep the manager", so removing one
+            // needs its own flag. True clears it; approvals then go to the
+            // department head, as they do for anyone without a manager.
+            Boolean clearReportingManager
     ) { }
 
     /**

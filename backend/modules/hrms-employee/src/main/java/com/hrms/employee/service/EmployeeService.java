@@ -57,6 +57,9 @@ public class EmployeeService {
     /** The workspace's email rule, shared with the directory create (WorkforceEmployeeService). */
     private final EmployeeContactGuard contactGuard;
     private final boolean kafkaEnabled;
+    /** Who can be someone's manager, the directory's rule; optional so hand-built tests need not wire it. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrms.employee.workforce.service.WorkforceEmployeeService managerRules;
 
     public EmployeeService(
             EmployeeRepository employeeRepository,
@@ -106,6 +109,7 @@ public class EmployeeService {
         String personalEmail = EmployeeContactGuard.normalizeEmail(request.personalEmail());
         if (email != null) contactGuard.assertEmailFree(email, null);
         if (personalEmail != null && !personalEmail.equals(email)) contactGuard.assertEmailFree(personalEmail, null);
+        if (managerRules != null && request.managerId() != null) managerRules.checkManager(null, request.managerId());
 
         Employee employee = employeeMapper.toEntity(request);
         if (email != null) employee.setEmail(email);
@@ -225,6 +229,9 @@ public class EmployeeService {
             employee.setGeoFenceZoneId(request.geoFenceZoneId());
         }
         if (request.managerId() != null) {
+            if (managerRules != null && !request.managerId().equals(employee.getManagerId())) {
+                managerRules.checkManager(employee.getId(), request.managerId());
+            }
             employee.setManagerId(request.managerId());
         }
         if (request.jobTitle() != null) {
