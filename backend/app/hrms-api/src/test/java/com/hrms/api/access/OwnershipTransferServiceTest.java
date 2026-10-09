@@ -187,4 +187,15 @@ class OwnershipTransferServiceTest {
         assertThatThrownBy(() -> service.start(tenant, owner, asha, "pw", "x".repeat(501)))
                 .isInstanceOfSatisfying(BusinessRuleException.class, e -> org.assertj.core.api.Assertions.assertThat(e.getErrorCode()).isEqualTo("NOTE_TOO_LONG"));
     }
+
+    @Test
+    void aNewOwnerWhoSignsInWithGoogleOnlyStillGetsAnAccount() {
+        // platform.accounts needs a password or a Google id; a Google-only login has no password.
+        UserCredentials google = login(asha, "asha@acme.test", true);
+        google.setPasswordHash(null);
+        when(jdbc.queryForList(contains("FROM platform.accounts"), eq(UUID.class), any(Object[].class))).thenReturn(List.of());
+        when(passwords.hash(any())).thenReturn("random-hash");
+        service.accountFor(google, "Asha");
+        verify(jdbc).update(contains("INSERT INTO platform.accounts"), any(), eq("asha@acme.test"), eq("Asha"), eq("random-hash"));
+    }
 }
