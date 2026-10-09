@@ -7,9 +7,9 @@
  * active modules. Role names are not used to decide access; the two
  * exceptions are presentational and mirror something the backend or a page
  * itself decides by role today, and each is named where it is used:
- *   - `planAdmin`: adding modules and billing are role-gated on the server
- *     (WorkspacePlanController / BrandingController), so only those roles are
- *     offered the "request module" flow.
+ *   - `planAdmin`: holds workspace.billing.manage ("Can buy and manage plans
+ *     and billing", Q-26), the code the server checks for the plan, module
+ *     buying and billing; only they are offered the "request module" flow.
  *   - `adminRole`: the Leave page hides the personal tabs (My leave, Apply,
  *     Balances) and the Attendance page hides My Attendance from admin
  *     roles, so search must not offer them either. My work and the other
@@ -35,7 +35,7 @@ export interface AccessContext {
   adminRole: boolean
   /** Sees the personal pages (see the note above). Missing = `!adminRole`. */
   personalPages?: boolean
-  /** May add modules and manage the plan (see the note above). */
+  /** May add modules and manage the plan and billing: holds workspace.billing.manage (see the note above). */
   planAdmin: boolean
 }
 

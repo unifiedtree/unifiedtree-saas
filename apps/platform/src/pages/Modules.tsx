@@ -12,6 +12,7 @@ import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import { useBusinessSettings } from '@/layouts/businessSettings'
 import { useMarketingLauncher } from '@/core/marketing/useMarketingLauncher'
 import { MarketingAppTile, MarketingLaunchDialog } from '@/core/marketing/MarketingLaunch'
+import { useCanManageBilling } from '@/shared/navigation/useAccess'
 
 /** Marketing Automation's catalogue module (the plan `marketing` includes it). */
 const MARKETING_MODULE = 'whatsapp'
@@ -71,9 +72,6 @@ function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
   }
 }
 
-// Match the plan configurator's billing-admin roles.
-const ADMIN_ROLES = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN']
-
 /**
  * Per-app icon identities — the Odoo move: every app instantly recognisable by
  * colour. Deliberately NOT the emerald brand ramp (client call 2026-08-11:
@@ -116,10 +114,8 @@ function tileColor(key: string, index: number) {
 export const Modules: React.FC = () => {
   const navigate = useNavigate()
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  const user          = useSdkStore(s => s.user)
-  const permissions   = useSdkStore(s => s.permissions)
-  const roles: string[] = user?.roles ?? []
-  const isAdmin = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
+  // Holds "Can buy and manage plans and billing" (Q-26), the permission the server checks.
+  const isAdmin = useCanManageBilling()
 
   // Backend-driven merged view — same source as the marketing site's
   // /pricing and Navbar mega-menu (platform.module_plans, RETIRED-filtered).
