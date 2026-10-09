@@ -87,11 +87,15 @@ public class EmployeeBaselinePermissions {
         Set<String> cached = cache.getIfPresent(CACHE_KEY);
         if (cached != null) return cached;
         try {
+            // Only the built-in role (tenant_id IS NULL). The answer is cached for
+            // every workspace, so a business's own role that happened to be coded
+            // EMPLOYEE must never feed it: its grants would reach every employee
+            // of every business.
             List<String> codes = jdbc.queryForList("""
                     SELECT rp.permission_code
                       FROM rbac.role_permissions rp
                       JOIN rbac.roles r ON r.id = rp.role_id
-                     WHERE r.code = ?
+                     WHERE r.code = ? AND r.tenant_id IS NULL
                     """, String.class, BASELINE_ROLE_CODE);
             Set<String> loaded = Set.copyOf(codes);
             if (loaded.isEmpty()) {
