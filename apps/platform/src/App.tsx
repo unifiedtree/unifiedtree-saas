@@ -4,7 +4,6 @@ import { lazyPage, registerRoutes } from '@/shared/routing/lazyPage'
 import { P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { RouteGuard } from '@/routes/RouteGuard'
 import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
-import { RequirePermission } from '@/core/permissions/RequirePermission'
 import { PlatformShell } from '@/layouts/PlatformShell'
 import { BusinessShell } from '@/layouts/BusinessShell'
 import { LoginPage } from '@/core/auth/LoginPage'
@@ -240,7 +239,7 @@ export const ROUTE_TREE = (
         <Route path="/business/branding"   element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write', 'workspace.profile.update', 'workspace.security.manage']}><Settings tab="branding" /></RouteGuard>} />
         <Route path="/business/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
         <Route path="/business/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
-        <Route path="/business/billing"    element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings tab="billing" /></RequirePermission>} />
+        <Route path="/business/billing"    element={<RouteGuard anyOf={[P.WORKSPACE_BILLING_MANAGE]}><Settings tab="billing" /></RouteGuard>} />
         <Route path="/business/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
         {/* Ownership transfer: the owner starts it; the person offered answers it here (their notification links here). */}
         <Route path="/business/ownership"  element={<Ownership />} />
@@ -272,7 +271,7 @@ export const ROUTE_TREE = (
             and get their own gated routes so a plain SETTINGS_READ user can't
             deep-link into them. React Router v6 matches the static paths in
             preference to the /:tab wildcard below, so ordering is safe. */}
-        <Route path="/settings/billing" element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings tab="billing" /></RequirePermission>} />
+        <Route path="/settings/billing" element={<RouteGuard anyOf={[P.WORKSPACE_BILLING_MANAGE]}><Settings tab="billing" /></RouteGuard>} />
         {/* Danger zone: export needs workspace.data.export, reset/delete need
             workspace.lifecycle.manage (owners and super admins, V143_26). */}
         <Route path="/settings/danger"  element={<RouteGuard anyOf={['workspace.data.export', 'workspace.lifecycle.manage']}><Settings tab="danger" /></RouteGuard>} />
@@ -386,11 +385,9 @@ export const ROUTE_TREE = (
         <Route
           path="/hrms/employees"
           element={
-            <RequirePermission code={P.HRMS_EMPLOYEE_READ}>
-              <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
-                <ModuleGate moduleKey="hrms"><DirectoryRoute /></ModuleGate>
-              </RouteGuard>
-            </RequirePermission>
+            <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
+              <ModuleGate moduleKey="hrms"><DirectoryRoute /></ModuleGate>
+            </RouteGuard>
           }
         />
         <Route
@@ -592,22 +589,18 @@ export const ROUTE_TREE = (
         <Route
           path="/hrms/bank-disbursement"
           element={
-            <RequirePermission code={P.PAYROLL_RUNS_READ}>
-              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
-              </RouteGuard>
-            </RequirePermission>
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
+            </RouteGuard>
           }
         />
         {/* Bank profiles (and the full batch tools) — linked from the designed Bank Disbursement page. */}
         <Route
           path="/hrms/bank-disbursement/setup"
           element={
-            <RequirePermission code={P.PAYROLL_RUNS_READ}>
-              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="payroll"><BankDisbursement /></ModuleGate>
-              </RouteGuard>
-            </RequirePermission>
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+              <ModuleGate moduleKey="payroll"><BankDisbursement /></ModuleGate>
+            </RouteGuard>
           }
         />
         <Route
@@ -822,11 +815,9 @@ export const ROUTE_TREE = (
         <Route
           path="/hrms/payroll/runs"
           element={
-            <RequirePermission code={P.PAYROLL_RUNS_READ}>
-              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
-              </RouteGuard>
-            </RequirePermission>
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
+            </RouteGuard>
           }
         />
         <Route
