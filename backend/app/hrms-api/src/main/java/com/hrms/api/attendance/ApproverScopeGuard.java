@@ -19,8 +19,9 @@ import java.util.stream.Collectors;
  *
  * <p>Rule: an HR / admin marker (leave.approve.l2) lets the whole tenant
  * through. Anyone else must be the requester's approver by the team-scope rule
- * TeamEmployeeScope already implements (department head → whole department;
- * else reporting manager). The self-approval guard stays in each service.
+ * TeamEmployeeScope already implements (department head → whole department
+ * plus their direct reports; else reporting manager). The self-approval guard
+ * stays in each service.
  */
 @Component
 public class ApproverScopeGuard {

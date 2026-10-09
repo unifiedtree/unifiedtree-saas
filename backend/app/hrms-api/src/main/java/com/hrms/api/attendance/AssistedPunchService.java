@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
  *
  * <p>Who: {@code attendance.assisted_punch.team} punches for the caller's team
  * (the My team rule, {@link TeamEmployeeScope#teamOf}: the departments they
- * head, else their direct reports); {@code attendance.assisted_punch.any} for
+ * head and their direct reports); {@code attendance.assisted_punch.any} for
  * anyone working in the caller's company. Nobody punches for themself here.
  *
  * <p>The checks a self face punch makes, reused rather than copied: the face

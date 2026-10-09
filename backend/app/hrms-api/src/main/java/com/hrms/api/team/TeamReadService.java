@@ -37,8 +37,9 @@ import java.util.stream.Collectors;
  * My team's read models (redesign BW-07, BW-08): who is in the team and how it
  * is chosen, and the team's leave and work from home over a range. The team is
  * always {@link TeamEmployeeScope}: the whole company with
- * attendance.workforce.admin, else the departments the caller heads, else
- * their direct reports; never the caller.
+ * attendance.workforce.admin, else the departments the caller heads and
+ * their direct reports (owner decision Q-22), else their direct reports;
+ * never the caller.
  */
 @Service
 public class TeamReadService {
