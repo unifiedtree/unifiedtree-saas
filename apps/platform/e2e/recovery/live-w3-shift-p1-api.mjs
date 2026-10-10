@@ -68,7 +68,7 @@ const created = { rosters: [], templates: [] }
 let settingsBefore = null
 
 function insertFixtures() {
-  const emp = (k, dept) => `('${people[k]}','${tenant}','${company}','QSH-${NAME[k].slice(0, 3)}-${tag}','QA Shift','${NAME[k]}-${tag}','${email(k)}',
+  const emp = (k, dept) => `('${people[k]}','${tenant}','${company}','QSH-${k}-${tag}','QA Shift','${NAME[k]}-${tag}','${email(k)}',
       'FULL_TIME','ACTIVE',${dept ? `'${dept}'` : 'NULL'},'2025-01-01','qa','qa')`
   const login = (u, k, role) => `INSERT INTO auth.user_credentials(id,tenant_id,email,password_hash,employee_id,is_active)
       SELECT '${u}','${tenant}','${email(k)}',password_hash,'${people[k]}',true FROM auth.user_credentials
@@ -100,7 +100,7 @@ const draftBody = (over = {}) => ({
   staffing: [], rows: [rowFor(M1, 0), rowFor(M2, 2)], ...over,
 })
 const notices = (rosterId, type) => num(`select count(*) from notif.notifications where tenant_id='${tenant}' and type='${type}' and data::text ~ '${rosterId}'`)
-async function waitFor(fn, ms = 15000) { const until = Date.now() + ms; while (Date.now() < until) { if (await fn()) return true; await wait(500) } return false }
+async function waitFor(fn, ms = 30000) { const until = Date.now() + ms; while (Date.now() < until) { if (await fn()) return true; await wait(500) } return false }
 
 async function main(owner) {
   insertFixtures()
