@@ -16,6 +16,7 @@
 // row (what the web shows) and the payslip. The run is processed only, never
 // locked or paid, and only when processing can't touch advances, encashments or
 // PLI awards (fixture check). Everything it creates is removed.
+/* global process, console, fetch */
 import { execFileSync } from 'node:child_process'
 
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
@@ -40,7 +41,7 @@ async function session(email) {
   return async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body ? JSON.stringify(body) : undefined })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (res.status >= 400) apiErrors.push(`${method} ${path} → ${res.status} ${json?.errorCode ?? ''}`)
     return { status: res.status, json }
