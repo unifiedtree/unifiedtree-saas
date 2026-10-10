@@ -178,6 +178,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.quota",
         // /v1/users/me + /v1/users/me/avatar — profile lookup + avatar upload.
         "com.hrms.api.users",
+        // Shift planning, Phase 1: rotation patterns, rosters, publish and the effective schedule
+        // (/v1/rotation-templates, /v1/rosters, /v1/schedule), with the planner engine and preview in
+        // its roster.plan subpackage. JDBC only; every call is FEATURE_NOT_READY until V143.106.
+        "com.hrms.api.roster",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",

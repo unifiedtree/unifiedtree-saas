@@ -1,5 +1,6 @@
 package com.hrms.api.attendance;
 import com.hrms.attendance.service.AttendanceCalendar;
+import com.hrms.attendance.service.EffectiveShiftResolver;
 import com.hrms.core.exception.BusinessRuleException;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -58,12 +59,9 @@ public class TeamScheduleController {
     FROM hrms.employees e
     CROSS JOIN generate_series(CAST(:from AS date),CAST(:to AS date),interval '1 day') d(day)
     LEFT JOIN LATERAL (
-      SELECT a.shift_policy_id,a.effective_from FROM attendance.employee_shift_assignments a
-      WHERE a.tenant_id=e.tenant_id AND a.employee_id=e.id AND a.effective_from<=d.day::date
-        AND (a.effective_to IS NULL OR a.effective_to>=d.day::date)
-      ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1
+      %s
     ) assignment ON true
-    LEFT JOIN attendance.shift_policies s ON s.id=assignment.shift_policy_id AND s.tenant_id=e.tenant_id
+    %s
     LEFT JOIN LATERAL (
       SELECT lr.id AS leave_id,lt.name AS leave_type_name,lr.duration,lr.half_day
       FROM leave_mgmt.leave_requests lr LEFT JOIN leave_mgmt.leave_types lt ON lt.id=lr.leave_type_id
@@ -78,7 +76,10 @@ public class TeamScheduleController {
     LEFT JOIN settings.hr_configuration hc ON hc.company_id=e.company_id AND hc.tenant_id=e.tenant_id
     WHERE e.tenant_id=:tenant AND e.id IN (:employees)
     ORDER BY e.first_name,e.last_name,e.id,d.day
-    """;
+    """.formatted(
+      // The shift in force each day: the schedule rule of EffectiveShiftResolver.
+      EffectiveShiftResolver.scheduleAssignment("e.tenant_id","e.id","d.day::date"),
+      EffectiveShiftResolver.scheduleShiftJoin("assignment","e.tenant_id"));
  /** Turns one row's helper columns ("_…") into {@code onLeave} and {@code weeklyOff}, and drops them. */
  static void dayFacts(Map<String,Object> row) {
    boolean onLeave=Boolean.TRUE.equals(row.remove("_onLeave"));

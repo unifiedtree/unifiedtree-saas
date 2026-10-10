@@ -103,6 +103,8 @@ function PoliciesRoute() {
 // Seams: each of these pages is being rebuilt by its own package; the route file renders today's page until then.
 const DirectoryRoute = lazyPage(() => import('@/modules/hrms/workforce/DirectoryRoute').then(m => ({ default: m.DirectoryRoute })))
 const AnalyticsRoute = lazyPage(() => import('@/modules/hrms/attendance/AnalyticsRoute').then(m => ({ default: m.AnalyticsRoute })))
+// Shift planning, Phase 1: a roster imported from Excel (Import → Validate → Preview → Apply); it lands as a draft.
+const RosterImportPage = lazyPage(() => import('@/modules/hrms/attendance/planner/import/RosterImportPage').then(m => ({ default: m.RosterImportPage })))
 const ShiftsRoute = lazyPage(() => import('@/modules/hrms/attendance/ShiftsRoute').then(m => ({ default: m.ShiftsRoute })))
 // Face station (V143.95): the setup page, and the station itself (its own sign-in, outside the shell).
 const FaceStationsPage = lazyPage(() => import('@/modules/hrms/attendance/station/FaceStationsPage').then(m => ({ default: m.FaceStationsPage })))
@@ -694,6 +696,14 @@ export const ROUTE_TREE = (
           element={
             <RouteGuard anyOf={['hrms.notiftemplate.read', 'hrms.notiftemplate.write']}>
               <ModuleGate moduleKey="hrms"><NotificationTemplates /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/shifts/planner/import"
+          element={
+            <RouteGuard anyOf={[P.ATTENDANCE_ROSTER_PLAN]}>
+              <ModuleGate moduleKey="hrms"><RosterImportPage /></ModuleGate>
             </RouteGuard>
           }
         />

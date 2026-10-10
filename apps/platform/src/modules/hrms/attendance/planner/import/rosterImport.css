@@ -1,0 +1,72 @@
+/* Roster import (design §1.7). Every colour is a design token (light + dark, design/theme/tokens.css) with its light
+   fallback; the brand is the app's emerald (--u-br / --u-brt). The preview scrolls sideways inside its own box, so the
+   page never does (phone width 390). */
+
+.rim-page { display: grid; gap: 16px; min-width: 0; }
+.rim-form { display: grid; gap: 14px; max-width: 760px; }
+.rim-scope { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.rim-scope:disabled { opacity: .75; }
+.rim-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.rim-row--end { justify-content: flex-end; }
+.rim-muted { font-size: 13px; color: var(--u-ink3, #60706A); }
+.rim-lead { margin: 0; font-size: 14px; color: var(--u-ink, #0E1B16); }
+.rim-pad { padding: 12px 20px; }
+.rim-mono { font-variant-numeric: tabular-nums; color: var(--u-ink2, #4A5A54); }
+.rim-wrap { white-space: normal; }
+.rim-problem { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; line-height: 1.45; }
+.rim-notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--u-ink2, #4A5A54); }
+
+.rim-crumbs { display: inline-flex; align-items: center; gap: 6px; }
+.rim-crumbs button { padding: 0; border: 0; background: none; font: inherit; font-weight: 500; color: var(--u-brt, #0F6E56); cursor: pointer; }
+.rim-crumbs button:hover { text-decoration: underline; }
+
+/* ── Preview grid ─────────────────────────────────────────────────────────── */
+.rim-grid-wrap { max-width: 100%; max-height: 560px; overflow: auto; border-top: 1px solid var(--u-ln2, #EDF1EF); border-bottom: 1px solid var(--u-ln2, #EDF1EF); }
+.rim-grid-wrap:focus-visible { outline: none; box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.rim-grid { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.rim-grid th, .rim-grid td { height: 32px; min-width: 32px; padding: 0 3px; text-align: center; border-bottom: 1px solid var(--u-ln2, #EDF1EF); white-space: nowrap; }
+.rim-grid thead th { position: sticky; top: 0; z-index: 2; background: var(--u-sf2, #F7F9F8); font-weight: 600; color: var(--u-ink2, #4A5A54); line-height: 1.1; }
+.rim-grid thead th small { display: block; font-size: 10px; font-weight: 500; color: var(--u-ink3, #60706A); }
+.rim-grid [data-holiday] { background: var(--u-holiday-soft, #F1EAFB); }
+.rim-grid thead th[data-holiday] { background: var(--u-holiday-soft, #F1EAFB); color: var(--u-holiday-text, #6B3DB8); }
+.rim-grid__name {
+  position: sticky; left: 0; z-index: 1; min-width: 180px; max-width: 220px; padding: 0 10px !important; text-align: left !important;
+  background: var(--u-sf, #fff); border-right: 1px solid var(--u-ln, #E3E9E6);
+}
+.rim-grid thead .rim-grid__name { z-index: 3; background: var(--u-sf2, #F7F9F8); }
+.rim-grid tbody .rim-grid__name span { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--u-ink, #0E1B16); }
+.rim-grid tbody .rim-grid__name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--u-ink3, #60706A); }
+.rim-grid td { position: relative; }
+.rim-grid td[data-outside] { background: repeating-linear-gradient(135deg, transparent 0 4px, var(--u-ln2, #EDF1EF) 4px 6px); }
+.rim-grid td[data-flag="error"] { box-shadow: inset 0 0 0 2px var(--u-danger, #D64545); }
+.rim-grid td[data-flag="warning"] { box-shadow: inset 0 0 0 2px var(--u-amber, #E0A23B); }
+.rim-total { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--u-ink2, #4A5A54); background: var(--u-sf2, #F7F9F8); }
+
+.rim-code {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 20px; padding: 0 4px; border-radius: 5px;
+  font-size: 11.5px; font-weight: 600; line-height: 1; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+}
+.rim-code[data-wo] { background: var(--u-hv, #F0F4F2); color: var(--u-ink3, #60706A); }
+.rim-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 17px; padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--u-onbr, #fff); }
+.rim-badge[data-type="PH"] { background: var(--u-holiday, #8B4FE0); }
+.rim-badge[data-type="L"] { background: var(--u-leave, #E0661B); }
+.rim-badge[data-type="COFF"] { background: var(--u-info, #2585C7); }
+.rim-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; }
+.rim-dot[data-type="PH"] { background: var(--u-holiday, #8B4FE0); }
+.rim-dot[data-type="L"] { background: var(--u-leave, #E0661B); }
+.rim-dot[data-type="COFF"] { background: var(--u-info, #2585C7); }
+
+/* ── Schedule check lines ─────────────────────────────────────────────────── */
+.rim-checks { list-style: none; margin: 0; padding: 12px 20px 0; display: grid; gap: 6px; font-size: 13px; color: var(--u-ink, #0E1B16); }
+.rim-checks li { display: flex; align-items: baseline; gap: 8px; }
+.rim-checks li > span { width: 16px; text-align: center; font-weight: 700; }
+.rim-checks li[data-level="ok"] > span { color: var(--u-success, #1F9D63); }
+.rim-checks li[data-level="error"] > span { color: var(--u-danger, #D64545); }
+.rim-checks li[data-level="warning"] > span { color: var(--u-amber, #E0A23B); }
+.rim-checks li[data-level="info"] > span { color: var(--u-info, #2585C7); }
+
+@media (max-width: 640px) {
+  .rim-pad { padding: 12px 14px; }
+  .rim-checks { padding: 12px 14px 0; }
+  .rim-grid__name { min-width: 130px; max-width: 150px; }
+}

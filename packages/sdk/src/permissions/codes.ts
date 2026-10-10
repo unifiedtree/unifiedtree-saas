@@ -200,6 +200,10 @@ export const P = {
    * intent directly for a future authorities split.
    */
   ATTENDANCE_MANUAL_ENTRY_WRITE:   'attendance.manual-entry.write',
+  /** Shift planner (V143.107): draft rosters and rotation patterns; department heads plan only the departments they head. */
+  ATTENDANCE_ROSTER_PLAN:          'attendance.roster.plan',
+  /** Shift planner (V143.107): publish a roster so people see their schedule (they are told). */
+  ATTENDANCE_ROSTER_PUBLISH:       'attendance.roster.publish',
 
   // ── Leave ─────────────────────────────────────────────────────────────────
   LEAVE_BALANCE_READ:              'leave.balance.read',

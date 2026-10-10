@@ -1,0 +1,9 @@
+Roster — January 2027 — Technical
+Employee,Employee code,Department,Designation,Building,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,Working days,WO,PH,L,COFF
+,,,,,F,S,S,M,T,W,T,F,S,S,M,T,W,T,F,S,S,M,T,W,T,F,S,S,M,T,W,T,F,S,S
+Ravi Kumar,TV-101,Technical,HVAC Technician,Building 1,A,A,B,B,C,C,WO,A,A,B,B,L,C,WO,A,A,B,B,C,C,WO,A,A,B,B,PH,C,WO,A,A,B,25,4,1,1,0
+Praveen Rao,TV-102,Technical,HVAC Technician,Building 1,B,B,C,C,WO,A,A,B,B,C,C,WO,A,A,B,B,C,C,WO,A,A,B,B,C,C,PH,A,A,B,B,C,27,3,1,0,0
+Shiva Prasad,TV-103,Technical,Electrician,Building 2,C,C,WO,A,A,B,B,C,C,WO,A,A,B,B,C,C,WO,A,A,B,B,C,C,WO,A,PH,B,B,C,C,WO,25,5,1,0,0
+Anitha Reddy,TV-104,Technical,Electrician,Building 2,WO,A,A,B,B,C,C,WO,A,A,B,B,C,C,WO,A,A,B,B,COFF,C,WO,A,A,B,PH,C,C,WO,A,A,24,5,1,0,1
+Kiran Babu,TV-105,Technical,Supervisor,Building 1,G,WO,WO,G,G,G,G,G,WO,WO,G,G,G,G,G,WO,WO,G,G,G,G,G,WO,WO,G,PH,G,G,G,WO,WO,20,10,1,0,0
+Lakshmi Devi,TV-106,Technical,Supervisor,Building 2,G,WO,WO,G,G,G,G,G,WO,WO,G,G,G,G,G,WO,WO,G,G,G,G,G,WO,WO,G,PH,G,G,G,WO,WO,20,10,1,0,0
