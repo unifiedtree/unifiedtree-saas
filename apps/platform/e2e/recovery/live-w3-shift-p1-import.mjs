@@ -249,7 +249,7 @@ function watch(page, label) {
   return { errors, failed }
 }
 async function signIn(page, who) {
-  await page.goto(base + '/login')
+  await page.goto(base + '/login', { waitUntil: 'domcontentloaded', timeout: 180_000 })   // a cold vite compiles on the first load
   await page.locator('input[type=email]').fill(who)
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
@@ -264,10 +264,37 @@ async function dismissPopups(page) {
     await page.keyboard.press('Escape').catch(() => {})
   }
 }
-const visible = (locator, timeout = 20_000) => locator.waitFor({ timeout }).then(() => true, () => false)
+const visible = (locator, timeout = 60_000) => locator.waitFor({ timeout }).then(() => true, () => false)
+
+/**
+ * A cold dev server compiles every module on its first request, which on this machine can take longer than a page
+ * load waits. Fetch the app's static module graph (and the import page's) once from Node first, on 127.0.0.1 (Node
+ * can't resolve demo.localhost), so the browser then gets compiled modules. Bounded; it says what was slowest.
+ */
+async function warmUp() {
+  const origin = base.replace('demo.localhost', '127.0.0.1')
+  const seen = new Set(), queue = ['/', '/src/main.tsx', '/src/modules/hrms/attendance/planner/import/RosterImportPage.tsx']
+  const t0 = Date.now()
+  let slowest = { url: '', ms: 0 }
+  const spec = /(?:\bfrom\s*|\bimport\s*)["'](\/[^"']+)["']/g
+  while (queue.length && Date.now() - t0 < 240_000) {
+    await Promise.all(queue.splice(0, 8).map(async (u) => {
+      if (seen.has(u)) return
+      seen.add(u)
+      const s = Date.now()
+      try {
+        const text = await (await fetch(origin + u)).text()
+        for (const m of text.matchAll(spec)) if (!seen.has(m[1])) queue.push(m[1])
+      } catch { /* the browser will say */ }
+      if (Date.now() - s > slowest.ms) slowest = { url: u, ms: Date.now() - s }
+    }))
+  }
+  console.log(`warm-up: ${seen.size} modules in ${Math.round((Date.now() - t0) / 1000)} s, ${queue.length} left; slowest ${slowest.url} (${slowest.ms} ms)`)
+}
 
 async function ui() {
   mkdirSync(SHOTS, { recursive: true })
+  await warmUp()
   // The page opens on next month (India time); a sheet for that month with day numbers 01 … 31.
   const [y, m] = istToday().split('-').map(Number)
   const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1
@@ -288,7 +315,7 @@ async function ui() {
     const page = await ctx.newPage()
     watched.push(watch(page, 'desktop'))
     await signIn(page, 'owner@unifiedtree.demo')
-    await page.goto(base + '/hrms/shifts/planner/import')
+    await page.goto(base + '/hrms/shifts/planner/import', { waitUntil: 'domcontentloaded', timeout: 180_000 })
     check('web: the import page opens for the owner', await visible(page.getByRole('heading', { name: 'Import a roster from Excel' })))
     await dismissPopups(page)
     await page.getByLabel('Department').selectOption({ label: `QA Import ${tag}` })
@@ -319,7 +346,7 @@ async function ui() {
     await signIn(pp, 'owner@unifiedtree.demo')
     const overflow = () => pp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     const openOnPhone = async () => {
-      await pp.goto(base + '/hrms/shifts/planner/import')
+      await pp.goto(base + '/hrms/shifts/planner/import', { waitUntil: 'domcontentloaded', timeout: 180_000 })
       const ok = await visible(pp.getByRole('heading', { name: 'Import a roster from Excel' }))
       await dismissPopups(pp)
       await pp.getByLabel('Department').selectOption({ label: `QA Import ${tag}` })
