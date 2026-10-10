@@ -73,6 +73,9 @@ class EffectiveShiftResolverTest {
         assertEquals(Map.of(), EffectiveShiftResolver.attendanceShifts(failing, List.of(EMP), null, DAY));
         assertEquals(List.of(), EffectiveShiftResolver.dashboardShifts(failing, List.of(), DAY));
         assertEquals(Map.of(), EffectiveShiftResolver.peopleOnEachShift(failing, UUID.randomUUID(), List.of(), DAY));
+        assertEquals(Map.of(), EffectiveShiftResolver.shiftsOn(failing, List.of(), DAY));
+        // The attendance weekly-off rule is AttendanceCalendar's: without a database, Saturday and Sunday.
+        assertEquals(Map.of(EMP, java.util.Set.of(6, 7)), EffectiveShiftResolver.attendanceWeeklyOffDays(null, List.of(EMP), DAY));
         // With people, the database is asked and its failure is the caller's.
         assertThrows(DataAccessResourceFailureException.class, () -> EffectiveShiftResolver.attendanceShift(failing, EMP, DAY));
         assertThrows(DataAccessResourceFailureException.class, () -> EffectiveShiftResolver.attendanceShifts(failing, List.of(EMP), DAY, DAY));

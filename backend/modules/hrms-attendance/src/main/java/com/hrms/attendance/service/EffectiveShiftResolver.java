@@ -3,6 +3,7 @@ package com.hrms.attendance.service;
 import com.hrms.attendance.entity.EmployeeShiftAssignment;
 import com.hrms.attendance.repository.EmployeeShiftAssignmentRepository;
 import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 
 import java.sql.Date;
@@ -18,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,7 +36,7 @@ import java.util.stream.Collectors;
  * <p>The copies this replaced did not apply the rule in quite the same way, and each difference is kept, by name,
  * until someone decides otherwise:
  * <ul>
- *   <li>{@link #attendanceShift} and {@link #attendanceShifts} (late marks, my day and app home, the weekly target,
+ *   <li>{@link #attendanceShift}, {@link #attendanceShifts} and {@link #shiftsOn} (late marks, my day and app home, the weekly target,
  *       the overtime threshold, the shift's weekly offs, day status): an archived shift is skipped, so the assignment
  *       before it applies; the tenant is the caller's (row-level security), with no condition of its own; two
  *       assignments starting the same day are not told apart.</li>
@@ -156,6 +158,30 @@ public final class EffectiveShiftResolver {
             if (best == null || s.effectiveFrom().isAfter(best.effectiveFrom())) best = s;
         }
         return best;
+    }
+
+    /**
+     * The attendance rule for many people on one date, in one query: person → the assignment and shift in force (as
+     * {@link #attendanceShift}); people with none are absent. The tenant is the caller's (row-level security, inside
+     * its transaction). The bulk entry point for new readers (shift-ot DESIGN §0.2 {@code shiftsOn}). Database errors
+     * are the caller's to handle.
+     */
+    public static Map<UUID, EffectiveShift> shiftsOn(JdbcOperations jdbc, Collection<UUID> employeeIds, LocalDate date) {
+        Map<UUID, EffectiveShift> out = new HashMap<>();
+        attendanceShifts(jdbc, employeeIds, date, date).forEach((id, shifts) -> {
+            EffectiveShift shift = inForceOn(shifts, date);
+            if (shift != null) out.put(id, shift);
+        });
+        return out;
+    }
+
+    /**
+     * The ATTENDANCE weekly-off rule for many people on one date: their own days, else the days of the shift
+     * {@link #shiftsOn} gives, else their company's, else Saturday and Sunday ({@link AttendanceCalendar#resolveWeeklyOffDays},
+     * unchanged). Not the payroll or leave rule. Every person asked for is in the map.
+     */
+    public static Map<UUID, Set<Integer>> attendanceWeeklyOffDays(JdbcTemplate jdbc, Collection<UUID> employeeIds, LocalDate date) {
+        return AttendanceCalendar.resolveWeeklyOffDays(jdbc, employeeIds, date);
     }
 
     // ── Dashboard: shift windows and shift ends ────────────────────────────────────────────────────────────────
