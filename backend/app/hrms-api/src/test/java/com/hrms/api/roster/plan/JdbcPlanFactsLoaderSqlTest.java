@@ -80,8 +80,8 @@ class JdbcPlanFactsLoaderSqlTest {
         employee(sita, tenant, "Sita", "NOTICE_PERIOD", dept2, null, null, LocalDate.of(2026, 10, 20));
         employee(exited, tenant, "Gone", "EXITED", dept, null, null, LocalDate.of(2026, 8, 31));
         employee(stranger, otherTenant, "Stranger", "ACTIVE", null, null, null, null);
-        jdbc.update("INSERT INTO settings.holiday_calendar(id, tenant_id, company_id, year, holiday_date, holiday_name, is_active) VALUES "
-                        + "(?, ?, ?, 2026, '2026-10-02', 'QA Gandhi Jayanti', TRUE), (?, ?, ?, 2026, '2026-10-20', 'QA Removed', FALSE)",
+        jdbc.update("INSERT INTO settings.holiday_calendar(id, tenant_id, company_id, year, holiday_date, holiday_name, holiday_type, is_active) VALUES "
+                        + "(?, ?, ?, 2026, '2026-10-02', 'QA Gandhi Jayanti', 'NATIONAL', TRUE), (?, ?, ?, 2026, '2026-10-20', 'QA Removed', 'COMPANY', FALSE)",
                 UUID.randomUUID(), tenant, company, UUID.randomUUID(), tenant, company);
         UUID casual = UUID.randomUUID(), compOff = UUID.randomUUID();
         jdbc.update("INSERT INTO leave_mgmt.leave_types(id, tenant_id, company_id, name, code, category) VALUES "
