@@ -18,7 +18,7 @@
 //   live-slot.sh /c/REACT/ut-wt/shift-p1-import 3193 node e2e/recovery/live-w3-shift-p1-import.mjs
 //   env: RECOVERY_APP_URL (web app), RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev),
 //        RECOVERY_PASSWORD
-/* global process, console, fetch, FormData, Blob, Buffer, URL, document, window */
+/* global process, console, fetch, FormData, Blob, Buffer, URL, URLSearchParams, document, window */
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
@@ -51,6 +51,11 @@ const end = addDays(start, 9)
 const dates = Array.from({ length: 10 }, (_, i) => addDays(start, i))
 
 // ── sessions ────────────────────────────────────────────────────────────────
+/** The JSON body of an answer, or null (a file, an empty body, or text that is not JSON). */
+function parseJson(buf, type) {
+  if (!buf.length || !/json/.test(type || '')) return null
+  try { return JSON.parse(buf.toString('utf8')) } catch { return null }
+}
 const surprises = []
 async function session(email) {
   const r = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant }, body: JSON.stringify({ tenantId: tenant, email, password }) })
@@ -59,8 +64,7 @@ async function session(email) {
   const raw = async (path, init = {}) => {
     const res = await fetch(api + path, { ...init, headers: { 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}`, ...(init.headers || {}) } })
     const buf = Buffer.from(await res.arrayBuffer())
-    let json = null
-    try { json = buf.length && /json/.test(res.headers.get('content-type') || '') ? JSON.parse(buf.toString('utf8')) : null } catch { json = null }
+    const json = parseJson(buf, res.headers.get('content-type'))
     if (res.status >= 500 && !(json && json.errorCode === 'FEATURE_NOT_READY')) surprises.push(`${init.method || 'GET'} ${path} → ${res.status} ${buf.toString('utf8').slice(0, 200)}`)
     return { status: res.status, json, buf, type: res.headers.get('content-type') || '' }
   }
@@ -408,10 +412,8 @@ function cleanup() {
   check('cleanup: nothing the test made is left behind', left === 0, `left=${left}`)
 }
 
-let owner = null
 try {
-  owner = await session('owner@unifiedtree.demo')
-  await main(owner)
+  await main(await session('owner@unifiedtree.demo'))
 } catch (e) {
   check('script completed without an exception', false, e.stack?.split('\n').slice(0, 3).join(' | '))
 } finally {
