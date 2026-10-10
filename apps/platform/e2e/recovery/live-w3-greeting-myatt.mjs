@@ -73,8 +73,13 @@ async function openDaily(page, query = '') {
   return { tabs, selected, heading }
 }
 
-/** Search in the ⌘K dialog and return the text of every result row. */
+/** Search in the ⌘K dialog and return the text of every result row. The search lives in HRMS's top bar (the
+ *  Apps page has none since 10 Oct 2026, 69e9b0ce): from the Apps page, open the person's Home first. */
 async function search(page, text) {
+  if (new URL(page.url()).pathname === '/modules') {
+    await page.goto(base + '/dashboard')
+    await page.getByRole('button', { name: 'Search everything' }).first().waitFor({ timeout: 60_000 })
+  }
   await page.keyboard.press('Control+k')
   const input = page.locator('input[aria-controls="top-search-results"]')
   await input.waitFor({ timeout: 10_000 })

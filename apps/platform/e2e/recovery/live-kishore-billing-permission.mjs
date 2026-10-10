@@ -129,8 +129,12 @@ try {
   const dp = await web('mgr@unifiedtree.demo')
   await dp.goto(base + '/modules', { waitUntil: 'domcontentloaded' })
   await dp.waitForTimeout(3000)
-  check('web deputy: the launcher\'s Business settings shows Billing & plan', await dp.getByText('Billing & plan').first().isVisible().catch(() => false))
   await dp.screenshot({ path: `${shots}/kishore-billing-deputy-launcher.png`, fullPage: true })
+  // Business settings (owner, 10 Oct 2026): the launcher's top-bar button opens them, all of them as a left menu.
+  const bizMenu = dp.getByRole('navigation', { name: 'Business settings' })
+  const bizButton = dp.locator('a.ut-biz__apps[href^="/business/"]')
+  if (await bizButton.count()) { await bizButton.click(); await bizMenu.waitFor({ timeout: 30000 }).catch(() => {}) }
+  check('web deputy: the launcher\'s Business settings shows Billing & plan', await bizMenu.getByRole('link', { name: 'Billing & plan', exact: true }).isVisible().catch(() => false))
   await dp.goto(base + '/plan', { waitUntil: 'domcontentloaded' })
   await dp.waitForTimeout(4000)
   check('web deputy: /plan opens (no "You can’t manage the plan")', !(await dp.getByText('You can’t manage the plan').isVisible().catch(() => false)))

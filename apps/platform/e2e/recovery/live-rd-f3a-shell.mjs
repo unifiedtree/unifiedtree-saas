@@ -5,8 +5,9 @@
 //     with no page goes to /no-access (that last block changes a demo user's roles, so it only runs in
 //     the isolated live slot, or with SHELL_ROLE_CHANGES=1, and puts them back).
 //   - The rail's groups per role, the lit item (the item you came through stays lit), the module's pages as
-//     tabs along the top bar (the left Pages panel is gone, DECISIONS 21), the pin (kept per device), More's entries, Preferences (the first settings page the person can
-//     open, and More lit there), Help & support, the Light/Dark choice kept across reloads, the "?q="
+//     tabs along the top bar (the left Pages panel is gone, DECISIONS 21), the pin (kept per device), the rail's top block (the
+//     company selector since 10 Oct 2026), More's entries (no My workspace, My profile or Preferences since then), the first
+//     settings page the person can open (More lit there), Help & support, the Light/Dark choice kept across reloads, the "?q="
 //     filter chip, the phone drawer at 390, no vendor name, no page errors, no unexpected API errors.
 // Read-only except the role block, which removes everything it adds.
 //
@@ -135,9 +136,15 @@ for (const who of ['owner', 'hrm', 'fin', 'mgr', 'reader']) {
       check('owner: no My work (the roles that run the workspace), and the Business apps group', !labels.includes('My work') && labels.includes('Business apps') && items[0] === 'Dashboard', JSON.stringify(labels))
     }
 
-    // The top block opens Home.
-    await rail(page).locator('.ut-rail__brand').click(); await settle(page)
-    check(`${who}: the rail's top block opens their Home`, new URL(page.url()).pathname === home, at(page))
+    // The top block is the company selector (owner, 10 Oct 2026; it opens on hover): the Companies menu, the page
+    // stays. Home is the rail's first item.
+    const was = at(page)
+    await rail(page).locator('.ut-rail__brand').hover()
+    const companies = await page.getByRole('menu', { name: 'Companies' }).waitFor({ timeout: 10_000 }).then(() => true, () => false)
+    check(`${who}: the rail's top block is the company selector (Companies; the page stays)`, companies && at(page) === was, at(page))
+    await page.keyboard.press('Escape'); await page.mouse.move(900, 600); await page.waitForTimeout(300)
+    await clickRail(page, items[0])
+    check(`${who}: the rail's first item (${items[0]}) opens their Home`, new URL(page.url()).pathname === home, at(page))
 
     // A rail click lights that item; a module with several pages shows them as tabs along the top bar.
     const multi = { owner: 'Workforce', hrm: 'Workforce', fin: 'Payroll', mgr: 'My time', reader: 'My pay' }[who]
@@ -181,22 +188,22 @@ for (const who of ['owner', 'hrm', 'fin', 'mgr', 'reader']) {
       check('mgr: /team lights My team', JSON.stringify((await railState(page)).lit) === JSON.stringify(['My team']))
     }
 
-    // More: its entries, My workspace, Preferences, Help & support.
+    // More: its entries, Help & support. Owner, 10 Oct 2026: no My workspace, My profile or Preferences rows (the
+    // card's "View my profile" stays), and the Settings group is Help.
     let more = await openMore(page)
     const moreText = (await more.textContent()).replace(/\s+/g, ' ')
-    const want = ['My space', 'My workspace', 'My profile', 'All apps', 'Settings', 'Preferences', 'Help & support', 'Light', 'Dark', 'Sign out', 'View my profile']
-    check(`${who}: More lists My space, Settings, Light/Dark and Sign out`, want.every((w) => moreText.includes(w)), moreText.slice(0, 300))
+    const want = ['My space', 'All apps', 'Help', 'Help & support', 'Light', 'Dark', 'Sign out', 'View my profile']
+    check(`${who}: More lists My space, Help, Light/Dark and Sign out`, want.every((w) => moreText.includes(w)), moreText.slice(0, 300))
     check(`${who}: More shows no vendor name`, !/UnifiedTree HRMS/i.test(moreText))
     if (shots && (who === 'owner' || who === 'reader')) await page.screenshot({ path: `${shots}/rd-f3a-live-${who}-more-1440.png` })
-    await more.getByRole('link', { name: 'My workspace' }).click(); await settle(page)
-    check(`${who}: My workspace opens their Home`, new URL(page.url()).pathname === home, at(page))
-    more = await openMore(page)
-    await more.getByRole('link', { name: 'Preferences' }).click(); await settle(page)
-    check(`${who}: Preferences opens the first settings page they can open (${PREFS[who]})`, new URL(page.url()).pathname === PREFS[who] && !(await page.getByText('Access Restricted').isVisible().catch(() => false)), at(page))
+    await page.keyboard.press('Escape')
+    // The first settings page they can open, by its address (More has no Preferences row any more).
+    await page.goto(base + PREFS[who]); await settle(page)
+    check(`${who}: the first settings page they can open (${PREFS[who]}) opens`, new URL(page.url()).pathname === PREFS[who] && !(await page.getByText('Access Restricted').isVisible().catch(() => false)), at(page))
     s = await railState(page)
     const sp = await panelState(page)
     check(`${who}: on a settings page More is lit and no rail item`, s.moreLit && s.lit.length === 0, JSON.stringify(s.lit))
-    check(`${who}: the settings pages list opens with Preferences`, !!sp && sp.label === 'Settings pages' && sp.rows.includes('Security'), JSON.stringify(sp))
+    check(`${who}: the settings pages list shows on it`, !!sp && sp.label === 'Settings pages' && sp.rows.includes('Security'), JSON.stringify(sp))
     if (who === 'owner') {
       check('owner: the settings list is today\'s row with Document types after Integrations', JSON.stringify(sp?.rows) === JSON.stringify(['Profile', 'Branding', 'Security', 'Notifications', 'Billing & Plan', 'Integrations', 'Document types', 'Users & Access', 'Roles & Permissions', 'Audit Logs', 'Danger Zone']), JSON.stringify(sp?.rows))
     }
@@ -271,7 +278,7 @@ for (const who of ['reader', 'owner']) {
     const nav = drawer.getByRole('navigation', { name: 'Primary' })
     const lit = (await nav.locator('a[aria-current="page"]').allTextContents()).map((t) => t.trim())
     const drawerText = (await drawer.textContent()).replace(/\s+/g, ' ')
-    check(`${who} (phone): the drawer lights Home and carries More (Preferences, Light/Dark, Sign out)`, lit.length === 1 && /Home|Dashboard/.test(lit[0]) && /Preferences/.test(drawerText) && /Sign out/.test(drawerText) && /Dark/.test(drawerText), `lit ${JSON.stringify(lit)}`)
+    check(`${who} (phone): the drawer lights Home and carries More (Help & support, Light/Dark, Sign out)`, lit.length === 1 && /Home|Dashboard/.test(lit[0]) && /Help & support/.test(drawerText) && /Sign out/.test(drawerText) && /Dark/.test(drawerText), `lit ${JSON.stringify(lit)}`)
     if (shots) await page.screenshot({ path: `${shots}/rd-f3a-live-${who}-drawer-390.png` })
     const target = who === 'reader' ? 'My leave' : 'Leave'
     await nav.getByRole('link', { name: target, exact: true }).click(); await settle(page)
@@ -287,16 +294,14 @@ for (const who of ['reader', 'owner']) {
     const sheet = await page.getByRole('dialog', { name: 'Search' }).isVisible().catch(() => false)
     check(`${who} (phone): the search icon opens today's search`, sheet)
     await page.keyboard.press('Escape')
-    // The drawer's Preferences: the settings page, with the settings pages as the top bar's sideways tabs
-    // (this one lit) and, in the drawer, above the rail.
-    await page.goto(base + HOME[who]); await settle(page)
-    await page.getByRole('button', { name: 'Open navigation' }).click()
-    await page.getByRole('dialog', { name: 'Navigation' }).getByRole('link', { name: 'Preferences', exact: true }).click(); await settle(page)
+    // A settings page (by its address: the drawer has no Preferences row since 10 Oct 2026), with the settings
+    // pages as the top bar's sideways tabs (this one lit) and, in the drawer, above the rail.
+    await page.goto(base + PREFS[who]); await settle(page)
     const tabs = page.locator('.ut-topbar nav[aria-label="Settings pages"]')
     const listed = await tabs.isVisible({ timeout: 5_000 }).catch(() => false)
     const lit3 = listed ? (await tabs.locator('a[aria-current="page"]').allTextContents()).map((t) => t.trim()) : []
     const wide3 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-    check(`${who} (phone): Preferences in the drawer opens a settings page whose top bar lists the settings pages with this one lit`, listed && lit3.length === 1 && wide3 <= 2, `${at(page)}; tabs ${listed}, lit ${JSON.stringify(lit3)}, sideways ${wide3}`)
+    check(`${who} (phone): a settings page's top bar lists the settings pages with this one lit`, listed && lit3.length === 1 && wide3 <= 2, `${at(page)}; tabs ${listed}, lit ${JSON.stringify(lit3)}, sideways ${wide3}`)
     await page.getByRole('button', { name: 'Open navigation' }).click()
     const dpages = page.getByRole('dialog', { name: 'Navigation' }).getByRole('navigation', { name: 'Settings pages' })
     const dlit = (await dpages.locator('a[aria-current="page"]').allTextContents().catch(() => [])).map((t) => t.trim())
