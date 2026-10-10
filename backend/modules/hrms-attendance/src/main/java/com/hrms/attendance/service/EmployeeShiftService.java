@@ -242,8 +242,8 @@ public class EmployeeShiftService {
         // that has not begun yet. Reporting that as current made the profile,
         // roster and change-request baseline jump to the new shift the moment
         // HR scheduled it — the schedule SQL, which is date-aware, disagreed.
-        EmployeeShiftAssignment inForce = assignmentRepo.findEffectiveOn(employeeId, today)
-                .stream().findFirst().orElse(null);
+        EmployeeShiftAssignment inForce = EffectiveShiftResolver.assignmentInForce(assignmentRepo, employeeId, today)
+                .orElse(null);
         EmployeeShiftAssignment upcoming = assignmentRepo
                 .findFirstByEmployeeIdAndEffectiveFromAfterOrderByEffectiveFromAsc(employeeId, today)
                 .orElse(null);
@@ -262,8 +262,7 @@ public class EmployeeShiftService {
     /** The shift policy in force for {@code employeeId} on {@code date}, or null when none is. */
     @Transactional(readOnly = true)
     public UUID shiftPolicyIdOn(UUID employeeId, LocalDate date) {
-        return assignmentRepo.findEffectiveOn(employeeId, date).stream()
-                .findFirst()
+        return EffectiveShiftResolver.assignmentInForce(assignmentRepo, employeeId, date)
                 .map(EmployeeShiftAssignment::getShiftPolicyId)
                 .orElse(null);
     }

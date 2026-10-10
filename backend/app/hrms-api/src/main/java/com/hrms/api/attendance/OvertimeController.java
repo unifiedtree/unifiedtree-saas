@@ -1,4 +1,5 @@
 package com.hrms.api.attendance;
+import com.hrms.attendance.service.EffectiveShiftResolver;
 import com.hrms.core.exception.BusinessRuleException;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
@@ -48,16 +49,14 @@ public class OvertimeController {
          WHEN r.manual_entry AND COALESCE(NULLIF(btrim(r.manual_entry_reason),''),NULLIF(btrim(r.regularization_reason),'')) IS NOT NULL THEN 'MANUAL_ENTRY'
          WHEN NULLIF(btrim(r.regularization_reason),'') IS NOT NULL AND r.regularization_reason NOT LIKE 'AUTO_CLOSED%' THEN 'FIX_REQUEST' END AS "reasonSource"
    """;
- /** The shift assignment in force on the record's date (the same rule as the team schedule). */
+ /** The shift assignment in force on the record's date (EffectiveShiftResolver's schedule rule, as the team schedule). */
  static final String SHIFT_JOIN = """
    LEFT JOIN LATERAL (
-     SELECT a.shift_policy_id FROM attendance.employee_shift_assignments a
-     WHERE a.tenant_id=r.tenant_id AND a.employee_id=r.employee_id AND a.effective_from<=r.attendance_date
-       AND (a.effective_to IS NULL OR a.effective_to>=r.attendance_date)
-     ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1
+     %s
    ) sa ON true
-   LEFT JOIN attendance.shift_policies s ON s.id=sa.shift_policy_id AND s.tenant_id=r.tenant_id
-   """;
+   %s
+   """.formatted(EffectiveShiftResolver.scheduleAssignment("r.tenant_id","r.employee_id","r.attendance_date"),
+     EffectiveShiftResolver.scheduleShiftJoin("sa","r.tenant_id"));
  @GetMapping
  @PreAuthorize("hasAuthority('attendance.team.read')")
  @Transactional(readOnly=true)
