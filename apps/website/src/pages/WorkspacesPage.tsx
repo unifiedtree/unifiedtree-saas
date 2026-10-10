@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore, WorkspaceSummary } from '../store/authStore';
 import { api, ApiError } from '../lib/api';
@@ -26,6 +26,7 @@ export function WorkspacesPage() {
     setTenantAuth,
   } = useAuthStore();
   const [enteringId, setEnteringId] = useState<string | null>(null);
+  const [autoFailed, setAutoFailed] = useState(false);
   const navigate = useNavigate();
   const reduce = useReducedMotion();
 
@@ -70,26 +71,11 @@ export function WorkspacesPage() {
     loadWorkspaces().catch(() => {});
   }, [loadWorkspaces, isHydrating, accountToken, navigate]);
 
-  // Hydration-in-flight shim: a signed-in user reloading the page should
-  // land back on their workspaces, not flash the login screen for ~300ms
-  // while the refresh-cookie exchange completes.
-  if (isHydrating) {
-    return (
-      <div className="surface-soft min-h-screen">
-        <Navbar tone="light" />
-        <main className="flex min-h-screen items-center justify-center px-4 pt-24">
-          <div
-            role="status"
-            aria-label="Restoring your session"
-            className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
-          />
-        </main>
-      </div>
-    );
-  }
-
-  const handleEnterWorkspace = async (workspace: WorkspaceSummary) => {
+  // Starts the business session (the API sets the business's sign-in cookie) and opens the business.
+  // sameTab: the sign-in's own hand-over, straight onto the business's Apps page.
+  const enterWorkspace = async (workspace: WorkspaceSummary, sameTab: boolean) => {
     setEnteringId(workspace.tenantId);
+    let left = false;
     try {
       const response = await api.post('/v1/accounts/workspaces/session', {
         tenantId: workspace.tenantId
@@ -103,6 +89,12 @@ export function WorkspacesPage() {
           ? `http://${workspace.subdomain}.localhost:3001`
           : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`),
         response.auth.accessToken);
+
+      if (sameTab) {
+        left = true;
+        window.location.assign(target);
+        return;
+      }
 
       // Deliberately NOT passing 'noopener' in the feature string.
       //
@@ -127,6 +119,7 @@ export function WorkspacesPage() {
         window.location.assign(target);
       }
     } catch (err) {
+      if (sameTab) setAutoFailed(true);
       alert(err instanceof ApiError ? err.message : 'Failed to enter workspace');
     } finally {
       // MUST run on the success path too. Previously this lived only in the
@@ -134,9 +127,50 @@ export function WorkspacesPage() {
       // tab was pinned on "Entering…" indefinitely — the customer saw the
       // workspace launch correctly yet the button never recovered, and a
       // second workspace could not be opened without a full page reload.
-      setEnteringId(null);
+      // (Not while this tab is on its way to the business: the loader stays up.)
+      if (!left) setEnteringId(null);
     }
   };
+
+  // Owner, 10 Oct 2026: no workspace list after signing in. The business opens straight away on its
+  // Apps page: the starred one, or the only one. The list shows only with ?pick=1 (the navbar's
+  // Workspaces link), when there is no starred one among several, or when opening failed.
+  const autoStarted = useRef(false);
+  const autoTarget = searchParams.get('pick') === '1' || autoFailed || isLoading
+    ? null
+    : (workspaces.find((w) => w.defaultWorkspace) ?? (workspaces.length === 1 ? workspaces[0] : null));
+  useEffect(() => {
+    if (!autoTarget || autoStarted.current) return;
+    autoStarted.current = true;
+    void enterWorkspace(autoTarget, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTarget]);
+
+  // Hydration-in-flight shim: a signed-in user reloading the page should
+  // land back on their workspaces, not flash the login screen for ~300ms
+  // while the refresh-cookie exchange completes. The same loader shows while
+  // the business opens.
+  if (isHydrating || (autoTarget && !autoFailed)) {
+    return (
+      <div className="surface-soft min-h-screen">
+        <Navbar tone="light" />
+        <main className="flex min-h-screen items-center justify-center px-4 pt-24">
+          <div className="flex flex-col items-center gap-4">
+            <div
+              role="status"
+              aria-label={autoTarget ? `Opening ${autoTarget.tenantName}` : 'Restoring your session'}
+              className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
+            />
+            {autoTarget && (
+              <p className="font-body text-[15px] font-semibold text-text-secondary">Opening {autoTarget.tenantName}…</p>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const handleEnterWorkspace = (workspace: WorkspaceSummary) => enterWorkspace(workspace, false);
 
   return (
     <div className="surface-soft min-h-screen lg:h-screen lg:overflow-hidden">

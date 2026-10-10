@@ -226,7 +226,7 @@ export function Navbar({ tone }: Props) {
             >
               {accountToken ? (
                 <>
-                  <Link to="/workspaces" className={linkCls}>Workspaces</Link>
+                  <Link to="/workspaces?pick=1" className={linkCls}>Workspaces</Link>
                   <button
                     onClick={handleSignOut}
                     className={`rounded-lg px-3.5 py-2.5 text-[15px] font-medium transition-colors duration-200 ${
@@ -409,7 +409,7 @@ export function Navbar({ tone }: Props) {
                 {accountToken ? (
                   <>
                     <Link
-                      to="/workspaces"
+                      to="/workspaces?pick=1"
                       onClick={() => setMenuOpen(false)}
                       className="block w-full rounded-xl border border-white/25 bg-white/10 px-4 py-3.5 text-center text-[15px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
                     >

@@ -13,6 +13,7 @@ export function handOverUrl(base: string, token: string): string {
   } catch {
     /* not a full address: keep the token */
   }
-  if (host.endsWith('.unifiedtree.com')) return `${b}/`
+  // Straight onto the business's Apps page (owner, 10 Oct 2026).
+  if (host.endsWith('.unifiedtree.com')) return `${b}/modules`
   return `${b}/?token=${encodeURIComponent(token)}`
 }
