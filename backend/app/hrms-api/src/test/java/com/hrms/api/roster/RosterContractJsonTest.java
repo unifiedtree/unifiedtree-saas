@@ -136,8 +136,9 @@ class RosterContractJsonTest {
     @Test
     void theStubsRefuseRatherThanGuess() {
         assertThrows(UnsupportedOperationException.class, () -> RosterPlanner.plan(null, new PlanFacts()));
-        assertThrows(UnsupportedOperationException.class, () -> new BaselineScheduleAdapter()
-                .between(UUID.randomUUID(), List.of(EMP), LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)));
+        // Package A filled the adapter (BaselineScheduleAdapterTest): nobody asked about, nothing answered.
+        assertTrue(new BaselineScheduleAdapter(null)
+                .between(UUID.randomUUID(), List.of(), LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)).isEmpty());
     }
 
     private static Set<String> keys(JsonNode n) {
