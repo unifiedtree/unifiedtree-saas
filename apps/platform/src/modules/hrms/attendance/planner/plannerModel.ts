@@ -269,8 +269,11 @@ export type PlannerAction =
   | { type: 'refresh' }
   | { type: 'plan'; rev: number; regenerate: boolean; plan: PlanResponse }
   | { type: 'saved'; detail: RosterDetail; sentSig: string; sentRev: number }
-  /** A new roster's defaults (shifts and people ticked for the planner) count as its starting point, not as changes. */
-  | { type: 'baseline' }
+  /**
+   * A new roster's starting point (a department planner's department, every shift, everyone in scope): applied only
+   * while the roster is new, and not counted as a change unless the planner had already changed something.
+   */
+  | { type: 'newDefaults'; scope?: { departmentId: string; scopeLabel: string | null }; shiftIds?: string[]; employeeIds?: string[]; designationIds?: string[] }
   /** Start again with a new roster. */
   | { type: 'reset' }
 
@@ -280,7 +283,7 @@ export type PlannerAction =
  * edits" don't touch the preview.
  */
 export const PREVIEW_KIND: Record<PlannerAction['type'], 'regenerate' | 'refresh' | null> = {
-  load: null, name: null, keepEdits: null, designations: null, plan: null, saved: null, baseline: null, reset: null,
+  load: null, name: null, keepEdits: null, designations: null, plan: null, saved: null, newDefaults: null, reset: null,
   period: 'regenerate', scope: 'regenerate', pattern: 'regenerate', weeklyOffMode: 'regenerate', stagger: 'regenerate',
   members: 'regenerate', generate: 'regenerate', resetEdits: 'regenerate', offset: 'regenerate',
   shifts: 'refresh', required: 'refresh', staffing: 'refresh', cells: 'refresh', removeMember: 'refresh', undo: 'refresh', refresh: 'refresh',
@@ -409,7 +412,16 @@ export function plannerReducer(s: PlannerState, a: PlannerAction): PlannerState 
     }
     case 'refresh': return s.generated ? { ...s, rev: s.rev + 1 } : s
     case 'plan': return adoptPlan(s, a)
-    case 'baseline': return s.status === 'NEW' ? { ...s, savedSig: signature(s) } : s
+    case 'newDefaults': {
+      if (s.status !== 'NEW') return s
+      const clean = !isDirty(s)
+      let t = s
+      if (a.scope) t = plannerReducer(t, { type: 'scope', departmentId: a.scope.departmentId, branchId: t.branchId, scopeLabel: a.scope.scopeLabel })
+      if (a.shiftIds) t = plannerReducer(t, { type: 'shifts', shiftIds: a.shiftIds })
+      if (a.employeeIds) t = plannerReducer(t, { type: 'members', employeeIds: a.employeeIds })
+      if (a.designationIds) t = plannerReducer(t, { type: 'designations', designationIds: a.designationIds })
+      return clean ? { ...t, savedSig: signature(t) } : t
+    }
     case 'reset': return initialState(s.today)
     case 'saved': {
       const r = a.detail.roster

@@ -52,8 +52,8 @@ export function PublishDialog({ open, onClose, state, reach, checks, checking, c
       <div className="spl-publish">
         <dl className="spl-facts">
           <div><dt>People</dt><dd>{state.members.length}</dd></div>
-          <div><dt>Days published</dt><dd>{reach.past ? 'None' : `${reach.days} from ${fmtShort(reach.from)} on`}</dd></div>
-          <div><dt>Version</dt><dd>{republish ? `${state.version + 1} (now ${state.version})` : '1'}</dd></div>
+          <div><dt>{reach.past ? 'Days to publish' : `Days from ${fmtShort(reach.from)}`}</dt><dd>{reach.past ? 'None' : reach.days}</dd></div>
+          <div><dt>{republish ? `Version (now ${state.version})` : 'Version'}</dt><dd>{republish ? state.version + 1 : 1}</dd></div>
         </dl>
         <p className="spl-publish__line">Days before {reach.from === state.startDate ? 'the start' : 'today'} are never published or changed. {told}</p>
         <Callout tone="info" icon="info">{INFO_ONLY_NOTE}</Callout>

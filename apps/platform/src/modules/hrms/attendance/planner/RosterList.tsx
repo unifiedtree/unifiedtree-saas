@@ -32,17 +32,22 @@ export function RosterList({ rosters, loading, canPlan }: { rosters: RosterSumma
 
   const columns: TableColumn<RosterSummary>[] = [
     { key: 'name', header: 'Roster', primary: true, render: (r) => <CellStack primary={r.name} secondary={r.source === 'IMPORT' ? 'Imported from Excel' : undefined} /> },
-    { key: 'period', header: 'Period', render: (r) => <span className="apl-num">{periodLabel(r.startDate, r.endDate)}</span> },
-    { key: 'scope', header: 'Scope', render: (r) => scopeLabel(r) },
-    { key: 'people', header: 'People', numeric: true, render: (r) => <span className="apl-num">{r.memberCount}</span> },
-    { key: 'status', header: 'Status', render: (r) => { const s = rosterStatus(r); return <StatusPill tone={s.tone}>{s.label}</StatusPill> } },
+    { key: 'period', header: 'Period', width: 150, render: (r) => <span className="apl-num">{periodLabel(r.startDate, r.endDate)}</span> },
+    { key: 'scope', header: 'Scope', width: 140, render: (r) => scopeLabel(r) },
+    { key: 'people', header: 'People', width: 76, numeric: true, render: (r) => <span className="apl-num">{r.memberCount}</span> },
     {
-      key: 'published', header: 'Published', render: (r) => (r.publishedAt
+      key: 'status', header: 'Status', width: 170, render: (r) => (r.status === 'PUBLISHED' && r.hasUnpublishedChanges
+        // "Published · changes not published", on two lines so it fits the column.
+        ? <CellStack primary={<StatusPill tone="warning">Published</StatusPill>} secondary="Changes not published" />
+        : <StatusPill tone={rosterStatus(r).tone}>{rosterStatus(r).label}</StatusPill>),
+    },
+    {
+      key: 'published', header: 'Published', width: 170, render: (r) => (r.publishedAt
         ? <CellStack primary={r.publishedByName ?? '—'} secondary={`${fmtShort(r.publishedAt.slice(0, 10))} · version ${r.version}`} />
         : <span className="apl-muted">Not yet</span>),
     },
     {
-      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', render: (r) => (
+      key: 'actions', header: <span className="uk-sr">Actions</span>, label: 'Actions', align: 'right', width: 240, render: (r) => (
         <CellActions>
           <Button variant="secondary" size={30} onClick={() => open(r)} aria-label={`Open ${r.name}`}>Open</Button>
           <Button variant="ghost" size={30} icon="download" onClick={() => exportIt(r)} aria-label={`Export ${r.name}`}>Export</Button>

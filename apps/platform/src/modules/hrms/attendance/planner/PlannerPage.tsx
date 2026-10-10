@@ -114,21 +114,20 @@ function Planner({ rosterId }: { rosterId: string | null }) {
     if (lastParam.current && !rosterId) { started.current = { dept: false, shifts: false, peopleKey: '', peopleIds: '' }; dispatch({ type: 'reset' }) }
     lastParam.current = rosterId
   }, [rosterId])
+  // Only for a new roster: a saved one (rosterId) opens exactly as it was saved.
   useEffect(() => {
-    if (state.status !== 'NEW' || started.current.dept || scope.loading || scope.companyWide || !scope.departments.length) return
+    if (rosterId || state.status !== 'NEW' || started.current.dept || scope.loading || scope.companyWide || !scope.departments.length) return
     started.current.dept = true
     const d = scope.departments[0]
-    dispatch({ type: 'scope', departmentId: d.id, branchId: null, scopeLabel: d.name })
-    dispatch({ type: 'baseline' })
-  }, [state.status, scope.loading, scope.companyWide, scope.departments])
+    dispatch({ type: 'newDefaults', scope: { departmentId: d.id, scopeLabel: d.name } })
+  }, [rosterId, state.status, scope.loading, scope.companyWide, scope.departments])
   useEffect(() => {
-    if (state.status !== 'NEW' || started.current.shifts || !shifts.length) return
+    if (rosterId || state.status !== 'NEW' || started.current.shifts || !shifts.length) return
     started.current.shifts = true
-    dispatch({ type: 'shifts', shiftIds: shifts.map((s) => s.id) })
-    dispatch({ type: 'baseline' })
-  }, [state.status, shifts])
+    dispatch({ type: 'newDefaults', shiftIds: shifts.map((s) => s.id) })
+  }, [rosterId, state.status, shifts])
   useEffect(() => {
-    if (state.status !== 'NEW' || !people.data) return
+    if (rosterId || state.status !== 'NEW' || !people.data) return
     const key = JSON.stringify([state.departmentId, state.branchId, state.startDate, state.endDate])
     if (started.current.peopleKey === key) return
     const now = state.members.map((m) => m.employeeId).join(',')
@@ -137,10 +136,7 @@ function Planner({ rosterId }: { rosterId: string | null }) {
     const ids = groups.flatMap((g) => g.people).filter((p) => !otherRostersOf(p, null).length).map((p) => p.employeeId)
     started.current.peopleKey = key
     started.current.peopleIds = ids.join(',')
-    const wasDirty = isDirty(state)
-    dispatch({ type: 'members', employeeIds: ids })
-    dispatch({ type: 'designations', designationIds: groups.filter((g) => g.people.some((p) => ids.includes(p.employeeId))).map((g) => g.designationId) })
-    if (!wasDirty) dispatch({ type: 'baseline' })
+    dispatch({ type: 'newDefaults', employeeIds: ids, designationIds: groups.filter((g) => g.people.some((p) => ids.includes(p.employeeId))).map((g) => g.designationId) })
   }, [people.data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Shift Schedules may be open in another tab: read the shifts again on coming back, and refresh the preview when they changed.
@@ -436,7 +432,7 @@ function Planner({ rosterId }: { rosterId: string | null }) {
       {showCheck && <ScheduleCheck checks={checks} updating={updating} full={!!fullChecks && fullChecks.rev === state.rev} onReview={review} />}
       {!state.generated && (
         <div className="spl-before">
-          {patternLen > 0 ? <><span className="spl-field__label">Pattern</span><PatternChips days={state.config.pattern} shifts={shiftMap} max={31} /></> : <span className="apl-muted">Choose a pattern in step 3.</span>}
+          {patternLen > 0 && <><span className="spl-field__label">Pattern</span><PatternChips days={state.config.pattern} shifts={shiftMap} max={31} /></>}
           <span className="apl-muted">{generateBlocker(state) ?? 'Generate the schedule to lay the pattern over the period.'}</span>
           {!generateBlocker(state) && canEdit && <Button icon="calendarCheck" onClick={() => { dispatch({ type: 'generate' }); setStep('generate') }}>Generate schedule</Button>}
         </div>

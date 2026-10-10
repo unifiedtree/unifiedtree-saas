@@ -120,10 +120,18 @@ describe('the draft: which changes lay the pattern again', () => {
   it('tracks unsaved changes; a new roster’s defaults are its starting point', () => {
     const s0 = initialState(TODAY)
     expect(isDirty(s0)).toBe(false)
-    const ticked = run(s0, { type: 'shifts', shiftIds: [SH.A] }, { type: 'baseline' })
+    const ticked = run(s0, { type: 'newDefaults', shiftIds: [SH.A], employeeIds: [emp(1)] })
+    expect(ticked.config.shiftIds).toEqual([SH.A])
+    expect(ticked.members).toHaveLength(1)
     expect(isDirty(ticked)).toBe(false)
     expect(isDirty(run(ticked, { type: 'name', name: 'Night team' }))).toBe(true)
     expect(isDirty(run(ticked, { type: 'name', name: ticked.name }))).toBe(false)
+    // After the planner changed something, defaults no longer hide it.
+    expect(isDirty(run(s0, { type: 'name', name: 'Mine' }, { type: 'newDefaults', shiftIds: [SH.A] }))).toBe(true)
+  })
+  it('never lays new-roster defaults over a saved roster', () => {
+    const s = fromDetail(detail(), TODAY)
+    expect(run(s, { type: 'newDefaults', shiftIds: [SH.A, SH.B, SH.C, SH.G], employeeIds: [emp(5)] })).toBe(s)
   })
   it('follows the period and scope in the name until the planner types one', () => {
     const s = run(initialState(TODAY), { type: 'scope', departmentId: 'd1', branchId: null, scopeLabel: 'Technical' })
