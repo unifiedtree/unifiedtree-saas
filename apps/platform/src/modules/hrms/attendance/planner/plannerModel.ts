@@ -147,7 +147,7 @@ export const STEPS: { key: StepKey; label: string }[] = [
   { key: 'generate', label: 'Generate' },
 ]
 
-/** A member. A null offset = not chosen yet: the server spreads it on the next regenerate (contract note in useRosters). */
+/** A member. A null offset = no start day yet: sent as -1, and the server spreads it on the next regenerate. */
 export interface DraftMember { employeeId: string; rotationOffset: number | null }
 export interface DraftRow { cells: CellToken[]; edited: number[] }
 export interface UndoCell { employeeId: string; index: number; token: CellToken; edited: boolean }
@@ -487,10 +487,11 @@ function wireRows(s: PlannerState): RowIn[] {
 }
 
 /**
- * Members as sent. A null offset (not chosen yet) goes as JSON null: with today's `int` field the server reads 0;
- * the contract note asks for `number | null` so the server spreads exactly those.
+ * Members as sent to the preview. No start day yet (new people, or after the way of choosing start days changed) goes
+ * as a negative offset, -1: the engine (RosterPlanner) then spreads, keeps or continues it; any offset ≥ 0 is kept.
  */
-const wireMembers = (s: PlannerState): MemberIn[] => s.members.map((m) => ({ employeeId: m.employeeId, rotationOffset: m.rotationOffset as number }))
+export const NO_START_DAY = -1
+const wireMembers = (s: PlannerState): MemberIn[] => s.members.map((m) => ({ employeeId: m.employeeId, rotationOffset: m.rotationOffset ?? NO_START_DAY }))
 
 export function planRequest(s: PlannerState): PlanRequest {
   return {
@@ -624,7 +625,8 @@ export function coverageView(plan: PlanResponse | null, shiftIds: readonly strin
   const order = new Map(shiftIds.map((id, i) => [id, i]))
   const byShift = new Map<string, { line?: CoverageLine; parts: CoverageLine[] }>()
   for (const c of plan.coverage) {
-    const cells = c.perDay.map(coverageCell)
+    // A holiday column is never a gap, whatever the day reports (the requirement still comes back on it).
+    const cells = c.perDay.map((d, i) => coverageCell(plan.days[i]?.holidayName ? { ...d, status: 'HOLIDAY' } : d))
     const sh = shifts.get(c.shiftPolicyId)
     const code = c.code ?? sh?.code ?? '?'
     const line: CoverageLine = {

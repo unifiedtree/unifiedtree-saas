@@ -233,7 +233,7 @@ describe('members and start days', () => {
     s = run(s, { type: 'members', employeeIds: [emp(2), emp(3)] })
     expect(s.members).toEqual([{ employeeId: emp(2), rotationOffset: 4 }, { employeeId: emp(3), rotationOffset: null }])
     expect(s.rows[emp(1)]).toBeUndefined()
-    expect(planRequest(s).members[1].rotationOffset).toBeNull()
+    expect(planRequest(s).members.map((m) => m.rotationOffset)).toEqual([4, -1])
     expect(draftBody(s).members[1].rotationOffset).toBe(0)
   })
   it('chooses start days again for everyone when the way of choosing changes', () => {
@@ -241,6 +241,7 @@ describe('members and start days', () => {
     s = run(s, { type: 'plan', rev: 1, regenerate: true, plan: answer(s, SH.A, { offsets: [0, 4] }) })
     s = run(s, { type: 'stagger', mode: 'SAME', continueFromRosterId: 'x' })
     expect(s.members.every((m) => m.rotationOffset === null)).toBe(true)
+    expect(planRequest(s).members.every((m) => m.rotationOffset === -1)).toBe(true)
     expect(s.config).toMatchObject({ staggerMode: 'SAME', continueFromRosterId: null })
   })
   it('moves the working copy with the period, by date', () => {
@@ -341,6 +342,15 @@ describe('coverage and checks', () => {
     expect(g.map((x) => x.line.label)).toEqual(['A · Morning', 'C · Night'])
     expect(g[1].line.short).toBe(1)
     expect(g[1].parts.map((p) => p.label)).toEqual(['HVAC Technician'])
+  })
+  it('never shows a holiday column as a gap, even with the requirement on it', () => {
+    const plan = planOf('2026-10-01', '2026-10-02', [], {
+      coverage: [{ shiftPolicyId: SH.A, code: 'A', designationId: null, perDay: [{ required: 2, scheduled: 0, status: 'SHORT' }, { required: 2, scheduled: 0, status: 'SHORT' }] }],
+    })
+    plan.days[1].holidayName = 'Gandhi Jayanti'
+    const [g] = coverageView(plan, [SH.A], shiftMap, new Map())
+    expect(g.line.cells.map((c) => c.label)).toEqual(['0/2', '–'])
+    expect(g.line.short).toBe(1)
   })
   it('counts errors and warnings for the toolbar', () => {
     expect(checkCountLabel(checks({ errors: [issue('a', 'E1', 'error'), issue('b', 'E3', 'error')], warnings: [issue('c', 'W1', 'warning')] }))).toBe('2 errors · 1 warning')
