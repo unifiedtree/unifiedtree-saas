@@ -39,10 +39,10 @@ describe('a login that needs a two-factor code: the business’s own sign-in pag
     expect(needsTwoFactorSignIn(403, 'USE_PASSWORD_FOR_TWO_FACTOR')).toBe(false)
   })
 
-  it('its /login, with no token, here and in local dev', () => {
-    expect(businessSignInUrl(businessBase(acme, 'www.unifiedtree.com'))).toBe('https://acme.unifiedtree.com/login')
-    expect(businessSignInUrl('https://acme.unifiedtree.com/')).toBe('https://acme.unifiedtree.com/login')
-    expect(businessSignInUrl(businessBase(acme, 'localhost'))).toBe('http://acme.localhost:3001/login')
-    expect(businessSignInUrl(businessBase(acme, 'www.unifiedtree.com'))).not.toMatch(/token/i)
+  it('its /login with the two-factor message (?error=, which also stops its own silent try), no token, here and in local dev', () => {
+    expect(businessSignInUrl(businessBase(acme, 'www.unifiedtree.com'))).toBe('https://acme.unifiedtree.com/login?error=USE_PASSWORD_FOR_TWO_FACTOR')
+    expect(businessSignInUrl('https://acme.unifiedtree.com/')).toBe('https://acme.unifiedtree.com/login?error=USE_PASSWORD_FOR_TWO_FACTOR')
+    expect(businessSignInUrl(businessBase(acme, 'localhost'))).toBe('http://acme.localhost:3001/login?error=USE_PASSWORD_FOR_TWO_FACTOR')
+    expect(new URL(businessSignInUrl(businessBase(acme, 'www.unifiedtree.com'))).searchParams.has('token')).toBe(false)
   })
 })

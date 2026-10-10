@@ -28,9 +28,12 @@ export function businessBase(workspace: { subdomain: string; workspaceUrl?: stri
     : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`)
 }
 
-/** The business's own sign-in page: the person signs in there, so no token goes with them. */
+/**
+ * The business's own sign-in page for a login that needs a two-factor code: the person signs in there, so no
+ * token goes with them; ?error= shows the page's two-factor message and keeps it from trying this sign-in again.
+ */
 export function businessSignInUrl(base: string): string {
-  return `${base.replace(/\/$/, '')}/login`
+  return `${base.replace(/\/$/, '')}/login?error=USE_PASSWORD_FOR_TWO_FACTOR`
 }
 
 /**
