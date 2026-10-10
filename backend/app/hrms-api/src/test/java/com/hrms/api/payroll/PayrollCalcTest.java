@@ -18,8 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The rules payroll applies around the engine (V143.11): weekly offs per
- * employee and company, working days, custom pay cycles, LWF months, fixed and
- * switched-off components, and hidden payslip lines. September 2026 starts on a
+ * employee and company, working days, half-day leave with the day's
+ * attendance, custom pay cycles, LWF months, fixed and switched-off
+ * components, and hidden payslip lines. September 2026 starts on a
  * Tuesday and has 30 days: 5 Tuesdays and Wednesdays, 4 of every other day.
  */
 class PayrollCalcTest {
@@ -125,6 +126,142 @@ class PayrollCalcTest {
     private static LopResult lop(Map<LocalDate, DayStatus> attendance, Set<Integer> offDays, boolean sandwich) {
         List<DayStatus> days = PayrollCalc.dayStatuses(SEP.atDay(1), SEP.atEndOfMonth(), Map.of(), attendance, Set.of(), offDays);
         return LopCalculator.calculate(new LopInput(days, sandwich, 0, 0, null, null, SEP));
+    }
+
+    // ── Half-day leave (docs/PAYROLL-LOP-RULES.md, case 1) ─────────────────────
+
+    /** The attendance input payroll reads from a stored record status (no attendance policy). */
+    private static DayStatus stored(String recordStatus) {
+        return PayrollCalc.attendanceDay(recordStatus, null, false, false, false, false).status();
+    }
+
+    @Test
+    void halfDayLeaveIsTheDurationTheLeaveModuleSavesOrTheOlderColumn() {
+        assertThat(PayrollCalc.halfDayLeave(false, "HALF_DAY_MORNING")).isTrue();
+        assertThat(PayrollCalc.halfDayLeave(false, "HALF_DAY_AFTERNOON")).isTrue();
+        assertThat(PayrollCalc.halfDayLeave(true, null)).isTrue();
+        assertThat(PayrollCalc.halfDayLeave(false, "FULL_DAY")).isFalse();
+        assertThat(PayrollCalc.halfDayLeave(false, null)).isFalse();
+    }
+
+    @Test
+    void paidHalfDayLeaveWithTheOtherHalfWorkedIsFullyPaid() {
+        // Present, late (paid, with a late mark) or a half day worked.
+        for (String rec : List.of("PRESENT", "LATE", "HALF_DAY")) {
+            assertThat(PayrollCalc.leaveDay(true, true, stored(rec))).as(rec).isEqualTo(DayStatus.PAID_LEAVE);
+        }
+        // The attendance policy on a punch: a half day, or late.
+        assertThat(PayrollCalc.leaveDay(true, true, PayrollCalc.attendanceDay("LATE", "HALF_DAY", false, true, false, false).status()))
+                .isEqualTo(DayStatus.PAID_LEAVE);
+        assertThat(PayrollCalc.leaveDay(true, true, PayrollCalc.attendanceDay("LATE", "LATE", false, true, false, false).status()))
+                .isEqualTo(DayStatus.PAID_LEAVE);
+    }
+
+    @Test
+    void paidHalfDayLeaveWithTheOtherHalfAbsentIsHalfPaidHalfLossOfPay() {
+        assertThat(PayrollCalc.leaveDay(true, true, stored("ABSENT"))).isEqualTo(DayStatus.HALF_DAY_LEAVE);
+        // Punched but worked under the half-day minimum; a reviewer set the day to absent.
+        assertThat(PayrollCalc.leaveDay(true, true, PayrollCalc.attendanceDay("ON_TIME", "ABSENT", false, true, false, false).status()))
+                .isEqualTo(DayStatus.HALF_DAY_LEAVE);
+        assertThat(PayrollCalc.leaveDay(true, true, PayrollCalc.attendanceDay(null, "ABSENT", true, false, false, false).status()))
+                .isEqualTo(DayStatus.HALF_DAY_LEAVE);
+    }
+
+    /** No attendance input is not an absence: no record, no punch on a leave day (ON_LEAVE), or an on-time punch. */
+    @Test
+    void paidHalfDayLeaveWithoutAttendanceIsPaidLikeAnyDayWithoutAMarkedAbsence() {
+        assertThat(PayrollCalc.leaveDay(true, true, null)).isEqualTo(DayStatus.PAID_LEAVE);
+        assertThat(PayrollCalc.leaveDay(true, true, PayrollCalc.attendanceDay(null, "ON_LEAVE", false, false, false, false).status()))
+                .isEqualTo(DayStatus.PAID_LEAVE);
+        assertThat(PayrollCalc.leaveDay(true, true, PayrollCalc.attendanceDay("ON_TIME", "PRESENT", false, true, false, false).status()))
+                .isEqualTo(DayStatus.PAID_LEAVE);
+    }
+
+    @Test
+    void unpaidHalfDayLeaveWithTheOtherHalfWorkedIsHalfPaidHalfLossOfPay() {
+        for (String rec : Arrays.asList("PRESENT", "LATE", "HALF_DAY", null)) {
+            assertThat(PayrollCalc.leaveDay(false, true, stored(rec))).as(String.valueOf(rec)).isEqualTo(DayStatus.HALF_DAY_LEAVE);
+        }
+    }
+
+    @Test
+    void unpaidHalfDayLeaveWithTheOtherHalfAbsentIsAWholeDayOfLossOfPay() {
+        assertThat(PayrollCalc.leaveDay(false, true, stored("ABSENT"))).isEqualTo(DayStatus.LOP_LEAVE);
+    }
+
+    @Test
+    void fullDayLeaveIsItsLeaveTypeWhateverTheAttendance() {
+        for (DayStatus att : Arrays.asList(null, DayStatus.PRESENT, DayStatus.HALF_DAY_LEAVE, DayStatus.UNAUTHORIZED_ABSENT)) {
+            assertThat(PayrollCalc.leaveDay(true, false, att)).isEqualTo(DayStatus.PAID_LEAVE);
+            assertThat(PayrollCalc.leaveDay(false, false, att)).isEqualTo(DayStatus.LOP_LEAVE);
+        }
+    }
+
+    /**
+     * September 2026 the way a run builds it: attendance first, then each leave
+     * day's status from its leave and that day's attendance. The log is what
+     * payroll.run_lop_days.computation_log keeps for each day.
+     */
+    @Test
+    void halfDayLeaveThroughTheLopCalculator() {
+        Map<LocalDate, DayStatus> att = new HashMap<>();
+        att.put(SEP.atDay(1), stored("HALF_DAY"));   // Tue: paid half-day leave, worked the other half
+        att.put(SEP.atDay(2), stored("LATE"));       // Wed: paid half, came in late for the other half
+        att.put(SEP.atDay(3), stored("ABSENT"));     // Thu: paid half, absent for the other half
+        //                                              Fri 4: paid half, no attendance
+        att.put(SEP.atDay(7), stored("HALF_DAY"));   // Mon: unpaid half, worked the other half
+        att.put(SEP.atDay(8), stored("ABSENT"));     // Tue: unpaid half, absent for the other half
+        //                                              Wed 9: unpaid half, no attendance
+        att.put(SEP.atDay(10), stored("HALF_DAY"));  // Thu: a half day worked, no leave
+        Map<LocalDate, DayStatus> leave = new HashMap<>();
+        for (int d : new int[] {1, 2, 3, 4}) leave.put(SEP.atDay(d), PayrollCalc.leaveDay(true, true, att.get(SEP.atDay(d))));
+        for (int d : new int[] {7, 8, 9}) leave.put(SEP.atDay(d), PayrollCalc.leaveDay(false, true, att.get(SEP.atDay(d))));
+        leave.put(SEP.atDay(11), PayrollCalc.leaveDay(true, false, null));   // Fri: full-day paid leave
+        leave.put(SEP.atDay(14), PayrollCalc.leaveDay(false, false, null));  // Mon: full-day unpaid leave
+
+        LopResult r = LopCalculator.calculate(new LopInput(
+                PayrollCalc.dayStatuses(SEP.atDay(1), SEP.atEndOfMonth(), leave, att, Set.of(), PayrollCalc.SAT_SUN),
+                false, 0, 0, null, null, SEP));
+        // ½ (3rd) + ½ (7th) + 1 (8th) + ½ (9th) + ½ (10th) + 1 (14th)
+        assertThat(r.lopDays()).isEqualByComparingTo("4.0");
+        assertThat(r.paidDays()).isEqualByComparingTo("26.0");
+        assertThat(logged(r, 1)).isEqualTo("PAID_LEAVE PAID");
+        assertThat(logged(r, 2)).isEqualTo("PAID_LEAVE PAID");
+        assertThat(logged(r, 3)).isEqualTo("HALF_DAY_LEAVE HALF");
+        assertThat(logged(r, 4)).isEqualTo("PAID_LEAVE PAID");
+        assertThat(logged(r, 7)).isEqualTo("HALF_DAY_LEAVE HALF");
+        assertThat(logged(r, 8)).isEqualTo("LOP_LEAVE LOP");
+        assertThat(logged(r, 9)).isEqualTo("HALF_DAY_LEAVE HALF");
+        assertThat(logged(r, 10)).isEqualTo("HALF_DAY_LEAVE HALF");
+        assertThat(logged(r, 11)).isEqualTo("PAID_LEAVE PAID");
+        assertThat(logged(r, 14)).isEqualTo("LOP_LEAVE LOP");
+    }
+
+    /** "Half paid, half LOP": a paid half-day leave on a day otherwise worked costs no pay; an unpaid one costs half a day's. */
+    @Test
+    void aPaidHalfDayLeaveCostsNoPayAndAnUnpaidOneHalfADays() {
+        LocalDate tue = SEP.atDay(15);
+        Map<LocalDate, DayStatus> att = Map.of(tue, stored("HALF_DAY"));
+        assertThat(basicPaid(Map.of(tue, PayrollCalc.leaveDay(true, true, att.get(tue))), att)).isEqualByComparingTo("30000.00");
+        assertThat(basicPaid(Map.of(tue, PayrollCalc.leaveDay(false, true, att.get(tue))), att)).isEqualByComparingTo("29500.00");
+    }
+
+    private static String logged(LopResult r, int dayOfMonth) {
+        LopCalculator.DayBreakdown b = r.log().stream().filter(x -> x.dayOfMonth() == dayOfMonth).findFirst().orElseThrow();
+        return b.status() + " " + b.resolution();
+    }
+
+    /** What a BASIC of ₹30,000 pays for September with these leave and attendance days. */
+    private static BigDecimal basicPaid(Map<LocalDate, DayStatus> leave, Map<LocalDate, DayStatus> att) {
+        LopResult lop = LopCalculator.calculate(new LopInput(
+                PayrollCalc.dayStatuses(SEP.atDay(1), SEP.atEndOfMonth(), leave, att, Set.of(), PayrollCalc.SAT_SUN),
+                false, 0, 0, null, null, SEP));
+        PayrollEngine.PayrollResult r = PayrollEngine.compute(new PayrollEngine.PayrollEngineInput(
+                List.of(new EarningLine(BASIC_DEF, bd("30000"))), lop,
+                new PayrollEngine.StatutoryConfig(false, null, null, null, false, false, null, null, null, false, null),
+                new PayrollEngine.EmployeeStructureCfg("NOT_APPLICABLE", false, false), SEP),
+                new PayrollEngine.Extras(List.of(), List.of(), null, null));
+        return amount(r, "BASIC");
     }
 
     // ── Pay cycle and pay date ─────────────────────────────────────────────────
