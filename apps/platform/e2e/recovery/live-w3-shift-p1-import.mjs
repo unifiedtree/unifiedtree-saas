@@ -265,6 +265,12 @@ async function dismissPopups(page) {
   }
 }
 const visible = (locator, timeout = 60_000) => locator.waitFor({ timeout }).then(() => true, () => false)
+/** A screenshot once the page has settled (entrance animations, count-ups), scrolled to `focus` when given. */
+async function shot(page, name, focus) {
+  await page.waitForTimeout(1500)
+  if (focus) await focus.scrollIntoViewIfNeeded().catch(() => {})
+  await page.screenshot({ path: `${SHOTS}/shift-p1-import-${name}.png`, animations: 'disabled' })
+}
 
 /**
  * A cold dev server compiles every module on its first request, which on this machine can take longer than a page
@@ -320,17 +326,18 @@ async function ui() {
     await dismissPopups(page)
     await page.getByLabel('Department').selectOption({ label: `QA Import ${tag}` })
     await page.locator('input[type=file]').setInputFiles({ name: `qa-${tag}-month.csv`, mimeType: 'text/csv', buffer: sheet })
-    await page.screenshot({ path: `${SHOTS}/shift-p1-import-1-import-desktop.png`, fullPage: true })
+    await shot(page, '1-import-desktop')
     await page.getByRole('button', { name: 'Check the file' }).click()
     check('web: the check finds both people and no errors', await visible(page.getByRole('button', { name: 'See the preview' })))
-    await page.screenshot({ path: `${SHOTS}/shift-p1-import-2-validate-desktop.png`, fullPage: true })
+    await shot(page, '2-validate-desktop')
     await page.getByRole('button', { name: 'See the preview' }).click()
     const grid = page.getByRole('region', { name: 'Roster preview' })
     check('web: the preview shows the roster', await visible(grid) && (await grid.locator('tbody tr').count()) === 2)
-    await page.screenshot({ path: `${SHOTS}/shift-p1-import-3-preview-desktop.png`, fullPage: true })
+    await shot(page, '3-preview-desktop', grid)
+    await grid.screenshot({ path: `${SHOTS}/shift-p1-import-3-preview-grid-desktop.png`, animations: 'disabled' })
     await page.getByRole('button', { name: 'Continue' }).click()
     await page.getByRole('button', { name: 'Create draft roster' }).waitFor({ timeout: 10_000 })
-    await page.screenshot({ path: `${SHOTS}/shift-p1-import-4-apply-desktop.png`, fullPage: true })
+    await shot(page, '4-apply-desktop')
     await page.getByRole('button', { name: 'Create draft roster' }).click()
     let saved = 0
     for (let i = 0; i < 30 && !saved; i++) {
@@ -358,14 +365,14 @@ async function ui() {
     check('web (390 wide): the import page opens', await openOnPhone())
     const o1 = await overflow()
     check('web (390 wide): step 1 has no sideways scroll', o1 <= 1, `overflow=${o1}px`)
-    await pp.screenshot({ path: `${SHOTS}/shift-p1-import-1-import-phone.png`, fullPage: true })
+    await shot(pp, '1-import-phone')
     await pp.locator('input[type=file]').setInputFiles({ name: `qa-${tag}-errors.csv`, mimeType: 'text/csv', buffer: withErrors })
     await pp.getByRole('button', { name: 'Check the file' }).click()
     check('web (390 wide): a file with errors lists them and offers no preview', await visible(pp.getByRole('button', { name: 'Upload a fixed file' }))
       && (await pp.getByRole('button', { name: 'See the preview' }).count()) === 0)
     const o2 = await overflow()
     check('web (390 wide): the problems have no sideways scroll', o2 <= 1, `overflow=${o2}px`)
-    await pp.screenshot({ path: `${SHOTS}/shift-p1-import-2-validate-phone.png`, fullPage: true })
+    await shot(pp, '2-validate-phone', pp.locator('.rim-problem').first())
     // the clean sheet: the preview at phone width
     await openOnPhone()
     await pp.locator('input[type=file]').setInputFiles({ name: `qa-${tag}-month.csv`, mimeType: 'text/csv', buffer: sheet })
@@ -375,7 +382,7 @@ async function ui() {
     await visible(pp.getByRole('region', { name: 'Roster preview' }))
     const o3 = await overflow()
     check('web (390 wide): the preview scrolls inside its box, not the page', o3 <= 1, `overflow=${o3}px`)
-    await pp.screenshot({ path: `${SHOTS}/shift-p1-import-3-preview-phone.png`, fullPage: true })
+    await shot(pp, '3-preview-phone', pp.getByRole('region', { name: 'Roster preview' }))
   } finally {
     await browser.close()
   }

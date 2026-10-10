@@ -261,7 +261,7 @@ function ValidateStep({ validation: v, filter, setFilter, fileName, onBack, onNe
   ]
   return (
     <>
-      <StatGrid min={180} label="Check result">
+      <StatGrid min={150} label="Check result">
         <StatCard variant="stat" index={0} icon="fileText" tone="gray" label="Rows" value={v.summary.rows} note={fileName ?? `Sheet ${v.sheetName}`} />
         <StatCard variant="stat" index={1} icon="users" tone="brand" label="Matched" value={v.summary.matched} note="People found" />
         <StatCard variant="stat" index={2} icon={v.summary.errors ? 'circleX' : 'checkCircle'} tone={v.summary.errors ? 'red' : 'brand'} label="Errors" value={v.summary.errors}
