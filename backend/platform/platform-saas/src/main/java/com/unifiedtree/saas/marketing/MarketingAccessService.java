@@ -9,10 +9,13 @@ import com.unifiedtree.auth.service.WorkspaceSignInRule;
 import com.unifiedtree.saas.admin.support.TenantScopedReader;
 import com.unifiedtree.saas.entitlement.CompanyEntitlementService;
 import com.unifiedtree.saas.entitlement.CompanyEntitlementService.Entitlement;
+import com.unifiedtree.security.tenant.TenantContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -60,6 +63,7 @@ public class MarketingAccessService {
     public static final String MODULE = CompanyEntitlementService.MARKETING_MODULE;
     public static final String AUDIENCE = "marketing";
     public static final Duration TICKET_TTL = Duration.ofSeconds(60);
+    private static final String ACCOUNT_TOKEN_TYPE = "account";
 
     /** Why a ticket was refused (401), in the body's {@code code}: unknown or malformed, already redeemed, past its minute */
     public static final String TICKET_INVALID = "TICKET_INVALID";
@@ -179,8 +183,38 @@ public class MarketingAccessService {
                 principal(accountId, companyId));
     }
 
-    /** Every workspace and company the account could enter Marketing with. */
-    public List<WorkspaceChoice> choices(UUID accountId) {
+    /**
+     * Who is calling /v1/sso/marketing: the account, and the one workspace it is pinned to when the caller signed in
+     * directly on a business subdomain (a workspace token), else null.
+     */
+    public record SsoCaller(UUID accountId, UUID tenantPin) {}
+
+    /**
+     * An account token is its account (AccountService.requireAccountId's rule). A workspace token is the account
+     * whose active membership is that workspace user (platform.account_workspaces, unique on tenant and user, no RLS),
+     * pinned to that workspace; no such membership is NOT_A_MEMBER. Every other token (operator, station, no tenant,
+     * the platform tenant) is refused as before. Roles are never consulted: a workspace can create a role coded
+     * ACCOUNT_USER.
+     */
+    public SsoCaller ssoCaller(Jwt jwt) {
+        if (jwt == null) throw new AccessDeniedException("Access Denied");
+        String type = jwt.getClaimAsString("token_type");
+        UUID subject = uuidOrNull(jwt.getSubject());
+        if (ACCOUNT_TOKEN_TYPE.equals(type) && subject != null) return new SsoCaller(subject, null);
+        UUID tenantId = uuidOrNull(jwt.getClaimAsString("tenant_id"));
+        if (type != null || subject == null || tenantId == null || TenantContext.PLATFORM_TENANT_ID.equals(tenantId)) {
+            throw new AccessDeniedException("Access Denied");
+        }
+        UUID accountId = jdbc.query("""
+                SELECT account_id FROM platform.account_workspaces
+                 WHERE tenant_id = ? AND auth_user_id = ? AND status = 'ACTIVE'
+                """, (rs, i) -> (UUID) rs.getObject(1), tenantId, subject).stream().findFirst().orElse(null);
+        if (accountId == null) throw notAMember();
+        return new SsoCaller(accountId, tenantId);
+    }
+
+    /** Every workspace and company the account could enter Marketing with; only {@code onlyTenant} when not null. */
+    public List<WorkspaceChoice> choices(UUID accountId, UUID onlyTenant) {
         List<Map<String, Object>> memberships = jdbc.queryForList("""
                 SELECT aw.tenant_id, aw.auth_user_id, aw.role::text AS role, t.subdomain, t.display_name
                   FROM platform.account_workspaces aw JOIN platform.tenants t ON t.id = aw.tenant_id
@@ -190,6 +224,7 @@ public class MarketingAccessService {
         List<WorkspaceChoice> out = new ArrayList<>();
         for (Map<String, Object> m : memberships) {
             UUID tenantId = (UUID) m.get("tenant_id");
+            if (onlyTenant != null && !onlyTenant.equals(tenantId)) continue;
             CompanyAccessView view = scoped.read(tenantId,
                     () -> companyAccess.view(companyAccess.profile((UUID) m.get("auth_user_id")), false));
             Map<UUID, UUID> toTenant = new LinkedHashMap<>();
@@ -405,7 +440,7 @@ public class MarketingAccessService {
                   JOIN platform.tenants t ON t.id = aw.tenant_id
                  WHERE aw.account_id = ? AND aw.tenant_id = ? AND aw.status = 'ACTIVE'
                 """, accountId, tenantId);
-        if (m.isEmpty()) throw forbidden("NOT_A_MEMBER", "You are not a member of that workspace");
+        if (m.isEmpty()) throw notAMember();
         Map<String, Object> row = m.get(0);
         // platform.account_status: a LOCKED account is refused as locked, DISABLED (or anything else) as inactive.
         // Same order as WorkspaceSignInRule. locked_until is not read: it only stops password sign-in after wrong
@@ -487,6 +522,19 @@ public class MarketingAccessService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static UUID uuidOrNull(String value) {
+        if (value == null) return null;
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    static ResponseStatusException notAMember() {
+        return forbidden("NOT_A_MEMBER", "You are not a member of that workspace");
     }
 
     private static ResponseStatusException forbidden(String code, String message) {

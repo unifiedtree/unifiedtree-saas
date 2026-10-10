@@ -3,7 +3,7 @@
 For the Marketing Automation (Node) developer. Built on `feat/marketing-sso-error-codes` (9 Oct 2026).
 
 Every refusal from `/v1/internal/marketing/**` (server to server, service token) and `/v1/sso/marketing/**`
-(the person's browser, UnifiedTree account token) now has a `code` field in its JSON body.
+(the person's browser: a UnifiedTree account token, or the business subdomain's workspace token mapped to its account) now has a `code` field in its JSON body.
 **Switch on `code`. Do not match words in `message`.** The message text can change; the codes will not.
 
 Backward compatible: HTTP statuses, `errorCode` and `message` are exactly what they were. Only `code` is new.
@@ -52,7 +52,7 @@ Where they come from:
 | `PRINCIPAL_HELD` | 409 | `PUT /principals`: an operator has quarantined or retired that Mongo user. | Don't retry. Flag it for an operator. |
 | `IDEMPOTENCY_MISMATCH` | 409 | `POST /usage`: the `idempotencyKey` was already recorded for a different event. | Don't resend with that key. It is a bug on Node's side. |
 | `VALIDATION_FAILED`, `INVALID_REQUEST`, `INVALID_PARAMETER` | 400 | The request is the wrong shape: a missing or blank field (for example a blank `ticket`), JSON that can't be read, or a missing or malformed query parameter. | A bug on Node's side. Fix the request; don't retry it unchanged. |
-| `ACCESS_DENIED` | 403 | `/v1/sso/marketing/*` called with a token that is not a UnifiedTree account token. Browser only. | Not seen by Node. |
+| `ACCESS_DENIED` | 403 | `/v1/sso/marketing/*` called with a token that is neither a UnifiedTree account token nor a tenant workspace token (e.g. an operator or station token). Browser only. A workspace token with no active `platform.account_workspaces` row gets `NOT_A_MEMBER` instead, and one used for another workspace's handoff also gets `NOT_A_MEMBER`. | Not seen by Node. |
 | `BAD_REQUEST`, `CONFLICT`, `NOT_FOUND`, ... | 400, 409, 404 | Any other refusal that has no code of its own. The code is the status name. Examples: `action must start with MARKETING_` on `/audit`, `wabaId is required` on `/channels`, `That company is not in that workspace` on `/channels` and `/usage`. | Act on the HTTP status. Log the message, but don't parse it. |
 | none | 5xx | Unexpected server error. | Retry with backoff. |
 

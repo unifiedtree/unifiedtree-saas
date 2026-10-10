@@ -47,6 +47,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -75,6 +76,7 @@ class MarketingRefusalCodesTest {
     static final class FakeJdbc extends JdbcTemplate {
         final Map<String, List<?>> answers = new LinkedHashMap<>();
         final List<String> asked = new ArrayList<>();
+        final List<Object[]> args = new ArrayList<>();
         int updated = 1;
 
         FakeJdbc answer(String fragment, List<?> rows) {
@@ -83,26 +85,45 @@ class MarketingRefusalCodesTest {
         }
 
         @SuppressWarnings("unchecked")
-        private <T> List<T> find(String sql) {
+        private <T> List<T> find(String sql, Object... values) {
             asked.add(sql);
+            args.add(values);
             return answers.entrySet().stream().filter(e -> sql.contains(e.getKey())).findFirst()
                     .map(e -> (List<T>) e.getValue()).orElse(List.of());
         }
 
         @Override
         public List<Map<String, Object>> queryForList(String sql, Object... args) {
-            return find(sql);
+            return find(sql, args);
         }
 
         @Override
         public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
-            return find(sql);
+            return find(sql, args);
         }
 
         @Override
-        public int update(String sql, Object... args) {
+        public <T> T queryForObject(String sql, Class<T> requiredType) {
+            List<T> rows = find(sql);
+            return rows.isEmpty() ? null : rows.get(0);
+        }
+
+        @Override
+        public int update(String sql, Object... values) {
             asked.add(sql);
+            args.add(values);
             return updated;
+        }
+
+        @Override
+        public int update(String sql) {
+            return update(sql, new Object[0]);
+        }
+
+        /** The arguments of the first statement containing the fragment */
+        Object[] argsOf(String fragment) {
+            for (int i = 0; i < asked.size(); i++) if (asked.get(i).contains(fragment)) return args.get(i);
+            throw new AssertionError("Never asked: " + fragment);
         }
     }
 
@@ -279,7 +300,7 @@ class MarketingRefusalCodesTest {
         aMember("LOCKED", "ACTIVE");
         redeem(TICKET).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
         Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"),
-                Map.of("sub", ACCOUNT.toString(), "roles", List.of("ACCOUNT_USER")));
+                Map.of("sub", ACCOUNT.toString(), "token_type", "account", "roles", List.of("ACCOUNT_USER")));
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
         mvc.perform(post("/v1/sso/marketing/handoff").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tenantId\":\"" + TENANT + "\",\"companyId\":\"" + COMPANY + "\"}"))
@@ -366,13 +387,172 @@ class MarketingRefusalCodesTest {
     @Test
     void theSsoHandoffRefusalsCarryTheSameCodes() throws Exception {
         Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"),
-                Map.of("sub", ACCOUNT.toString(), "roles", List.of("ACCOUNT_USER")));
+                Map.of("sub", ACCOUNT.toString(), "token_type", "account", "roles", List.of("ACCOUNT_USER")));
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
         mvc.perform(post("/v1/sso/marketing/handoff").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tenantId\":\"" + TENANT + "\",\"companyId\":\"" + COMPANY + "\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("NOT_A_MEMBER"))
                 .andExpect(jsonPath("$.message").value("NOT_A_MEMBER: You are not a member of that workspace"));
+    }
+
+    // ── Signed in on the business subdomain: a workspace token is its mapped account, in that workspace only ──
+
+    static final UUID TENANT_B = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    static final UUID AUTH_USER_B = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    static final String CALLER = "SELECT account_id FROM platform.account_workspaces";
+    static final String CHOICES = "ORDER BY aw.default_workspace DESC";
+    static final String TICKET_ROW = "INSERT INTO platform.sso_handoff_tickets";
+
+    private static void signedInWith(Map<String, Object> claims) {
+        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"), claims);
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
+    }
+
+    private static Map<String, Object> accountToken() {
+        return Map.of("sub", ACCOUNT.toString(), "token_type", "account", "roles", List.of("ACCOUNT_USER"));
+    }
+
+    /** As JwtService.issueAccessToken: the workspace user, its tenant and session, no token_type */
+    private static Map<String, Object> workspaceToken(UUID tenant, String role) {
+        return Map.of("sub", AUTH_USER.toString(), "tenant_id", tenant.toString(),
+                "sid", UUID.randomUUID().toString(), "roles", List.of(role));
+    }
+
+    private void mappedTo(UUID account) {
+        jdbc.answer(CALLER, List.of(account));
+    }
+
+    private void memberOfAAndB() {
+        jdbc.answer(CHOICES, List.of(
+                row("tenant_id", TENANT, "auth_user_id", AUTH_USER, "role", "MEMBER", "subdomain", "acme",
+                        "display_name", "Acme"),
+                row("tenant_id", TENANT_B, "auth_user_id", AUTH_USER_B, "role", "OWNER", "subdomain", "beta",
+                        "display_name", "Beta")));
+        companies(List.of(new CompanyEntry(COMPANY, "Acme", null, true, true, "WORKSPACE", List.of())));
+    }
+
+    /** Membership, workspace user, company access and entitlement all pass, so a handoff would mint */
+    private void everythingElseLetsThemIn() {
+        aMember("ACTIVE", "ACTIVE");
+        workspaceUser(true, null);
+        companies(List.of(new CompanyEntry(COMPANY, "Acme", null, true, true, "WORKSPACE", List.of())));
+        entitled(true);
+        jdbc.answer("SELECT now()", List.of(Timestamp.from(Instant.now())));
+    }
+
+    private ResultActions listCompanies() throws Exception {
+        return mvc.perform(get("/v1/sso/marketing/companies"));
+    }
+
+    private ResultActions handoff(UUID tenant) throws Exception {
+        return mvc.perform(post("/v1/sso/marketing/handoff").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tenantId\":\"" + tenant + "\",\"companyId\":\"" + COMPANY + "\"}"));
+    }
+
+    @Test
+    void anAccountTokenStillListsEveryWorkspaceAndMints() throws Exception {
+        signedInWith(accountToken());
+        memberOfAAndB();
+        listCompanies().andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].tenantId").value(TENANT.toString()))
+                .andExpect(jsonPath("$[1].tenantId").value(TENANT_B.toString()));
+        assertThat(jdbc.argsOf(CHOICES)).containsExactly(ACCOUNT);
+        everythingElseLetsThemIn();
+        handoff(TENANT_B).andExpect(status().isOk()).andExpect(jsonPath("$.ticket").isNotEmpty());
+        Object[] ticket = jdbc.argsOf(TICKET_ROW);
+        assertThat(ticket[2]).isEqualTo(ACCOUNT);
+        assertThat(ticket[3]).isEqualTo(TENANT_B);
+        assertThat(jdbc.asked).noneMatch(sql -> sql.contains(CALLER));
+    }
+
+    @Test
+    void aWorkspaceTokenListsOnlyItsOwnWorkspace() throws Exception {
+        signedInWith(workspaceToken(TENANT, "OWNER"));
+        mappedTo(ACCOUNT);
+        memberOfAAndB();
+        listCompanies().andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].tenantId").value(TENANT.toString()))
+                .andExpect(jsonPath("$[0].companies[0].companyId").value(COMPANY.toString()));
+        assertThat(jdbc.argsOf(CALLER)).containsExactly(TENANT, AUTH_USER);
+        assertThat(jdbc.argsOf(CHOICES)).containsExactly(ACCOUNT);
+        verify(companyAccess).profile(AUTH_USER);
+        verify(companyAccess, never()).profile(AUTH_USER_B);
+    }
+
+    @Test
+    void aWorkspaceTokenMintsForItsMappedAccountAsItsOwnWorkspaceUser() throws Exception {
+        signedInWith(workspaceToken(TENANT, "OWNER"));
+        mappedTo(ACCOUNT);
+        everythingElseLetsThemIn();
+        handoff(TENANT).andExpect(status().isOk()).andExpect(jsonPath("$.ticket").isNotEmpty());
+        assertThat(jdbc.argsOf(MEMBERSHIP)).containsExactly(ACCOUNT, TENANT);
+        Object[] ticket = jdbc.argsOf(TICKET_ROW);
+        assertThat(ticket[2]).as("account_id").isEqualTo(ACCOUNT);
+        assertThat(ticket[3]).as("tenant_id").isEqualTo(TENANT);
+        assertThat(ticket[4]).as("company_id").isEqualTo(COMPANY);
+        assertThat(ticket[5]).as("auth_user_id is the token's subject").isEqualTo(AUTH_USER);
+    }
+
+    @Test
+    void aWorkspaceTokenCannotHandOffIntoAnotherWorkspace() throws Exception {
+        signedInWith(workspaceToken(TENANT, "OWNER"));
+        mappedTo(ACCOUNT);
+        everythingElseLetsThemIn();   // the account is a member of B as well: only the pin stops this
+        handoff(TENANT_B).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("NOT_A_MEMBER"))
+                .andExpect(jsonPath("$.message").value("NOT_A_MEMBER: You are not a member of that workspace"));
+        assertThat(jdbc.asked).noneMatch(sql -> sql.contains(TICKET_ROW) || sql.contains(MEMBERSHIP));
+    }
+
+    @Test
+    void aWorkspaceUserWithoutAnActiveMembershipIsNotAMember() throws Exception {
+        signedInWith(workspaceToken(TENANT, "OWNER"));
+        everythingElseLetsThemIn();
+        listCompanies().andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_A_MEMBER"));
+        handoff(TENANT).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_A_MEMBER"));
+        // An INVITED, SUSPENDED or REMOVED membership finds no row
+        assertThat(jdbc.asked).filteredOn(sql -> sql.contains(CALLER)).hasSize(2)
+                .allMatch(sql -> sql.contains("status = 'ACTIVE'"));
+        assertThat(jdbc.asked).noneMatch(sql -> sql.contains(CHOICES) || sql.contains(MEMBERSHIP)
+                || sql.contains(TICKET_ROW));
+    }
+
+    @Test
+    void aCustomRoleCodedAccountUserOnAWorkspaceTokenOnlyCountsThroughTheMapping() throws Exception {
+        signedInWith(workspaceToken(TENANT, "ACCOUNT_USER"));
+        everythingElseLetsThemIn();
+        listCompanies().andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_A_MEMBER"));
+        handoff(TENANT).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_A_MEMBER"));
+        assertThat(jdbc.asked).noneMatch(sql -> sql.contains(CHOICES) || sql.contains(TICKET_ROW));
+        mappedTo(ACCOUNT);
+        handoff(TENANT).andExpect(status().isOk());
+        assertThat(jdbc.argsOf(TICKET_ROW)[2]).isEqualTo(ACCOUNT);
+    }
+
+    @Test
+    void operatorStationAndTenantlessTokensAreRefused() throws Exception {
+        String platform = "00000000-0000-0000-0000-000000000000";
+        List<Map<String, Object>> tokens = List.of(
+                Map.of("sub", AUTH_USER.toString(), "token_type", "platform", "tenant_id", platform,
+                        "roles", List.of("PLATFORM_SUPER_ADMIN")),
+                Map.of("sub", AUTH_USER.toString(), "token_type", "station", "tenant_id", TENANT.toString(),
+                        "roles", List.of("FACE_STATION")),
+                Map.of("sub", AUTH_USER.toString(), "roles", List.of("ACCOUNT_USER")),
+                Map.of("sub", AUTH_USER.toString(), "tenant_id", platform, "roles", List.of("SUPER_ADMIN")),
+                Map.of("sub", AUTH_USER.toString(), "tenant_id", "not-a-uuid", "roles", List.of("OWNER")));
+        mappedTo(ACCOUNT);
+        everythingElseLetsThemIn();
+        for (Map<String, Object> claims : tokens) {
+            signedInWith(claims);
+            listCompanies().andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+                    .andExpect(jsonPath("$.message").value("You do not have permission to perform this action"));
+            handoff(TENANT).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        }
+        assertThat(jdbc.asked).isEmpty();
     }
 
     // ── The rest of the internal API: a code on every refusal ──
