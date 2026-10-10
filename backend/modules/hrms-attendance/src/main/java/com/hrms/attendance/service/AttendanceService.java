@@ -1185,35 +1185,11 @@ public class AttendanceService {
         try {
             // A FLEXIBLE shift with core hours is late after core start, with
             // no grace on top (V143.23); every other shift after start + grace.
-            return jdbcTemplate.query("""
-                    SELECT CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL
-                                THEN sp.core_start_time ELSE sp.start_time END AS start_time,
-                           CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL
-                                THEN 0 ELSE sp.grace_period_minutes END AS grace_period_minutes,
-                           sp.working_hours_per_day
-                      FROM attendance.employee_shift_assignments esa
-                      JOIN attendance.shift_policies sp
-                        ON sp.id = esa.shift_policy_id
-                     WHERE esa.employee_id = ?
-                       AND esa.effective_from <= ?
-                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                       AND sp.is_active = TRUE
-                     ORDER BY esa.effective_from DESC
-                     LIMIT 1
-                    """,
-                    rs -> {
-                        if (!rs.next()) return null;
-                        java.sql.Time start = rs.getTime("start_time");
-                        String scheduledStart = start == null
-                                ? null
-                                : start.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"));
-                        int graceRaw = rs.getInt("grace_period_minutes");
-                        Integer grace = rs.wasNull() ? null : graceRaw;
-                        double hoursRaw = rs.getDouble("working_hours_per_day");
-                        Double hours = rs.wasNull() ? null : hoursRaw;
-                        return new ShiftProfile(scheduledStart, grace, hours);
-                    },
-                    employeeId, onDate, onDate);
+            EffectiveShiftResolver.EffectiveShift shift = EffectiveShiftResolver.attendanceShift(jdbcTemplate, employeeId, onDate);
+            if (shift == null) return null;
+            LocalTime lateFrom = shift.lateFrom();
+            String scheduledStart = lateFrom == null ? null : lateFrom.format(DateTimeFormatter.ofPattern("HH:mm"));
+            return new ShiftProfile(scheduledStart, shift.lateGraceMinutes(), shift.workingHoursPerDay());
         } catch (Exception ex) {
             log.debug("Shift profile lookup failed for employee {}: {}", employeeId, ex.getMessage());
             return null;
@@ -1239,52 +1215,20 @@ public class AttendanceService {
         if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) {
             return Map.of();
         }
-        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
-        String sql = ("""
-                SELECT esa.employee_id, sp.name, sp.start_time, sp.end_time,
-                       CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL
-                            THEN sp.core_start_time ELSE sp.start_time END AS late_from,
-                       CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL
-                            THEN 0 ELSE sp.grace_period_minutes END AS grace_period_minutes
-                  FROM attendance.employee_shift_assignments esa
-                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id AND sp.tenant_id = esa.tenant_id
-                 WHERE esa.employee_id IN (%s)
-                   AND esa.effective_from <= ?
-                   AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                   AND sp.is_active = TRUE
-                   AND esa.effective_from = (
-                       SELECT MAX(esa2.effective_from)
-                         FROM attendance.employee_shift_assignments esa2
-                         JOIN attendance.shift_policies sp2 ON sp2.id = esa2.shift_policy_id
-                        WHERE esa2.employee_id = esa.employee_id
-                          AND esa2.effective_from <= ?
-                          AND (esa2.effective_to IS NULL OR esa2.effective_to >= ?)
-                          AND sp2.is_active = TRUE
-                   )
-                """).formatted(inClause);
-        Object[] args = new Object[employeeIds.size() + 4];
-        for (int i = 0; i < employeeIds.size(); i++) {
-            args[i] = employeeIds.get(i);
-        }
-        args[employeeIds.size()] = onDate;
-        args[employeeIds.size() + 1] = onDate;
-        args[employeeIds.size() + 2] = onDate;
-        args[employeeIds.size() + 3] = onDate;
         Map<UUID, ShiftWindow> out = new HashMap<>();
-        jdbcTemplate.query(sql, rs -> {
-            UUID eid = (UUID) rs.getObject("employee_id");
-            java.sql.Time start = rs.getTime("start_time"), end = rs.getTime("end_time");
+        for (EffectiveShiftResolver.EffectiveShift shift : EffectiveShiftResolver.dashboardShifts(jdbcTemplate, employeeIds, onDate)) {
+            UUID eid = shift.employeeId();
+            LocalTime start = shift.startTime(), end = shift.endTime();
             if (eid != null && start != null && end != null) {
-                int grace = rs.getInt("grace_period_minutes");
-                boolean noGrace = rs.wasNull();
+                Integer grace = shift.lateGraceMinutes();
                 // Late is measured from core start on a flexible shift with core hours (V143.23).
-                java.sql.Time lateFrom = rs.getTime("late_from");
-                Instant startAt = onDate.atTime((lateFrom != null ? lateFrom : start).toLocalTime()).atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
-                out.put(eid, new ShiftWindow(rs.getString("name"), startAt,
-                        ShiftTiming.expectedEnd(onDate, start.toLocalTime(), end.toLocalTime()),
-                        noGrace ? 0 : grace));
+                LocalTime lateFrom = shift.lateFrom();
+                Instant startAt = onDate.atTime(lateFrom != null ? lateFrom : start).atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+                out.put(eid, new ShiftWindow(shift.name(), startAt,
+                        ShiftTiming.expectedEnd(onDate, start, end),
+                        grace == null ? 0 : grace));
             }
-        }, args);
+        }
         return out;
     }
 
@@ -1294,43 +1238,16 @@ public class AttendanceService {
         if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) {
             return Map.of();
         }
-        // Same "latest active assignment per employee" pattern as getShiftProfile,
-        // just expressed as a correlated subquery so it works across a batch.
-        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
-        String sql = ("""
-                SELECT esa.employee_id, sp.start_time, sp.end_time
-                  FROM attendance.employee_shift_assignments esa
-                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id AND sp.tenant_id = esa.tenant_id
-                 WHERE esa.employee_id IN (%s)
-                   AND esa.effective_from <= ?
-                   AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                   AND sp.is_active = TRUE
-                   AND esa.effective_from = (
-                       SELECT MAX(esa2.effective_from)
-                         FROM attendance.employee_shift_assignments esa2
-                         JOIN attendance.shift_policies sp2 ON sp2.id = esa2.shift_policy_id
-                        WHERE esa2.employee_id = esa.employee_id
-                          AND esa2.effective_from <= ?
-                          AND (esa2.effective_to IS NULL OR esa2.effective_to >= ?)
-                          AND sp2.is_active = TRUE
-                   )
-                """).formatted(inClause);
-        Object[] args = new Object[employeeIds.size() + 4];
-        for (int i = 0; i < employeeIds.size(); i++) {
-            args[i] = employeeIds.get(i);
-        }
-        args[employeeIds.size()] = onDate;
-        args[employeeIds.size() + 1] = onDate;
-        args[employeeIds.size() + 2] = onDate;
-        args[employeeIds.size() + 3] = onDate;
+        // Same "latest active assignment per employee" rule as getShiftWindowsForEmployees
+        // (EffectiveShiftResolver.dashboardShifts), so a batch works in one query.
         Map<UUID, Instant> out = new HashMap<>();
-        jdbcTemplate.query(sql, rs -> {
-            UUID eid = (UUID) rs.getObject("employee_id");
-            java.sql.Time start = rs.getTime("start_time"), end = rs.getTime("end_time");
+        for (EffectiveShiftResolver.EffectiveShift shift : EffectiveShiftResolver.dashboardShifts(jdbcTemplate, employeeIds, onDate)) {
+            UUID eid = shift.employeeId();
+            LocalTime start = shift.startTime(), end = shift.endTime();
             if (eid != null && start != null && end != null) {
-                out.put(eid, ShiftTiming.expectedEnd(onDate, start.toLocalTime(), end.toLocalTime()));
+                out.put(eid, ShiftTiming.expectedEnd(onDate, start, end));
             }
-        }, args);
+        }
         return out;
     }
 
@@ -1339,24 +1256,8 @@ public class AttendanceService {
             return null;
         }
         try {
-            return jdbcTemplate.query("""
-                    SELECT sp.working_hours_per_day
-                      FROM attendance.employee_shift_assignments esa
-                      JOIN attendance.shift_policies sp
-                        ON sp.id = esa.shift_policy_id
-                     WHERE esa.employee_id = ?
-                       AND esa.effective_from <= ?
-                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                       AND sp.is_active = TRUE
-                     ORDER BY esa.effective_from DESC
-                     LIMIT 1
-                    """,
-                    rs -> {
-                        if (!rs.next()) return null;
-                        double value = rs.getDouble("working_hours_per_day");
-                        return rs.wasNull() ? null : value;
-                    },
-                    employeeId, onDate, onDate);
+            EffectiveShiftResolver.EffectiveShift shift = EffectiveShiftResolver.attendanceShift(jdbcTemplate, employeeId, onDate);
+            return shift == null ? null : shift.workingHoursPerDay();
         } catch (Exception ex) {
             log.debug("Daily target hours lookup failed for employee {}: {}", employeeId, ex.getMessage());
             return null;
@@ -2008,33 +1909,21 @@ public class AttendanceService {
             return STANDARD_HOURS;
         }
         try {
-            Double hours = jdbcTemplate.query("""
-                    SELECT sp.start_time, sp.end_time, sp.working_hours_per_day
-                      FROM attendance.employee_shift_assignments esa
-                      JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
-                     WHERE esa.employee_id = ?
-                       AND esa.effective_from <= ?
-                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                       AND sp.is_active = TRUE
-                     ORDER BY esa.effective_from DESC
-                     LIMIT 1
-                    """,
-                    rs -> {
-                        if (!rs.next()) return null;
-                        java.sql.Time start = rs.getTime("start_time");
-                        java.sql.Time end = rs.getTime("end_time");
-                        double perDay = rs.getDouble("working_hours_per_day");
-                        if (rs.wasNull()) perDay = 0;
-                        double span = 0;
-                        if (start != null && end != null) {
-                            long minutes = Duration.between(start.toLocalTime(), end.toLocalTime()).toMinutes();
-                            if (minutes <= 0) minutes += 24 * 60;
-                            span = minutes / 60.0;
-                        }
-                        double t = Math.max(span, perDay);
-                        return t > 0 ? t : null;
-                    },
-                    employeeId, onDate, onDate);
+            EffectiveShiftResolver.EffectiveShift shift = EffectiveShiftResolver.attendanceShift(jdbcTemplate, employeeId, onDate);
+            Double hours = null;
+            if (shift != null) {
+                LocalTime start = shift.startTime();
+                LocalTime end = shift.endTime();
+                double perDay = shift.workingHoursPerDay() != null ? shift.workingHoursPerDay() : 0;
+                double span = 0;
+                if (start != null && end != null) {
+                    long minutes = Duration.between(start, end).toMinutes();
+                    if (minutes <= 0) minutes += 24 * 60;
+                    span = minutes / 60.0;
+                }
+                double t = Math.max(span, perDay);
+                hours = t > 0 ? t : null;
+            }
             return hours != null ? hours : STANDARD_HOURS;
         } catch (Exception ex) {
             log.debug("Overtime threshold lookup failed for employee {}: {}", employeeId, ex.getMessage());

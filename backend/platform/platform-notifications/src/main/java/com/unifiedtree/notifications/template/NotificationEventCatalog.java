@@ -282,6 +282,17 @@ public final class NotificationEventCatalog {
                 "Sent to the employee when their shift change is rejected.",
                 "Shift change rejected", "Your request to move to {{shiftName}} was rejected.{{reasonText}}",
                 SHIFT_NAME, REASON, REASON_TEXT));
+        // In the app and on the phone only (shift planning, D-S12): sent when HR publishes a roster.
+        add(appOnly("roster.published", AppNotificationType.ROSTER_PUBLISHED, "Shifts", "Shift schedule published", "Employees on the roster",
+                "Sent to each person on a shift roster when it is published with days for them from today on, and to people added to it later.",
+                "Your shift schedule is ready", "Your schedule for {{period}} is published. Open it to see your shifts.",
+                ph("period", "The period the schedule covers, for example October 2026"),
+                ph("rosterName", "The roster's name, for example October 2026 · Technical")));
+        add(appOnly("roster.day_changed", AppNotificationType.ROSTER_DAY_CHANGED, "Shifts", "Shift schedule changed", "Employee",
+                "Sent to a person when a shift roster is published again and one or more of their days were added, changed or removed.",
+                "Your schedule changed", "{{changeText}}",
+                ph("changeText", "What changed, for example \"12 Oct is now B (Evening, 14:00–22:00), and 2 more days.\""),
+                ph("rosterName", "The roster's name, for example October 2026 · Technical")));
 
         // ── Expenses and advances ────────────────────────────────────────────
         add(inApp("expense.submitted", AppNotificationType.EXPENSE_SUBMITTED, "Expenses and advances", "Expense claim submitted", "Approver",

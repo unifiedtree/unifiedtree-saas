@@ -1,0 +1,768 @@
+profile E1 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-03 = 8.0
+overtimeThresholdHours E1 2026-08-03 = 9.0
+lateThreshold E1 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-03 = 09:10
+profile E1 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-04 = 8.0
+overtimeThresholdHours E1 2026-08-04 = 9.0
+lateThreshold E1 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-04 = 09:10
+profile E1 2026-08-05 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-05 = 8.0
+overtimeThresholdHours E1 2026-08-05 = 9.0
+lateThreshold E1 2026-08-05 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-05 = 09:10
+profile E1 2026-08-06 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-06 = 8.0
+overtimeThresholdHours E1 2026-08-06 = 9.0
+lateThreshold E1 2026-08-06 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-06 = 09:10
+profile E1 2026-08-07 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-07 = 8.0
+overtimeThresholdHours E1 2026-08-07 = 9.0
+lateThreshold E1 2026-08-07 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-07 = 09:10
+profile E1 2026-08-08 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-08 = 8.0
+overtimeThresholdHours E1 2026-08-08 = 9.0
+lateThreshold E1 2026-08-08 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-08 = 09:10
+profile E1 2026-08-09 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-09 = 8.0
+overtimeThresholdHours E1 2026-08-09 = 9.0
+lateThreshold E1 2026-08-09 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-09 = 09:10
+profile E1 2026-08-10 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-10 = 8.0
+overtimeThresholdHours E1 2026-08-10 = 9.0
+lateThreshold E1 2026-08-10 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-10 = 09:10
+profile E1 2026-08-11 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E1 2026-08-11 = 8.0
+overtimeThresholdHours E1 2026-08-11 = 9.0
+lateThreshold E1 2026-08-11 = 09:10
+lateThresholdWithCompanyPolicy E1 2026-08-11 = 09:10
+profile E2 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-03 = 8.0
+overtimeThresholdHours E2 2026-08-03 = 9.0
+lateThreshold E2 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-03 = 09:10
+profile E2 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-04 = 8.0
+overtimeThresholdHours E2 2026-08-04 = 9.0
+lateThreshold E2 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-04 = 09:10
+profile E2 2026-08-05 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-05 = 8.0
+overtimeThresholdHours E2 2026-08-05 = 9.0
+lateThreshold E2 2026-08-05 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-05 = 09:10
+profile E2 2026-08-06 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-06 = 8.0
+overtimeThresholdHours E2 2026-08-06 = 9.0
+lateThreshold E2 2026-08-06 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-06 = 09:10
+profile E2 2026-08-07 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-07 = 8.0
+overtimeThresholdHours E2 2026-08-07 = 9.0
+lateThreshold E2 2026-08-07 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-07 = 09:10
+profile E2 2026-08-08 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-08 = 8.0
+overtimeThresholdHours E2 2026-08-08 = 9.0
+lateThreshold E2 2026-08-08 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-08 = 09:10
+profile E2 2026-08-09 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E2 2026-08-09 = 8.0
+overtimeThresholdHours E2 2026-08-09 = 9.0
+lateThreshold E2 2026-08-09 = 09:10
+lateThresholdWithCompanyPolicy E2 2026-08-09 = 09:10
+profile E2 2026-08-10 = ShiftProfile[scheduledStart=22:00, graceMinutes=15, dailyTargetHours=7.5]
+dailyTargetHours E2 2026-08-10 = 7.5
+overtimeThresholdHours E2 2026-08-10 = 8.0
+lateThreshold E2 2026-08-10 = 22:15
+lateThresholdWithCompanyPolicy E2 2026-08-10 = 22:15
+profile E2 2026-08-11 = ShiftProfile[scheduledStart=22:00, graceMinutes=15, dailyTargetHours=7.5]
+dailyTargetHours E2 2026-08-11 = 7.5
+overtimeThresholdHours E2 2026-08-11 = 8.0
+lateThreshold E2 2026-08-11 = 22:15
+lateThresholdWithCompanyPolicy E2 2026-08-11 = 22:15
+profile E3 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-03 = 8.0
+overtimeThresholdHours E3 2026-08-03 = 9.0
+lateThreshold E3 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E3 2026-08-03 = 09:10
+profile E3 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-04 = 8.0
+overtimeThresholdHours E3 2026-08-04 = 9.0
+lateThreshold E3 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E3 2026-08-04 = 09:10
+profile E3 2026-08-05 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-05 = 8.0
+overtimeThresholdHours E3 2026-08-05 = 12.0
+lateThreshold E3 2026-08-05 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-05 = 10:15
+profile E3 2026-08-06 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-06 = 8.0
+overtimeThresholdHours E3 2026-08-06 = 12.0
+lateThreshold E3 2026-08-06 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-06 = 10:15
+profile E3 2026-08-07 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-07 = 8.0
+overtimeThresholdHours E3 2026-08-07 = 12.0
+lateThreshold E3 2026-08-07 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-07 = 10:15
+profile E3 2026-08-08 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-08 = 8.0
+overtimeThresholdHours E3 2026-08-08 = 12.0
+lateThreshold E3 2026-08-08 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-08 = 10:15
+profile E3 2026-08-09 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-09 = 8.0
+overtimeThresholdHours E3 2026-08-09 = 12.0
+lateThreshold E3 2026-08-09 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-09 = 10:15
+profile E3 2026-08-10 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-10 = 8.0
+overtimeThresholdHours E3 2026-08-10 = 12.0
+lateThreshold E3 2026-08-10 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-10 = 10:15
+profile E3 2026-08-11 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E3 2026-08-11 = 8.0
+overtimeThresholdHours E3 2026-08-11 = 12.0
+lateThreshold E3 2026-08-11 = 10:00
+lateThresholdWithCompanyPolicy E3 2026-08-11 = 10:15
+profile E4 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-03 = 8.0
+overtimeThresholdHours E4 2026-08-03 = 9.0
+lateThreshold E4 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-03 = 09:10
+profile E4 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-04 = 8.0
+overtimeThresholdHours E4 2026-08-04 = 9.0
+lateThreshold E4 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-04 = 09:10
+profile E4 2026-08-05 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-05 = 8.0
+overtimeThresholdHours E4 2026-08-05 = 9.0
+lateThreshold E4 2026-08-05 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-05 = 09:10
+profile E4 2026-08-06 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-06 = 8.0
+overtimeThresholdHours E4 2026-08-06 = 9.0
+lateThreshold E4 2026-08-06 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-06 = 09:10
+profile E4 2026-08-07 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-07 = 8.0
+overtimeThresholdHours E4 2026-08-07 = 9.0
+lateThreshold E4 2026-08-07 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-07 = 09:10
+profile E4 2026-08-08 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-08 = 8.0
+overtimeThresholdHours E4 2026-08-08 = 9.0
+lateThreshold E4 2026-08-08 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-08 = 09:10
+profile E4 2026-08-09 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-09 = 8.0
+overtimeThresholdHours E4 2026-08-09 = 9.0
+lateThreshold E4 2026-08-09 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-09 = 09:10
+profile E4 2026-08-10 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-10 = 8.0
+overtimeThresholdHours E4 2026-08-10 = 9.0
+lateThreshold E4 2026-08-10 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-10 = 09:10
+profile E4 2026-08-11 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E4 2026-08-11 = 8.0
+overtimeThresholdHours E4 2026-08-11 = 9.0
+lateThreshold E4 2026-08-11 = 09:10
+lateThresholdWithCompanyPolicy E4 2026-08-11 = 09:10
+profile E5 2026-08-03 = null
+dailyTargetHours E5 2026-08-03 = null
+overtimeThresholdHours E5 2026-08-03 = 8.0
+lateThreshold E5 2026-08-03 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-03 = 09:30
+profile E5 2026-08-04 = null
+dailyTargetHours E5 2026-08-04 = null
+overtimeThresholdHours E5 2026-08-04 = 8.0
+lateThreshold E5 2026-08-04 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-04 = 09:30
+profile E5 2026-08-05 = null
+dailyTargetHours E5 2026-08-05 = null
+overtimeThresholdHours E5 2026-08-05 = 8.0
+lateThreshold E5 2026-08-05 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-05 = 09:30
+profile E5 2026-08-06 = null
+dailyTargetHours E5 2026-08-06 = null
+overtimeThresholdHours E5 2026-08-06 = 8.0
+lateThreshold E5 2026-08-06 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-06 = 09:30
+profile E5 2026-08-07 = null
+dailyTargetHours E5 2026-08-07 = null
+overtimeThresholdHours E5 2026-08-07 = 8.0
+lateThreshold E5 2026-08-07 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-07 = 09:30
+profile E5 2026-08-08 = null
+dailyTargetHours E5 2026-08-08 = null
+overtimeThresholdHours E5 2026-08-08 = 8.0
+lateThreshold E5 2026-08-08 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-08 = 09:30
+profile E5 2026-08-09 = null
+dailyTargetHours E5 2026-08-09 = null
+overtimeThresholdHours E5 2026-08-09 = 8.0
+lateThreshold E5 2026-08-09 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-09 = 09:30
+profile E5 2026-08-10 = null
+dailyTargetHours E5 2026-08-10 = null
+overtimeThresholdHours E5 2026-08-10 = 8.0
+lateThreshold E5 2026-08-10 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-10 = 09:30
+profile E5 2026-08-11 = null
+dailyTargetHours E5 2026-08-11 = null
+overtimeThresholdHours E5 2026-08-11 = 8.0
+lateThreshold E5 2026-08-11 = 09:30
+lateThresholdWithCompanyPolicy E5 2026-08-11 = 09:30
+profile E6 2026-08-03 = null
+dailyTargetHours E6 2026-08-03 = null
+overtimeThresholdHours E6 2026-08-03 = 8.0
+lateThreshold E6 2026-08-03 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-03 = 09:30
+profile E6 2026-08-04 = null
+dailyTargetHours E6 2026-08-04 = null
+overtimeThresholdHours E6 2026-08-04 = 8.0
+lateThreshold E6 2026-08-04 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-04 = 09:30
+profile E6 2026-08-05 = null
+dailyTargetHours E6 2026-08-05 = null
+overtimeThresholdHours E6 2026-08-05 = 8.0
+lateThreshold E6 2026-08-05 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-05 = 09:30
+profile E6 2026-08-06 = null
+dailyTargetHours E6 2026-08-06 = null
+overtimeThresholdHours E6 2026-08-06 = 8.0
+lateThreshold E6 2026-08-06 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-06 = 09:30
+profile E6 2026-08-07 = null
+dailyTargetHours E6 2026-08-07 = null
+overtimeThresholdHours E6 2026-08-07 = 8.0
+lateThreshold E6 2026-08-07 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-07 = 09:30
+profile E6 2026-08-08 = null
+dailyTargetHours E6 2026-08-08 = null
+overtimeThresholdHours E6 2026-08-08 = 8.0
+lateThreshold E6 2026-08-08 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-08 = 09:30
+profile E6 2026-08-09 = null
+dailyTargetHours E6 2026-08-09 = null
+overtimeThresholdHours E6 2026-08-09 = 8.0
+lateThreshold E6 2026-08-09 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-09 = 09:30
+profile E6 2026-08-10 = null
+dailyTargetHours E6 2026-08-10 = null
+overtimeThresholdHours E6 2026-08-10 = 8.0
+lateThreshold E6 2026-08-10 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-10 = 09:30
+profile E6 2026-08-11 = null
+dailyTargetHours E6 2026-08-11 = null
+overtimeThresholdHours E6 2026-08-11 = 8.0
+lateThreshold E6 2026-08-11 = 09:30
+lateThresholdWithCompanyPolicy E6 2026-08-11 = 09:30
+profile E7 2026-08-03 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-03 = 9.5
+overtimeThresholdHours E7 2026-08-03 = 9.5
+lateThreshold E7 2026-08-03 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-03 = 10:15
+profile E7 2026-08-04 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-04 = 9.5
+overtimeThresholdHours E7 2026-08-04 = 9.5
+lateThreshold E7 2026-08-04 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-04 = 10:15
+profile E7 2026-08-05 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-05 = 9.5
+overtimeThresholdHours E7 2026-08-05 = 9.5
+lateThreshold E7 2026-08-05 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-05 = 10:15
+profile E7 2026-08-06 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-06 = 9.5
+overtimeThresholdHours E7 2026-08-06 = 9.5
+lateThreshold E7 2026-08-06 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-06 = 10:15
+profile E7 2026-08-07 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-07 = 9.5
+overtimeThresholdHours E7 2026-08-07 = 9.5
+lateThreshold E7 2026-08-07 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-07 = 10:15
+profile E7 2026-08-08 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-08 = 9.5
+overtimeThresholdHours E7 2026-08-08 = 9.5
+lateThreshold E7 2026-08-08 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-08 = 10:15
+profile E7 2026-08-09 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-09 = 9.5
+overtimeThresholdHours E7 2026-08-09 = 9.5
+lateThreshold E7 2026-08-09 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-09 = 10:15
+profile E7 2026-08-10 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-10 = 9.5
+overtimeThresholdHours E7 2026-08-10 = 9.5
+lateThreshold E7 2026-08-10 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-10 = 10:15
+profile E7 2026-08-11 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=9.5]
+dailyTargetHours E7 2026-08-11 = 9.5
+overtimeThresholdHours E7 2026-08-11 = 9.5
+lateThreshold E7 2026-08-11 = 10:00
+lateThresholdWithCompanyPolicy E7 2026-08-11 = 10:15
+profile E8 2026-08-03 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-03 = 8.0
+overtimeThresholdHours E8 2026-08-03 = 12.0
+lateThreshold E8 2026-08-03 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-03 = 10:15
+profile E8 2026-08-04 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-04 = 8.0
+overtimeThresholdHours E8 2026-08-04 = 12.0
+lateThreshold E8 2026-08-04 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-04 = 10:15
+profile E8 2026-08-05 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-05 = 8.0
+overtimeThresholdHours E8 2026-08-05 = 12.0
+lateThreshold E8 2026-08-05 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-05 = 10:15
+profile E8 2026-08-06 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-06 = 8.0
+overtimeThresholdHours E8 2026-08-06 = 12.0
+lateThreshold E8 2026-08-06 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-06 = 10:15
+profile E8 2026-08-07 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-07 = 8.0
+overtimeThresholdHours E8 2026-08-07 = 12.0
+lateThreshold E8 2026-08-07 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-07 = 10:15
+profile E8 2026-08-08 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-08 = 8.0
+overtimeThresholdHours E8 2026-08-08 = 12.0
+lateThreshold E8 2026-08-08 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-08 = 10:15
+profile E8 2026-08-09 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-09 = 8.0
+overtimeThresholdHours E8 2026-08-09 = 12.0
+lateThreshold E8 2026-08-09 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-09 = 10:15
+profile E8 2026-08-10 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-10 = 8.0
+overtimeThresholdHours E8 2026-08-10 = 12.0
+lateThreshold E8 2026-08-10 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-10 = 10:15
+profile E8 2026-08-11 = ShiftProfile[scheduledStart=10:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E8 2026-08-11 = 8.0
+overtimeThresholdHours E8 2026-08-11 = 12.0
+lateThreshold E8 2026-08-11 = 10:00
+lateThresholdWithCompanyPolicy E8 2026-08-11 = 10:15
+profile E9 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E9 2026-08-03 = 8.0
+overtimeThresholdHours E9 2026-08-03 = 9.0
+lateThreshold E9 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E9 2026-08-03 = 09:10
+profile E9 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E9 2026-08-04 = 8.0
+overtimeThresholdHours E9 2026-08-04 = 9.0
+lateThreshold E9 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E9 2026-08-04 = 09:10
+profile E9 2026-08-05 = null
+dailyTargetHours E9 2026-08-05 = null
+overtimeThresholdHours E9 2026-08-05 = 8.0
+lateThreshold E9 2026-08-05 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-05 = 09:30
+profile E9 2026-08-06 = null
+dailyTargetHours E9 2026-08-06 = null
+overtimeThresholdHours E9 2026-08-06 = 8.0
+lateThreshold E9 2026-08-06 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-06 = 09:30
+profile E9 2026-08-07 = null
+dailyTargetHours E9 2026-08-07 = null
+overtimeThresholdHours E9 2026-08-07 = 8.0
+lateThreshold E9 2026-08-07 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-07 = 09:30
+profile E9 2026-08-08 = null
+dailyTargetHours E9 2026-08-08 = null
+overtimeThresholdHours E9 2026-08-08 = 8.0
+lateThreshold E9 2026-08-08 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-08 = 09:30
+profile E9 2026-08-09 = null
+dailyTargetHours E9 2026-08-09 = null
+overtimeThresholdHours E9 2026-08-09 = 8.0
+lateThreshold E9 2026-08-09 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-09 = 09:30
+profile E9 2026-08-10 = null
+dailyTargetHours E9 2026-08-10 = null
+overtimeThresholdHours E9 2026-08-10 = 8.0
+lateThreshold E9 2026-08-10 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-10 = 09:30
+profile E9 2026-08-11 = null
+dailyTargetHours E9 2026-08-11 = null
+overtimeThresholdHours E9 2026-08-11 = 8.0
+lateThreshold E9 2026-08-11 = 09:30
+lateThresholdWithCompanyPolicy E9 2026-08-11 = 09:30
+profile E11 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-03 = 8.0
+overtimeThresholdHours E11 2026-08-03 = 9.0
+lateThreshold E11 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E11 2026-08-03 = 09:10
+profile E11 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-04 = 8.0
+overtimeThresholdHours E11 2026-08-04 = 9.0
+lateThreshold E11 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E11 2026-08-04 = 09:10
+profile E11 2026-08-05 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-05 = 8.0
+overtimeThresholdHours E11 2026-08-05 = 9.0
+lateThreshold E11 2026-08-05 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-05 = 11:15
+profile E11 2026-08-06 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-06 = 8.0
+overtimeThresholdHours E11 2026-08-06 = 9.0
+lateThreshold E11 2026-08-06 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-06 = 11:15
+profile E11 2026-08-07 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-07 = 8.0
+overtimeThresholdHours E11 2026-08-07 = 9.0
+lateThreshold E11 2026-08-07 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-07 = 11:15
+profile E11 2026-08-08 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-08 = 8.0
+overtimeThresholdHours E11 2026-08-08 = 9.0
+lateThreshold E11 2026-08-08 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-08 = 11:15
+profile E11 2026-08-09 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-09 = 8.0
+overtimeThresholdHours E11 2026-08-09 = 9.0
+lateThreshold E11 2026-08-09 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-09 = 11:15
+profile E11 2026-08-10 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-10 = 8.0
+overtimeThresholdHours E11 2026-08-10 = 9.0
+lateThreshold E11 2026-08-10 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-10 = 11:15
+profile E11 2026-08-11 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E11 2026-08-11 = 8.0
+overtimeThresholdHours E11 2026-08-11 = 9.0
+lateThreshold E11 2026-08-11 = 11:00
+lateThresholdWithCompanyPolicy E11 2026-08-11 = 11:15
+profile E12 2026-08-03 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-03 = 8.0
+overtimeThresholdHours E12 2026-08-03 = 9.0
+lateThreshold E12 2026-08-03 = 09:10
+lateThresholdWithCompanyPolicy E12 2026-08-03 = 09:10
+profile E12 2026-08-04 = ShiftProfile[scheduledStart=09:00, graceMinutes=10, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-04 = 8.0
+overtimeThresholdHours E12 2026-08-04 = 9.0
+lateThreshold E12 2026-08-04 = 09:10
+lateThresholdWithCompanyPolicy E12 2026-08-04 = 09:10
+profile E12 2026-08-05 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-05 = 8.0
+overtimeThresholdHours E12 2026-08-05 = 9.0
+lateThreshold E12 2026-08-05 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-05 = 11:15
+profile E12 2026-08-06 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-06 = 8.0
+overtimeThresholdHours E12 2026-08-06 = 9.0
+lateThreshold E12 2026-08-06 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-06 = 11:15
+profile E12 2026-08-07 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-07 = 8.0
+overtimeThresholdHours E12 2026-08-07 = 9.0
+lateThreshold E12 2026-08-07 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-07 = 11:15
+profile E12 2026-08-08 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-08 = 8.0
+overtimeThresholdHours E12 2026-08-08 = 9.0
+lateThreshold E12 2026-08-08 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-08 = 11:15
+profile E12 2026-08-09 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-09 = 8.0
+overtimeThresholdHours E12 2026-08-09 = 9.0
+lateThreshold E12 2026-08-09 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-09 = 11:15
+profile E12 2026-08-10 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-10 = 8.0
+overtimeThresholdHours E12 2026-08-10 = 9.0
+lateThreshold E12 2026-08-10 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-10 = 11:15
+profile E12 2026-08-11 = ShiftProfile[scheduledStart=11:00, graceMinutes=0, dailyTargetHours=8.0]
+dailyTargetHours E12 2026-08-11 = 8.0
+overtimeThresholdHours E12 2026-08-11 = 9.0
+lateThreshold E12 2026-08-11 = 11:00
+lateThresholdWithCompanyPolicy E12 2026-08-11 = 11:15
+profile E13 2026-08-03 = null
+dailyTargetHours E13 2026-08-03 = null
+overtimeThresholdHours E13 2026-08-03 = 8.0
+lateThreshold E13 2026-08-03 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-03 = 09:30
+profile E13 2026-08-04 = null
+dailyTargetHours E13 2026-08-04 = null
+overtimeThresholdHours E13 2026-08-04 = 8.0
+lateThreshold E13 2026-08-04 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-04 = 09:30
+profile E13 2026-08-05 = null
+dailyTargetHours E13 2026-08-05 = null
+overtimeThresholdHours E13 2026-08-05 = 8.0
+lateThreshold E13 2026-08-05 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-05 = 09:30
+profile E13 2026-08-06 = null
+dailyTargetHours E13 2026-08-06 = null
+overtimeThresholdHours E13 2026-08-06 = 8.0
+lateThreshold E13 2026-08-06 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-06 = 09:30
+profile E13 2026-08-07 = null
+dailyTargetHours E13 2026-08-07 = null
+overtimeThresholdHours E13 2026-08-07 = 8.0
+lateThreshold E13 2026-08-07 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-07 = 09:30
+profile E13 2026-08-08 = null
+dailyTargetHours E13 2026-08-08 = null
+overtimeThresholdHours E13 2026-08-08 = 8.0
+lateThreshold E13 2026-08-08 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-08 = 09:30
+profile E13 2026-08-09 = null
+dailyTargetHours E13 2026-08-09 = null
+overtimeThresholdHours E13 2026-08-09 = 8.0
+lateThreshold E13 2026-08-09 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-09 = 09:30
+profile E13 2026-08-10 = null
+dailyTargetHours E13 2026-08-10 = null
+overtimeThresholdHours E13 2026-08-10 = 8.0
+lateThreshold E13 2026-08-10 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-10 = 09:30
+profile E13 2026-08-11 = null
+dailyTargetHours E13 2026-08-11 = null
+overtimeThresholdHours E13 2026-08-11 = 8.0
+lateThreshold E13 2026-08-11 = 09:30
+lateThresholdWithCompanyPolicy E13 2026-08-11 = 09:30
+window E1 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-03 = 2026-08-03T12:30:00Z
+window E2 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-03 = 2026-08-03T12:30:00Z
+window E3 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E3 2026-08-03 = 2026-08-03T12:30:00Z
+window E4 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-03 = 2026-08-03T12:30:00Z
+window E5 2026-08-03 = null
+shiftEnd E5 2026-08-03 = null
+window E6 2026-08-03 = null
+shiftEnd E6 2026-08-03 = null
+window E7 2026-08-03 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-03T04:30:00Z, expectedEnd=2026-08-03T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-03 = 2026-08-03T13:30:00Z
+window E8 2026-08-03 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-03T04:30:00Z, expectedEnd=2026-08-03T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-03 = 2026-08-03T14:30:00Z
+window E9 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E9 2026-08-03 = 2026-08-03T12:30:00Z
+window E11 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E11 2026-08-03 = 2026-08-03T12:30:00Z
+window E12 2026-08-03 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-03T03:30:00Z, expectedEnd=2026-08-03T12:30:00Z, graceMinutes=10]
+shiftEnd E12 2026-08-03 = 2026-08-03T12:30:00Z
+window E13 2026-08-03 = null
+shiftEnd E13 2026-08-03 = null
+window E1 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-04 = 2026-08-04T12:30:00Z
+window E2 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-04 = 2026-08-04T12:30:00Z
+window E3 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E3 2026-08-04 = 2026-08-04T12:30:00Z
+window E4 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-04 = 2026-08-04T12:30:00Z
+window E5 2026-08-04 = null
+shiftEnd E5 2026-08-04 = null
+window E6 2026-08-04 = null
+shiftEnd E6 2026-08-04 = null
+window E7 2026-08-04 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-04T04:30:00Z, expectedEnd=2026-08-04T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-04 = 2026-08-04T13:30:00Z
+window E8 2026-08-04 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-04T04:30:00Z, expectedEnd=2026-08-04T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-04 = 2026-08-04T14:30:00Z
+window E9 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E9 2026-08-04 = 2026-08-04T12:30:00Z
+window E11 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E11 2026-08-04 = 2026-08-04T12:30:00Z
+window E12 2026-08-04 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-04T03:30:00Z, expectedEnd=2026-08-04T12:30:00Z, graceMinutes=10]
+shiftEnd E12 2026-08-04 = 2026-08-04T12:30:00Z
+window E13 2026-08-04 = null
+shiftEnd E13 2026-08-04 = null
+window E1 2026-08-05 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-05T03:30:00Z, expectedEnd=2026-08-05T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-05 = 2026-08-05T12:30:00Z
+window E2 2026-08-05 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-05T03:30:00Z, expectedEnd=2026-08-05T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-05 = 2026-08-05T12:30:00Z
+window E3 2026-08-05 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-05T04:30:00Z, expectedEnd=2026-08-05T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-05 = 2026-08-05T14:30:00Z
+window E4 2026-08-05 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-05T03:30:00Z, expectedEnd=2026-08-05T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-05 = 2026-08-05T12:30:00Z
+window E5 2026-08-05 = null
+shiftEnd E5 2026-08-05 = null
+window E6 2026-08-05 = null
+shiftEnd E6 2026-08-05 = null
+window E7 2026-08-05 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-05T04:30:00Z, expectedEnd=2026-08-05T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-05 = 2026-08-05T13:30:00Z
+window E8 2026-08-05 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-05T04:30:00Z, expectedEnd=2026-08-05T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-05 = 2026-08-05T14:30:00Z
+window E9 2026-08-05 = null
+shiftEnd E9 2026-08-05 = null
+window E11 2026-08-05 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-05T05:30:00Z, expectedEnd=2026-08-05T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-05 = 2026-08-05T14:30:00Z
+window E12 2026-08-05 = null
+shiftEnd E12 2026-08-05 = null
+window E13 2026-08-05 = null
+shiftEnd E13 2026-08-05 = null
+window E1 2026-08-06 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-06T03:30:00Z, expectedEnd=2026-08-06T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-06 = 2026-08-06T12:30:00Z
+window E2 2026-08-06 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-06T03:30:00Z, expectedEnd=2026-08-06T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-06 = 2026-08-06T12:30:00Z
+window E3 2026-08-06 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-06T04:30:00Z, expectedEnd=2026-08-06T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-06 = 2026-08-06T14:30:00Z
+window E4 2026-08-06 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-06T03:30:00Z, expectedEnd=2026-08-06T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-06 = 2026-08-06T12:30:00Z
+window E5 2026-08-06 = null
+shiftEnd E5 2026-08-06 = null
+window E6 2026-08-06 = null
+shiftEnd E6 2026-08-06 = null
+window E7 2026-08-06 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-06T04:30:00Z, expectedEnd=2026-08-06T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-06 = 2026-08-06T13:30:00Z
+window E8 2026-08-06 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-06T04:30:00Z, expectedEnd=2026-08-06T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-06 = 2026-08-06T14:30:00Z
+window E9 2026-08-06 = null
+shiftEnd E9 2026-08-06 = null
+window E11 2026-08-06 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-06T05:30:00Z, expectedEnd=2026-08-06T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-06 = 2026-08-06T14:30:00Z
+window E12 2026-08-06 = null
+shiftEnd E12 2026-08-06 = null
+window E13 2026-08-06 = null
+shiftEnd E13 2026-08-06 = null
+window E1 2026-08-07 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-07T03:30:00Z, expectedEnd=2026-08-07T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-07 = 2026-08-07T12:30:00Z
+window E2 2026-08-07 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-07T03:30:00Z, expectedEnd=2026-08-07T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-07 = 2026-08-07T12:30:00Z
+window E3 2026-08-07 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-07T04:30:00Z, expectedEnd=2026-08-07T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-07 = 2026-08-07T14:30:00Z
+window E4 2026-08-07 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-07T03:30:00Z, expectedEnd=2026-08-07T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-07 = 2026-08-07T12:30:00Z
+window E5 2026-08-07 = null
+shiftEnd E5 2026-08-07 = null
+window E6 2026-08-07 = null
+shiftEnd E6 2026-08-07 = null
+window E7 2026-08-07 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-07T04:30:00Z, expectedEnd=2026-08-07T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-07 = 2026-08-07T13:30:00Z
+window E8 2026-08-07 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-07T04:30:00Z, expectedEnd=2026-08-07T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-07 = 2026-08-07T14:30:00Z
+window E9 2026-08-07 = null
+shiftEnd E9 2026-08-07 = null
+window E11 2026-08-07 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-07T05:30:00Z, expectedEnd=2026-08-07T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-07 = 2026-08-07T14:30:00Z
+window E12 2026-08-07 = null
+shiftEnd E12 2026-08-07 = null
+window E13 2026-08-07 = null
+shiftEnd E13 2026-08-07 = null
+window E1 2026-08-08 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-08T03:30:00Z, expectedEnd=2026-08-08T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-08 = 2026-08-08T12:30:00Z
+window E2 2026-08-08 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-08T03:30:00Z, expectedEnd=2026-08-08T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-08 = 2026-08-08T12:30:00Z
+window E3 2026-08-08 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-08T04:30:00Z, expectedEnd=2026-08-08T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-08 = 2026-08-08T14:30:00Z
+window E4 2026-08-08 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-08T03:30:00Z, expectedEnd=2026-08-08T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-08 = 2026-08-08T12:30:00Z
+window E5 2026-08-08 = null
+shiftEnd E5 2026-08-08 = null
+window E6 2026-08-08 = null
+shiftEnd E6 2026-08-08 = null
+window E7 2026-08-08 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-08T04:30:00Z, expectedEnd=2026-08-08T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-08 = 2026-08-08T13:30:00Z
+window E8 2026-08-08 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-08T04:30:00Z, expectedEnd=2026-08-08T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-08 = 2026-08-08T14:30:00Z
+window E9 2026-08-08 = null
+shiftEnd E9 2026-08-08 = null
+window E11 2026-08-08 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-08T05:30:00Z, expectedEnd=2026-08-08T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-08 = 2026-08-08T14:30:00Z
+window E12 2026-08-08 = null
+shiftEnd E12 2026-08-08 = null
+window E13 2026-08-08 = null
+shiftEnd E13 2026-08-08 = null
+window E1 2026-08-09 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-09T03:30:00Z, expectedEnd=2026-08-09T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-09 = 2026-08-09T12:30:00Z
+window E2 2026-08-09 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-09T03:30:00Z, expectedEnd=2026-08-09T12:30:00Z, graceMinutes=10]
+shiftEnd E2 2026-08-09 = 2026-08-09T12:30:00Z
+window E3 2026-08-09 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-09T04:30:00Z, expectedEnd=2026-08-09T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-09 = 2026-08-09T14:30:00Z
+window E4 2026-08-09 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-09T03:30:00Z, expectedEnd=2026-08-09T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-09 = 2026-08-09T12:30:00Z
+window E5 2026-08-09 = null
+shiftEnd E5 2026-08-09 = null
+window E6 2026-08-09 = null
+shiftEnd E6 2026-08-09 = null
+window E7 2026-08-09 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-09T04:30:00Z, expectedEnd=2026-08-09T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-09 = 2026-08-09T13:30:00Z
+window E8 2026-08-09 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-09T04:30:00Z, expectedEnd=2026-08-09T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-09 = 2026-08-09T14:30:00Z
+window E9 2026-08-09 = null
+shiftEnd E9 2026-08-09 = null
+window E11 2026-08-09 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-09T05:30:00Z, expectedEnd=2026-08-09T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-09 = 2026-08-09T14:30:00Z
+window E12 2026-08-09 = null
+shiftEnd E12 2026-08-09 = null
+window E13 2026-08-09 = null
+shiftEnd E13 2026-08-09 = null
+window E1 2026-08-10 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-10T03:30:00Z, expectedEnd=2026-08-10T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-10 = 2026-08-10T12:30:00Z
+window E2 2026-08-10 = ShiftWindow[shiftName=QA Night, expectedStart=2026-08-10T16:30:00Z, expectedEnd=2026-08-11T00:30:00Z, graceMinutes=15]
+shiftEnd E2 2026-08-10 = 2026-08-11T00:30:00Z
+window E3 2026-08-10 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-10T04:30:00Z, expectedEnd=2026-08-10T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-10 = 2026-08-10T14:30:00Z
+window E4 2026-08-10 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-10T03:30:00Z, expectedEnd=2026-08-10T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-10 = 2026-08-10T12:30:00Z
+window E5 2026-08-10 = null
+shiftEnd E5 2026-08-10 = null
+window E6 2026-08-10 = null
+shiftEnd E6 2026-08-10 = null
+window E7 2026-08-10 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-10T04:30:00Z, expectedEnd=2026-08-10T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-10 = 2026-08-10T13:30:00Z
+window E8 2026-08-10 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-10T04:30:00Z, expectedEnd=2026-08-10T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-10 = 2026-08-10T14:30:00Z
+window E9 2026-08-10 = null
+shiftEnd E9 2026-08-10 = null
+window E11 2026-08-10 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-10T05:30:00Z, expectedEnd=2026-08-10T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-10 = 2026-08-10T14:30:00Z
+window E12 2026-08-10 = null
+shiftEnd E12 2026-08-10 = null
+window E13 2026-08-10 = null
+shiftEnd E13 2026-08-10 = null
+window E1 2026-08-11 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-11T03:30:00Z, expectedEnd=2026-08-11T12:30:00Z, graceMinutes=10]
+shiftEnd E1 2026-08-11 = 2026-08-11T12:30:00Z
+window E2 2026-08-11 = ShiftWindow[shiftName=QA Night, expectedStart=2026-08-11T16:30:00Z, expectedEnd=2026-08-12T00:30:00Z, graceMinutes=15]
+shiftEnd E2 2026-08-11 = 2026-08-12T00:30:00Z
+window E3 2026-08-11 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-11T04:30:00Z, expectedEnd=2026-08-11T14:30:00Z, graceMinutes=0]
+shiftEnd E3 2026-08-11 = 2026-08-11T14:30:00Z
+window E4 2026-08-11 = ShiftWindow[shiftName=QA General, expectedStart=2026-08-11T03:30:00Z, expectedEnd=2026-08-11T12:30:00Z, graceMinutes=10]
+shiftEnd E4 2026-08-11 = 2026-08-11T12:30:00Z
+window E5 2026-08-11 = null
+shiftEnd E5 2026-08-11 = null
+window E6 2026-08-11 = null
+shiftEnd E6 2026-08-11 = null
+window E7 2026-08-11 = ShiftWindow[shiftName=QA B Shift, expectedStart=2026-08-11T04:30:00Z, expectedEnd=2026-08-11T13:30:00Z, graceMinutes=0]
+shiftEnd E7 2026-08-11 = 2026-08-11T13:30:00Z
+window E8 2026-08-11 = ShiftWindow[shiftName=QA Flex, expectedStart=2026-08-11T04:30:00Z, expectedEnd=2026-08-11T14:30:00Z, graceMinutes=0]
+shiftEnd E8 2026-08-11 = 2026-08-11T14:30:00Z
+window E9 2026-08-11 = null
+shiftEnd E9 2026-08-11 = null
+window E11 2026-08-11 = ShiftWindow[shiftName=QA Other Tenant, expectedStart=2026-08-11T05:30:00Z, expectedEnd=2026-08-11T14:30:00Z, graceMinutes=0]
+shiftEnd E11 2026-08-11 = 2026-08-11T14:30:00Z
+window E12 2026-08-11 = null
+shiftEnd E12 2026-08-11 = null
+window E13 2026-08-11 = null
+shiftEnd E13 2026-08-11 = null
+weeklyOffToday E1 = [6, 7]
+weeklyOffToday E2 = [6, 7]
+weeklyOffToday E3 = [3]
+weeklyOffToday E4 = [6]
+weeklyOffToday E5 = [7]
+weeklyOffToday E6 = [6, 7]
+weeklyOffToday E7 = [5, 6]
+weeklyOffToday E8 = [3]
+weeklyOffToday E9 = [7]
+weeklyOffToday E11 = [2]
+weeklyOffToday E12 = [2]
+weeklyOffToday E13 = [6, 7]

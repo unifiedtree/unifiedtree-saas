@@ -1,5 +1,6 @@
 package com.hrms.api.attendance;
 
+import com.hrms.attendance.service.EffectiveShiftResolver;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -32,15 +33,12 @@ public class ShiftHeadcount {
             SELECT cur.shift_policy_id AS shift_policy_id, count(*) AS people
               FROM hrms.employees e
               JOIN LATERAL (
-                    SELECT a.shift_policy_id FROM attendance.employee_shift_assignments a
-                     WHERE a.tenant_id = e.tenant_id AND a.employee_id = e.id AND a.effective_from <= :today
-                       AND (a.effective_to IS NULL OR a.effective_to >= :today)
-                     ORDER BY a.effective_from DESC, a.created_at DESC LIMIT 1
+                    %s
               ) cur ON true
              WHERE e.tenant_id = :tenant AND e.company_id = :company
                AND e.employment_status NOT IN ('TERMINATED', 'RESIGNED', 'RETIRED', 'EXITED')
              GROUP BY cur.shift_policy_id
-            """;
+            """.formatted(EffectiveShiftResolver.scheduleAssignment("e.tenant_id", "e.id", ":today"));
 
     private final NamedParameterJdbcTemplate jdbc;
 
