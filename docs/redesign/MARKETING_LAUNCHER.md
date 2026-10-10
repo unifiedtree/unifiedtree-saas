@@ -36,11 +36,16 @@ unset (production today) nothing runs: no tile, no button, **zero** calls (check
 3. Click → `POST /v1/sso/marketing/handoff {tenantId, companyId}` → a single-use ticket valid 60 seconds. On the
    account path an expired account token (401) is refreshed once and the handoff retried. When the API refuses
    (`NOT_A_MEMBER`, `MARKETING_NOT_ENTITLED`…) and there is no account sign-in to fall back to, that refusal is shown.
-4. The tab goes to `${VITE_MARKETING_APP_URL}/auth/unifiedtree/callback#ticket=<ticket>` — Marketing's real callback
-   (`profitera/frontend/src/app/auth/unifiedtree/callback`). The ticket is only ever in the **fragment**: never in a
-   query string, a server log, a Referer, storage or a log line. Marketing reads it, removes it from the address bar,
-   and redeems it server-to-server (`POST /v1/internal/marketing/sso/redeem`); Java re-checks membership, company
-   access and entitlement, and a ticket works once.
+4. The tab goes to `${VITE_MARKETING_APP_URL}/auth/unifiedtree/callback#ticket=<ticket>&launch=<nonce>` — Marketing's
+   real callback (`profitera/frontend/src/app/auth/unifiedtree/callback`). The ticket is only ever in the **fragment**:
+   never in a query string, a server log, a Referer, storage or a log line. Marketing reads it, removes it from the
+   address bar, and redeems it server-to-server (`POST /v1/internal/marketing/sso/redeem`); Java re-checks membership,
+   company access and entitlement, and a ticket works once.
+   Just before leaving, the launcher sets the cookie `ut_mkt_launch=<nonce>` (`Domain=.unifiedtree.com`, `Path=/`,
+   `Max-Age=120`, `Secure`, `SameSite=Lax`; host-only and without `Secure` on local http). `<nonce>` is 32 fresh random
+   bytes (base64url, 43 characters) per click. Marketing's callback continues without the "Continue to Marketing"
+   button only when the cookie and the fragment's `launch` match; a link planted with someone else's ticket cannot set
+   that cookie in this browser, so it still stops at the button (login CSRF). No cookie is set when the handoff fails.
 
 Code: `apps/platform/src/core/marketing/` (`marketingLauncher.ts` logic, `useMarketingLauncher.ts` state,
 `MarketingLaunch.tsx` tile, button and chooser); used in `pages/Modules.tsx` and `layouts/BusinessShell.tsx`.
@@ -88,15 +93,17 @@ sign-in page has the same behaviour; the launcher refreshes at most once per pag
    `GET /v1/sso/marketing/companies` (200, workspace bearer, no `X-Company-Id`) and **no**
    `POST /v1/accounts/auth/refresh`. Repeat after signing in through the **website**: same result.
 2. Click it: one `POST /v1/sso/marketing/handoff` (200), then the tab is on
-   `https://marketing.unifiedtree.com/auth/unifiedtree/callback` (the fragment is removed at once). Press Continue →
-   Marketing opens for that company.
+   `https://marketing.unifiedtree.com/auth/unifiedtree/callback` (the fragment is removed at once). DevTools →
+   Application → Cookies: `ut_mkt_launch` on `.unifiedtree.com`. Marketing opens for that company with no Continue
+   button (a Marketing build without the launch check still shows it: press Continue).
 3. Go back and click again: a new ticket each time; Marketing's logs never show a ticket in a request URL.
 4. A member of a company **without** Marketing: no tile. Suspend the pilot's entitlement and click: "This company
    doesn't have Marketing…". Sign out and sign in as someone else in the same tab: only their companies show.
 5. A build without the variable (today's): no tile and no refresh/SSO request at all.
 
 ## Tests
-- Unit (vitest, `src/core/marketing/*.test.ts(x)`): URL rule, fragment-only URL, refresh/companies/handoff calls and
+- Unit (vitest, `src/core/marketing/*.test.ts(x)`): URL rule, fragment-only URL, the launch nonce and cookie
+  (Domain only on `*.unifiedtree.com`, none when the handoff fails), refresh/companies/handoff calls and
   the token each carries, visibility rules, single-flight session, every refusal's message, no ticket in any log; the
   workspace-token path through the real `apiJson` (direct sign-in with no account cookie, no account refresh, no
   `X-Company-Id`), the older-API fallback (403/404/405), and the session reset on sign-out.

@@ -76,6 +76,9 @@ export function useMarketingLauncher(): MarketingLauncher {
     openMarketing({
       sessions: marketingSessions, fetchImpl: doFetch, origin, email, tenantId, companyId,
       navigate: (url) => window.location.assign(url),
+      writeCookie: (cookie) => { document.cookie = cookie },
+      random: crypto,
+      page: window.location,
     }).catch((e: unknown) => {
       setBusyId(null)
       setError(e instanceof MarketingLaunchError ? e.code : 'UNKNOWN')

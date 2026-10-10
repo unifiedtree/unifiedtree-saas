@@ -1,13 +1,15 @@
 // The Marketing launcher: when the tile shows, the calls it makes (and the token each one carries), the URL the
-// browser goes to (the ticket in the fragment only) and the plain message for every refusal.
+// browser goes to (the ticket and the launch nonce in the fragment only), the launch cookie and the plain message for
+// every refusal.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setAccessToken } from '@unifiedtree/sdk'
 import { HttpError, companyHeaderFor, setCompanyHeader } from '@/core/api/client'
 import {
-  MARKETING_APP_ORIGIN, MARKETING_CALLBACK_PATH, MarketingLaunchError, createAccountSessionStore, createMarketingTicket,
-  fetchMarketingChoices, isRetryable, launchPlan, launcherEnabled, loadMarketingChoices, marketingCallbackUrl,
-  marketingCompanies, marketingErrorMessage, openMarketing, parseMarketingAppUrl, refreshAccountSession, refusalCode,
-  type FetchLike, type MarketingErrorCode, type MarketingWorkspaceChoice, type WorkspaceApi,
+  LAUNCH_COOKIE, MARKETING_APP_ORIGIN, MARKETING_CALLBACK_PATH, MarketingLaunchError, createAccountSessionStore,
+  createMarketingTicket, fetchMarketingChoices, isRetryable, launchCookie, launchNonce, launchPlan, launcherEnabled,
+  loadMarketingChoices, marketingCallbackUrl, marketingCompanies, marketingErrorMessage, openMarketing,
+  parseMarketingAppUrl, refreshAccountSession, refusalCode,
+  type FetchLike, type MarketingErrorCode, type MarketingWorkspaceChoice, type RandomSource, type WorkspaceApi,
 } from './marketingLauncher'
 import { marketingSessions, resetMarketingSession } from './useMarketingLauncher'
 
@@ -32,6 +34,13 @@ const login = (email = ME, token = 'acct-token-1') => [200, { accessToken: token
 const header = (c: Call, name: string) => new Headers(c.init.headers).get(name)
 /** An API from before the workspace-token change: it refuses this page's workspace token (hasRole('ACCOUNT_USER')). */
 const olderApi: WorkspaceApi = async () => { throw new HttpError('Access Denied', 403, { status: 403, error: 'Forbidden', message: 'Access Denied' }) }
+
+/** Fills every byte with one value: 0xfb is "+/" in base64, so the nonce shows both URL-safe swaps. */
+const fixedRandom = (byte = 0xfb): RandomSource => ({ getRandomValues: <T>(a: T) => { (a as unknown as Uint8Array).fill(byte); return a } })
+const NONCE = `${'-_v7'.repeat(10)}-_s`
+const BUSINESS_PAGE = { hostname: 'acme.unifiedtree.com', protocol: 'https:' }
+/** openMarketing's browser side: a recording cookie writer, a random source and this page's address. */
+const browser = (page = BUSINESS_PAGE, random: RandomSource = fixedRandom()) => ({ writeCookie: vi.fn(), random, page })
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -68,19 +77,26 @@ describe('VITE_MARKETING_APP_URL', () => {
 })
 
 describe('the URL the browser goes to', () => {
-  it('is Marketing’s callback with the ticket in the fragment, and nothing in a query string', () => {
-    const url = marketingCallbackUrl('https://marketing.unifiedtree.com', TICKET)
-    expect(url).toBe(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}`)
+  it('is Marketing’s callback with the ticket and the launch nonce in the fragment, and nothing in a query string', () => {
+    const url = marketingCallbackUrl('https://marketing.unifiedtree.com', TICKET, NONCE)
+    expect(url).toBe(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}&launch=${NONCE}`)
     expect(MARKETING_CALLBACK_PATH).toBe('/auth/unifiedtree/callback')
     const parsed = new URL(url)
     expect(parsed.search).toBe('')
     expect(parsed.pathname).toBe(MARKETING_CALLBACK_PATH)
-    // Marketing reads it as new URLSearchParams(hash).get('ticket')
-    expect(new URLSearchParams(parsed.hash.replace(/^#/, '')).get('ticket')).toBe(TICKET)
+    // Marketing reads it as new URLSearchParams(hash).get('ticket') / .get('launch')
+    const fragment = new URLSearchParams(parsed.hash.replace(/^#/, ''))
+    expect(fragment.get('ticket')).toBe(TICKET)
+    expect(fragment.get('launch')).toBe(NONCE)
   })
   it('refuses a ticket Marketing would not accept (or one that could add parameters)', () => {
     for (const bad of ['short', `${TICKET}&next=x`, `${TICKET}#x`, `${TICKET}?x`, 'a'.repeat(513), 'tick et with spaces 123']) {
-      expect(() => marketingCallbackUrl('https://m.example.com', bad), bad).toThrow(MarketingLaunchError)
+      expect(() => marketingCallbackUrl('https://m.example.com', bad, NONCE), bad).toThrow(MarketingLaunchError)
+    }
+  })
+  it('refuses a launch nonce that is not 43 base64url characters', () => {
+    for (const bad of ['', NONCE.slice(1), `${NONCE}A`, `${NONCE.slice(1)}=`, `${NONCE.slice(1)}+`, `${NONCE.slice(1)}/`, `${NONCE.slice(3)}&x=`]) {
+      expect(() => marketingCallbackUrl('https://m.example.com', TICKET, bad), bad).toThrow(MarketingLaunchError)
     }
   })
 })
@@ -236,7 +252,7 @@ describe('the account session is refreshed as rarely as possible (each refresh r
 describe('opening Marketing (an older API: the account sign-in)', () => {
   const opts = (impl: FetchLike, navigate: (u: string) => void) => ({
     sessions: createAccountSessionStore(impl), fetchImpl: impl, origin: 'https://marketing.unifiedtree.com',
-    email: ME, tenantId: TENANT, companyId: CO, navigate, workspaceApi: olderApi,
+    email: ME, tenantId: TENANT, companyId: CO, navigate, workspaceApi: olderApi, ...browser(),
   })
   it('gets a ticket for the company and goes to the callback with it in the fragment (same tab)', async () => {
     const f = fakeFetch(login(), [200, { ticket: TICKET, expiresAt: '2026-10-09T10:00:00Z' }])
@@ -245,7 +261,7 @@ describe('opening Marketing (an older API: the account sign-in)', () => {
     await openMarketing(opts(f.impl, navigate))
     expect(navigate).toHaveBeenCalledTimes(1)
     const url = navigate.mock.calls[0][0] as string
-    expect(url).toBe(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}`)
+    expect(url).toBe(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}&launch=${NONCE}`)
     expect(url.split('#')[0]).not.toContain(TICKET)
     // The ticket is never written anywhere: no log line carries it, and no request URL does
     for (const spy of logs) expect(spy).not.toHaveBeenCalled()
@@ -275,6 +291,81 @@ describe('opening Marketing (an older API: the account sign-in)', () => {
     const navigate = vi.fn()
     await expect(openMarketing(opts(fakeFetch(login(), [503, null]).impl, navigate))).rejects.toMatchObject({ code: 'UNAVAILABLE' })
     expect(navigate).not.toHaveBeenCalled()
+  })
+})
+
+// Marketing's callback continues without a button only when the fragment's launch matches the ut_mkt_launch cookie.
+describe('the launch proof (no button on Marketing’s callback)', () => {
+  const ticketApi = (async () => ({ ticket: TICKET })) as WorkspaceApi
+  const open = (b: ReturnType<typeof browser>, navigate = vi.fn(), workspaceApi: WorkspaceApi = ticketApi, impl: FetchLike = fakeFetch().impl) =>
+    openMarketing({ sessions: createAccountSessionStore(impl), fetchImpl: impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate, workspaceApi, ...b })
+  const fragment = (url: string) => new URLSearchParams(new URL(url).hash.replace(/^#/, ''))
+
+  it('the URL carries the ticket and the launch nonce, both in the fragment only', async () => {
+    const navigate = vi.fn()
+    await open(browser(), navigate)
+    expect(navigate).toHaveBeenCalledTimes(1)
+    const url = navigate.mock.calls[0][0] as string
+    expect(url).toBe(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}&launch=${NONCE}`)
+    expect(new URL(url).search).toBe('')
+    expect(fragment(url).get('ticket')).toBe(TICKET)
+    expect(fragment(url).get('launch')).toBe(NONCE)
+  })
+  it('on a business subdomain: the same nonce in the cookie, with Path=/, Max-Age=120, Secure, SameSite=Lax and Domain=.unifiedtree.com, set before the page leaves', async () => {
+    const b = browser()
+    const navigate = vi.fn()
+    await open(b, navigate)
+    expect(b.writeCookie).toHaveBeenCalledTimes(1)
+    const cookie = b.writeCookie.mock.calls[0][0] as string
+    expect(cookie).toBe(`ut_mkt_launch=${NONCE}; Path=/; Max-Age=120; Secure; SameSite=Lax; Domain=.unifiedtree.com`)
+    expect(cookie.split('; ')[0]).toBe(`${LAUNCH_COOKIE}=${fragment(navigate.mock.calls[0][0] as string).get('launch')}`)
+    expect(b.writeCookie.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0])
+  })
+  it('localhost: host-only (no Domain), and no Secure over plain http', async () => {
+    const http = browser({ hostname: 'localhost', protocol: 'http:' })
+    await open(http)
+    expect(http.writeCookie).toHaveBeenCalledWith(`ut_mkt_launch=${NONCE}; Path=/; Max-Age=120; SameSite=Lax`)
+    const https = browser({ hostname: 'localhost', protocol: 'https:' })
+    await open(https)
+    expect(https.writeCookie).toHaveBeenCalledWith(`ut_mkt_launch=${NONCE}; Path=/; Max-Age=120; Secure; SameSite=Lax`)
+  })
+  it('the parent Domain only on a real *.unifiedtree.com host', () => {
+    for (const hostname of ['unifiedtree.com', 'evilunifiedtree.com', 'acme.unifiedtree.com.evil.example', '127.0.0.1', 'acme.localhost']) {
+      expect(launchCookie(NONCE, { hostname, protocol: 'https:' }), hostname).not.toContain('Domain=')
+    }
+    expect(launchCookie(NONCE, { hostname: 'ACME.UnifiedTree.com', protocol: 'https:' })).toMatch(/; Domain=\.unifiedtree\.com$/)
+  })
+  it('the nonce: 43 base64url characters (no padding), new on every launch', async () => {
+    expect(launchNonce(fixedRandom())).toBe(NONCE)
+    const nonces: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const b = browser(BUSINESS_PAGE, globalThis.crypto)
+      const navigate = vi.fn()
+      await open(b, navigate)
+      const launch = fragment(navigate.mock.calls[0][0] as string).get('launch') ?? ''
+      expect(launch).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(b.writeCookie.mock.calls[0][0]).toMatch(new RegExp(`^ut_mkt_launch=${launch};`))
+      nonces.push(launch)
+    }
+    expect(new Set(nonces).size).toBe(3)
+  })
+  it('the handoff fails: no cookie and no navigation', async () => {
+    const refused = (status: number, message: string) => (async () => { throw new HttpError(message, status, { status, message }) }) as WorkspaceApi
+    const cases: Array<[MarketingErrorCode, WorkspaceApi, FetchLike]> = [
+      ['UNAVAILABLE', refused(503, 'Service Unavailable'), fakeFetch().impl],
+      ['RATE_LIMITED', refused(429, 'Too Many Requests'), fakeFetch().impl],
+      ['NOT_A_MEMBER', refused(403, 'NOT_A_MEMBER: not a member of this workspace'), fakeFetch([401, null]).impl],
+      ['SIGNED_OUT', olderApi, fakeFetch([401, null]).impl],
+      ['MARKETING_NOT_ENTITLED', olderApi, fakeFetch(login(), [403, { message: 'MARKETING_NOT_ENTITLED: refused' }]).impl],
+      ['BAD_TICKET', (async () => ({ ticket: 'x&next=y' })) as WorkspaceApi, fakeFetch().impl],
+    ]
+    for (const [code, api, impl] of cases) {
+      const b = browser()
+      const navigate = vi.fn()
+      await expect(open(b, navigate, api, impl), code).rejects.toMatchObject({ code })
+      expect(b.writeCookie, code).not.toHaveBeenCalled()
+      expect(navigate, code).not.toHaveBeenCalled()
+    }
   })
 })
 
@@ -326,7 +417,7 @@ describe('signed in on the business subdomain (workspace token, no account cooki
     })
     const navigate = vi.fn()
     // CO2 is the selector's company: the chooser opens another one, named only in the body
-    await openMarketing({ sessions: createAccountSessionStore(f.impl), fetchImpl: f.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate })
+    await openMarketing({ sessions: createAccountSessionStore(f.impl), fetchImpl: f.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate, ...browser() })
     expect(f.paths()).toEqual([`/v1/sso/marketing/handoff Bearer ${WS}`])
     const [c] = f.calls
     expect(c.init.method).toBe('POST')
@@ -334,7 +425,7 @@ describe('signed in on the business subdomain (workspace token, no account cooki
     expect(JSON.parse(String(c.init.body))).toEqual({ tenantId: TENANT, companyId: CO })
     expect(header(c, 'X-Company-Id')).toBeNull()
     expect(c.url).not.toContain(TICKET)
-    expect(navigate).toHaveBeenCalledWith(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}`)
+    expect(navigate).toHaveBeenCalledWith(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}&launch=${NONCE}`)
     expect(new URL(navigate.mock.calls[0][0] as string).search).toBe('')
   })
 
@@ -363,12 +454,12 @@ describe('signed in on the business subdomain (workspace token, no account cooki
       const choices = await loadMarketingChoices(sessions, f.impl, ME)
       expect(marketingCompanies(choices, TENANT, CO)).toHaveLength(1)
       const navigate = vi.fn()
-      await openMarketing({ sessions, fetchImpl: f.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate })
+      await openMarketing({ sessions, fetchImpl: f.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate, ...browser() })
       expect(f.paths()).toEqual([
         `/v1/sso/marketing/companies Bearer ${WS}`, '/v1/accounts/auth/refresh -', '/v1/sso/marketing/companies Bearer acct-token-1',
         `/v1/sso/marketing/handoff Bearer ${WS}`, '/v1/sso/marketing/handoff Bearer acct-token-1',
       ])
-      expect(navigate).toHaveBeenCalledWith(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}`)
+      expect(navigate).toHaveBeenCalledWith(`https://marketing.unifiedtree.com/auth/unifiedtree/callback#ticket=${TICKET}&launch=${NONCE}`)
       for (const c of f.calls.filter((x) => x.url.includes('/v1/sso/'))) expect(header(c, 'X-Company-Id')).toBeNull()
     })
   }
@@ -383,7 +474,7 @@ describe('signed in on the business subdomain (workspace token, no account cooki
     const choices = await loadMarketingChoices(sessions, f.impl, ME)
     expect(launchPlan(marketingCompanies(choices, TENANT, CO))).toEqual({ kind: 'none' })
     const navigate = vi.fn()
-    await expect(openMarketing({ sessions, fetchImpl: f.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate }))
+    await expect(openMarketing({ sessions, fetchImpl: f.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate, ...browser() }))
       .rejects.toMatchObject({ code: 'NOT_A_MEMBER' })
     expect(navigate).not.toHaveBeenCalled()
   })
@@ -404,12 +495,12 @@ describe('signed in on the business subdomain (workspace token, no account cooki
 
     const signedOut = api((path) => (path === '/v1/accounts/auth/refresh' ? login() : [401, null]))
     const navigate = vi.fn()
-    await expect(openMarketing({ sessions: createAccountSessionStore(signedOut.impl), fetchImpl: signedOut.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate }))
+    await expect(openMarketing({ sessions: createAccountSessionStore(signedOut.impl), fetchImpl: signedOut.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate, ...browser() }))
       .rejects.toMatchObject({ code: 'SIGNED_OUT' })
     expect(signedOut.paths()).toEqual([`/v1/sso/marketing/handoff Bearer ${WS}`, '/v1/canonical-auth/refresh -'])
 
     const badTicket = api(() => [200, { ticket: 'x&next=y' }])
-    await expect(openMarketing({ sessions: createAccountSessionStore(badTicket.impl), fetchImpl: badTicket.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate }))
+    await expect(openMarketing({ sessions: createAccountSessionStore(badTicket.impl), fetchImpl: badTicket.impl, origin: 'https://marketing.unifiedtree.com', email: ME, tenantId: TENANT, companyId: CO, navigate, ...browser() }))
       .rejects.toMatchObject({ code: 'BAD_TICKET' })
     expect(navigate).not.toHaveBeenCalled()
   })

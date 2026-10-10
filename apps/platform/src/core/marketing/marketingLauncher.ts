@@ -14,8 +14,11 @@
  *     sets that cookie; no sign-in on the business subdomain does (Google included).
  *  2. GET /v1/sso/marketing/companies — this workspace's companies the person may enter, each marked with Marketing.
  *  3. POST /v1/sso/marketing/handoff {tenantId, companyId} — a single-use ticket, valid 60 seconds.
- *  4. The browser goes to {Marketing}/auth/unifiedtree/callback#ticket=… (the ticket in the fragment only, never a
- *     query string, so it never reaches a server log or a Referer). Marketing redeems it server-to-server.
+ *  4. The browser goes to {Marketing}/auth/unifiedtree/callback#ticket=…&launch=… (the ticket in the fragment only,
+ *     never a query string, so it never reaches a server log or a Referer). Marketing redeems it server-to-server.
+ *     `launch` is a fresh random nonce, also set as the cookie ut_mkt_launch (Domain=.unifiedtree.com, 2 minutes).
+ *     Marketing's callback continues without a button only when the two match: a link planted with someone else's
+ *     ticket cannot set that cookie in this browser, so it still stops at the button (login CSRF).
  *
  * The account token and the ticket are kept in memory only: never stored, logged or put in a query string.
  */
@@ -26,6 +29,12 @@ export const MARKETING_CALLBACK_PATH = '/auth/unifiedtree/callback'
 
 /** What Marketing's callback accepts as a ticket (UnifiedTreeCallback.tsx: TICKET_RE). */
 const TICKET_RE = /^[A-Za-z0-9._~-]{16,512}$/
+
+/** The cookie Marketing's callback compares with the fragment's `launch`. */
+export const LAUNCH_COOKIE = 'ut_mkt_launch'
+
+/** 32 random bytes as base64url, no padding. */
+const LAUNCH_RE = /^[A-Za-z0-9_-]{43}$/
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
 
@@ -52,10 +61,32 @@ export const MARKETING_APP_ORIGIN: string | null = parseMarketingAppUrl(
   import.meta.env.VITE_MARKETING_APP_URL, !import.meta.env.PROD,
 )
 
-/** Where the browser goes with a ticket: the fragment carries it, nothing else does. */
-export function marketingCallbackUrl(origin: string, ticket: string): string {
+/** Where the browser goes with a ticket: the fragment carries it and the launch nonce, nothing else does. */
+export function marketingCallbackUrl(origin: string, ticket: string, launch: string): string {
   if (!TICKET_RE.test(ticket)) throw new MarketingLaunchError('BAD_TICKET')
-  return `${origin}${MARKETING_CALLBACK_PATH}#ticket=${encodeURIComponent(ticket)}`
+  if (!LAUNCH_RE.test(launch)) throw new MarketingLaunchError('UNKNOWN')
+  return `${origin}${MARKETING_CALLBACK_PATH}#ticket=${encodeURIComponent(ticket)}&launch=${launch}`
+}
+
+/** crypto (only getRandomValues). */
+export type RandomSource = Pick<Crypto, 'getRandomValues'>
+
+/** A fresh launch nonce: 32 random bytes as base64url (43 characters of [A-Za-z0-9_-]). */
+export function launchNonce(random: RandomSource): string {
+  const bytes = random.getRandomValues(new Uint8Array(32))
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/**
+ * The ut_mkt_launch cookie for a nonce, 2 minutes. On a *.unifiedtree.com page it goes on the parent domain, so that
+ * Marketing's origin gets it; anywhere else (local testing) it stays host-only, and is Secure only over https.
+ */
+export function launchCookie(nonce: string, page: Pick<Location, 'hostname' | 'protocol'>): string {
+  let cookie = `${LAUNCH_COOKIE}=${nonce}; Path=/; Max-Age=120`
+  if (page.protocol === 'https:') cookie += '; Secure'
+  cookie += '; SameSite=Lax'
+  if (page.hostname.toLowerCase().endsWith('.unifiedtree.com')) cookie += '; Domain=.unifiedtree.com'
+  return cookie
 }
 
 // ── The API's shapes (MarketingAccessService) ───────────────────────────────
@@ -390,6 +421,12 @@ export interface OpenMarketingOptions {
   companyId: string
   /** Same-tab navigation (window.location.assign). */
   navigate: (url: string) => void
+  /** Sets one cookie (document.cookie = …). */
+  writeCookie: (cookie: string) => void
+  /** The launch nonce's randomness (crypto). */
+  random: RandomSource
+  /** This page's address (window.location): the cookie's Domain and Secure. */
+  page: Pick<Location, 'hostname' | 'protocol'>
   /** The workspace-token caller (apiJson). */
   workspaceApi?: WorkspaceApi
 }
@@ -397,9 +434,11 @@ export interface OpenMarketingOptions {
 /**
  * Get a ticket for the company and go to Marketing with it: with this page's workspace token, else (an older API)
  * with the account sign-in. The server checks membership, company access and entitlement now; a refusal throws its
- * MarketingLaunchError and nothing navigates.
+ * MarketingLaunchError, no launch cookie is set and nothing navigates.
  */
-export async function openMarketing({ sessions, fetchImpl, origin, email, tenantId, companyId, navigate, workspaceApi = apiJson }: OpenMarketingOptions): Promise<void> {
+export async function openMarketing({
+  sessions, fetchImpl, origin, email, tenantId, companyId, navigate, writeCookie, random, page, workspaceApi = apiJson,
+}: OpenMarketingOptions): Promise<void> {
   let ticket: string | null
   try {
     ticket = await createWorkspaceMarketingTicket(workspaceApi, tenantId, companyId)
@@ -415,7 +454,10 @@ export async function openMarketing({ sessions, fetchImpl, origin, email, tenant
     ticket = (await attempt(false)) ?? (await attempt(true))
   }
   if (!ticket) throw new MarketingLaunchError('SIGNED_OUT')
-  navigate(marketingCallbackUrl(origin, ticket))
+  const launch = launchNonce(random)
+  const url = marketingCallbackUrl(origin, ticket, launch)
+  writeCookie(launchCookie(launch, page))
+  navigate(url)
 }
 
 /** Failures worth a "Try again" (a refusal is not: trying again gets the same answer). */
