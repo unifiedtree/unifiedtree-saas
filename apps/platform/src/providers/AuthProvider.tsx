@@ -4,6 +4,7 @@ import type { AuthUser, AuthTenant, ModuleInfo } from '@unifiedtree/sdk'
 import { useAuthStore as useOldStore } from '@/core/auth/authStore'
 import { queryClient } from '@/providers/QueryProvider'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
+import { resetMarketingSession } from '@/core/marketing/useMarketingLauncher'
 import {
   WelcomeSplash,
   WelcomeOnScreen,
@@ -115,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (prevStatusRef.current === 'authenticated') {
         try { queryClient.clear() } catch { /* best-effort */ }
         try { useNotificationStore.getState().reset() } catch { /* best-effort */ }
+        resetMarketingSession()
       }
       oldLogout()
     }
