@@ -241,7 +241,7 @@ final class RosterImportCheck {
                     }
                     switch (res) {
                         case WO -> {
-                            if (p != null && !employment(p, d, beforeJoining, afterLeaving)) tokens.set(i, RosterContract.WO);
+                            if (p != null && !outsideEmployment(p, d, beforeJoining, afterLeaving)) tokens.set(i, RosterContract.WO);
                         }
                         case PH -> {
                             if (!facts.holidays().containsKey(d)) noHoliday.computeIfAbsent(d, k -> new ArrayList<>()).add(r.rowNo());
@@ -265,7 +265,7 @@ final class RosterImportCheck {
                                 + raw.trim().toUpperCase(Locale.ROOT) + " (" + String.join(", ", shifts.stream().map(PlanFacts.Shift::name).toList())
                                 + "). Give each its own code in Shift Schedules."));
                     }
-                } else if (p != null && !employment(p, d, beforeJoining, afterLeaving)) {
+                } else if (p != null && !outsideEmployment(p, d, beforeJoining, afterLeaving)) {
                     PlanFacts.Shift s = shifts.get(0);
                     tokens.set(i, s.id().toString());
                     usedShifts.add(s.id());
@@ -329,8 +329,8 @@ final class RosterImportCheck {
                 members, cells, shiftIds, new ArrayList<>(designations));
     }
 
-    /** False (and the date noted) when the person isn't employed on {@code d}: before joining or after leaving. */
-    private static boolean employment(PlannerPerson p, LocalDate d, List<LocalDate> before, List<LocalDate> after) {
+    /** True (and the date noted) when the person isn't employed on {@code d}: before joining or after leaving. */
+    private static boolean outsideEmployment(PlannerPerson p, LocalDate d, List<LocalDate> before, List<LocalDate> after) {
         if (p.joinedOn() != null && d.isBefore(p.joinedOn())) {
             before.add(d);
             return true;
