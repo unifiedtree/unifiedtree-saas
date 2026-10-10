@@ -28,7 +28,7 @@ import { guardedGo } from '@/design/shell/navigationGuard'
 import { pageTitleLabel } from '@/design/shell/pageTitle'
 import {
   SETTINGS_MODULE, clearLastPages, fitRail, isMorePath, isSettingsPath, litPage, matchPath, moduleTarget, owningModules,
-  preferencesTarget, railGroups, readLastPages, readPinned, routeOf, saveLastPage, savePinned, settingsActive, settingsPages,
+  railGroups, readLastPages, readPinned, routeOf, saveLastPage, savePinned, settingsActive, settingsPages,
   type NavPage, type VisibleModule,
 } from '@/design/shell/navModel'
 import { mayPunchFromWeb } from '@/modules/hrms/attendance/webpunch/punchPromptRules'
@@ -95,7 +95,7 @@ export function PlatformShell() {
   // Bumped to show a page again from scratch (after its "?q=" filter is cleared).
   const [outletKey, setOutletKey] = useState(0)
   // Goes up when the person switches company (CurrentCompany): the page is shown again from scratch.
-  const companyVersion = useCurrentCompany().version
+  const { version: companyVersion, company: currentCompany } = useCurrentCompany()
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
@@ -209,7 +209,6 @@ export function PlatformShell() {
     navigate(to)
   })
   const goHome = () => goTo(home.path, () => { setRailVia(null); saveRailVia(null) })
-  const openPreferences = () => goTo(preferencesTarget(accessCtx))
   const signOut = () => { saveRailVia(null); clearLastPages(); logout() }
   const togglePin = () => { const next = !pinned; setPinned(next); savePinned(next) }
 
@@ -236,17 +235,16 @@ export function PlatformShell() {
   const moreCount = overflowSections.reduce((n, g) => n + g.rows.length, 0)
   // Org chart (P-ORG): for every role with HRMS; the server limits what each person sees.
   const canSeeOrgChart = accessCtx.modules.includes('hrms') && (accessCtx.self || accessCtx.has('hrms.employee.read'))
+  // Owner, 10 Oct 2026: no "My workspace" or "My profile" rows (the card's "View my profile" is enough).
   const mySpace: MoreSection = {
     key: 'my-space', label: 'My space', rows: [
-      { key: 'my-workspace', label: 'My workspace', icon: 'grid', href: home.path, onClick: goHome },
-      { key: 'my-profile', label: 'My profile', icon: 'user', href: '/profile', active: matchPath(pathname, '/profile'), onClick: () => goTo('/profile') },
       ...(canSeeOrgChart ? [{ key: 'org-chart', label: 'Org chart', icon: 'users', href: '/hrms/org-chart', active: matchPath(pathname, '/hrms/org-chart'), onClick: () => goTo('/hrms/org-chart') }] : []),
       { key: 'all-apps', label: 'All apps', icon: 'layers', href: '/modules', active: matchPath(pathname, '/modules'), onClick: () => goTo('/modules') },
     ],
   }
+  // Owner, 10 Oct 2026: no "Preferences" row in More.
   const settingsSection: MoreSection = {
-    key: 'settings', label: 'Settings', rows: [
-      { key: 'preferences', label: 'Preferences', icon: 'settings', href: preferencesTarget(accessCtx), active: settingsScope, onClick: openPreferences },
+    key: 'settings', label: 'Help', rows: [
       { key: 'help', label: 'Help & support', icon: 'help', onClick: () => { setMoreOpen(false); setMobileOpen(false); setHelpOpen(true) } },
     ],
   }
@@ -299,6 +297,7 @@ export function PlatformShell() {
           onItem={(key) => { const m = byKey(key); if (m) openModule(m) }}
           onIntent={intent}
           listRef={listRef}
+          brand={currentCompany ? <CompanySwitcher variant="rail" mark={<WorkspaceTile />} workspaceName={workspaceName} /> : undefined}
         >
           {moreOpen && (
             <MorePanel onClose={() => setMoreOpen(false)} sections={[mySpace, ...overflowSections, settingsSection]} {...moreContent} />
@@ -310,7 +309,6 @@ export function PlatformShell() {
             tabs={topTabs}
             pill={topTabs ? null : pillFor()}
             chip={chip}
-            company={<CompanySwitcher />}
             search={
               <TopBarSearch
                 onOpen={(path) => openInApp(navigate, path)}
