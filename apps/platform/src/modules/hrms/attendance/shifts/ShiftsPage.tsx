@@ -1,9 +1,10 @@
 // /hrms/shifts — Shifts & overtime (P-ATT-PLAN; prototype PgTime a-shifts, and EmpTime e-shift for My Shift). The
 // page's own views are inline pill tabs (DECISIONS 21), kept in ?tab= with today's names and order:
-//   people with attendance.team.read: Shift Schedules · Roster · Overtime · Shift Requests
+//   people with attendance.team.read: Shift Schedules · Roster · Shift Planner · Overtime · Shift Requests
 //   everyone else (attendance.checkin.self): My Shift
-// Shift planning (rotations, a week grid to plan) is on hold (DECISIONS 21).
-import { useCallback, useMemo, useState } from 'react'
+// Shift Planner (shift planning Phase 1, design §1.6) shows with attendance.roster.plan or attendance.roster.publish.
+// ?add=1 opens the new-shift drawer (the planner's "Add custom shift" opens this page in a new tab).
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
@@ -21,13 +22,22 @@ import { RosterView, type RosterRow } from './RosterView'
 import { OvertimeView } from './OvertimeView'
 import { RequestsView } from './RequestsView'
 import { MyShiftView } from './MyShiftView'
+import { PlannerHome } from '../planner/PlannerHome'
 import { hhmm } from './shiftModel'
 import '../analytics/analytics.css'
 
-type Tab = 'schedules' | 'roster' | 'overtime' | 'requests' | 'myshift'
+type Tab = 'schedules' | 'roster' | 'planner' | 'overtime' | 'requests' | 'myshift'
 const HR_TABS: { key: Tab; label: string }[] = [
   { key: 'schedules', label: 'Shift Schedules' }, { key: 'roster', label: 'Roster' }, { key: 'overtime', label: 'Overtime' }, { key: 'requests', label: 'Shift Requests' },
 ]
+const PLANNER_TAB: { key: Tab; label: string } = { key: 'planner', label: 'Shift Planner' }
+/** The page's tabs: the Planner sits after Roster for people who plan or publish rosters. */
+function tabsFor(canTeam: boolean, canPlanner: boolean) {
+  const base = canTeam ? HR_TABS : [{ key: 'myshift' as Tab, label: 'My Shift' }]
+  if (!canPlanner) return base
+  const at = base.findIndex((t) => t.key === 'roster')
+  return at >= 0 ? [...base.slice(0, at + 1), PLANNER_TAB, ...base.slice(at + 1)] : [...base, PLANNER_TAB]
+}
 interface ScheduleRow { employeeId: string; employeeName: string; shiftPolicyId?: string | null; shiftName?: string | null; since?: string | null; joinedOn?: string | null }
 
 export function ShiftsPage() {
@@ -39,7 +49,10 @@ export function ShiftsPage() {
   const canShiftAdmin = usePermission('attendance.workforce.admin')
   const canPolicy = usePermission('attendance.policy.manage')
   const canSelf = usePermission(P.ATTENDANCE_CHECKIN_SELF)
-  const tabs = canTeam ? HR_TABS : [{ key: 'myshift' as Tab, label: 'My Shift' }]
+  const canPlan = usePermission(P.ATTENDANCE_ROSTER_PLAN)
+  const canPublishRoster = usePermission(P.ATTENDANCE_ROSTER_PUBLISH)
+  const canPlanner = canPlan || canPublishRoster
+  const tabs = tabsFor(canTeam, canPlanner)
   const tab: Tab = tabs.find((t) => t.key === params.get('tab'))?.key ?? tabs[0].key
   const [addKey, setAddKey] = useState(0)
   const [rosterFilter, setRosterFilter] = useState('all')
@@ -87,6 +100,15 @@ export function ShiftsPage() {
     setParams(sp, { replace: true })
   }
   const seePeople = (shiftId: string) => { setRosterFilter(shiftId); setTab('roster') }
+  // ?add=1: open the new-shift drawer once, then drop the flag.
+  const wantsAdd = params.get('add') === '1'
+  useEffect(() => {
+    if (!wantsAdd) return
+    const sp = new URLSearchParams(params)
+    sp.delete('add')
+    if (canShiftAdmin && canTeam) { sp.set('tab', 'schedules'); setAddKey((k) => k + 1) }
+    setParams(sp, { replace: true })
+  }, [wantsAdd, canShiftAdmin, canTeam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mine = myShift.data
   const subs: Record<Tab, string> = {
@@ -94,12 +116,13 @@ export function ShiftsPage() {
     roster: 'Who works which shift today. Move someone to another shift from a date you choose.',
     overtime: 'Hours worked beyond the shift. Approved overtime is recorded, not paid.',
     requests: 'Requests from employees who want to move shifts.',
+    planner: 'Plan rosters from rotation patterns, check coverage and publish them.',
     myshift: mine?.shiftName
       ? `You work the ${mine.shiftName} shift, ${hhmm(mine.startTime)} to ${hhmm(mine.endTime)}${mine.gracePeriodMinutes ? ` with ${mine.gracePeriodMinutes} minutes’ grace` : ''}. Pick another shift to ask HR to move you.`
       : 'Your work timing, and requests to change it.',
   }
 
-  if (!canTeam && !canSelf) {
+  if (!canTeam && !canSelf && !canPlanner) {
     return (
       <PageFrame label="Shifts & overtime">
         <PageHeader eyebrow="Attendance & time" title="Shifts & overtime" />
@@ -110,7 +133,7 @@ export function ShiftsPage() {
 
   return (
     <PageFrame label="Shifts & overtime" className="apl-page">
-      <PageHeader eyebrow="Attendance & time" title={canTeam ? 'Shifts & overtime' : 'My Shift'} sub={subs[tab]}
+      <PageHeader eyebrow="Attendance & time" title={canTeam || tab === 'planner' ? 'Shifts & overtime' : 'My Shift'} sub={subs[tab]}
         actions={canTeam && canShiftAdmin ? <Button icon="plus" onClick={() => { setTab('schedules'); setAddKey((k) => k + 1) }}>Add shift</Button> : undefined} />
       {tabs.length > 1 && (
         <PillTabs label="Shifts & overtime views" semantics="tabs" className="apl-tabs" activeKey={tab} onSelect={setTab}
@@ -128,6 +151,7 @@ export function ShiftsPage() {
         <OvertimeView today={today} companyId={companyId} canTeam={canTeam} canDecide={canOt} canPolicy={canPolicy} canSelf={canSelf} who={who} />
       )}
       {tab === 'requests' && <RequestsView canApprove={canApprove} shifts={shifts} />}
+      {tab === 'planner' && <PlannerHome companyId={companyId} />}
       {tab === 'myshift' && (
         <MyShiftView shifts={shifts} shiftsLoading={policies.isLoading || !companyId} mine={mine} today={today} canSelf={canSelf}
           minimumMinutes={rules.data?.minimumMinutes ?? null} />

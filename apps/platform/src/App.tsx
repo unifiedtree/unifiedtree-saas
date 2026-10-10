@@ -106,6 +106,8 @@ const AnalyticsRoute = lazyPage(() => import('@/modules/hrms/attendance/Analytic
 // Shift planning, Phase 1: a roster imported from Excel (Import → Validate → Preview → Apply); it lands as a draft.
 const RosterImportPage = lazyPage(() => import('@/modules/hrms/attendance/planner/import/RosterImportPage').then(m => ({ default: m.RosterImportPage })))
 const ShiftsRoute = lazyPage(() => import('@/modules/hrms/attendance/ShiftsRoute').then(m => ({ default: m.ShiftsRoute })))
+// Shift planning, Phase 1: the planner (a new roster, or one saved before). The Excel import page joins at /hrms/shifts/planner/import.
+const PlannerPage = lazyPage(() => import('@/modules/hrms/attendance/planner/PlannerPage').then(m => ({ default: m.PlannerPage })))
 // Face station (V143.95): the setup page, and the station itself (its own sign-in, outside the shell).
 const FaceStationsPage = lazyPage(() => import('@/modules/hrms/attendance/station/FaceStationsPage').then(m => ({ default: m.FaceStationsPage })))
 const StationPage = lazyPage(() => import('@/modules/hrms/attendance/station/StationPage').then(m => ({ default: m.StationPage })))
@@ -712,6 +714,22 @@ export const ROUTE_TREE = (
           element={
             <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
               <ModuleGate moduleKey="hrms"><ShiftsRoute /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/shifts/planner/new"
+          element={
+            <RouteGuard anyOf={[P.ATTENDANCE_ROSTER_PLAN, P.ATTENDANCE_ROSTER_PUBLISH]}>
+              <ModuleGate moduleKey="hrms"><PlannerPage /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/shifts/planner/:rosterId"
+          element={
+            <RouteGuard anyOf={[P.ATTENDANCE_ROSTER_PLAN, P.ATTENDANCE_ROSTER_PUBLISH]}>
+              <ModuleGate moduleKey="hrms"><PlannerPage /></ModuleGate>
             </RouteGuard>
           }
         />
