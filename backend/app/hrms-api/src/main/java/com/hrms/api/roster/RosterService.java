@@ -19,6 +19,7 @@ import com.hrms.api.roster.RosterContract.ScheduleChange;
 import com.hrms.api.roster.RosterContract.StaffingIn;
 import com.hrms.api.roster.RosterStore.Cell;
 import com.hrms.api.roster.RosterStore.Header;
+import com.hrms.api.roster.plan.RosterPlanner;
 import com.hrms.core.exception.FeatureNotReady;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.unifiedtree.rbac.company.CompanyAccessService;
@@ -130,10 +131,10 @@ public class RosterService implements RosterDrafts {
         tables.require();
         UUID tenant = TenantContext.requireTenantId();
         Header h = load(tenant, id, false);
-        reader(jwt, h);
+        Actor a = reader(jwt, h);
         List<MemberIn> members = store.members(tenant, id);
         PlanRequest in = planRequest(h, members, store.staffing(tenant, id), rows(h, members, store.cells(tenant, id)));
-        return planning.plan(tenant, h.companyId(), in).map(PlanResponse::checks).orElseThrow(FeatureNotReady::new);
+        return planning.plan(tenant, h.companyId(), in, a).map(PlanResponse::checks).orElseThrow(FeatureNotReady::new);
     }
 
     @Transactional(readOnly = true)
@@ -260,7 +261,7 @@ public class RosterService implements RosterDrafts {
         List<MemberIn> members = store.members(tenant, h.id());
         List<StaffingIn> staffing = store.staffing(tenant, h.id());
         List<RowIn> rows = rows(h, members, store.cells(tenant, h.id()));
-        PlanResponse planned = planning.plan(tenant, h.companyId(), planRequest(h, members, staffing, rows)).orElse(null);
+        PlanResponse planned = planning.plan(tenant, h.companyId(), planRequest(h, members, staffing, rows), a).orElse(null);
         RosterSummary s = summary(h, a, plan);
         RosterHeader header = new RosterHeader(s.id(), s.companyId(), s.name(), s.periodType(), s.startDate(), s.endDate(),
                 s.departmentId(), s.departmentName(), s.branchId(), s.branchName(), s.status(), s.source(),
@@ -348,10 +349,8 @@ public class RosterService implements RosterDrafts {
         if (body == null) throw RosterErrors.invalid("Send the roster.");
         if (body.periodType() == null) throw RosterErrors.rangeInvalid("Choose a month or a date range.");
         LocalDate start = body.startDate(), end = body.endDate();
-        if (start == null || end == null) throw RosterErrors.rangeInvalid("Choose the start and end dates.");
-        if (end.isBefore(start)) throw RosterErrors.rangeInvalid("The end date is before the start date.");
+        RosterPlanner.requireValidRange(start, end);   // the one range rule (store, import, preview)
         int days = (int) ChronoUnit.DAYS.between(start, end) + 1;
-        if (days > MAX_DAYS) throw RosterErrors.rangeInvalid("A roster covers at most " + MAX_DAYS + " days.");
         if (body.periodType() == PeriodType.MONTH
                 && (start.getDayOfMonth() != 1 || !end.equals(start.withDayOfMonth(start.lengthOfMonth())))) {
             throw RosterErrors.rangeInvalid("A monthly roster runs from the first to the last day of one month.");

@@ -37,15 +37,18 @@ public class RosterPlanning {
         this.loader = loader;
     }
 
-    /** Generate + coverage + checks for {@code in}; empty while the planner is not in the build. */
-    public Optional<PlanResponse> plan(UUID tenantId, UUID companyId, PlanRequest in) {
+    /**
+     * Generate + coverage + checks for {@code in}, as {@code actor} plans it (a department planner gets check E5
+     * for anyone outside the departments they head); empty while the planner is not in the build.
+     */
+    public Optional<PlanResponse> plan(UUID tenantId, UUID companyId, PlanRequest in, Actor actor) {
         PlanFactsLoader l = loader.getIfAvailable();
         if (l == null) return notBuilt("no PlanFactsLoader bean");
         java.util.List<UUID> people = in.members() == null ? java.util.List.of()
                 : in.members().stream().map(RosterContract.MemberIn::employeeId).toList();
         try {
             PlanFacts facts = l.load(tenantId, companyId, in.rosterId(), people, in.startDate().minusDays(1), in.endDate());
-            return Optional.ofNullable(RosterPlanner.plan(in, facts));
+            return Optional.ofNullable(RosterPlanner.plan(in, facts == null ? null : facts.withPlanner(actor)));
         } catch (UnsupportedOperationException stub) {
             return notBuilt(stub.getMessage());
         }

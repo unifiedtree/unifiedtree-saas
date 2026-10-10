@@ -115,7 +115,7 @@ public class RosterPublisher {
         List<StaffingIn> staffing = store.staffing(tenant, id);
         List<Cell> cells = store.cells(tenant, id);
         Optional<PlanResponse> plan = planning.plan(tenant, h.companyId(),
-                RosterService.planRequest(h, members, staffing, RosterService.rows(h, members, cells)));
+                RosterService.planRequest(h, members, staffing, RosterService.rows(h, members, cells)), a);
         if (plan.isPresent() && plan.get().checks() != null) {
             Checks checks = plan.get().checks();
             if (checks.errors() != null && !checks.errors().isEmpty()) throw RosterChecksException.errors(checks);

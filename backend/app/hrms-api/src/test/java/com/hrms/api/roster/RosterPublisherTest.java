@@ -405,6 +405,9 @@ class RosterPublisherTest {
         RosterDetail d = rosters.create(head, COMPANY, body(DEPT, null, List.of(RAVI), List.of(row(RAVI, x -> a.id().toString()))));
         assertTrue(d.roster().canEdit());
         assertFalse(d.roster().canPublish());
+        Actor asked = planning.askedAs.get(planning.askedAs.size() - 1);
+        assertFalse(asked.companyWide(), "the planner is told who plans, so E5 shows people outside their departments");
+        assertEquals(Set.of(DEPT), asked.headedDepartmentIds());
         HrmsException ex = assertThrows(HrmsException.class,
                 () -> publisher.publish(head, d.roster().id(), new PublishBody(d.roster().lockVersion(), true, null)));
         assertEquals("ROSTER_SCOPE", ex.getErrorCode());

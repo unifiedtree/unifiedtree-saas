@@ -3,6 +3,7 @@ package com.hrms.api.roster;
 import com.hrms.api.attendance.TeamEmployeeScope;
 import com.hrms.api.roster.RosterContract.MySchedule;
 import com.hrms.api.roster.RosterContract.ScheduleDay;
+import com.hrms.api.roster.plan.RosterPlanner;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.employee.entity.Employee;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -18,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +38,6 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class ScheduleController {
 
-    static final int MAX_DAYS = 62;
 
     private final EffectiveSchedule schedule;
     private final RosterTables tables;
@@ -82,9 +81,9 @@ public class ScheduleController {
         return schedule.days(TenantContext.requireTenantId(), list, from, to);
     }
 
+    /** At most 62 days: the planner's one range rule ({@link RosterPlanner#requireValidRange}). */
     static void range(LocalDate from, LocalDate to) {
-        if (from == null || to == null || to.isBefore(from)) throw RosterErrors.rangeInvalid("Choose a period with the end on or after the start.");
-        if (ChronoUnit.DAYS.between(from, to) + 1 > MAX_DAYS) throw RosterErrors.rangeInvalid("Choose at most " + MAX_DAYS + " days.");
+        RosterPlanner.requireValidRange(from, to);
     }
 
     private static String name(Employee e) {

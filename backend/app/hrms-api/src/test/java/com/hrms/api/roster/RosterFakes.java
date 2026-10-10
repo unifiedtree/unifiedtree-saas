@@ -85,8 +85,10 @@ final class RosterFakes {
         Function<PlanRequest, Optional<PlanResponse>> answer = in -> Optional.empty();
         final List<PlanRequest> asked = new ArrayList<>();
         Planning() { super(null); }
-        @Override public Optional<PlanResponse> plan(UUID tenantId, UUID companyId, PlanRequest in) {
+        final List<Actor> askedAs = new ArrayList<>();
+        @Override public Optional<PlanResponse> plan(UUID tenantId, UUID companyId, PlanRequest in, Actor actor) {
             asked.add(in);
+            askedAs.add(actor);
             return answer.apply(in);
         }
     }
