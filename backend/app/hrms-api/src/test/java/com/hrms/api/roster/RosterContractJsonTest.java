@@ -6,8 +6,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.hrms.api.roster.RosterContract.*;
-import com.hrms.api.roster.plan.PlanFacts;
-import com.hrms.api.roster.plan.RosterPlanner;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -135,7 +133,7 @@ class RosterContractJsonTest {
 
     @Test
     void theStubsRefuseRatherThanGuess() {
-        assertThrows(UnsupportedOperationException.class, () -> RosterPlanner.plan(null, new PlanFacts()));
+        // RosterPlanner is built now (package B); RosterPlannerTest covers it.
         assertThrows(UnsupportedOperationException.class, () -> new BaselineScheduleAdapter()
                 .between(UUID.randomUUID(), List.of(EMP), LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)));
     }
