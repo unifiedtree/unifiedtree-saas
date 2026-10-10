@@ -1,4 +1,4 @@
-/* global process, console */
+/* global process, console, fetch */
 // Live check (shift planning Phase 1, package D — the web planner): as the owner, plan a roster through the wizard,
 // set a staffing number, generate, edit two cells and see coverage follow, save the draft, publish it with its
 // warnings ticked, and read it back. Captures page errors and API 4xx/5xx on the way.

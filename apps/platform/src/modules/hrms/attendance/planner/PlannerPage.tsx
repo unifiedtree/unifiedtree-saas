@@ -98,7 +98,7 @@ function Planner({ rosterId }: { rosterId: string | null }) {
     .filter((h) => h.active !== false && h.holidayDate >= state.startDate && h.holidayDate <= state.endDate)
     .sort((a, b) => a.holidayDate.localeCompare(b.holidayDate)), [hol1.data, hol2.data, y1, y2, state.startDate, state.endDate])
   const periodOk = !rangeProblem(state.startDate, state.endDate)
-  const people = usePlannerPeople({ companyId, departmentId: state.departmentId, branchId: state.branchId, from: state.startDate, to: state.endDate }, { enabled: scope.canPlan && periodOk })
+  const people = usePlannerPeople({ companyId, departmentId: state.departmentId, branchId: state.branchId, from: state.startDate, to: state.endDate }, { enabled: scope.canPlan && periodOk && (scope.companyWide || !!state.departmentId) })
   const peopleMap = useMemo(() => new Map((people.data ?? []).map((p) => [p.employeeId, p])), [people.data])
   const groups = useMemo(() => groupPeople(people.data ?? []), [people.data])
   const designationNames = useMemo(() => new Map(groups.map((g) => [g.designationId, g.name])), [groups])
@@ -164,7 +164,7 @@ function Planner({ rosterId }: { rosterId: string | null }) {
   const [previewError, setPreviewError] = useState<unknown>(null)
   useEffect(() => {
     const s = latest.current
-    if (!s.generated || s.rev <= s.planRev || !companyId || rangeProblem(s.startDate, s.endDate)) return
+    if (!s.generated || s.rev <= s.planRev || !companyId || rangeProblem(s.startDate, s.endDate)) { setUpdating(false); return }
     const ctrl = new AbortController()
     const body = planRequest(s), rev = s.rev
     setUpdating(true)

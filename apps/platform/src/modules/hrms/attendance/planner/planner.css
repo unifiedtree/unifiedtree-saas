@@ -177,12 +177,10 @@
   background: var(--u-sf, #fff); border-right: 1px solid var(--u-ln, #E3E9E6); border-bottom: 1px solid var(--u-ln2, #EDF1EF);
 }
 .spl-grid__table thead .spl-grid__corner { z-index: 3; left: 0; font-size: 12px; color: var(--u-ink3, #60706A); background: var(--u-sf2, #F7F9F8); }
-.spl-grid__row th.spl-grid__name { display: table-cell; }
 .spl-grid__who { display: grid; min-width: 0; padding-right: 26px; }
 .spl-grid__person { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spl-grid__meta { font-size: 11.5px; color: var(--u-ink3, #60706A); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spl-grid[data-compact] .spl-grid__meta { display: none; }
-.spl-grid__name { position: sticky; }
 .spl-grid__rowmenu { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--u-ink3, #60706A); cursor: pointer; opacity: 0; }
 .spl-grid__row:hover .spl-grid__rowmenu, .spl-grid__rowmenu:focus-visible, .spl-grid__rowmenu[aria-expanded="true"] { opacity: 1; }
 .spl-grid__rowmenu:hover { background: var(--u-hv, #F0F4F2); color: var(--u-ink, #0E1B16); }
@@ -221,7 +219,7 @@
 .spl-cell__badge { position: absolute; top: 0; right: 0; min-width: 13px; height: 11px; padding: 0 2px; font-size: 7.5px; border-radius: 3px; z-index: 1; }
 .spl-cell__dot { position: absolute; left: 4px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--u-gd, #C8912E); box-shadow: 0 0 0 1px var(--u-sf, #fff); }
 .spl-grid__total { min-width: 38px; padding: 0 6px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--u-ink2, #4A5A54); border-bottom: 1px solid var(--u-ln2, #EDF1EF); }
-.spl-grid__total:first-of-type, .spl-grid__row .spl-grid__total:nth-last-child(4), thead .spl-grid__total--head:nth-last-child(4) { border-left: 1px solid var(--u-ln, #E3E9E6); }
+.spl-grid__total--first { border-left: 1px solid var(--u-ln, #E3E9E6); }
 .spl-grid__total--head { font-size: 11.5px; color: var(--u-ink3, #60706A); }
 .spl-grid__empty { padding: 28px 12px; text-align: center; color: var(--u-ink3, #60706A); }
 

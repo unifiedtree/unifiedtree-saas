@@ -231,6 +231,6 @@ const isChecks = (v: unknown): v is Checks => !!v && typeof v === 'object' && Ar
 export function checksFromError(e: unknown): Checks | null {
   const p = (e as { payload?: Record<string, unknown> } | null)?.payload
   if (!p || typeof p !== 'object') return null
-  for (const v of [p, p.checks, p.details, p.data]) if (isChecks(v)) return { infos: [], summary: [], ...v }
+  for (const v of [p, p.checks, p.details, p.data]) if (isChecks(v)) return { ...v, infos: v.infos ?? [], summary: v.summary ?? [] }
   return null
 }

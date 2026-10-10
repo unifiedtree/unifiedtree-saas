@@ -6,7 +6,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HttpError } from '@/core/api/client'
-import type { RosterDetail, RosterSummary, RotationTemplate } from '../../api/rosterTypes'
 import { COMPANY, PEOPLE, POLICIES, detail, emp } from './__fixtures__/rosterFixtures'
 
 const perms = new Set<string>()
@@ -15,12 +14,7 @@ const failed = (error: unknown) => ({ data: undefined, isLoading: false, isError
 const mutation = { mutateAsync: async () => ({}), isPending: false }
 const notReady = () => new HttpError('This isn’t switched on yet.', 503, { errorCode: 'FEATURE_NOT_READY' })
 const DEPT = 'dddddddd-0000-0000-0000-000000000001'
-const answers: {
-  detail: ReturnType<typeof ok<RosterDetail>> | ReturnType<typeof failed> | { data: undefined; isLoading: boolean; error: null }
-  rosters: ReturnType<typeof ok<RosterSummary[]>> | ReturnType<typeof failed>
-  templates: ReturnType<typeof ok<RotationTemplate[]>> | ReturnType<typeof failed>
-  headId: string | null
-} = { detail: { data: undefined, isLoading: false, error: null }, rosters: ok([]), templates: ok([]), headId: null }
+const answers: { detail: unknown; rosters: unknown; templates: unknown; headId: string | null } = { detail: { data: undefined, isLoading: false, error: null }, rosters: ok([]), templates: ok([]), headId: null }
 
 vi.mock('@unifiedtree/sdk', async () => ({ ...(await vi.importActual<object>('@unifiedtree/sdk')), usePermission: (c: string) => perms.has(c) }))
 vi.mock('../../company/CurrentCompany', () => ({ useCurrentCompany: () => ({ companyId: COMPANY, company: { id: COMPANY, name: 'Demo' }, companies: [], multi: false, isLoading: false, error: null, version: 0, setCompany: () => {} }) }))

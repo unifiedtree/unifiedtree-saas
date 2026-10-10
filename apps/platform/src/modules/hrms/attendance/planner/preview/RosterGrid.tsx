@@ -98,7 +98,7 @@ const Row = memo(function Row({ row, r, days, shiftMap, sel, active, flash, read
           </td>
         )
       })}
-      {TOTALS.map((t) => <td key={t.key} className="spl-grid__total">{row.totals ? row.totals[t.key] : '–'}</td>)}
+      {TOTALS.map((t, i) => <td key={t.key} className={i ? 'spl-grid__total' : 'spl-grid__total spl-grid__total--first'}>{row.totals ? row.totals[t.key] : '–'}</td>)}
     </tr>
   )
 })
@@ -248,7 +248,7 @@ export function RosterGrid({ view, shifts, label = 'Roster', readOnly = false, c
                 <span className="spl-grid__wd">{d.letter}</span>
               </th>
             ))}
-            {TOTALS.map((t) => <th key={t.key} scope="col" className="spl-grid__total spl-grid__total--head" title={t.title}>{t.label}</th>)}
+            {TOTALS.map((t, i) => <th key={t.key} scope="col" className={`spl-grid__total spl-grid__total--head${i ? '' : ' spl-grid__total--first'}`} title={t.title}>{t.label}</th>)}
           </tr>
         </thead>
         <tbody>
