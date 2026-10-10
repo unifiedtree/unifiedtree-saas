@@ -287,7 +287,8 @@ async function warmUp() {
   const t0 = Date.now()
   let slowest = { url: '', ms: 0 }
   const spec = /(?:\bfrom\s*|\bimport\s*)["'](\/[^"']+)["']/g
-  while (queue.length && Date.now() - t0 < 240_000) {
+  const budget = Number(process.env.RECOVERY_WARMUP_SECONDS || 480) * 1000   // a cold dependency pre-bundle took 4-9 min here
+  while (queue.length && Date.now() - t0 < budget) {
     await Promise.all(queue.splice(0, 8).map(async (u) => {
       if (seen.has(u)) return
       seen.add(u)
