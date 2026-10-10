@@ -424,6 +424,23 @@ class RosterImportServiceTest {
         assertThatThrownBy(() -> service.export(jwt, id, false)).isInstanceOf(FeatureNotReady.class);
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> org.springframework.beans.factory.ObjectProvider<T> none() {
+        return mock(org.springframework.beans.factory.ObjectProvider.class);   // getIfAvailable() → null
+    }
+
+    @Test
+    void withoutShiftPlanningsBeansTheAppStillStartsAndTheImportIsNotReady() {
+        RosterImportService bare = new RosterImportService(none(), none(), none(), none(), none(), none(), none(), none());
+        assertThatThrownBy(() -> bare.validate(jwt, good(), january, null)).isInstanceOf(FeatureNotReady.class);
+        assertThatThrownBy(() -> bare.apply(jwt, good(), january, null, null, null)).isInstanceOf(FeatureNotReady.class);
+        assertThatThrownBy(() -> bare.template(jwt, january)).isInstanceOf(FeatureNotReady.class);
+        assertThatThrownBy(() -> bare.export(jwt, UUID.randomUUID(), false)).isInstanceOf(FeatureNotReady.class);
+        // and with the tables there but the store's drafts missing, apply still refuses cleanly
+        RosterImportService noDrafts = new RosterImportService(scope, null, rosters, store, tables, planning, people, loader);
+        assertThatThrownBy(() -> noDrafts.apply(jwt, good(), january, null, null, null)).isInstanceOf(FeatureNotReady.class);
+    }
+
     @Test
     void fileNamesKeepOnlySafeCharacters() {
         assertThat(RosterImportService.fileName("October 2026 · Technical/HVAC")).isEqualTo("October 2026 Technical HVAC");

@@ -33,6 +33,7 @@ import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * The shift roster's Excel import, template and export (design §1.7, endpoints 20–23).
@@ -69,7 +71,8 @@ import java.util.UUID;
  *       again.</li>
  * </ul>
  * Who may do it is the planner's rule ({@link PlannerScope}): a department head only for the departments they head.
- * Every call answers FEATURE_NOT_READY while shift planning's tables are missing.
+ * Every call answers FEATURE_NOT_READY while shift planning's tables are missing, or while its beans
+ * ({@code com.hrms.api.roster}) are not part of the running build.
  */
 @Service
 public class RosterImportService {
@@ -79,28 +82,62 @@ public class RosterImportService {
     /** Empty rows under the people in the template that still offer the code drop-down. */
     static final int TEMPLATE_SPARE_ROWS = 50;
 
-    private final PlannerScope scope;
-    private final RosterDrafts drafts;
-    private final RosterService rosters;
-    private final RosterStore store;
-    private final RosterTables tables;
-    private final RosterPlanning planning;
-    private final PlannerPeople people;
-    private final PlanFactsLoader facts;
+    // Shift planning's own beans (com.hrms.api.roster), looked up when a call needs them: this package is always
+    // scanned (com.hrms.app), theirs only where a profile lists it, and a missing one must never stop the app from
+    // starting. A call that needs one that isn't there answers FEATURE_NOT_READY instead.
+    private final Supplier<PlannerScope> scope;
+    private final Supplier<RosterDrafts> drafts;
+    private final Supplier<RosterService> rosters;
+    private final Supplier<RosterStore> store;
+    private final Supplier<RosterTables> tables;
+    private final Supplier<RosterPlanning> planning;
+    private final Supplier<PlannerPeople> people;
+    private final Supplier<PlanFactsLoader> facts;
 
     @Autowired(required = false)
     private CompanyAccessService companyAccess;
 
-    public RosterImportService(PlannerScope scope, RosterDrafts drafts, RosterService rosters, RosterStore store,
-                               RosterTables tables, RosterPlanning planning, PlannerPeople people, PlanFactsLoader facts) {
-        this.scope = scope;
-        this.drafts = drafts;
-        this.rosters = rosters;
-        this.store = store;
-        this.tables = tables;
-        this.planning = planning;
-        this.people = people;
-        this.facts = facts;
+    @Autowired
+    public RosterImportService(ObjectProvider<PlannerScope> scope, ObjectProvider<RosterDrafts> drafts,
+                               ObjectProvider<RosterService> rosters, ObjectProvider<RosterStore> store,
+                               ObjectProvider<RosterTables> tables, ObjectProvider<RosterPlanning> planning,
+                               ObjectProvider<PlannerPeople> people, ObjectProvider<PlanFactsLoader> facts) {
+        this.scope = scope::getIfAvailable;
+        this.drafts = drafts::getIfAvailable;
+        this.rosters = rosters::getIfAvailable;
+        this.store = store::getIfAvailable;
+        this.tables = tables::getIfAvailable;
+        this.planning = planning::getIfAvailable;
+        this.people = people::getIfAvailable;
+        this.facts = facts::getIfAvailable;
+    }
+
+    /** Tests: the collaborators themselves (any of them may be null = "not in this build"). */
+    RosterImportService(PlannerScope scope, RosterDrafts drafts, RosterService rosters, RosterStore store,
+                        RosterTables tables, RosterPlanning planning, PlannerPeople people, PlanFactsLoader facts) {
+        this.scope = () -> scope;
+        this.drafts = () -> drafts;
+        this.rosters = () -> rosters;
+        this.store = () -> store;
+        this.tables = () -> tables;
+        this.planning = () -> planning;
+        this.people = () -> people;
+        this.facts = () -> facts;
+    }
+
+    private PlannerScope scope() { return need(scope); }
+    private RosterDrafts drafts() { return need(drafts); }
+    private RosterService rosters() { return need(rosters); }
+    private RosterStore store() { return need(store); }
+    private RosterTables tables() { return need(tables); }
+    private RosterPlanning planning() { return need(planning); }
+    private PlannerPeople people() { return need(people); }
+    private PlanFactsLoader facts() { return need(facts); }
+
+    private static <T> T need(Supplier<T> bean) {
+        T t = bean.get();
+        if (t == null) throw new FeatureNotReady();
+        return t;
     }
 
     /** Tests: the company-access check (optional, as everywhere else). */
@@ -147,7 +184,7 @@ public class RosterImportService {
                 s.departmentId(), s.branchId(), c.config(), c.outcome().members(), c.staffing(), c.outcome().cells(),
                 rosterId == null ? null : lockVersion);
         if (rosterId == null) {
-            RosterDetail created = drafts.create(s.companyId(), body, c.actor(), RosterDrafts.SOURCE_IMPORT);
+            RosterDetail created = drafts().create(s.companyId(), body, c.actor(), RosterDrafts.SOURCE_IMPORT);
             log.info("Roster import: draft {} created from '{}' ({} people)", created.roster().id(), file.getOriginalFilename(),
                     c.outcome().members().size());
             return new Applied(created, true);
@@ -155,7 +192,7 @@ public class RosterImportService {
         if (lockVersion == null) {
             throw RosterImportErrors.fileInvalid("Send the draft's lockVersion to replace its days.");
         }
-        RosterDetail replaced = drafts.replace(rosterId, body, c.actor());
+        RosterDetail replaced = drafts().replace(rosterId, body, c.actor());
         log.info("Roster import: draft {} replaced from '{}' ({} people)", rosterId, file.getOriginalFilename(),
                 c.outcome().members().size());
         return new Applied(replaced, false);
@@ -169,7 +206,7 @@ public class RosterImportService {
                    List<StaffingIn> staffing, Actor actor, RosterStore.Header target) {}
 
     Checked check(Jwt jwt, MultipartFile file, Scope s, UUID rosterId) {
-        tables.require();
+        tables().require();
         if (s == null || s.companyId() == null) throw RosterImportErrors.fileInvalid("Choose the company first.");
         RosterPlanner.requireValidRange(s.startDate(), s.endDate());
         // The multipart form may carry companyId outside the query string, where the company-access filter looks.
@@ -180,20 +217,20 @@ public class RosterImportService {
         RosterStore.Header target = null;
         List<StaffingIn> staffing = List.of();
         if (rosterId != null) {
-            target = rosters.load(tenant, rosterId, false);
-            rosters.editor(jwt, target);
+            target = rosters().load(tenant, rosterId, false);
+            rosters().editor(jwt, target);
             requireReplaceable(target, s);
-            staffing = store.staffing(tenant, rosterId);
+            staffing = store().staffing(tenant, rosterId);
         }
 
         RosterSheetParser.ParsedSheet sheet = RosterSheetParser.parse(file == null ? null : file.getOriginalFilename(),
                 bytes(file), s.startDate(), s.endDate());
-        List<PlannerPerson> candidates = people.list(tenant, s.companyId(), null, null, null, s.startDate(), s.endDate());
+        List<PlannerPerson> candidates = people().list(tenant, s.companyId(), null, null, null, s.startDate(), s.endDate());
         RosterImportCheck.Target t = new RosterImportCheck.Target(s.companyId(), s.startDate(), s.endDate(),
                 s.departmentId(), name(tenant, s.departmentId(), null), s.branchId(), name(tenant, null, s.branchId()),
                 actor.companyWide(), actor.headedDepartmentIds() == null ? Set.of() : actor.headedDepartmentIds());
         RosterImportCheck.Matching matching = RosterImportCheck.match(sheet, candidates, t);
-        PlanFacts loaded = facts.load(tenant, s.companyId(), rosterId, matching.employeeIds(), s.startDate().minusDays(1), s.endDate());
+        PlanFacts loaded = facts().load(tenant, s.companyId(), rosterId, matching.employeeIds(), s.startDate().minusDays(1), s.endDate());
         if (loaded == null) throw new FeatureNotReady();
         RosterImportCheck.Outcome outcome = RosterImportCheck.cells(sheet, matching, loaded, t);
         RosterConfig config = config(outcome);
@@ -249,14 +286,14 @@ public class RosterImportService {
     /** Endpoint 20: the S13 sheet with the people in scope filled in and the days empty. */
     @Transactional(readOnly = true)
     public Download template(Jwt jwt, Scope s) {
-        tables.require();
+        tables().require();
         if (s == null || s.companyId() == null) throw RosterImportErrors.fileInvalid("Choose the company first.");
         RosterPlanner.requireValidRange(s.startDate(), s.endDate());
         UUID tenant = TenantContext.requireTenantId();
         Actor actor = planner(jwt, s.companyId(), s.departmentId());
-        List<PlannerPerson> inScope = people.list(tenant, s.companyId(), s.departmentId(), s.branchId(),
+        List<PlannerPerson> inScope = people().list(tenant, s.companyId(), s.departmentId(), s.branchId(),
                 actor.companyWide() ? null : actor.headedDepartmentIds(), s.startDate(), s.endDate());
-        PlanFacts f = facts.load(tenant, s.companyId(), null, List.of(), s.startDate().minusDays(1), s.endDate());
+        PlanFacts f = facts().load(tenant, s.companyId(), null, List.of(), s.startDate().minusDays(1), s.endDate());
         if (f == null) throw new FeatureNotReady();
         int days = RosterSheetParser.days(s.startDate(), s.endDate());
         List<RosterSheetWriter.SheetPerson> rows = new ArrayList<>(inScope.size());
@@ -280,22 +317,22 @@ public class RosterImportService {
      */
     @Transactional(readOnly = true)
     public Download export(Jwt jwt, UUID rosterId, boolean published) {
-        tables.require();
+        tables().require();
         UUID tenant = TenantContext.requireTenantId();
-        RosterStore.Header h = rosters.load(tenant, rosterId, false);
-        Actor actor = rosters.reader(jwt, h);
-        List<MemberIn> members = new ArrayList<>(store.members(tenant, rosterId));
+        RosterStore.Header h = rosters().load(tenant, rosterId, false);
+        Actor actor = rosters().reader(jwt, h);
+        List<MemberIn> members = new ArrayList<>(store().members(tenant, rosterId));
         Map<UUID, Map<LocalDate, String>> tokens = new LinkedHashMap<>();
         if (published) {
             Set<UUID> listed = new LinkedHashSet<>();
             for (MemberIn m : members) listed.add(m.employeeId());
-            for (RosterStore.Day d : store.rosterDays(tenant, rosterId, h.startDate(), false)) {
+            for (RosterStore.Day d : store().rosterDays(tenant, rosterId, h.startDate(), false)) {
                 if (d.date().isAfter(h.endDate())) continue;
                 if (listed.add(d.employeeId())) members.add(new MemberIn(d.employeeId(), 0));
                 tokens.computeIfAbsent(d.employeeId(), k -> new LinkedHashMap<>()).put(d.date(), d.token());
             }
         } else {
-            for (RosterStore.Cell c : store.cells(tenant, rosterId)) {
+            for (RosterStore.Cell c : store().cells(tenant, rosterId)) {
                 tokens.computeIfAbsent(c.employeeId(), k -> new LinkedHashMap<>()).put(c.date(), c.token());
             }
         }
@@ -309,20 +346,20 @@ public class RosterImportService {
             });
             rows.add(new RowIn(m.employeeId(), Arrays.asList(row), List.of()));
         }
-        PlanResponse plan = planning.plan(tenant, h.companyId(), new PlanRequest(h.startDate(), h.endDate(), h.departmentId(),
-                h.branchId(), h.id(), h.config(), members, store.staffing(tenant, rosterId), rows, false, true), actor)
+        PlanResponse plan = planning().plan(tenant, h.companyId(), new PlanRequest(h.startDate(), h.endDate(), h.departmentId(),
+                h.branchId(), h.id(), h.config(), members, store().staffing(tenant, rosterId), rows, false, true), actor)
                 .orElseThrow(FeatureNotReady::new);
-        PlanFacts f = facts.load(tenant, h.companyId(), h.id(), List.of(), h.startDate().minusDays(1), h.endDate());
+        PlanFacts f = facts().load(tenant, h.companyId(), h.id(), List.of(), h.startDate().minusDays(1), h.endDate());
         if (f == null) throw new FeatureNotReady();
 
-        List<RosterSheetWriter.SheetPerson> people = new ArrayList<>(plan.rows().size());
-        for (PlanRow r : plan.rows()) people.add(new RosterSheetWriter.SheetPerson(r.employeeName(), r.employeeCode(),
+        List<RosterSheetWriter.SheetPerson> sheetPeople = new ArrayList<>(plan.rows().size());
+        for (PlanRow r : plan.rows()) sheetPeople.add(new RosterSheetWriter.SheetPerson(r.employeeName(), r.employeeCode(),
                 r.departmentName(), r.designationName(), r.branchName(), exportCodes(r)));
         Map<LocalDate, String> holidays = new LinkedHashMap<>();
         for (PlanDay d : plan.days()) if (d.holidayName() != null) holidays.put(d.date(), d.holidayName());
         String title = "Roster — " + h.name() + (published ? " — published days" : "");
         byte[] bytes = RosterSheetWriter.write(new RosterSheetWriter.Spec(title, h.startDate(), h.endDate(), sheetShifts(f, h.companyId()),
-                uncodedShifts(f, h.companyId()), holidays, people, 0));
+                uncodedShifts(f, h.companyId()), holidays, sheetPeople, 0));
         return new Download(fileName(h.name()) + (published ? " (published)" : "") + ".xlsx", bytes);
     }
 
@@ -345,8 +382,8 @@ public class RosterImportService {
 
     /** The caller as a planner of the company; a department head must name one of their departments. */
     private Actor planner(Jwt jwt, UUID companyId, UUID departmentId) {
-        Actor actor = scope.actor(jwt, companyId);
-        if (!actor.companyWide()) scope.check(actor, departmentId, List.of());
+        Actor actor = scope().actor(jwt, companyId);
+        if (!actor.companyWide()) scope().check(actor, departmentId, List.of());
         return actor;
     }
 
@@ -369,7 +406,7 @@ public class RosterImportService {
     /** A department's and/or branch's name ("Technical · Building 2"), or null. */
     private String name(UUID tenant, UUID departmentId, UUID branchId) {
         if (departmentId == null && branchId == null) return null;
-        return store.scopeName(tenant, departmentId, branchId);
+        return store().scopeName(tenant, departmentId, branchId);
     }
 
     /** A file name from a roster name: letters, digits, spaces, dots, dashes and underscores only. */
