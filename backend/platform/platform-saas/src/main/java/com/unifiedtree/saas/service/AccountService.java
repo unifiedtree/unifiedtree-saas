@@ -1,6 +1,8 @@
 package com.unifiedtree.saas.service;
 
+import com.hrms.core.exception.HrmsException;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
+import com.unifiedtree.auth.mfa.MfaService;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.auth.service.JwtService;
 import com.unifiedtree.auth.service.PasswordService;
@@ -59,11 +61,15 @@ public class AccountService {
 
     private static final SecureRandom RNG = new SecureRandom();
 
+    /** The refusal of a silent sign-in for a login that needs a two-factor code (as Google and SMS sign-in). */
+    static final String TWO_FACTOR_REFUSAL = "USE_PASSWORD_FOR_TWO_FACTOR";
+
     private final JdbcTemplate jdbc;
     private final PasswordService passwords;
     private final JwtService jwt;
     private final AuthService auth;
     private final SaasService saas;
+    private final MfaService mfa;
     private final String baseDomain;
 
     public AccountService(JdbcTemplate jdbc,
@@ -71,12 +77,14 @@ public class AccountService {
                           JwtService jwt,
                           AuthService auth,
                           SaasService saas,
+                          MfaService mfa,
                           @Value("${unifiedtree.base-domain:unifiedtree.com}") String baseDomain) {
         this.jdbc = jdbc;
         this.passwords = passwords;
         this.jwt = jwt;
         this.auth = auth;
         this.saas = saas;
+        this.mfa = mfa;
         this.baseDomain = baseDomain;
     }
 
@@ -290,6 +298,17 @@ public class AccountService {
     }
 
     public WorkspaceSessionResponse createWorkspaceSession(Jwt accountJwt, UUID tenantId) {
+        return createWorkspaceSession(accountJwt, tenantId, false);
+    }
+
+    /**
+     * {@code silent}: the business's own sign-in page exchanging the website's sign-in by itself,
+     * before it shows its form (nobody typed anything; apps/platform silentSignIn.ts). A login that
+     * needs a two-factor code is then refused (403 {@value #TWO_FACTOR_REFUSAL}), as Google and SMS
+     * sign-in refuse it, and the page shows its form, where the code is asked. Not silent (the
+     * website's Enter and its hand-over): exactly as before.
+     */
+    public WorkspaceSessionResponse createWorkspaceSession(Jwt accountJwt, UUID tenantId, boolean silent) {
         UUID accountId = requireAccountId(accountJwt);
         WorkspaceMembership membership = loadMembership(accountId, tenantId);
 
@@ -301,6 +320,7 @@ public class AccountService {
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
         try {
+            if (silent) refuseWhenTwoFactorNeeded(tenantId, membership.authUserId());
             LoginResponse session = auth.issueWorkspaceSession(tenantId, membership.authUserId());
             WorkspaceSummary workspace = workspaceForMembership(membership);
             return new WorkspaceSessionResponse(session, workspace);
@@ -541,6 +561,21 @@ public class AccountService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to this workspace");
         }
         return membership;
+    }
+
+    /**
+     * A sign-in nobody typed never skips the two-factor code (BusinessGoogleSignIn, PhoneSignInRule).
+     * Read in the business, which the caller has bound (rbac and auth are row-level secured).
+     */
+    private void refuseWhenTwoFactorNeeded(UUID tenantId, UUID authUserId) {
+        List<String> roles = jdbc.queryForList("""
+                SELECT r.code FROM rbac.user_roles ur JOIN rbac.roles r ON r.id = ur.role_id
+                 WHERE ur.tenant_id = ? AND ur.user_id = ?
+                """, String.class, tenantId, authUserId);
+        if (mfa.requirementFor(tenantId, authUserId, roles) != MfaService.Requirement.NONE) {
+            throw new HrmsException("Your login uses two-factor sign-in. Sign in with your password.",
+                    HttpStatus.FORBIDDEN, TWO_FACTOR_REFUSAL);
+        }
     }
 
     private AccountCredential loadCredential(String email) {

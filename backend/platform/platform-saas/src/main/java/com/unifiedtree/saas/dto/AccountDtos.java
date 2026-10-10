@@ -66,8 +66,15 @@ public final class AccountDtos {
             String action
     ) {}
 
+    /**
+     * {@code silent}: true when the business's own sign-in page asks by itself, with the website's
+     * sign-in, before showing its form (nobody typed anything). A login that needs a two-factor code
+     * is then refused, as Google and SMS sign-in refuse it. Absent or false: as before (the website's
+     * Enter and its hand-over).
+     */
     public record WorkspaceSessionRequest(
-            @NotNull UUID tenantId
+            @NotNull UUID tenantId,
+            Boolean silent
     ) {}
 
     public record WorkspaceSessionResponse(
