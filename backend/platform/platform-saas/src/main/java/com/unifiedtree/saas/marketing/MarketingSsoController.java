@@ -2,6 +2,7 @@ package com.unifiedtree.saas.marketing;
 
 import com.unifiedtree.saas.admin.support.PlatformAuditTrail;
 import com.unifiedtree.saas.marketing.MarketingAccessService.Handoff;
+import com.unifiedtree.saas.marketing.MarketingAccessService.SsoCaller;
 import com.unifiedtree.saas.marketing.MarketingAccessService.WorkspaceChoice;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -22,7 +23,9 @@ import java.util.UUID;
  * The person's side of signing in to Marketing Automation (marketing.unifiedtree.com)
  * with their UnifiedTree account. Needs an ACCOUNT token (POST /v1/accounts/auth/login
  * or /refresh) — the same login as everywhere else on UnifiedTree; Marketing has no
- * password of its own.
+ * password of its own. A WORKSPACE token (signed in directly on the business subdomain)
+ * also works: it stands for the account mapped to that workspace user, and only for
+ * that workspace ({@link MarketingAccessService#ssoCaller}).
  *
  * <ol>
  *   <li>{@code GET /v1/sso/marketing/companies} — the workspaces and companies the
@@ -48,16 +51,21 @@ public class MarketingSsoController {
     public record HandoffRequest(@NotNull UUID tenantId, @NotNull UUID companyId) {}
 
     @GetMapping("/companies")
-    @PreAuthorize("hasRole('ACCOUNT_USER')")
+    @PreAuthorize("isAuthenticated()")
     public List<WorkspaceChoice> companies(@AuthenticationPrincipal Jwt jwt) {
-        return access.choices(UUID.fromString(jwt.getSubject()));
+        SsoCaller caller = access.ssoCaller(jwt);
+        return access.choices(caller.accountId(), caller.tenantPin());
     }
 
     @PostMapping("/handoff")
-    @PreAuthorize("hasRole('ACCOUNT_USER')")
+    @PreAuthorize("isAuthenticated()")
     public Handoff handoff(@Valid @RequestBody HandoffRequest req, @AuthenticationPrincipal Jwt jwt,
                            HttpServletRequest http) {
-        return access.mint(UUID.fromString(jwt.getSubject()), req.tenantId(), req.companyId(),
+        SsoCaller caller = access.ssoCaller(jwt);
+        if (caller.tenantPin() != null && !caller.tenantPin().equals(req.tenantId())) {
+            throw MarketingAccessService.notAMember();
+        }
+        return access.mint(caller.accountId(), req.tenantId(), req.companyId(),
                 PlatformAuditTrail.clientIp(http), http.getHeader("User-Agent"));
     }
 }

@@ -1,14 +1,26 @@
 package com.hrms.app.config;
 
+import com.hrms.api.saasguard.SubscriptionAccessGuard;
+import com.hrms.api.saasguard.TenantModuleGuard;
+import com.hrms.api.saasguard.TenantModuleGuardConfig;
+import com.hrms.api.saasguard.TenantModuleLookup;
 import com.unifiedtree.auth.service.JwtService;
+import com.unifiedtree.saas.marketing.MarketingAccessService;
+import com.unifiedtree.saas.marketing.MarketingAccessService.Handoff;
+import com.unifiedtree.saas.marketing.MarketingAccessService.SsoCaller;
 import com.unifiedtree.saas.marketing.MarketingServiceTokenFilter;
+import com.unifiedtree.saas.marketing.MarketingSsoController;
 import com.unifiedtree.security.web.TenantContextFilter;
 import jakarta.servlet.Filter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.annotation.AnnotatedBeanDefinitionReader;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -18,12 +30,22 @@ import org.springframework.web.context.support.GenericWebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -32,7 +54,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The real production security chain ({@link CanonicalProdSecurityConfig}) in front of /v1/internal/marketing/**:
  * a refused service token answers JSON with code SERVICE_TOKEN_REJECTED and the same status and headers as before
- * (the body used to be empty). Every other path is refused exactly as before.
+ * (the body used to be empty). Every other path is refused exactly as before. And /v1/sso/marketing/**, which a
+ * workspace token (direct sign-in on the business subdomain) now reaches, past method security and the paywall.
  */
 class MarketingInternalSecurityChainTest {
 
@@ -58,6 +81,10 @@ class MarketingInternalSecurityChainTest {
     private JwtService jwt;
 
     private MockMvc chain(String configuredToken) {
+        return chain(configuredToken, c -> {});
+    }
+
+    private MockMvc chain(String configuredToken, Consumer<GenericWebApplicationContext> more) {
         context = new GenericWebApplicationContext(new MockServletContext());
         context.getEnvironment().setActiveProfiles("canonical-prod");
         new AnnotatedBeanDefinitionReader(context).register(Web.class, CanonicalProdSecurityConfig.class,
@@ -67,6 +94,7 @@ class MarketingInternalSecurityChainTest {
         context.registerBean(TenantContextFilter.class, () -> new TenantContextFilter(false));
         context.registerBean(JwtService.class, () -> jwt);
         context.registerBean(MarketingServiceTokenFilter.class, () -> marketing);
+        more.accept(context);
         context.refresh();
         // As in the app: the security chain first, then MarketingServiceTokenFilter (a servlet filter after it)
         return MockMvcBuilders.webAppContextSetup(context)
@@ -152,5 +180,75 @@ class MarketingInternalSecurityChainTest {
         mvc.perform(get("/v1/platform/admin/workspaces").header("Authorization", "Bearer " + userToken()))
                 .andExpect(status().isForbidden())
                 .andExpect(content().string(""));
+    }
+
+    // ── The Marketing launcher, signed in directly on the business subdomain (a workspace token) ──
+
+    static final String SSO = "/v1/sso/marketing/companies";
+    static final UUID ACCOUNT = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    private final MarketingAccessService access = mock(MarketingAccessService.class);
+    /** No workspace has a subscription row, and none is grandfathered: the paywall refuses them wherever it applies */
+    private final JdbcTemplate noSubscriptions = mock(JdbcTemplate.class);
+
+    /** Plus the real SSO controller with method security on, and the real paywall interceptors, as in the app */
+    private MockMvc ssoChain() {
+        return chain(TOKEN, c -> {
+            new AnnotatedBeanDefinitionReader(c).register(MethodSecurityConfig.class, MarketingSsoController.class,
+                    TenantModuleGuardConfig.class);
+            c.registerBean(MarketingAccessService.class, () -> access);
+            c.registerBean(TenantModuleGuard.class, () -> new TenantModuleGuard(new TenantModuleLookup(noSubscriptions)));
+            c.registerBean(SubscriptionAccessGuard.class,
+                    () -> new SubscriptionAccessGuard(noSubscriptions, null, null, ""));
+        });
+    }
+
+    private String workspaceToken(UUID user, UUID tenant) {
+        return jwt.issueAccessToken(user, tenant, "owner@example.com", List.of("OWNER"), List.of(), null,
+                UUID.randomUUID()).token();
+    }
+
+    @Test
+    void aWorkspaceTokenPassesTheChainToTheMarketingLauncher() throws Exception {
+        UUID user = UUID.randomUUID();
+        UUID tenant = UUID.randomUUID();
+        UUID company = UUID.randomUUID();
+        when(access.ssoCaller(any())).thenReturn(new SsoCaller(ACCOUNT, tenant));
+        when(access.choices(ACCOUNT, tenant)).thenReturn(List.of());
+        when(access.mint(eq(ACCOUNT), eq(tenant), eq(company), any(), any()))
+                .thenReturn(new Handoff("ticket-0123456789abcdefghij", Instant.now().plusSeconds(60)));
+        MockMvc mvc = ssoChain();
+        String bearer = "Bearer " + workspaceToken(user, tenant);
+
+        mvc.perform(get(SSO).header("Authorization", bearer)).andExpect(status().isOk()).andExpect(content().json("[]"));
+        mvc.perform(post("/v1/sso/marketing/handoff").header("Authorization", bearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tenantId\":\"" + tenant + "\",\"companyId\":\"" + company + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticket").value("ticket-0123456789abcdefghij"));
+        ArgumentCaptor<Jwt> seen = ArgumentCaptor.forClass(Jwt.class);
+        verify(access, times(2)).ssoCaller(seen.capture());
+        assertThat(seen.getValue().getSubject()).isEqualTo(user.toString());
+        assertThat(seen.getValue().getClaimAsString("tenant_id")).isEqualTo(tenant.toString());
+    }
+
+    @Test
+    void theMarketingLauncherStillNeedsASignedInCaller() throws Exception {
+        MockMvc mvc = ssoChain();
+        mvc.perform(get(SSO)).andExpect(status().isUnauthorized());
+        mvc.perform(get(SSO).header("Authorization", "Bearer not-a-jwt")).andExpect(status().isUnauthorized());
+        verifyNoInteractions(access);
+    }
+
+    @Test
+    void aWorkspaceWithoutASubscriptionStillReachesTheMarketingLauncher() throws Exception {
+        UUID tenant = UUID.randomUUID();
+        when(access.ssoCaller(any())).thenReturn(new SsoCaller(ACCOUNT, tenant));
+        when(access.choices(ACCOUNT, tenant)).thenReturn(List.of());
+        MockMvc mvc = ssoChain();
+        String bearer = "Bearer " + workspaceToken(UUID.randomUUID(), tenant);
+
+        mvc.perform(get("/v1/hrms/elsewhere").header("Authorization", bearer)).andExpect(status().isPaymentRequired());
+        mvc.perform(get(SSO).header("Authorization", bearer)).andExpect(status().isOk());
     }
 }

@@ -143,8 +143,9 @@ export function setCompanyHeader(companyId: string | null) { companyHeader = com
 /**
  * Calls that are not about a company: sign-in, refresh, sign-out, public pages and the company list
  * itself. GET /v1/canonical-auth/me does carry it: its roles and permissions are the company's.
+ * The Marketing SSO calls name their company in the body (the chooser can open one that isn't current).
  */
-const NO_COMPANY_HEADER = ['/v1/canonical-auth', '/v1/auth', '/v1/public', '/v1/me/companies']
+const NO_COMPANY_HEADER = ['/v1/canonical-auth', '/v1/auth', '/v1/public', '/v1/me/companies', '/v1/sso']
 const ME_PATH = /^\/v1\/canonical-auth\/me(\?|$)/
 export function companyHeaderFor(path: string): Record<string, string> {
   if (!companyHeader || (!ME_PATH.test(path) && NO_COMPANY_HEADER.some((p) => path.startsWith(p)))) return {}

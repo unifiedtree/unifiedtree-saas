@@ -103,6 +103,9 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                                         // warnings we send when a sub lapses are FETCHED via this
                                         // endpoint. Behind the guard, the customer never sees the
                                         // very notification telling them to renew (Anil 2026-08-23)
+            "/v1/sso/marketing",        // an account token never reaches this guard (no tenant_id); a workspace
+                                        // token must not be stopped where it is. Marketing's per-company
+                                        // entitlement (MarketingAccessService.verify) is the check that counts
             "/v3/api-docs",
             "/swagger-ui"
     );

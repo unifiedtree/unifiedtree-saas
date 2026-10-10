@@ -10,7 +10,10 @@ import {
 const doFetch: FetchLike = (input, init) => fetch(input, init)
 
 /** One account session for the whole page (the launcher grid and the business frame share it). */
-const sessions = createAccountSessionStore(doFetch)
+export const marketingSessions = createAccountSessionStore(doFetch)
+
+/** Sign-out (AuthProvider): the account session must not outlive the workspace one in this tab. */
+export function resetMarketingSession() { marketingSessions.reset() }
 
 export interface MarketingLauncher {
   /** Show the Marketing tile: this build names Marketing and the person has at least one company with it. */
@@ -41,7 +44,7 @@ export function useMarketingLauncher(): MarketingLauncher {
 
   const choices = useQuery({
     queryKey: ['marketing-launcher', tenantId, email.trim().toLowerCase()],
-    queryFn: () => loadMarketingChoices(sessions, doFetch, email),
+    queryFn: () => loadMarketingChoices(marketingSessions, doFetch, email),
     enabled,
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -71,8 +74,11 @@ export function useMarketingLauncher(): MarketingLauncher {
     setLastId(companyId)
     setError(null)
     openMarketing({
-      sessions, fetchImpl: doFetch, origin, email, tenantId, companyId,
+      sessions: marketingSessions, fetchImpl: doFetch, origin, email, tenantId, companyId,
       navigate: (url) => window.location.assign(url),
+      writeCookie: (cookie) => { document.cookie = cookie },
+      random: crypto,
+      page: window.location,
     }).catch((e: unknown) => {
       setBusyId(null)
       setError(e instanceof MarketingLaunchError ? e.code : 'UNKNOWN')
