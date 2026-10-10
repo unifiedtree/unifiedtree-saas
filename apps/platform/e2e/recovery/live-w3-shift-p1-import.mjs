@@ -10,15 +10,23 @@
 //   · mgr@unifiedtree.demo (DEPT_MANAGER), made head of the test's department (undone at the end): the template of
 //     their department works; checking a file for another department is refused (403 ROSTER_SCOPE)
 //   · an employee (reader@): 403 everywhere
+//   · the web page (owner): /hrms/shifts/planner/import through Import → Validate → Preview → Apply with next month's
+//     sheet, at 1440 wide (screenshots shift-p1-import-*.png), and the page at 390 wide without sideways scroll;
+//     page errors and API 4xx/5xx are failures
 // Everything it creates is removed at the end (SQL on the slot's database, as the other live tests do).
 //
 //   live-slot.sh /c/REACT/ut-wt/shift-p1-import 3193 node e2e/recovery/live-w3-shift-p1-import.mjs
-//   env: RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev), RECOVERY_PASSWORD
-/* global process, console, fetch, FormData, Blob */
+//   env: RECOVERY_APP_URL (web app), RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev),
+//        RECOVERY_PASSWORD
+/* global process, console, fetch, FormData, Blob, Buffer, URL, document, window */
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
 import { inflateRawSync } from 'node:zlib'
+import { chromium } from '@playwright/test'
 
+const base = process.env.RECOVERY_APP_URL || 'http://demo.localhost:3193'
+const SHOTS = 'C:/REACT/ut-wt/_results/shots'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const db = process.env.RECOVERY_DB || 'ut_w3_dev'
 const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
@@ -225,6 +233,128 @@ async function main(owner) {
   const rv = await reader.upload(`/v1/rosters/import/validate?${scope()}`, 'x.csv', fixed, 'text/csv')
   const re = id ? await reader.raw(`/v1/rosters/${id}/export`) : { status: 403 }
   check('employee: no template, check or export (403)', rt.status === 403 && rv.status === 403 && re.status === 403, `${rt.status} ${rv.status} ${re.status}`)
+
+  await ui()
+}
+
+// ── the web page ────────────────────────────────────────────────────────────
+function watch(page, label) {
+  const errors = [], failed = []
+  page.on('pageerror', (e) => errors.push(`${label}: ${String(e.message || e)}`))
+  page.on('response', (r) => {
+    const u = r.url()
+    if (!u.includes('/api/') || r.status() < 400) return
+    failed.push(`${label}: ${r.status()} ${new URL(u).pathname}`)
+  })
+  return { errors, failed }
+}
+async function signIn(page, who) {
+  await page.goto(base + '/login')
+  await page.locator('input[type=email]').fill(who)
+  await page.locator('input[type=password]').fill(password)
+  await page.locator('button[type=submit]').click()
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+}
+/** Closes whatever opened by itself over the page (a punch reminder, a welcome card). */
+async function dismissPopups(page) {
+  for (let i = 0; i < 3; i++) {
+    await page.waitForTimeout(1200)
+    const layer = page.locator('.uko-layer')
+    if (!(await layer.count()) || !(await layer.first().isVisible().catch(() => false))) return
+    await page.keyboard.press('Escape').catch(() => {})
+  }
+}
+const visible = (locator, timeout = 20_000) => locator.waitFor({ timeout }).then(() => true, () => false)
+
+async function ui() {
+  mkdirSync(SHOTS, { recursive: true })
+  // The page opens on next month (India time); a sheet for that month with day numbers 01 … 31.
+  const [y, m] = istToday().split('-').map(Number)
+  const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1
+  const first = `${ny}-${String(nm).padStart(2, '0')}-01`
+  const len = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
+  const cycle = [D, D, N, N, 'WO']
+  const lines = [`Roster — QA ${tag}`, ['Employee', 'Employee code', 'Department', 'Designation', 'Building',
+    ...Array.from({ length: len }, (_, i) => String(i + 1).padStart(2, '0')), 'Working days', 'WO', 'PH', 'L', 'COFF'].join(',')]
+  for (const [k, off] of [['M1', 0], ['M2', 2]]) {
+    lines.push([NAME[k], CODE[k], `QA Import ${tag}`, '', '', ...Array.from({ length: len }, (_, i) => cycle[(i + off) % cycle.length])].join(','))
+  }
+  const sheet = Buffer.from(lines.join('\r\n') + '\r\n', 'utf8')
+
+  const browser = await chromium.launch()
+  const watched = []
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    const page = await ctx.newPage()
+    watched.push(watch(page, 'desktop'))
+    await signIn(page, 'owner@unifiedtree.demo')
+    await page.goto(base + '/hrms/shifts/planner/import')
+    check('web: the import page opens for the owner', await visible(page.getByRole('heading', { name: 'Import a roster from Excel' })))
+    await dismissPopups(page)
+    await page.getByLabel('Department').selectOption({ label: `QA Import ${tag}` })
+    await page.locator('input[type=file]').setInputFiles({ name: `qa-${tag}-month.csv`, mimeType: 'text/csv', buffer: sheet })
+    await page.screenshot({ path: `${SHOTS}/shift-p1-import-1-import-desktop.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Check the file' }).click()
+    check('web: the check finds both people and no errors', await visible(page.getByRole('button', { name: 'See the preview' })))
+    await page.screenshot({ path: `${SHOTS}/shift-p1-import-2-validate-desktop.png`, fullPage: true })
+    await page.getByRole('button', { name: 'See the preview' }).click()
+    const grid = page.getByRole('region', { name: 'Roster preview' })
+    check('web: the preview shows the roster', await visible(grid) && (await grid.locator('tbody tr').count()) === 2)
+    await page.screenshot({ path: `${SHOTS}/shift-p1-import-3-preview-desktop.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: 'Create draft roster' }).waitFor({ timeout: 10_000 })
+    await page.screenshot({ path: `${SHOTS}/shift-p1-import-4-apply-desktop.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Create draft roster' }).click()
+    let saved = 0
+    for (let i = 0; i < 30 && !saved; i++) {
+      await page.waitForTimeout(500)
+      saved = num(`select count(*) from attendance.rosters where tenant_id='${tenant}' and start_date='${first}' and name ~ '${tag}' and status='DRAFT' and source='IMPORT'`)
+    }
+    check('web: Create draft roster saves the draft and opens it in the planner', saved === 1
+      && await page.waitForURL(/\/hrms\/shifts\/planner\/[0-9a-f-]{36}/, { timeout: 15_000 }).then(() => true, () => false), page.url())
+
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+    const pp = await phone.newPage()
+    watched.push(watch(pp, 'phone'))
+    await signIn(pp, 'owner@unifiedtree.demo')
+    const overflow = () => pp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    const openOnPhone = async () => {
+      await pp.goto(base + '/hrms/shifts/planner/import')
+      const ok = await visible(pp.getByRole('heading', { name: 'Import a roster from Excel' }))
+      await dismissPopups(pp)
+      await pp.getByLabel('Department').selectOption({ label: `QA Import ${tag}` })
+      return ok
+    }
+    // a sheet with planted errors: the problems at phone width
+    const withErrors = Buffer.from([...lines, [`Nobody ${tag}`, '', '', '', '', D].join(','), [NAME.M1, CODE.M1, '', '', '', 'ZZ'].join(',')]
+      .join('\r\n') + '\r\n', 'utf8')
+    check('web (390 wide): the import page opens', await openOnPhone())
+    const o1 = await overflow()
+    check('web (390 wide): step 1 has no sideways scroll', o1 <= 1, `overflow=${o1}px`)
+    await pp.screenshot({ path: `${SHOTS}/shift-p1-import-1-import-phone.png`, fullPage: true })
+    await pp.locator('input[type=file]').setInputFiles({ name: `qa-${tag}-errors.csv`, mimeType: 'text/csv', buffer: withErrors })
+    await pp.getByRole('button', { name: 'Check the file' }).click()
+    check('web (390 wide): a file with errors lists them and offers no preview', await visible(pp.getByRole('button', { name: 'Upload a fixed file' }))
+      && (await pp.getByRole('button', { name: 'See the preview' }).count()) === 0)
+    const o2 = await overflow()
+    check('web (390 wide): the problems have no sideways scroll', o2 <= 1, `overflow=${o2}px`)
+    await pp.screenshot({ path: `${SHOTS}/shift-p1-import-2-validate-phone.png`, fullPage: true })
+    // the clean sheet: the preview at phone width
+    await openOnPhone()
+    await pp.locator('input[type=file]').setInputFiles({ name: `qa-${tag}-month.csv`, mimeType: 'text/csv', buffer: sheet })
+    await pp.getByRole('button', { name: 'Check the file' }).click()
+    await visible(pp.getByRole('button', { name: 'See the preview' }))
+    await pp.getByRole('button', { name: 'See the preview' }).click()
+    await visible(pp.getByRole('region', { name: 'Roster preview' }))
+    const o3 = await overflow()
+    check('web (390 wide): the preview scrolls inside its box, not the page', o3 <= 1, `overflow=${o3}px`)
+    await pp.screenshot({ path: `${SHOTS}/shift-p1-import-3-preview-phone.png`, fullPage: true })
+  } finally {
+    await browser.close()
+  }
+  const errors = watched.flatMap((w) => w.errors), failedCalls = watched.flatMap((w) => w.failed)
+  check('web: no page errors', errors.length === 0, errors.slice(0, 3).join(' || '))
+  check('web: no API 4xx/5xx', failedCalls.length === 0, failedCalls.slice(0, 5).join(' || '))
 }
 
 function cleanup() {

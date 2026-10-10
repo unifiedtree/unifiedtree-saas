@@ -347,7 +347,7 @@ class RosterImportServiceTest {
             assertThat(roster.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Roster — January 2027 — Technical");
             assertThat(roster.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Ravi Kumar");
             assertThat(roster.getRow(4).getCell(1).getStringCellValue()).isEqualTo("TV-102");
-            assertThat(roster.getRow(5)).isNull();
+            assertThat(roster.getPhysicalNumberOfRows()).isEqualTo(5);   // title, headers, weekdays and the two people
             assertThat(wb.getSheet("Codes").getRow(1).getCell(0).getStringCellValue()).isEqualTo("A");
         }
         // the template's own people come back with no problems
