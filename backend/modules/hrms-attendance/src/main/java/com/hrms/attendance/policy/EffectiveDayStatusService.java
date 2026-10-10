@@ -4,13 +4,14 @@ import com.hrms.attendance.policy.AttendancePolicyEvaluator.DayFacts;
 import com.hrms.attendance.policy.AttendancePolicyEvaluator.EmployeeContext;
 import com.hrms.attendance.policy.AttendancePolicyEvaluator.ManualStatus;
 import com.hrms.attendance.policy.AttendancePolicyEvaluator.ShiftSlot;
+import com.hrms.attendance.service.EffectiveShiftResolver;
+import com.hrms.attendance.service.EffectiveShiftResolver.EffectiveShift;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
-import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -168,27 +169,11 @@ public class EffectiveDayStatusService {
                     args(cids, Date.valueOf(lf), Date.valueOf(lt)));
         }
 
-        // Shift assignments overlapping the window
-        Map<UUID, List<Assign>> assigns = new HashMap<>();
-        jdbc.query("""
-                SELECT esa.employee_id, esa.effective_from, esa.effective_to, sp.name, sp.end_time,
-                       -- A FLEXIBLE shift with core hours is late after core start with no
-                       -- grace (w2d, V143.23); -1 tells the evaluator "no grace, not even the company's".
-                       CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL THEN sp.core_start_time ELSE sp.start_time END AS start_time,
-                       CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL THEN -1 ELSE sp.grace_period_minutes END AS grace_period_minutes
-                  FROM attendance.employee_shift_assignments esa
-                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
-                 WHERE esa.employee_id IN (%s) AND sp.is_active = TRUE
-                   AND esa.effective_from <= ? AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                """.formatted(ein),
-                (RowCallbackHandler) rs -> {
-                    Time s = rs.getTime("start_time"), e = rs.getTime("end_time");
-                    if (s == null || e == null) return;
-                    Date t = rs.getDate("effective_to");
-                    assigns.computeIfAbsent((UUID) rs.getObject("employee_id"), k -> new ArrayList<>()).add(new Assign(
-                            rs.getDate("effective_from").toLocalDate(), t != null ? t.toLocalDate() : null,
-                            new ShiftSlot(rs.getString("name"), s.toLocalTime(), e.toLocalTime(), rs.getInt("grace_period_minutes"))));
-                }, args(empIds, Date.valueOf(lt), Date.valueOf(lf)));
+        // Shift assignments overlapping the window, by the attendance rule (EffectiveShiftResolver).
+        // A row whose late-from or end time is missing never counts.
+        Map<UUID, List<EffectiveShift>> assigns = new HashMap<>();
+        EffectiveShiftResolver.attendanceShifts(jdbc, empIds, lf, lt).forEach((id, shifts) -> assigns.put(id,
+                shifts.stream().filter(s -> s.lateFrom() != null && s.endTime() != null).toList()));
 
         // Manual statuses: the newest SET / EXCUSE / CLEAR per day.
         Map<UUID, Map<LocalDate, ManualStatus>> manual = new HashMap<>();
@@ -236,7 +221,7 @@ public class EffectiveDayStatusService {
             Map<LocalDate, Rec> r = recs.getOrDefault(e.id(), Map.of());
             Set<LocalDate> lv = leave.getOrDefault(e.id(), Set.of());
             Set<LocalDate> hol = holidays.getOrDefault(e.companyId(), Set.of());
-            List<Assign> as = assigns.getOrDefault(e.id(), List.of());
+            List<EffectiveShift> as = assigns.getOrDefault(e.id(), List.of());
             Map<LocalDate, ManualStatus> man = manual.getOrDefault(e.id(), Map.of());
             Set<LocalDate> rej = rejected.getOrDefault(e.id(), Set.of());
             Set<LocalDate> rejOut = rejectedOut.getOrDefault(e.id(), Set.of());
@@ -256,18 +241,14 @@ public class EffectiveDayStatusService {
         return result;
     }
 
-    /** One shift assignment: in force from {@code from} to {@code to} (open-ended when null). */
-    record Assign(LocalDate from, LocalDate to, ShiftSlot slot) {}
-
-    /** The assignment in force on {@code d}: the latest start on or before it. */
-    static ShiftSlot shiftOn(List<Assign> assigns, LocalDate d) {
-        ShiftSlot best = null;
-        LocalDate bestFrom = null;
-        for (Assign a : assigns) {
-            if (a.from().isAfter(d) || (a.to() != null && a.to().isBefore(d))) continue;
-            if (bestFrom == null || a.from().isAfter(bestFrom)) { best = a.slot(); bestFrom = a.from(); }
-        }
-        return best;
+    /** The shift {@code d} is judged against: the assignment in force on it, the latest start on or before it. */
+    static ShiftSlot shiftOn(List<EffectiveShift> assigns, LocalDate d) {
+        EffectiveShift s = EffectiveShiftResolver.inForceOn(assigns, d);
+        if (s == null) return null;
+        // A FLEXIBLE shift with core hours is late after core start with no
+        // grace (w2d, V143.23); -1 tells the evaluator "no grace, not even the company's".
+        int grace = s.lateFromCoreStart() ? -1 : s.graceMinutes() != null ? s.graceMinutes() : 0;
+        return new ShiftSlot(s.name(), s.lateFrom(), s.endTime(), grace);
     }
 
     static Set<Integer> parseOffs(String csv) {

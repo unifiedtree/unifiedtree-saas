@@ -1,5 +1,6 @@
 package com.hrms.api.approvals;
 
+import com.hrms.attendance.service.EffectiveShiftResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Component;
@@ -493,17 +494,8 @@ public class InboxQueries {
     public void enrichShiftChanges(UUID tenantId, List<Row> rows, Set<UUID> team, LocalDate today) {
         if (rows.isEmpty()) return;
         String ids = uuidArray(rows.stream().map(r -> r.requestId).toList());
-        Map<UUID, Integer> onShift = new HashMap<>();
-        if (!team.isEmpty()) {
-            jdbc.query("""
-                    SELECT a.shift_policy_id, COUNT(DISTINCT a.employee_id) AS people
-                      FROM attendance.employee_shift_assignments a
-                     WHERE a.tenant_id = ? AND a.effective_from <= ? AND (a.effective_to IS NULL OR a.effective_to >= ?)
-                       AND a.employee_id = ANY(CAST(? AS uuid[]))
-                     GROUP BY a.shift_policy_id
-                    """, (RowCallbackHandler) rs -> onShift.put(rs.getObject("shift_policy_id", UUID.class), rs.getInt("people")),
-                    tenantId, today, today, uuidArray(team));
-        }
+        // Every assignment covering today counts, not only the latest (EffectiveShiftResolver.peopleOnEachShift).
+        Map<UUID, Integer> onShift = EffectiveShiftResolver.peopleOnEachShift(jdbc, tenantId, team, today);
         Map<UUID, LocalDate> scheduled = new HashMap<>();
         jdbc.query("""
                 SELECT scr.id, MIN(a.effective_from) AS next_change
