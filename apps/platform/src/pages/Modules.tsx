@@ -54,7 +54,8 @@ function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
   const primaryApp = plan.includedModules
     .map(mk => APPS.find(a => a.key === mk && a.built))
     .find(Boolean)
-  const status: Status = plan.status === 'LAUNCHING_SOON'
+  // Marketing is live (owner, 10 Oct 2026): locked until the business buys it, never "Soon".
+  const status: Status = plan.status === 'LAUNCHING_SOON' && !plan.includedModules.includes(MARKETING_MODULE)
     ? 'coming-soon'
     : plan.status === 'AVAILABLE' && anyActive
       ? (primaryApp ? 'active' : 'coming-soon')

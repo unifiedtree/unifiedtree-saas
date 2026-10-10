@@ -65,6 +65,20 @@
 .ut-tile__dot { display: inline-block; width: 6px; height: 6px; margin: 9px 0 0 1px; border-radius: 50%; background: var(--u-gd, #C8912E); }
 .ut-tile__img { display: block; width: 32px; height: 32px; object-fit: contain; }
 .ut-rail__ws { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The company selector as the rail's top block (CompanySwitcher variant 'rail'): opens on hover or click. */
+.ut-rail__cosel { border: 0; padding: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; }
+.ut-rail__cosel:focus-visible .ut-rail__tile { box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); }
+.ut-rail__wsco { display: flex; flex-direction: column; gap: 1px; }
+.ut-rail__wsname { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ut-rail__coname { font-size: 12px; font-weight: 500; opacity: .78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ut-rail__cochev { flex-shrink: 0; margin-left: -10px; opacity: .85; transition: transform .15s; }
+.ut-rail__cosel[data-open] .ut-rail__cochev { transform: rotate(180deg); }
+.ut-cosel__add {
+  width: 100%; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; box-sizing: border-box;
+  border: 0; border-radius: 10px; background: none; color: var(--u-brt, #0F6E56);
+  font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.ut-cosel__add:hover, .ut-cosel__add:focus-visible { background: var(--u-brs, #E8F3EE); outline: none; }
 .ut-rail__pin {
   width: 30px; height: 30px; flex-shrink: 0; border: 0; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;

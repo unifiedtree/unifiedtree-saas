@@ -277,8 +277,9 @@ export const LoginPage: React.FC = () => {
         ) : (
         <>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(155deg, #0A4D3C 0%, #0F6E56 48%, #15876B 100%)' }} />
-        <div className="absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-32 right-[-6rem] h-[520px] w-[520px] rounded-full bg-black/10 blur-3xl" />
+        {/* The standard sign-in picture (owner, 10 Oct 2026) until the business uploads its own. */}
+        <img src="/assets/login-default.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-x-0 bottom-0 h-1/2" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.45) 100%)' }} />
         {!needsWorkspace && brand.workspaceName && (
           <div className="absolute bottom-12 left-12 right-12 text-white">
             <p className="text-[34px] font-black leading-tight tracking-tight">{brand.workspaceName}</p>

@@ -44,6 +44,8 @@ export interface AppRailProps {
   listRef: (el: HTMLDivElement | null) => void
   /** The More panel, placed at the rail's edge. */
   children?: ReactNode
+  /** Replaces the top block's Home link (the company selector, CompanySwitcher variant 'rail'). */
+  brand?: ReactNode
 }
 
 /** A plain left click stays in the app; modified clicks (new tab, new window) are the browser's. */
@@ -53,18 +55,20 @@ function inApp(e: MouseEvent, go: () => void) {
   go()
 }
 
-export function AppRail({ groups, workspaceName, mark, homeHref, homeLabel, onHome, pinned, onTogglePin, push, noExpand, more, onItem, onIntent, listRef, children }: AppRailProps) {
+export function AppRail({ groups, workspaceName, mark, homeHref, homeLabel, onHome, pinned, onTogglePin, push, noExpand, more, onItem, onIntent, listRef, children, brand }: AppRailProps) {
   const pinLabel = pinned ? 'Collapse sidebar' : 'Keep sidebar open'
   const moreOn = more.open || more.lit
   return (
     <div className="ut-railwrap" data-push={push ? '' : undefined} data-noexpand={noExpand ? '' : undefined}>
       <nav aria-label="Primary" className="ut-rail">
         <div className="ut-rail__top">
-          <a href={homeHref} className="ut-rail__brand" aria-label={workspaceName ? `${workspaceName} · ${homeLabel}` : homeLabel}
-            title={homeLabel} onClick={(e) => inApp(e, onHome)}>
-            <span className="ut-rail__tile" aria-hidden="true">{mark}</span>
-            <span className="ut-rail__ws">{workspaceName ?? ''}</span>
-          </a>
+          {brand ?? (
+            <a href={homeHref} className="ut-rail__brand" aria-label={workspaceName ? `${workspaceName} · ${homeLabel}` : homeLabel}
+              title={homeLabel} onClick={(e) => inApp(e, onHome)}>
+              <span className="ut-rail__tile" aria-hidden="true">{mark}</span>
+              <span className="ut-rail__ws">{workspaceName ?? ''}</span>
+            </a>
+          )}
           <button type="button" className="ut-rail__pin" onClick={onTogglePin} aria-label={pinLabel} title={pinLabel}>
             <ShellIcon name={pinned ? 'chevronLeft' : 'pin'} size={16} strokeWidth={2} />
           </button>
