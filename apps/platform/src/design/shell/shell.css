@@ -498,6 +498,48 @@
 .ut-biz__apps:hover { border-color: var(--u-brl, #BFDFD1); background: var(--u-brs, #E8F3EE); }
 .ut-biz__apps:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); border-color: var(--u-brl, #BFDFD1); }
 @media (max-width: 767px) { .ut-biz__apps { margin-right: 4px; } }
+/* The frame outside the modules (BusinessShell): the Apps page and Business settings, no HRMS rail. */
+.ut-frame__brand { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.ut-frame__tile {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--u-br, #0F6E56); color: var(--u-onbr, #fff);
+}
+.ut-frame__tile:has(img) { background: var(--u-sf, #fff); box-shadow: inset 0 0 0 1px var(--u-ln, #E3E9E6); }
+.ut-frame__tile .ut-tile__img { width: 30px; height: 30px; }
+.ut-frame__name { min-width: 0; font-size: 15px; font-weight: 700; color: var(--u-ink, #0E1B16); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ut-frame__acct {
+  width: 36px; height: 36px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--u-brl, #BFDFD1); border-radius: 999px; background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56);
+  font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; outline: none;
+}
+.ut-frame__acct:hover, .ut-frame__acct[data-open] { border-color: var(--u-brt, #0F6E56); }
+.ut-frame__acct:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.ut-bizset { display: flex; align-items: stretch; min-height: 100%; }
+.ut-bizset__nav {
+  flex: 0 0 240px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 20px 12px;
+  background: var(--u-sf, #fff); box-shadow: inset -1px 0 0 var(--u-ln, #E3E9E6);
+}
+.ut-bizset__head { margin: 0 12px 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--u-ink3, #6A7A73); }
+.ut-bizset__item {
+  display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 10px; flex-shrink: 0;
+  color: var(--u-ink2, #4A5A54); font-size: 13.5px; font-weight: 600; text-decoration: none; white-space: nowrap; outline: none;
+}
+.ut-bizset__item:hover { background: var(--u-brs, #E8F3EE); color: var(--u-ink, #0E1B16); }
+.ut-bizset__item[aria-current="page"] { background: var(--u-brs, #E8F3EE); color: var(--u-brt, #0F6E56); }
+.ut-bizset__item:focus-visible { box-shadow: var(--u-focus, 0 0 0 3px #E8F3EE); }
+.ut-bizset__body { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 767px) {
+  .ut-frame__bar { flex-wrap: nowrap; padding: 0 8px 0 12px; }
+  .ut-frame__brand { gap: 8px; height: 56px; }
+  .ut-frame__tile { width: 32px; height: 32px; }
+  .ut-frame__label { display: none; }
+  .ut-frame__bar .ut-topbar__right { gap: 6px; }
+  .ut-bizset { flex-direction: column; }
+  .ut-bizset__nav { flex: none; flex-direction: row; overflow-x: auto; padding: 8px 12px; box-shadow: inset 0 -1px 0 var(--u-ln, #E3E9E6); }
+  .ut-bizset__head { display: none; }
+  .ut-bizset__item { height: 36px; }
+}
 /* Marketing (core/marketing): the business frame's button next to All apps, and the company chooser. */
 .ut-biz__mkt { font-family: inherit; cursor: pointer; }
 @media (max-width: 767px) { .ut-biz__mkt { margin-right: 6px; padding: 0 11px; } .ut-biz__mkt span { display: none; } }

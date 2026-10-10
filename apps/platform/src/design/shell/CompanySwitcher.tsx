@@ -1,7 +1,7 @@
 // The top bar's company selector (master context §9): the HRMS company the person is working in, by
-// name, and a menu of the others they may open. Shown only to people with two or more companies; a
-// pick switches every HRMS page at once (modules/hrms/company/CurrentCompany); a page with unsaved
-// changes asks first, as it does before any other move.
+// name, and a menu of the others they may open. Shown at the top left to everyone with a company, also
+// with only one (owner, 10 Oct 2026); a pick switches every HRMS page at once
+// (modules/hrms/company/CurrentCompany); a page with unsaved changes asks first, as it does before any other move.
 import { ChevronDown } from 'lucide-react'
 import { Menu } from '@/design/kit/Menu'
 import { mayLeaveCompany, useCurrentCompany } from '@/modules/hrms/company/CurrentCompany'
@@ -10,14 +10,16 @@ import { ShellIcon } from './shellIcons'
 
 export function CompanySwitcher() {
   const { companies, company, multi, setCompany } = useCurrentCompany()
-  if (!multi || !company) return null
+  if (!company) return null
   return (
     <Menu
       label="Companies"
       selection="radio"
       width={300}
       maxHeight={420}
-      header={{ title: 'Switch company', sub: 'Every HRMS page shows the company you pick.' }}
+      header={multi
+        ? { title: 'Switch company', sub: 'Every HRMS page shows the company you pick.' }
+        : { title: 'Your company', sub: 'Every HRMS page shows this company.' }}
       items={companies.map((c) => ({
         key: c.id,
         label: c.name,

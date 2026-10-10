@@ -231,10 +231,14 @@ export const ROUTE_TREE = (
           entirely when a real replacement lands. */}
       <Route path="/module-workspace" element={<Navigate to="/dashboard" replace />} />
 
-      {/* Business settings (master context §11), opened from the launcher: the business's own pages in the
-          business frame, outside the modules (no HRMS rail or company selector). Same pages and the same
-          guards as their /settings, /users, /roles and /audit-logs routes in the shell below, which stay. */}
+      {/* The frame outside the modules (no HRMS rail): the Apps page, and Business settings (master context
+          §11) as its own page with a left menu. Same pages and the same guards as their /settings, /users,
+          /roles and /audit-logs routes in the shell below, which stay. */}
       <Route element={<RouteGuard><BusinessShell /></RouteGuard>}>
+        {/* App launcher (Odoo-style). The universal post-login landing / app picker —
+            open to every authenticated user. Entering a specific app's routes is still
+            gated per-route below, so this only chooses where to go, never grants access. */}
+        <Route path="/modules"             element={<Modules />} />
         <Route path="/business"            element={<Navigate to="/modules" replace />} />
         <Route path="/business/details"    element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'workspace.profile.update', 'workspace.security.manage']}><Settings tab="profile" /></RouteGuard>} />
         <Route path="/business/branding"   element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write', 'workspace.profile.update', 'workspace.security.manage']}><Settings tab="branding" /></RouteGuard>} />
@@ -292,10 +296,6 @@ export const ROUTE_TREE = (
         <Route path="/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
         <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
         <Route path="/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
-        {/* App launcher (Odoo-style). The universal post-login landing / app picker —
-            open to every authenticated user. Entering a specific app's routes is still
-            gated per-route below, so this only chooses where to go, never grants access. */}
-        <Route path="/modules"    element={<Modules />} />
         {/* In-workspace plan configurator + autopay setup. Admin-only; the
             page itself renders a "you must be an admin" guard for non-admins,
             so no RouteGuard wrapper needed (permissions vary per workspace). */}

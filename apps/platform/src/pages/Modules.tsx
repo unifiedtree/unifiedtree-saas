@@ -2,14 +2,13 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
-import { Lock, Megaphone, Users, UserCog, type LucideIcon } from 'lucide-react'
+import { Lock, Megaphone, Users, type LucideIcon } from 'lucide-react'
 import { Button, EmptyState, ErrorState, PageFrame, PageHeader } from '@/design/kit/display'
 import { Input } from '@/design/kit/overlays'
 import '@/design/shell/shell.css'
 import { APPS } from '@/layouts/appConfig'
 import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
-import { useBusinessSettings } from '@/layouts/businessSettings'
 import { useMarketingLauncher } from '@/core/marketing/useMarketingLauncher'
 import { MarketingAppTile, MarketingLaunchDialog } from '@/core/marketing/MarketingLaunch'
 import { useCanManageBilling } from '@/shared/navigation/useAccess'
@@ -124,8 +123,6 @@ export const Modules: React.FC = () => {
   const [query, setQuery] = useState('')
   // Marketing (another app): a tile only when this build names it and the person has a company with it.
   const marketing = useMarketingLauncher()
-  // Business settings (master context §11): they open in the business frame (/business/*), not in HRMS.
-  const settingsCards = useBusinessSettings()
 
   /** Open the IN-WORKSPACE plan configurator. Client-decision 2026-08-07:
    *  Manage Plan must stay inside the workspace — the old external redirect
@@ -272,26 +269,8 @@ export const Modules: React.FC = () => {
         <p className="ut-apps__hint">Locked apps open the plan configurator — add them any time.</p>
       )}
 
-      {/* The business's own settings: not an app tile (client: tiles are real apps only). */}
-      {settingsCards.length > 0 && !query.trim() && (
-        <section className="ut-apps__settings" aria-labelledby="ut-business-settings">
-          <h2 id="ut-business-settings" className="ut-apps__section"><UserCog size={16} aria-hidden="true" /> Business settings</h2>
-          <div className="ut-apps__setgrid">
-            {settingsCards.map(c => {
-              const Icon = c.icon
-              return (
-                <button key={c.key} type="button" className="ut-set" onClick={() => navigate(c.path)}>
-                  <span className="ut-set__icon"><Icon size={18} aria-hidden="true" /></span>
-                  <span className="ut-set__text">
-                    <span className="ut-set__label">{c.label}</span>
-                    <span className="ut-set__desc">{c.desc}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      )}
+      {/* The business's own settings are not an app tile (client: tiles are real apps only): the frame's
+          "Business settings" button opens them as their own page (BusinessShell). */}
     </PageFrame>
   )
 }

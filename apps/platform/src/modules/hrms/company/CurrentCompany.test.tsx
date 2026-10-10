@@ -173,9 +173,10 @@ describe('the selector', () => {
     expect(html).toContain('class="ut-cosel"')
   })
 
-  it('is not there with one company, and the page gets that company as before', () => {
+  it('shows the one company by name too (owner, 10 Oct), and the page gets that company as before', () => {
     const { html, value } = render({ companies: [A], homeId: A.id }, { ui: <CompanySwitcher /> })
-    expect(html).not.toContain('ut-cosel')
+    expect(html).toContain('class="ut-cosel"')
+    expect(html).toContain(`Company: ${A.name}. Switch company`)
     expect(value.multi).toBe(false)
     expect(value.companyId).toBe(A.id)
   })
