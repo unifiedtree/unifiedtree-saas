@@ -11,7 +11,7 @@ vi.mock('@unifiedtree/sdk', () => ({
 }))
 
 const { HttpError, subdomainOf } = await import('@/core/api/client')
-const { resolveWorkspaceHost, stateForError } = await import('./workspaceHost')
+const { resolveWorkspaceHost, resolveWorkspaceHostOnce, stateForError, workspaceHostAnswer } = await import('./workspaceHost')
 
 const ok = (dto: object) => () => Promise.resolve(dto as never)
 const fail = (e: unknown) => () => Promise.reject(e)
@@ -89,6 +89,25 @@ describe('resolving a business address', () => {
       expect(await pending).toEqual({ kind: 'unknown' })
     } finally {
       vi.useRealTimers()
+    }
+  })
+})
+
+describe('the answer, once it has come back (the sign-in page reads it at its first render)', () => {
+  it('is kept for this page load, for the address it was asked about only', async () => {
+    vi.stubGlobal('window', { location: { hostname: 'acme.unifiedtree.com' } })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ workspaceName: 'Acme', status: 'ACTIVE' }), { status: 200 })))
+    try {
+      expect(workspaceHostAnswer('acme')).toBeNull()
+      const pending = resolveWorkspaceHostOnce('acme')
+      expect(workspaceHostAnswer('acme')).toBeNull()
+      const state = await pending
+      expect(state.kind).toBe('open')
+      expect(workspaceHostAnswer('acme')).toBe(state)
+      expect(workspaceHostAnswer('beta')).toBeNull()
+      expect(resolveWorkspaceHostOnce('acme')).toBe(pending)
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })
