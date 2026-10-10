@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
@@ -7,7 +7,9 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { API_BASE_URL, apiJson, AuthResponse, currentSubdomain, HttpError, WorkspaceStatus } from '@/core/api/client'
 import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
 import { returnPathFrom } from '@/core/auth/returnPath'
+import { maySignInSilently, signInFromWebsiteOnce, SILENT_SIGN_IN_TIMEOUT_MS } from '@/core/auth/silentSignIn'
 import { usePageTitle, useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
+import { workspaceHostAnswer } from '@/core/tenant/workspaceHost'
 import { MonogramTile } from '@/shared/components/WorkspaceMark'
 
 /** /login's answer when the password was right but a two-factor code is needed. */
@@ -103,9 +105,18 @@ export const LoginPage: React.FC = () => {
   const [failedImage, setFailedImage] = useState<string | null>(null)
   usePageTitle('Sign in')
 
+  // Signed in on the website: that sign-in is used here instead of the form when it can be (silentSignIn.ts).
+  // Decided at the first render, so the form never flashes before "Signing you in…".
+  const sdkStatus = useSdkStore((state) => state.status)
+  const [silent, setSilent] = useState(() => maySignInSilently({ subdomain, host: workspaceHostAnswer(subdomain), search: searchParams }))
+
+  // The sign-in from the website waits for this same answer instead of asking again.
+  const statusRequest = useRef<Promise<WorkspaceStatus> | null>(null)
   useEffect(() => {
     if (subdomain) {
-      apiJson<WorkspaceStatus>('/v1/public/workspace-status')
+      const request = apiJson<WorkspaceStatus>('/v1/public/workspace-status')
+      statusRequest.current = request
+      request
         .then(setWorkspaceStatus)
         .catch(() => undefined)
     }
@@ -213,6 +224,37 @@ export const LoginPage: React.FC = () => {
       // Back to the page that asked for a sign-in (a notification link, say), else Home.
       navigate(returnPathFrom(location.state))
   }
+
+  // "Signing you in…" lasts 4 s at most from here, the wait for this address's own session included.
+  useEffect(() => {
+    if (!silent) return
+    const timer = setTimeout(() => setSilent(false), SILENT_SIGN_IN_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [silent])
+
+  // Once this address's own session has been looked for (AuthProvider): none, so the website's sign-in, tried
+  // once; it signs in exactly as the form does (finishLogin), and anything else shows the form.
+  const triedHere = useRef(false)
+  useEffect(() => {
+    if (!silent || sdkStatus === 'idle' || sdkStatus === 'loading') return
+    if (sdkStatus === 'authenticated') {
+      // This address's own session came back while the page waited (a reload, the website's hand-over).
+      if (!triedHere.current) navigate(returnPathFrom(location.state), { replace: true })
+      return
+    }
+    triedHere.current = true
+    let live = true
+    void signInFromWebsiteOnce({
+      workspaceStatus: () => statusRequest.current ?? apiJson<WorkspaceStatus>('/v1/public/workspace-status'),
+    }).then((done) => {
+      if (!live) return
+      if (done) finishLogin(done.auth, done.status)
+      else setSilent(false)
+    })
+    return () => { live = false }
+    // finishLogin, navigate and location are this render's; the try depends only on these two.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [silent, sdkStatus])
 
   /** The two-factor step: a code from the app, a recovery code, or the first code after set-up. */
   const handleMfaSubmit = async (event: React.FormEvent) => {
@@ -329,13 +371,13 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
         <div className="mb-8 h-px bg-gray-100" />
-        {!needsWorkspace && !mfa && !recovery && (
+        {!needsWorkspace && !mfa && !recovery && !silent && (
           <h1 className="mb-6 text-[22px] font-extrabold tracking-tight text-gray-900">
             {brand.workspaceName ? `Sign in to ${brand.workspaceName}` : 'Sign in'}
           </h1>
         )}
 
-        {workspaceStatus && workspaceStatus.status !== 'ACTIVE' && (
+        {!silent && workspaceStatus && workspaceStatus.status !== 'ACTIVE' && (
           <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3.5 py-3 text-sm font-medium text-[var(--status-warning-fg)]">
             <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--status-warning-solid)]" />
             This workspace is pending approval.
@@ -352,7 +394,9 @@ export const LoginPage: React.FC = () => {
           </motion.div>
         )}
 
-        {recovery ? (
+        {silent ? (
+          <SigningIn />
+        ) : recovery ? (
           /* Two-factor was just set up: the recovery codes are shown once. */
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -523,7 +567,7 @@ export const LoginPage: React.FC = () => {
         )}
 
         {/* Other ways in (outside the form: its one submit button stays "Log in"). */}
-        {!needsWorkspace && !mfa && !recovery && (GOOGLE_SIGN_IN || MOBILE_SIGN_IN) && (
+        {!needsWorkspace && !mfa && !recovery && !silent && (GOOGLE_SIGN_IN || MOBILE_SIGN_IN) && (
           <div className="mt-6 space-y-3">
             <div className="flex items-center gap-3 text-[12px] font-semibold uppercase tracking-wider text-gray-400">
               <span className="h-px flex-1 bg-gray-100" />or<span className="h-px flex-1 bg-gray-100" />
@@ -550,7 +594,7 @@ export const LoginPage: React.FC = () => {
         )}
 
         {/* The mobile app (Android, Google Play). */}
-        {!needsWorkspace && !mfa && !recovery && (
+        {!needsWorkspace && !mfa && !recovery && !silent && (
           <div className="mt-8 flex justify-center">
             <a
               href={PLAY_STORE_URL}
@@ -589,6 +633,16 @@ export const LoginPage: React.FC = () => {
         </div>
       </motion.div>
     </main>
+  )
+}
+
+/** While the website's sign-in is tried (silentSignIn.ts): a short wait in place of the form. */
+function SigningIn() {
+  return (
+    <div role="status" aria-live="polite" className="flex flex-col items-center gap-4 py-12 text-center">
+      <span aria-hidden className="h-9 w-9 rounded-full border-[3px] border-primary/20 border-t-primary motion-safe:animate-spin" />
+      <p className="text-[15px] font-semibold text-gray-700">Signing you in…</p>
+    </div>
   )
 }
 

@@ -4,7 +4,7 @@ import { useAuthStore, WorkspaceSummary } from '../store/authStore';
 import { api, ApiError } from '../lib/api';
 import { Building2, Plus, ArrowRight, Star, Loader2, Settings, Check, X as XIcon } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { handOverUrl } from '../lib/handOver';
+import { businessBase, businessSignInUrl, handOverUrl, needsTwoFactorSignIn } from '../lib/handOver';
 import { Navbar } from '../components/layout/Navbar';
 
 /* Compact one-line module summary for a workspace row — the rows stay quiet,
@@ -76,20 +76,11 @@ export function WorkspacesPage() {
   const enterWorkspace = async (workspace: WorkspaceSummary, sameTab: boolean) => {
     setEnteringId(workspace.tenantId);
     let left = false;
-    try {
-      const response = await api.post('/v1/accounts/workspaces/session', {
-        tenantId: workspace.tenantId
-      });
-      setTenantAuth(response.auth.accessToken, response.workspace);
+    // In local dev, *.localhost subdomains don't resolve in browsers: the business's app on <sub>.localhost:3001.
+    const base = businessBase(workspace, window.location.hostname);
 
-      // In local dev, *.localhost subdomains don't resolve in browsers.
-      // Redirect to plain localhost:3001 — the JWT already carries tenant context.
-      const target = handOverUrl(
-        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-          ? `http://${workspace.subdomain}.localhost:3001`
-          : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`),
-        response.auth.accessToken);
-
+    // The business's Apps page, or its sign-in page: in this tab, or a new one (a click).
+    const go = (target: string) => {
       if (sameTab) {
         left = true;
         window.location.assign(target);
@@ -118,7 +109,22 @@ export function WorkspacesPage() {
         // than leaving the user staring at a button that did nothing.
         window.location.assign(target);
       }
+    };
+
+    try {
+      // silent: nobody types anything here, so a login that needs a two-factor code is refused (below).
+      const response = await api.post('/v1/accounts/workspaces/session', {
+        tenantId: workspace.tenantId,
+        silent: true,
+      });
+      setTenantAuth(response.auth.accessToken, response.workspace);
+      go(handOverUrl(base, response.auth.accessToken));
     } catch (err) {
+      // A login that needs a two-factor code: the business's own sign-in page asks for it.
+      if (err instanceof ApiError && needsTwoFactorSignIn(err.status, err.data)) {
+        go(businessSignInUrl(base));
+        return;
+      }
       if (sameTab) setAutoFailed(true);
       alert(err instanceof ApiError ? err.message : 'Failed to enter workspace');
     } finally {

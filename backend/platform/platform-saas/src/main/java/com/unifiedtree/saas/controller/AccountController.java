@@ -223,13 +223,17 @@ public class AccountController {
      * {@code ut_rt_*} cookie the browser had, minting a DIFFERENT workspace's
      * session inside this tab. Both were fixed together on 2026-08-22; this
      * half removes the trigger, the refresh handler removes the fallback.
+     *
+     * <p>{@code silent} (optional): the business's own sign-in page using the website's sign-in by
+     * itself; see {@link AccountService#createWorkspaceSession(Jwt, UUID, boolean)}.
      */
     @PostMapping("/v1/accounts/workspaces/session")
     @PreAuthorize("hasRole('ACCOUNT_USER')")
     public WorkspaceSessionResponse session(@AuthenticationPrincipal Jwt jwt,
                                             @Valid @RequestBody WorkspaceSessionRequest request,
                                             HttpServletResponse res) {
-        WorkspaceSessionResponse out = accounts.createWorkspaceSession(jwt, request.tenantId());
+        WorkspaceSessionResponse out = accounts.createWorkspaceSession(jwt, request.tenantId(),
+                Boolean.TRUE.equals(request.silent()));
         if (out != null && out.auth() != null) {
             writeWorkspaceRefreshCookie(res, out.auth().tenantId(), out.auth().refreshToken());
         }
