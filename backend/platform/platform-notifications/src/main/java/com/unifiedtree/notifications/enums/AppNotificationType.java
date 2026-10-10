@@ -144,5 +144,13 @@ public enum AppNotificationType {
      */
     CELEBRATION_WISH,
 
+    /**
+     * A shift roster the person is on was published with days for them from today on (shift
+     * planning, V143.106): at the roster's first publish, or when they are added to it later.
+     */
+    ROSTER_PUBLISHED,
+    /** A republished shift roster added, changed or removed one or more of the person's days. */
+    ROSTER_DAY_CHANGED,
+
     GENERAL
 }
