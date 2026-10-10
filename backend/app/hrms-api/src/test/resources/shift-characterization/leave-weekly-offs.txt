@@ -1,0 +1,5 @@
+COMPANY_A = [7]
+COMPANY_B = [5, 6]
+COMPANY_C = [6, 7]
+UNKNOWN_COMPANY = [6, 7]
+null = [6, 7]
