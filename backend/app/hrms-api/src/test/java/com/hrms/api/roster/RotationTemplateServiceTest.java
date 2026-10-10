@@ -35,7 +35,7 @@ class RotationTemplateServiceTest {
 
     final RosterFakes.Shifts shifts = new RosterFakes.Shifts();
     ShiftCatalog.Shift a, b, old, otherCompany;
-    final Map<UUID, RotationTemplateService.Head> heads = new HashMap<>();
+    final Map<UUID, RotationTemplateService.Head> heads = new java.util.LinkedHashMap<>();
     final List<String> writes = new ArrayList<>();
     boolean nameTaken;
 

@@ -111,8 +111,8 @@ class RosterDoesNotChangeAttendanceSqlTest {
         record(e2, "2026-08-06", "08:00", "2026-08-06", "20:00");
         record(e3, "2026-08-10", "22:20", "2026-08-11", "06:30");
         record(e4, "2026-08-08", "10:00", "2026-08-08", "19:00");
-        jdbc.update("INSERT INTO settings.holiday_calendar(id, tenant_id, company_id, year, holiday_date, holiday_name) "
-                + "VALUES (?, ?, ?, 2026, '2026-08-15', 'QA Independence Day')", UUID.randomUUID(), tenant, company);
+        jdbc.update("INSERT INTO settings.holiday_calendar(id, tenant_id, company_id, year, holiday_date, holiday_name, holiday_type) "
+                + "VALUES (?, ?, ?, 2026, '2026-08-15', 'QA Independence Day', 'NATIONAL')", UUID.randomUUID(), tenant, company);
         UUID leaveType = UUID.randomUUID();
         jdbc.update("INSERT INTO leave_mgmt.leave_types(id, tenant_id, company_id, name, code) VALUES (?, ?, ?, 'QA Casual', ?)",
                 leaveType, tenant, company, "QAC" + tenant.toString().substring(0, 6));
@@ -187,8 +187,8 @@ class RosterDoesNotChangeAttendanceSqlTest {
         Jwt jwt = RosterFakes.jwt(UUID.randomUUID(), UUID.randomUUID(), "attendance.team.read");
         out.append("team = ").append(new TeamScheduleController(scope, named).schedule(jwt, mon, mon.plusDays(13), false)).append('\n');
         out.append("headcount = ").append(new TreeMap<>(new ShiftHeadcount(named).byShift(company))).append('\n');
-        out.append("records = ").append(jdbc.queryForList("SELECT employee_id, attendance_date, status::text, work_hours, overtime_minutes, "
-                + "is_late, late_by_minutes FROM attendance.records WHERE tenant_id = ? ORDER BY employee_id, attendance_date", tenant)).append('\n');
+        out.append("records = ").append(jdbc.queryForList("SELECT employee_id, attendance_date, attendance_status::text, work_hours, overtime_minutes, "
+                + "late_by_minutes FROM attendance.records WHERE tenant_id = ? ORDER BY employee_id, attendance_date", tenant)).append('\n');
         return out.toString();
     }
 

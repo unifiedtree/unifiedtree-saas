@@ -57,8 +57,8 @@ import java.util.UUID;
  *
  * <p><b>Writes only the roster tables</b> ({@code schedule_days}, {@code schedule_day_history},
  * {@code rosters}, and the working copy for a discard). Attendance, late marks, overtime, payroll and
- * leave read none of them in Phase 1, so every number stays as it is: the company switch
- * {@code rosters_drive_attendance} is never read here.
+ * leave read none of them in Phase 1, so every number stays as it is: the company's "rosters drive
+ * attendance" switch (Phase 3) is never read here.
  */
 @Service
 public class RosterPublisher {

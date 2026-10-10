@@ -64,7 +64,7 @@ public class RosterStore {
     /** One non-empty day of the working copy. */
     public record Cell(UUID employeeId, LocalDate date, String kind, UUID shiftPolicyId, boolean edited) {
         public String token() {
-            return token(kind, shiftPolicyId);
+            return RosterStore.token(kind, shiftPolicyId);
         }
     }
 
@@ -72,7 +72,7 @@ public class RosterStore {
     public record Day(UUID employeeId, LocalDate date, String kind, UUID shiftPolicyId, UUID rosterId, String rosterName,
                       int rosterVersion) {
         public String token() {
-            return token(kind, shiftPolicyId);
+            return RosterStore.token(kind, shiftPolicyId);
         }
     }
 

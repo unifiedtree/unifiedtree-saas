@@ -180,9 +180,9 @@ async function main(owner) {
     && num(`select count(*) from attendance.schedule_days where roster_id='${id}' and work_date < '${today}'`) === 0)
   check('publish: one history row per day, version 1, with the note', num(`select count(*) from attendance.schedule_day_history where roster_id='${id}' and roster_version=1 and change_kind='ADDED' and note='QA first ${tag}'`) === 28)
   check('publish: attendance is untouched (no shift assignment written for the members)', num(`select count(*) from attendance.employee_shift_assignments where employee_id in ('${M1}','${M2}')`) === 0)
-  const told = await waitFor(() => notices(id, 'ROSTER_PUBLISHED') >= 2)
-  check('publish: both members are told their schedule is ready (in the app)', told, `${notices(id, 'ROSTER_PUBLISHED')} notices`)
-  check('publish: the notice opens My Schedule (data.route)', num(`select count(*) from notif.notifications where tenant_id='${tenant}' and type='ROSTER_PUBLISHED' and data::text ~ '${id}' and data->>'route' = '/my-schedule'`) >= 2)
+  const told = await waitFor(() => num(`select count(*) from notif.notifications where tenant_id='${tenant}' and type='ROSTER_PUBLISHED' and data::text ~ '${id}' and user_id='${M1}'`) === 1)
+  check('publish: the member is told their schedule is ready (in the app), once', told, `${notices(id, 'ROSTER_PUBLISHED')} notices in all`)
+  check('publish: the notice opens My Schedule (data.route)', num(`select count(*) from notif.notifications where tenant_id='${tenant}' and type='ROSTER_PUBLISHED' and data::text ~ '${id}' and data->>'route' = '/my-schedule' and user_id='${M1}'`) === 1)
   const wrongLock = await owner.call(`/v1/rosters/${id}/publish`, 'POST', { lockVersion: lock1, acknowledgeWarnings: true })
   check('publish: the old lock no longer works (409 ROSTER_CHANGED)', wrongLock.status === 409 && wrongLock.json?.errorCode === 'ROSTER_CHANGED', `${wrongLock.status}`)
 

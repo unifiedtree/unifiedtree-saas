@@ -3,12 +3,14 @@ package com.hrms.api.roster;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,13 +32,25 @@ class RosterTablesStayInShiftPlanningTest {
         return s.contains("/com/hrms/api/roster/") || s.contains("/com/hrms/app/roster/");
     }
 
+    /** Every main Java source of the backend (build output, tests and resources are not walked). */
     static List<Path> mainSources(Path backend) throws IOException {
-        try (Stream<Path> files = Files.walk(backend)) {
-            return files.filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> p.toString().replace('\\', '/').contains("/src/main/java/"))
-                    .filter(p -> !p.toString().replace('\\', '/').contains("/target/"))
-                    .toList();
-        }
+        List<Path> out = new ArrayList<>();
+        Files.walkFileTree(backend, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                String name = dir.getFileName() == null ? "" : dir.getFileName().toString();
+                boolean skip = name.equals("target") || name.equals("node_modules") || name.startsWith(".")
+                        || name.equals("test") || name.equals("resources");
+                return skip && !dir.equals(backend) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (file.toString().endsWith(".java") && file.toString().replace('\\', '/').contains("/src/main/java/")) out.add(file);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return out;
     }
 
     @Test
