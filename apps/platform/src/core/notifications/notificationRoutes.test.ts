@@ -20,6 +20,7 @@ const CATALOG: Record<string, string> = {
   OVERTIME_REQUESTED: 'Attendance', OVERTIME_APPROVED: 'Attendance', OVERTIME_REJECTED: 'Attendance', FACE_ENROLLMENT_COMPLETE: 'Attendance', FACE_ENROLLMENT_FAILED: 'Attendance', FACE_ENROLLMENT_RESET: 'Attendance',
   ATTENDANCE_STATUS_CHANGED: 'Attendance', CHECKIN_REMINDER: 'Attendance', TIMESHEET_SUBMITTED: 'Attendance', TIMESHEET_DECIDED: 'Attendance',
   SHIFT_CHANGE_SUBMITTED: 'Shifts', SHIFT_CHANGE_APPROVED: 'Shifts', SHIFT_CHANGE_REJECTED: 'Shifts',
+  ROSTER_PUBLISHED: 'Shifts', ROSTER_DAY_CHANGED: 'Shifts',
   EXPENSE_SUBMITTED: 'Expenses and advances', EXPENSE_APPROVED: 'Expenses and advances', EXPENSE_REJECTED: 'Expenses and advances',
   ADVANCE_SUBMITTED: 'Expenses and advances', ADVANCE_APPROVED: 'Expenses and advances', ADVANCE_REJECTED: 'Expenses and advances',
   ADVANCE_RAISED_FOR_YOU: 'Expenses and advances', EXPENSE_CLAIM_RAISED_FOR_YOU: 'Expenses and advances',
@@ -35,7 +36,7 @@ const CATALOG: Record<string, string> = {
 }
 
 // The mobile routes the server sends today (they must never be opened on the web).
-const MOBILE = ['/requests-tab', '/leave-history', '/my-claims', '/my-advances', '/notifications', '/attendance', '/attendance-history', '/documents/pending', '/profile', '/(tabs)', '/wfh-apply', '/my-corrections', '/shift-change', '/leaves/[id]']
+const MOBILE = ['/requests-tab', '/leave-history', '/my-claims', '/my-advances', '/notifications', '/attendance', '/attendance-history', '/documents/pending', '/profile', '/(tabs)', '/wfh-apply', '/my-corrections', '/shift-change', '/leaves/[id]', '/my-schedule']
 
 describe('notification routes', () => {
   it('maps every server type to its catalog group', () => {
@@ -70,6 +71,12 @@ describe('notification routes', () => {
     expect(webRouteFor('DOCUMENT_VERIFIED', { route: '/profile' })).toBe('/hrms/documents?view=my')
     // The phone opens re-enrollment; the web opens the profile's Face enrollment section.
     expect(webRouteFor('FACE_ENROLLMENT_RESET', { route: '/face-enroll?reason=reset' })).toBe('/profile#st-face')
+  })
+  it('routes the shift planner types to the person’s shift until My Schedule exists', () => {
+    expect(webRouteFor('ROSTER_PUBLISHED', { route: '/my-schedule', rosterId: 'r1' })).toBe('/hrms/shifts?tab=myshift')
+    expect(webRouteFor('ROSTER_DAY_CHANGED', { route: '/my-schedule', dates: ['2026-10-12'] })).toBe('/hrms/shifts?tab=myshift')
+    expect(webRouteFor('ROSTER_DAY_CHANGED', null)).toBe('/hrms/shifts?tab=myshift')
+    expect(groupFor('ROSTER_PUBLISHED')).toBe('Shifts')
   })
   it('routes the redesign types', () => {
     expect(webRouteFor('DECISION_UNDONE', { route: '/wfh-apply', kind: 'WFH' })).toBe('/me/wfh')

@@ -40,6 +40,8 @@ export const NOTIFICATION_TYPES = [
   'PUNCH_IN_ALERT',
   // Wishes a colleague sent from Celebrations (V143_84): who, and their message.
   'CELEBRATION_WISH',
+  // Shift planning (V143_106): a roster was published for you, or one of your days changed on a republish.
+  'ROSTER_PUBLISHED', 'ROSTER_DAY_CHANGED',
   'GENERAL',
 ] as const
 
@@ -51,7 +53,7 @@ export function groupFor(type: string): string {
   if (type.startsWith('LEAVE_')) return 'Leave'
   if (type.startsWith('CORRECTION_') || type.startsWith('OVERTIME_') || type.startsWith('FACE_ENROLLMENT_') || type.startsWith('TIMESHEET_')
     || type === 'ATTENDANCE_STATUS_CHANGED' || type === 'CHECKIN_REMINDER' || type === 'PUNCH_IN_ALERT') return 'Attendance'
-  if (type.startsWith('SHIFT_CHANGE_')) return 'Shifts'
+  if (type.startsWith('SHIFT_CHANGE_') || type.startsWith('ROSTER_')) return 'Shifts'
   if (type.startsWith('EXPENSE_') || type.startsWith('ADVANCE_')) return 'Expenses and advances'
   if (type === 'DECISION_UNDONE') return 'Approvals'
   if (type === 'SALARY_REVISED' || type.startsWith('PAYSLIP_QUERY_')) return 'Payroll'
@@ -176,6 +178,8 @@ export function webRouteFor(type: string, data?: Record<string, unknown> | null,
     // Shifts
     case 'SHIFT_CHANGE_APPROVED': case 'SHIFT_CHANGE_REJECTED': return '/me/shift-change'
     case 'SHIFT_CHANGE_SUBMITTED': return '/hrms/shifts'
+    // Your schedule: My Shift until the My Schedule page arrives (shift planning Phase 2). The sender's route is the app's.
+    case 'ROSTER_PUBLISHED': case 'ROSTER_DAY_CHANGED': return '/hrms/shifts?tab=myshift'
     // Face enrollment happens in the mobile app; Home is the closest web page.
     case 'FACE_ENROLLMENT_COMPLETE': case 'FACE_ENROLLMENT_FAILED': return '/me'
     // HR reset your face: your profile's Face enrollment, where you can enroll it again.
