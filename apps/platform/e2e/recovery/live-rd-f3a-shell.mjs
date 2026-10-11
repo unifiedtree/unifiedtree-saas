@@ -31,7 +31,9 @@ const pageErrors = []
 const failedApi = new Set()
 // Expected answers: the session refresh probe (422 with nothing to refresh), the Help & support list
 // before its endpoint ships (404), and a person's own restricted reads the pages already make today.
-const EXPECTED = [/422 POST \/api\/v1\/canonical-auth\/refresh$/, /404 GET \/api\/v1\/workspace\/admin-contacts$/]
+// Since fix/handoff-signin (11 Oct 2026) the sign-in page first asks for the website's account sign-in
+// once (POST /v1/accounts/auth/refresh): with none on this browser it answers 401 and the form shows.
+const EXPECTED = [/422 POST \/api\/v1\/canonical-auth\/refresh$/, /404 GET \/api\/v1\/workspace\/admin-contacts$/, /401 POST \/api\/v1\/accounts\/auth\/refresh$/]
 function watch(page, who) {
   page.on('pageerror', (e) => pageErrors.push(`${who}: ${String(e.message || e).slice(0, 200)}`))
   page.on('response', (r) => {

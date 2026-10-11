@@ -111,8 +111,9 @@ const LIT_BARS = /(sections|views|Master inner sections)$/
 // API answers expected here: the session refresh probe (nothing to refresh), the admin contacts behind
 // Help & support (its endpoint is not built yet: the panel says so), and Billing & Plan's current plan
 // on the demo data (the owner's workspace has no billing account linked; the same before the redesign,
-// see live-design-settings on main).
-const EXPECTED_API = [/^422 POST .*\/canonical-auth\/refresh$/, /^404 GET .*\/admin-contacts$/, /^403 GET .*\/workspace\/plan\/current$/]
+// see live-design-settings on main). Since fix/handoff-signin (11 Oct 2026) the sign-in page first asks for
+// the website's account sign-in once (POST /v1/accounts/auth/refresh): with none on this browser, 401.
+const EXPECTED_API = [/^422 POST .*\/canonical-auth\/refresh$/, /^404 GET .*\/admin-contacts$/, /^403 GET .*\/workspace\/plan\/current$/, /^401 POST .*\/accounts\/auth\/refresh$/]
 
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
