@@ -73,7 +73,7 @@ export function BusinessShell() {
           </div>
           <div className="ut-topbar__right">
             {launcher && items.length > 0 && (
-              <a href={items[0].path} className="ut-biz__apps" onMouseEnter={() => preloadPath(items[0].path)}
+              <a href={items[0].path} className="ut-biz__apps" aria-label="Business settings" onMouseEnter={() => preloadPath(items[0].path)}
                 onClick={(e) => { if (!plainClick(e)) return; e.preventDefault(); go(items[0].path) }}>
                 <SettingsIcon size={16} aria-hidden="true" />
                 <span className="ut-frame__label">Business settings</span>
