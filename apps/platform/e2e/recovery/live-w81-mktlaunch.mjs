@@ -262,7 +262,8 @@ try {
   check('one refresh for this page load', callsIn('entitled').filter((c) => c.path === '/v1/accounts/auth/refresh').length === 1)
   await page.screenshot({ path: `${shots}/w81-mktlaunch-apps-1440.png`, fullPage: true })
 
-  await page.getByRole('button', { name: /^Business details/ }).click()
+  // Business settings (owner, 10 Oct 2026): the launcher's top-bar button; the owner's first one is Business details.
+  await page.getByRole('link', { name: 'Business settings', exact: true }).click()
   await page.waitForURL((u) => u.pathname === '/business/details', { timeout: 15000 })
   await frameButton(page).waitFor({ timeout: 15000 })
   check('business frame: Marketing next to All apps', await frameButton(page).isVisible())

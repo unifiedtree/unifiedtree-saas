@@ -78,8 +78,21 @@ export async function resolveWorkspaceHost(
 }
 
 // One lookup per page load, shared (React's StrictMode mounts the gate twice in development).
-let shared: { subdomain: string; promise: Promise<WorkspaceHostState> } | null = null
+let shared: { subdomain: string; promise: Promise<WorkspaceHostState>; answer: WorkspaceHostState | null } | null = null
 export function resolveWorkspaceHostOnce(subdomain: string): Promise<WorkspaceHostState> {
-  if (!shared || shared.subdomain !== subdomain) shared = { subdomain, promise: resolveWorkspaceHost(subdomain) }
+  if (!shared || shared.subdomain !== subdomain) {
+    const entry: NonNullable<typeof shared> = { subdomain, promise: resolveWorkspaceHost(subdomain), answer: null }
+    // Kept before the gate hears it, so the app it then renders can read it at once.
+    void entry.promise.then((s) => { entry.answer = s })
+    shared = entry
+  }
   return shared.promise
+}
+
+/**
+ * This page load's answer for the address, once it has come back (the gate waits for it before it renders
+ * the app), else null. The sign-in page reads it at its first render (silentSignIn.ts).
+ */
+export function workspaceHostAnswer(subdomain: string): WorkspaceHostState | null {
+  return shared && shared.subdomain === subdomain ? shared.answer : null
 }

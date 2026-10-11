@@ -65,6 +65,9 @@
 .ut-tile__dot { display: inline-block; width: 6px; height: 6px; margin: 9px 0 0 1px; border-radius: 50%; background: var(--u-gd, #C8912E); }
 .ut-tile__img { display: block; width: 32px; height: 32px; object-fit: contain; }
 .ut-rail__ws { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The company selector in the HRMS top bar: phones only (on a desktop the rail's top block is the selector). */
+.ut-cophone { display: none; }
+@media (max-width: 767px) { .ut-cophone { display: contents; } }
 /* The company selector as the rail's top block (CompanySwitcher variant 'rail'): opens on hover or click. */
 .ut-rail__cosel { border: 0; padding: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; }
 .ut-rail__cosel:focus-visible .ut-rail__tile { box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); }

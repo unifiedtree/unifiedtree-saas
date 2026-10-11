@@ -7,6 +7,19 @@ import type { AuthState, AuthMeResponse, AuthUser, AuthTenant, PermissionGrant, 
 
 const EMPTY_SCOPES: ScopeContext = { branches: [], departments: [], directReports: [] };
 
+// ─── Sign-out listeners ─────────────────────────────────────────────────────
+// For the app's own bookkeeping of a sign-out the person chose (logout() below),
+// e.g. so that a sign-in made without them cannot undo it. Not called when a
+// session simply ends (hydrate finding none).
+type SignOutListener = () => void;
+const signOutListeners = new Set<SignOutListener>();
+
+/** Runs `listener` at the start of every logout(), before the session is gone. Returns the unsubscribe. */
+export function onSignOut(listener: SignOutListener): () => void {
+  signOutListeners.add(listener);
+  return () => { signOutListeners.delete(listener); };
+}
+
 /**
  * Mint a fresh access token from the httpOnly refresh cookie set at login.
  *
@@ -261,6 +274,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 
   logout: async () => {
+    for (const listener of [...signOutListeners]) {
+      try { listener(); } catch { /* a listener never stops a sign-out */ }
+    }
     try {
       // Canonical path (/v1/auth/logout does not exist under the profile
       // production runs). withCredentials so the refresh cookie is sent and

@@ -309,6 +309,8 @@ export function PlatformShell() {
             tabs={topTabs}
             pill={topTabs ? null : pillFor()}
             chip={chip}
+            // On a phone the rail is hidden, so the company selector sits in the top bar there (shell.css .ut-cophone).
+            company={<span className="ut-cophone"><CompanySwitcher /></span>}
             search={
               <TopBarSearch
                 onOpen={(path) => openInApp(navigate, path)}

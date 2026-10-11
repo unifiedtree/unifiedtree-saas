@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useAuthStore as useSdkStore, apiEvents, setAccessToken } from '@unifiedtree/sdk'
+import { useAuthStore as useSdkStore, apiEvents, onSignOut, setAccessToken } from '@unifiedtree/sdk'
 import type { AuthUser, AuthTenant, ModuleInfo } from '@unifiedtree/sdk'
 import { useAuthStore as useOldStore } from '@/core/auth/authStore'
+import { clearSignedOut, isSignInStart, markSignedOut } from '@/core/auth/silentSignIn'
 import { queryClient } from '@/providers/QueryProvider'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import { resetMarketingSession } from '@/core/marketing/useMarketingLauncher'
@@ -122,6 +123,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     prevStatusRef.current = sdkStatus
   }, [sdkStatus, sdkUser, sdkTenant, sdkPermissions, sdkModules, oldLogin, oldLogout])
+
+  // A sign-out sticks on this business in this browser: the sign-in page then never uses the website's sign-in
+  // (silentSignIn.ts). Every "Sign out" goes through the SDK's logout().
+  useEffect(() => onSignOut(() => markSignedOut()), [])
+
+  // Signing in again spends that mark: the form, Google, the website's Enter or hand-over, a session that came
+  // back on load. Only on the way in: a signed-in page asking /me again leaves it alone.
+  const settledRef = useRef<typeof sdkStatus>('idle')
+  useEffect(() => {
+    if (sdkStatus === 'loading') return
+    if (isSignInStart(settledRef.current, sdkStatus)) clearSignedOut()
+    settledRef.current = sdkStatus
+  }, [sdkStatus])
 
   // Wire 403 forbidden events to a window event so Toaster can pick it up
   useEffect(() => {

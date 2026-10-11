@@ -12,9 +12,9 @@
 // same page lit. Payroll's and Workforce's own "Payroll sections" / "Master sections" bars show as the
 // top bar's "Payroll pages" / "Workforce pages" tabs: the same pages, the same one lit. The rail lights what it lit
 // then, under its new name (Master → Workforce…); what the gear lit, More lights now.
-// The gear and the profile menu become More: My workspace (the person's Home), My profile, All apps,
-// Preferences (the first settings page the person can open), Help & support and Sign out. On a phone
-// the drawer holds the same. The hub's own addresses still open the original page. No module shows
+// The gear and the profile menu become More: View my profile, All apps, Help & support and Sign out (owner,
+// 10 Oct 2026: no My workspace, My profile or Preferences rows any more). On a phone the drawer holds the
+// same. The hub's own addresses still open the original page. No module shows
 // on the rail or in More that the person's rail didn't have before (renamed, or their own My work).
 // Read-only: it only signs in and opens pages.
 //
@@ -34,8 +34,6 @@ const ACCOUNTS = [
   ['fin', 'fin@unifiedtree.demo'], ['mgr', 'mgr@unifiedtree.demo'], ['reader', 'reader@unifiedtree.demo'],
 ].filter(([who]) => !only.length || only.includes(who))
 const PHONE = new Set(['owner', 'hrm', 'reader'])
-// Home by permission (DECISIONS 12): the admin dashboard, or the self-service Home.
-const HOME = { owner: '/dashboard', admin: '/dashboard', hrm: '/dashboard', fin: '/dashboard', mgr: '/me', reader: '/me' }
 const PLAN_ADMINS = new Set(['owner', 'admin'])
 
 // Every settings address as it was before the hub, and the pages around them.
@@ -113,8 +111,9 @@ const LIT_BARS = /(sections|views|Master inner sections)$/
 // API answers expected here: the session refresh probe (nothing to refresh), the admin contacts behind
 // Help & support (its endpoint is not built yet: the panel says so), and Billing & Plan's current plan
 // on the demo data (the owner's workspace has no billing account linked; the same before the redesign,
-// see live-design-settings on main).
-const EXPECTED_API = [/^422 POST .*\/canonical-auth\/refresh$/, /^404 GET .*\/admin-contacts$/, /^403 GET .*\/workspace\/plan\/current$/]
+// see live-design-settings on main). Since fix/handoff-signin (11 Oct 2026) the sign-in page first asks for
+// the website's account sign-in once (POST /v1/accounts/auth/refresh): with none on this browser, 401.
+const EXPECTED_API = [/^422 POST .*\/canonical-auth\/refresh$/, /^404 GET .*\/admin-contacts$/, /^403 GET .*\/workspace\/plan\/current$/, /^401 POST .*\/accounts\/auth\/refresh$/]
 
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
@@ -284,7 +283,8 @@ try {
         const railNames = await s.page.locator('.ut-railwrap nav[aria-label="Primary"] a.ut-rail__item').evaluateAll((els) => els.map((a) => a.title))
         const more = await openMore(s)
         groups = await moreGroups(more)
-        const overflow = groups.filter((g) => g.group !== 'My space' && g.group !== 'Settings').flatMap((g) => g.rows.map((r) => moduleName(g.group, r)))
+        // More's own groups: My space, and Help (it was Settings, with Preferences, until 10 Oct 2026).
+        const overflow = groups.filter((g) => g.group !== 'My space' && g.group !== 'Help').flatMap((g) => g.rows.map((r) => moduleName(g.group, r)))
         modules = [...railNames, ...overflow]
         inMore = overflow
         check(`${tag}: /profile lights More, not a rail item (More holds My profile now)`, rail.more && !rail.lit.length, show(rail.lit))
@@ -301,12 +301,14 @@ try {
       check(`${tag}: "HR setup" exactly when "HR Setup" was on the rail, and no "HRMS settings"`, oldRail.includes('HR Setup') === modules.includes('HR setup') && !modules.some((m) => /HRMS settings/i.test(m)), show(modules))
 
       const mySpace = groups.find((g) => g.group === 'My space')?.rows ?? []
-      const settingsRows = groups.find((g) => g.group === 'Settings')?.rows ?? []
+      const helpRows = groups.find((g) => g.group === 'Help')?.rows ?? []
       // Org chart (P-ORG) sits in My space for people the shell offers it to (PlatformShell canSeeOrgChart):
       // HRMS active, and an employee record or hrms.employee.read.
       const orgChart = s.me.modules.includes('hrms') && (!!s.me.employeeId || s.me.permissions.includes('hrms.employee.read') || s.me.permissions.includes('*'))
-      const mySpaceWant = ['My workspace', 'My profile', ...(orgChart ? ['Org chart'] : []), 'All apps']
-      check(`${tag}: More has My workspace, My profile${orgChart ? ', Org chart' : ''}, All apps; Preferences, Help & support (the gear and profile menu)`, show(mySpace) === show(mySpaceWant) && show(settingsRows) === show(['Preferences', 'Help & support']), show(groups))
+      // Owner, 10 Oct 2026: no My workspace, My profile or Preferences rows (the card's "View my profile" stays);
+      // the Settings group is Help.
+      const mySpaceWant = [...(orgChart ? ['Org chart'] : []), 'All apps']
+      check(`${tag}: More has ${orgChart ? 'Org chart, ' : ''}All apps; Help & support (the gear and profile menu)`, show(mySpace) === show(mySpaceWant) && show(helpRows) === show(['Help & support']), show(groups))
       const lead = async (row, kind = 'link') => {
         await s.page.goto(base + '/profile'); await settle(s.page)
         const box = phone ? await openDrawer(s) : await openMore(s)
@@ -314,17 +316,10 @@ try {
         await settle(s.page)
         return new URL(s.page.url()).pathname
       }
-      const leads = { 'My workspace': await lead('My workspace'), 'My profile': await lead('My profile'), 'All apps': await lead('All apps') }
-      check(`${tag}: My workspace opens their Home (${HOME[who]}), My profile /profile, All apps /modules`, show(leads) === show({ 'My workspace': HOME[who], 'My profile': '/profile', 'All apps': '/modules' }), show(leads))
-      // Preferences: /settings when the person could open it before, else the first settings page they can open.
-      const rowBefore = before.pages['/settings']?.row?.items ?? []
+      const leads = { 'View my profile': await lead('View my profile'), 'All apps': await lead('All apps') }
+      check(`${tag}: View my profile opens /profile, All apps /modules`, show(leads) === show({ 'View my profile': '/profile', 'All apps': '/modules' }), show(leads))
+      // Every settings address (below) still opens as before; More no longer has a Preferences row leading to one.
       const openBefore = (p) => before.pages[p] && !before.pages[p].restricted && before.pages[p].at.split(/[?#]/)[0] === p
-      const pathOf = { 'Branding': '/settings/branding', 'Security': '/settings/security', 'Notifications': '/settings/notifications', 'Billing & Plan': '/settings/billing', 'Integrations': '/settings/integrations', 'Document types': '/settings/documents', 'Users & Access': '/users', 'Roles & Permissions': '/roles', 'Audit Logs': '/audit-logs', 'Danger Zone': '/settings/danger' }
-      const prefWant = openBefore('/settings') ? '/settings' : rowBefore.filter((r) => r !== 'Profile').map((r) => pathOf[r]).find((p) => p && openBefore(p))
-      const pref = await lead('Preferences', 'link')
-      const prefSnap = await snap(s.page)
-      const prefPanel = await pagesPanel(s.page)
-      check(`${tag}: Preferences opens ${prefWant} (a settings page they can open) with the Settings pages lit on it`, pref === prefWant && !prefSnap.restricted && prefPanel?.bar === 'Settings pages' && prefPanel.lit.length === 1, `at ${pref}, restricted ${prefSnap.restricted}, panel ${show(prefPanel)}`)
       // Help & support: its panel opens (the contacts come later; it says so).
       await s.page.goto(base + '/profile'); await settle(s.page)
       await (phone ? await openDrawer(s) : await openMore(s)).getByRole('button', { name: 'Help & support', exact: true }).click()

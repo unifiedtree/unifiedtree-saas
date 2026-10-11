@@ -1466,10 +1466,12 @@ public class PayrollRunService {
             if (late > 0) lateMarkCountByEmp.put(eid, late);
         }
 
-        // Approved leave requests that overlap the period.
+        // Approved leave requests that overlap the period. A half-day leave is
+        // paid together with that day's attendance for the other half
+        // (PayrollCalc.leaveDay), so attendance is read first, above.
         Map<UUID, Map<LocalDate, DayStatus>> leaveByEmp = new HashMap<>(empIds.size() * 2);
         jdbc.query("""
-                SELECT lr.employee_id, lr.start_date, lr.end_date, lr.half_day,
+                SELECT lr.employee_id, lr.start_date, lr.end_date, lr.half_day, lr.duration,
                        lt.is_paid_leave
                   FROM leave_mgmt.leave_requests lr
                   JOIN leave_mgmt.leave_types lt ON lt.id = lr.leave_type_id
@@ -1484,14 +1486,13 @@ public class PayrollRunService {
             UUID eid = rs.getObject("employee_id", UUID.class);
             LocalDate s = rs.getObject("start_date", LocalDate.class);
             LocalDate e = rs.getObject("end_date", LocalDate.class);
-            boolean half = rs.getBoolean("half_day");
+            boolean half = PayrollCalc.halfDayLeave(rs.getBoolean("half_day"), rs.getString("duration"));
             boolean paid = rs.getBoolean("is_paid_leave");
-            DayStatus st = half ? DayStatus.HALF_DAY_LEAVE
-                    : (paid ? DayStatus.PAID_LEAVE : DayStatus.LOP_LEAVE);
+            Map<LocalDate, DayStatus> att = attendanceByEmp.getOrDefault(eid, Map.of());
             LocalDate d = s.isBefore(periodStart) ? periodStart : s;
             LocalDate last = e.isAfter(periodEnd) ? periodEnd : e;
             Map<LocalDate, DayStatus> map = leaveByEmp.computeIfAbsent(eid, k -> new HashMap<>());
-            while (!d.isAfter(last)) { map.put(d, st); d = d.plusDays(1); }
+            while (!d.isAfter(last)) { map.put(d, PayrollCalc.leaveDay(paid, half, att.get(d))); d = d.plusDays(1); }
         });
 
         // Company-wide holidays for the period (Settings → Holidays, plus the

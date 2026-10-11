@@ -27,6 +27,8 @@ export function CompanySwitcher({ variant = 'bar', mark, workspaceName }: Compan
   const canAdd = usePermission(P.HRMS_BRANCH_READ)
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
+  // The rail opens the menu on hover; a click right after that hover keeps it open instead of closing it.
+  const hoverOpenedAt = useRef(0)
   if (!company) return null
 
   const addCompany = () => { setOpen(false); guardedGo(() => navigate('/hrms/companies')) }
@@ -37,7 +39,8 @@ export function CompanySwitcher({ variant = 'bar', mark, workspaceName }: Compan
       {variant === 'rail' ? (
         <button ref={anchor} type="button" className="ut-rail__brand ut-rail__cosel" data-open={open ? '' : undefined}
           aria-haspopup="menu" aria-expanded={open} aria-label={label} title={company.name}
-          onMouseEnter={() => setOpen(true)} onClick={() => setOpen((v) => !v)}>
+          onMouseEnter={() => { if (!open) { hoverOpenedAt.current = Date.now(); setOpen(true) } }}
+          onClick={() => { if (open && Date.now() - hoverOpenedAt.current < 1500) return; setOpen((v) => !v) }}>
           <span className="ut-rail__tile" aria-hidden="true">{mark}</span>
           <span className="ut-rail__ws ut-rail__wsco">
             <span className="ut-rail__wsname">{workspaceName || company.name}</span>
