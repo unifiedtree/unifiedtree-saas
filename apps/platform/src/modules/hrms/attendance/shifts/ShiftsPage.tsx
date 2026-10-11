@@ -2,7 +2,8 @@
 // page's own views are inline pill tabs (DECISIONS 21), kept in ?tab= with today's names and order:
 //   people with attendance.team.read: Shift Schedules · Roster · Shift Planner · Overtime · Shift Requests
 //   everyone else (attendance.checkin.self): My Shift
-// Shift Planner (shift planning Phase 1, design §1.6) shows with attendance.roster.plan or attendance.roster.publish.
+// Shift Planner (shift planning Phase 1, design §1.6) shows with attendance.roster.plan or attendance.roster.publish,
+// and only for a business in shift planning's pilot (the test businesses first; hidden until the answer is in).
 // ?add=1 opens the new-shift drawer (the planner's "Add custom shift" opens this page in a new tab).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -17,6 +18,7 @@ import { useEmployeeShift, useShiftPolicies } from '../../api/useShiftPolicies'
 import { usePendingShiftRequests } from '../../api/useShiftRequests'
 import { useOvertimeEntries, useTeamOvertimeRequests } from '../../api/useOvertime'
 import { useOvertimeRules } from '../../api/shared/useOvertimeRules'
+import { useShiftPlanningAvailability } from '../../api/useShiftPlanning'
 import { SchedulesView } from './SchedulesView'
 import { RosterView, type RosterRow } from './RosterView'
 import { OvertimeView } from './OvertimeView'
@@ -51,7 +53,8 @@ export function ShiftsPage() {
   const canSelf = usePermission(P.ATTENDANCE_CHECKIN_SELF)
   const canPlan = usePermission(P.ATTENDANCE_ROSTER_PLAN)
   const canPublishRoster = usePermission(P.ATTENDANCE_ROSTER_PUBLISH)
-  const canPlanner = canPlan || canPublishRoster
+  const planning = useShiftPlanningAvailability({ enabled: canPlan || canPublishRoster })
+  const canPlanner = (canPlan || canPublishRoster) && planning.enabled
   const tabs = tabsFor(canTeam, canPlanner)
   const tab: Tab = tabs.find((t) => t.key === params.get('tab'))?.key ?? tabs[0].key
   const [addKey, setAddKey] = useState(0)
@@ -120,6 +123,16 @@ export function ShiftsPage() {
     myshift: mine?.shiftName
       ? `You work the ${mine.shiftName} shift, ${hhmm(mine.startTime)} to ${hhmm(mine.endTime)}${mine.gracePeriodMinutes ? ` with ${mine.gracePeriodMinutes} minutes’ grace` : ''}. Pick another shift to ask HR to move you.`
       : 'Your work timing, and requests to change it.',
+  }
+
+  // Until the pilot's answer is in (once a sign-in), a page that would differ with the planner shows only its header,
+  // so neither the planner nor another tab shows first and then goes away.
+  if (planning.pending && (params.get('tab') === 'planner' || (!canTeam && !canSelf))) {
+    return (
+      <PageFrame label="Shifts & overtime" className="apl-page">
+        <PageHeader eyebrow="Attendance & time" title="Shifts & overtime" />
+      </PageFrame>
+    )
   }
 
   if (!canTeam && !canSelf && !canPlanner) {

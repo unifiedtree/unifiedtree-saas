@@ -24,6 +24,8 @@ import { ResetPassword } from '@/pages/ResetPassword'
 import { OnboardingForm } from '@/modules/hrms/onboarding/OnboardingForm'
 
 import { ModuleGate } from '@/shared/components/ModuleGate'
+// Shift planning's pilot (test businesses only): its pages open only where it is switched on, else Shifts & overtime.
+import { ShiftPlanningGate } from '@/modules/hrms/attendance/planner/ShiftPlanningGate'
 import { ModulePreview } from '@/shared/components/ModulePreview'
 import { ComingSoon } from '@/shared/components/ComingSoon'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
@@ -705,7 +707,7 @@ export const ROUTE_TREE = (
           path="/hrms/shifts/planner/import"
           element={
             <RouteGuard anyOf={[P.ATTENDANCE_ROSTER_PLAN]}>
-              <ModuleGate moduleKey="hrms"><RosterImportPage /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><ShiftPlanningGate><RosterImportPage /></ShiftPlanningGate></ModuleGate>
             </RouteGuard>
           }
         />
@@ -721,7 +723,7 @@ export const ROUTE_TREE = (
           path="/hrms/shifts/planner/new"
           element={
             <RouteGuard anyOf={[P.ATTENDANCE_ROSTER_PLAN, P.ATTENDANCE_ROSTER_PUBLISH]}>
-              <ModuleGate moduleKey="hrms"><PlannerPage /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><ShiftPlanningGate><PlannerPage /></ShiftPlanningGate></ModuleGate>
             </RouteGuard>
           }
         />
@@ -729,7 +731,7 @@ export const ROUTE_TREE = (
           path="/hrms/shifts/planner/:rosterId"
           element={
             <RouteGuard anyOf={[P.ATTENDANCE_ROSTER_PLAN, P.ATTENDANCE_ROSTER_PUBLISH]}>
-              <ModuleGate moduleKey="hrms"><PlannerPage /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><ShiftPlanningGate><PlannerPage /></ShiftPlanningGate></ModuleGate>
             </RouteGuard>
           }
         />

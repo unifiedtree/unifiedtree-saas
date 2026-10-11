@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, EmptyState, Section, SegmentedControl, errorText } from '@/design/kit/display'
 import { Dialog, Input, PanelButton, useToast } from '@/design/kit/overlays'
-import { isFeatureNotReady } from '@/core/api/featureNotReady'
+import { isShiftPlanningOff } from '../../api/useShiftPlanning'
 import { useShiftPolicies } from '../../api/useShiftPolicies'
 import { useRosterSettings, useRosters, useRotationTemplates, useSaveRosterSettings } from '../../api/useRosters'
 import { RosterList } from './RosterList'
@@ -29,7 +29,7 @@ export function PlannerHome({ companyId }: { companyId: string }) {
   const policies = useShiftPolicies(companyId)
   const shifts = useMemo(() => toShiftLites(policies.data ?? []), [policies.data])
 
-  if (isFeatureNotReady(rosters.error) || isFeatureNotReady(templates.error)) {
+  if (isShiftPlanningOff(rosters.error) || isShiftPlanningOff(templates.error)) {
     return <EmptyState icon="calendarDays" title="Shift planning isn’t switched on yet." hint="Rosters and rotation patterns appear here once it is." />
   }
   if (scope.noDepartment) {
@@ -54,12 +54,12 @@ export function PlannerHome({ companyId }: { companyId: string }) {
       </div>
       {sub === 'rosters' ? (
         <Section title="Rosters" body="flush" sub="Plans of who works which shift on each day. People see a roster once it’s published."
-          error={rosters.error && !isFeatureNotReady(rosters.error) ? rosters.error : undefined} onRetry={() => rosters.refetch()}>
+          error={rosters.error && !isShiftPlanningOff(rosters.error) ? rosters.error : undefined} onRetry={() => rosters.refetch()}>
           <RosterList rosters={rosters.data ?? []} loading={rosters.isLoading} canPlan={scope.canPlan} />
         </Section>
       ) : (
         <Section title="Rotation patterns" body="flush" sub="Saved cycles of shifts and days off to plan rosters from."
-          error={templates.error && !isFeatureNotReady(templates.error) ? templates.error : undefined} onRetry={() => templates.refetch()}>
+          error={templates.error && !isShiftPlanningOff(templates.error) ? templates.error : undefined} onRetry={() => templates.refetch()}>
           <PatternList companyId={companyId} templates={templates.data ?? []} loading={templates.isLoading || policies.isLoading} shifts={shifts}
             departments={scope.departments} companyWide={scope.companyWide} canPlan={scope.canPlan} />
         </Section>

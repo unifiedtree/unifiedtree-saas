@@ -15,7 +15,8 @@ import { UploadDrop, UploadFile } from '@/design/kit/data'
 import { DateRangeInput, FieldGrid, Input, MonthInput, Select, useToast } from '@/design/kit/overlays'
 import { istToday } from '@/design/dc/dates'
 import { apiJson } from '@/core/api/client'
-import { errorCodeOf, isFeatureNotReady } from '@/core/api/featureNotReady'
+import { errorCodeOf } from '@/core/api/featureNotReady'
+import { isShiftPlanningOff } from '../../../api/useShiftPlanning'
 import { useCurrentCompany } from '../../../company/CurrentCompany'
 import { useBranches, useDepartments } from '../../../api/useOrg'
 import type { PlanResponse, RosterDetail } from '../../../api/rosterTypes'
@@ -62,7 +63,7 @@ export function RosterImportPage() {
   const scopeName = [departments.find((d) => d.id === state.departmentId)?.name, branches.find((b) => b.id === state.branchId)?.name].filter(Boolean).join(' · ')
   const blocker = validateBlocker(state, { hasFile: !!file, companyId, companyWide })
   const v = state.validation
-  const notReady = isFeatureNotReady(rostersQ.error) || isFeatureNotReady(validate.error) || isFeatureNotReady(apply.error)
+  const notReady = isShiftPlanningOff(rostersQ.error) || isShiftPlanningOff(validate.error) || isShiftPlanningOff(apply.error)
 
   const update = (patch: Parameters<typeof changeScope>[1]) => { setState((s) => changeScope(s, patch)); validate.reset(); setStep('import') }
   const go = (to: ImportStep) => { if (canOpen(to, state)) setStep(to) }
@@ -183,7 +184,7 @@ export function RosterImportPage() {
                 <li>People are found by employee code, else by full name. The import never changes employee records.</li>
                 <li>PH, L and COFF come from Settings › Holidays and approved leave; the sheet only says where they are.</li>
               </ul>
-              {validate.isError && !isFeatureNotReady(validate.error) && (
+              {validate.isError && !isShiftPlanningOff(validate.error) && (
                 <Callout tone="danger" icon="alertTriangle" live>{errorText(validate.error, 'The file couldn’t be checked. Try again.')}</Callout>
               )}
               <div className="rim-row rim-row--end">
@@ -224,7 +225,7 @@ export function RosterImportPage() {
                   onChange={(e) => setName(e.target.value)} />
               )}
               <Callout tone="info">It is saved as a draft. Nothing changes for anyone until it is published in the planner.</Callout>
-              {apply.isError && !isFeatureNotReady(apply.error) && (
+              {apply.isError && !isShiftPlanningOff(apply.error) && (
                 <Callout tone="danger" icon="alertTriangle" live>{applyError(errorCodeOf(apply.error), errorText(apply.error, ''))}</Callout>
               )}
               <div className="rim-row">

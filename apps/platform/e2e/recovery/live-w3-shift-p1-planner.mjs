@@ -32,7 +32,31 @@ async function token(email) {
   return { ...headers, Authorization: `Bearer ${(await r.json()).accessToken}` }
 }
 
+/**
+ * A cold dev server compiles every module on its first request, which on this machine can take longer than a page
+ * load waits. Fetch the app's static module graph (and the planner's) once from Node first, on 127.0.0.1.
+ */
+async function warmUp() {
+  const origin = base.replace('demo.localhost', '127.0.0.1')
+  const seen = new Set(), queue = ['/', '/src/main.tsx', '/src/modules/hrms/attendance/ShiftsRoute.tsx', '/src/modules/hrms/attendance/planner/PlannerPage.tsx']
+  const t0 = Date.now()
+  const spec = /(?:\bfrom\s*|\bimport\s*)["'](\/[^"']+)["']/g
+  const budget = Number(process.env.RECOVERY_WARMUP_SECONDS || 480) * 1000   // a cold dependency pre-bundle took 4-9 min here
+  while (queue.length && Date.now() - t0 < budget) {
+    await Promise.all(queue.splice(0, 8).map(async (u) => {
+      if (seen.has(u)) return
+      seen.add(u)
+      try {
+        const text = await (await fetch(origin + u)).text()
+        for (const m of text.matchAll(spec)) if (!seen.has(m[1])) queue.push(m[1])
+      } catch { /* the browser will say */ }
+    }))
+  }
+  console.log(`warm-up: ${seen.size} modules in ${Math.round((Date.now() - t0) / 1000)} s, ${queue.length} left`)
+}
+
 mkdirSync(shots, { recursive: true })
+await warmUp()
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const pageErrors = [], apiErrors = []
@@ -43,15 +67,15 @@ const coverageText = () => page.locator('tbody.spl-cov').innerText().catch(() =>
 let rosterId = null
 
 try {
-  await page.goto(base + '/login')
+  await page.goto(base + '/login', { waitUntil: 'domcontentloaded', timeout: 180000 })
   await page.locator('input[type=email]').fill('owner@unifiedtree.demo')
   await page.locator('input[type=password]').fill(password)
   await page.locator('button[type=submit]').click()
-  await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 60000 })
+  await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 120000 })
 
   // ── The tab ──
-  await page.goto(base + '/hrms/shifts?tab=planner')
-  await page.getByRole('button', { name: 'Plan a roster' }).waitFor({ timeout: 30000 })
+  await page.goto(base + '/hrms/shifts?tab=planner', { waitUntil: 'domcontentloaded', timeout: 180000 })
+  await page.getByRole('button', { name: 'Plan a roster' }).waitFor({ timeout: 120000 })
   check('the Shift Planner tab shows Plan a roster and Import from Excel', await page.getByRole('button', { name: 'Import from Excel' }).isVisible())
   await page.screenshot({ path: `${shots}/shift-p1-live-tab.png` })
 
@@ -128,6 +152,25 @@ try {
   check('the roster reads back published, version 1', body?.roster?.status === 'PUBLISHED' && body?.roster?.version === 1, `${back.status} ${body?.roster?.status} v${body?.roster?.version}`)
   const days2 = Number(sql(`SELECT count(*) FROM attendance.schedule_days WHERE tenant_id='${tenant}' AND roster_id='${rosterId}' AND work_date < DATE '${istToday()}'`))
   check('no day before today was published', days2 === 0, `${days2}`)
+
+  // ── Phone width (390): the tab's lists, and the planner's note that it needs a wider screen ──
+  const phone = await browser.newPage({ viewport: { width: 390, height: 844 } })
+  phone.on('pageerror', (e) => pageErrors.push(`phone: ${String(e).slice(0, 300)}`))
+  await phone.goto(base + '/login', { waitUntil: 'domcontentloaded', timeout: 180000 })
+  await phone.locator('input[type=email]').fill('owner@unifiedtree.demo')
+  await phone.locator('input[type=password]').fill(password)
+  await phone.locator('button[type=submit]').click()
+  await phone.waitForURL((u) => !u.pathname.includes('login'), { timeout: 120000 })
+  await phone.goto(base + '/hrms/shifts?tab=planner', { waitUntil: 'domcontentloaded', timeout: 180000 })
+  check('phone: the Shift Planner tab lists the roster', await phone.getByText(`${body?.roster?.name ?? ''}`).first().waitFor({ timeout: 60000 }).then(() => true, () => false))
+  await phone.waitForTimeout(1500)
+  await phone.screenshot({ path: `${shots}/shift-p1-live-tab-phone.png` })
+  await phone.goto(base + `/hrms/shifts/planner/${rosterId}`, { waitUntil: 'domcontentloaded', timeout: 180000 })
+  check('phone: the planner says it needs a wider screen', await phone.getByText('The planner needs a wider screen. Open it on a computer.').waitFor({ timeout: 60000 }).then(() => true, () => false))
+  await phone.waitForTimeout(1500)
+  await phone.screenshot({ path: `${shots}/shift-p1-live-planner-phone.png` })
+  await phone.close()
+
   check('no page errors', pageErrors.length === 0, pageErrors.join(' | '))
   check('no API errors', apiErrors.length === 0, apiErrors.join(' | '))
 } catch (e) {

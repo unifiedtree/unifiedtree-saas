@@ -12,7 +12,8 @@ import { Button, Callout, EmptyState, PageFrame, PageHeader, SegmentedControl, S
 import { Checkbox, Dialog, Menu, PanelButton, Select, useToast, type MenuEntry } from '@/design/kit/overlays'
 import { fmtShort, istToday } from '@/design/dc/dates'
 import { apiJson } from '@/core/api/client'
-import { httpStatusOf, isFeatureNotReady } from '@/core/api/featureNotReady'
+import { httpStatusOf } from '@/core/api/featureNotReady'
+import { isShiftPlanningOff } from '../../api/useShiftPlanning'
 import { guardedGo, useNavigationGuard } from '@/design/shell/navigationGuard'
 import { useCurrentCompany } from '../../company/CurrentCompany'
 import { useShiftPolicies } from '../../api/useShiftPolicies'
@@ -334,7 +335,7 @@ function Planner({ rosterId }: { rosterId: string | null }) {
   const onUndo = useCallback(() => dispatch({ type: 'undo' }), [])
 
   // ── Page states ──
-  const notReady = isFeatureNotReady(detail.error) || isFeatureNotReady(previewError) || isFeatureNotReady(templates.error)
+  const notReady = isShiftPlanningOff(detail.error) || isShiftPlanningOff(previewError) || isShiftPlanningOff(templates.error)
   const frame = (body: JSX.Element) => (
     <PageFrame label="Shift planner" className="apl-page spl-page">
       <PageHeader eyebrow={<BackLink />} title="Shift planner" />
@@ -426,7 +427,7 @@ function Planner({ rosterId }: { rosterId: string | null }) {
         </div>
       </div>
       {updating && <div className="spl-updating" role="status">Updating…</div>}
-      {!!previewError && !updating && !isFeatureNotReady(previewError) && (
+      {!!previewError && !updating && !isShiftPlanningOff(previewError) && (
         <div className="spl-note" data-tone="red">Couldn’t update the preview: {errorText(previewError, 'Try again in a moment.')} <button type="button" className="spl-link" onClick={() => dispatch({ type: 'refresh' })}>Try again</button></div>
       )}
       {showCheck && <ScheduleCheck checks={checks} updating={updating} full={!!fullChecks && fullChecks.rev === state.rev} onReview={review} />}
