@@ -107,6 +107,9 @@ const PAYLOAD: Record<string, Record<string, unknown>> = {
   PROBATION_TEAM_DECISION: { route: '/notifications', employeeId: READER_ID },
   PUNCH_IN_ALERT: { route: '/notifications', employeeId: READER_ID, latitude: 17.38504, longitude: 78.48667 },
   CELEBRATION_WISH: { route: '/milestones', occasion: 'BIRTHDAY' },
+  // Shift planning (V143_106, RosterNotifier): your roster was published, or a republish changed your days.
+  ROSTER_PUBLISHED: { route: '/my-schedule', rosterId: 'r1', from: '2026-10-01', to: '2026-10-31' },
+  ROSTER_DAY_CHANGED: { route: '/my-schedule', rosterId: 'r1', dates: ['2026-10-12', '2026-10-13'] },
   GENERAL: { type: 'MILESTONE_BIRTHDAY', route: '/milestones', employeeId: READER_ID, self: false },
 }
 
