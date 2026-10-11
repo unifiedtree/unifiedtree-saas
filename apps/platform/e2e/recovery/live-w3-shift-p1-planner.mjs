@@ -1,4 +1,4 @@
-/* global process, console, fetch */
+/* global process, console, fetch, URL */
 // Live check (shift planning Phase 1, package D — the web planner): as the owner, plan a roster through the wizard,
 // set a staffing number, generate, edit two cells and see coverage follow, save the draft, publish it with its
 // warnings ticked, and read it back. Captures page errors and API 4xx/5xx on the way.
@@ -63,7 +63,10 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const pageErrors = [], apiErrors = []
 page.on('pageerror', (e) => pageErrors.push(String(e).slice(0, 300)))
-page.on('response', (r) => { if (r.url().includes('/api/v1/') && r.status() >= 400) apiErrors.push(`${r.status()} ${r.request().method()} ${r.url().replace(/^.*\/api/, '')}`) })
+// Since fix/handoff-signin (11 Oct 2026) the sign-in page first asks for the website's account sign-in once
+// (POST /v1/accounts/auth/refresh): with none on this browser it answers 401 and the form shows. Expected.
+const expectedAnswer = (r) => r.status() === 401 && r.request().method() === 'POST' && /\/v1\/accounts\/auth\/refresh$/.test(new URL(r.url()).pathname)
+page.on('response', (r) => { if (r.url().includes('/api/v1/') && r.status() >= 400 && !expectedAnswer(r)) apiErrors.push(`${r.status()} ${r.request().method()} ${r.url().replace(/^.*\/api/, '')}`) })
 const preview = () => page.waitForResponse((r) => r.url().includes('/v1/rosters/preview') && r.request().method() === 'POST', { timeout: 30000 })
 const coverageText = () => page.locator('tbody.spl-cov').innerText().catch(() => '')
 let rosterId = null

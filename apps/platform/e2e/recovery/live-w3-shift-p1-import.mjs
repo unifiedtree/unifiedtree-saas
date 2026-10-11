@@ -250,6 +250,9 @@ function watch(page, label) {
   page.on('response', (r) => {
     const u = r.url()
     if (!u.includes('/api/') || r.status() < 400) return
+    // Since fix/handoff-signin (11 Oct 2026) the sign-in page first asks for the website's account sign-in once
+    // (POST /v1/accounts/auth/refresh): with none on this browser it answers 401 and the form shows. Expected.
+    if (r.status() === 401 && r.request().method() === 'POST' && new URL(u).pathname.endsWith('/v1/accounts/auth/refresh')) return
     failed.push(`${label}: ${r.status()} ${new URL(u).pathname}`)
   })
   return { errors, failed }
