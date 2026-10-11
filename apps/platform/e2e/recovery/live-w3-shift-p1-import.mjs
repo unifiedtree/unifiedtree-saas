@@ -16,6 +16,8 @@
 // Everything it creates is removed at the end (SQL on the slot's database, as the other live tests do).
 //
 //   live-slot.sh /c/REACT/ut-wt/shift-p1-import 3193 node e2e/recovery/live-w3-shift-p1-import.mjs
+//   Shift planning is on only for the pilot list, which by default doesn't name the local demo business: run the
+//   slot with UNIFIEDTREE_ROSTER_PILOT_TENANTS=demo-hrms,demotech,srcai,srcai2026,sri,ionora,unity,demo
 //   env: RECOVERY_APP_URL (web app), RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev),
 //        RECOVERY_PASSWORD
 /* global process, console, fetch, FormData, Blob, Buffer, URL, URLSearchParams, document, window */

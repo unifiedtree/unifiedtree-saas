@@ -1,4 +1,4 @@
-/* global process, console, fetch, FormData, Blob, window, document, location, MutationObserver */
+/* global process, console, fetch, FormData, Blob, URL, window, document, location, MutationObserver */
 // Live check of shift planning's pilot (owner, 11 Oct 2026: Phase 1 for TEST businesses only), for a business that
 // is NOT on the list. Run it with the backend's default list (UNIFIEDTREE_ROSTER_PILOT_TENANTS unset), which does
 // not name the local demo business ("demo"), so demo plays nclever here.
@@ -52,7 +52,7 @@ async function session(email) {
     const form = body instanceof FormData
     const res = await fetch(api + path, { method, headers: form || body === undefined ? auth : { ...auth, 'Content-Type': 'application/json' }, body: form ? body : body === undefined ? undefined : JSON.stringify(body) })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
@@ -154,8 +154,11 @@ function plannerTextWatcher() {
   const words = ['Shift Planner', 'Shift planner', 'Plan a roster', 'Import from Excel', 'Import a roster from Excel', 'Rotation patterns', 'Shift planning isn’t switched on yet']
   const seen = []
   window.__plannerSeen = seen
+  // A control: the watcher must also see a word every one of these pages shows, or "nothing seen" proves nothing.
+  window.__plannerWatchSawControl = false
   const look = () => {
     const text = document.body ? document.body.textContent || '' : ''
+    if (text.includes('Shift Schedules')) window.__plannerWatchSawControl = true
     for (const w of words) {
       const what = `${w} @ ${location.pathname}${location.search}`
       if (text.includes(w) && !seen.includes(what)) seen.push(what)
@@ -173,13 +176,18 @@ async function webChecks() {
       const ctx = await browser.newContext({ viewport })
       await ctx.addInitScript(plannerTextWatcher)
       const page = await ctx.newPage()
-      const errors = [], planningCalls = [], seen = []
+      const errors = [], planningCalls = [], seen = [], blind = []
       page.on('pageerror', (e) => errors.push(String(e.message || e).slice(0, 200)))
       page.on('response', (r) => {
         const u = new URL(r.url())
         if (/\/api\/v1\/(rosters|rotation-templates|schedule)(\/|$)/.test(u.pathname) && !u.pathname.endsWith('/v1/rosters/availability')) planningCalls.push(`${r.status()} ${u.pathname}`)
       })
-      const collect = async () => { seen.push(...await page.evaluate(() => window.__plannerSeen || []).catch(() => [])) }
+      const collect = async () => {
+        const w = await page.evaluate(() => ({ seen: window.__plannerSeen || [], control: window.__plannerWatchSawControl === true }))
+          .catch(() => ({ seen: [], control: false }))
+        seen.push(...w.seen)
+        if (!w.control) blind.push(new URL(page.url()).pathname)
+      }
 
       await page.goto(base + '/login', { waitUntil: 'domcontentloaded', timeout: 180_000 })
       await page.locator('input[type=email]').fill('owner@unifiedtree.demo')
@@ -219,6 +227,7 @@ async function webChecks() {
       }
       if (label === 'phone') await page.screenshot({ path: `${SHOTS}/shift-p1-pilot-off-redirected-phone.png`, animations: 'disabled' })
 
+      check(`web ${label}: the text watcher ran on every page (it saw "Shift Schedules")`, blind.length === 0, blind.join(' | '))
       check(`web ${label}: no planner text appeared, not even for a moment`, seen.length === 0, seen.join(' | '))
       check(`web ${label}: no shift-planning call other than availability`, planningCalls.length === 0, planningCalls.join(' | '))
       check(`web ${label}: no page errors`, errors.length === 0, errors.join(' | '))

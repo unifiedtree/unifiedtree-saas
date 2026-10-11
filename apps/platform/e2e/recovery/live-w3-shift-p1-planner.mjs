@@ -8,6 +8,8 @@
 // "schedule ready" notifications the publish sent.
 //
 //   live-slot.sh /c/REACT/ut-wt/shift-p1-web 3031 env RECOVERY_DB=ut_w3_dev node e2e/recovery/live-w3-shift-p1-planner.mjs
+//   Shift planning is on only for the pilot list, which by default doesn't name the local demo business: run the
+//   slot with UNIFIEDTREE_ROSTER_PILOT_TENANTS=demo-hrms,demotech,srcai,srcai2026,sri,ionora,unity,demo
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -137,7 +139,11 @@ try {
   await dialog.getByText('Checking the roster…').waitFor({ state: 'detached', timeout: 30000 }).catch(() => {})
   check('the publish dialog says the roster is information only for now', await dialog.getByText('Until rosters drive attendance for the company').isVisible())
   const ack = dialog.getByRole('checkbox', { name: /Publish with \d+ warning/ })
-  if (await ack.count()) await ack.check()
+  if (await ack.count()) {
+    // The kit's checkbox is ticked through its label, as a person does (the input itself is visually hidden).
+    await dialog.locator('.uko-check-title', { hasText: /Publish with \d+ warning/ }).click()
+    check('the warnings are ticked to publish', await ack.isChecked())
+  }
   const published = page.waitForResponse((r) => r.url().includes(`/v1/rosters/${rosterId}/publish`), { timeout: 30000 })
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click()
   const pr = await published
@@ -162,7 +168,8 @@ try {
   await phone.locator('button[type=submit]').click()
   await phone.waitForURL((u) => !u.pathname.includes('login'), { timeout: 120000 })
   await phone.goto(base + '/hrms/shifts?tab=planner', { waitUntil: 'domcontentloaded', timeout: 180000 })
-  check('phone: the Shift Planner tab lists the roster', await phone.getByText(`${body?.roster?.name ?? ''}`).first().waitFor({ timeout: 60000 }).then(() => true, () => false))
+  const rosterName = body?.roster?.name
+  check('phone: the Shift Planner tab lists the roster', !!rosterName && await phone.getByText(rosterName).first().waitFor({ timeout: 60000 }).then(() => true, () => false), rosterName ?? 'no roster read back')
   await phone.waitForTimeout(1500)
   await phone.screenshot({ path: `${shots}/shift-p1-live-tab-phone.png` })
   await phone.goto(base + `/hrms/shifts/planner/${rosterId}`, { waitUntil: 'domcontentloaded', timeout: 180000 })

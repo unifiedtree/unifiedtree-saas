@@ -12,6 +12,8 @@
 // Everything it creates is removed at the end (SQL on the slot's database, as the other live tests do).
 //
 //   live-slot.sh /c/REACT/ut-wt/shift-p1-store 3191 node e2e/recovery/live-w3-shift-p1-api.mjs
+//   Shift planning is on only for the pilot list, which by default doesn't name the local demo business: run the
+//   slot with UNIFIEDTREE_ROSTER_PILOT_TENANTS=demo-hrms,demotech,srcai,srcai2026,sri,ionora,unity,demo
 //   env: RECOVERY_API_URL (default http://127.0.0.1:8080/api), RECOVERY_DB (default ut_w3_dev), RECOVERY_PASSWORD
 /* global process, console, fetch, setTimeout */
 import { execFileSync } from 'node:child_process'
@@ -47,7 +49,7 @@ async function session(email) {
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
     const text = await res.text()
-    let json = null
+    let json
     try { json = text ? JSON.parse(text) : null } catch { json = text }
     if (res.status >= 500 && !(json && json.errorCode === 'FEATURE_NOT_READY')) surprises.push(`${method} ${path} → ${res.status} ${text.slice(0, 200)}`)
     return { status: res.status, json }
