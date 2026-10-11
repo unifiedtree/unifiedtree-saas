@@ -35,7 +35,7 @@ class PlannerScopeServiceTest {
     /** The database: who is in which company and department, and who heads what. */
     final Map<UUID, Set<UUID>> heads = new HashMap<>();
     final Map<UUID, PlannerScopeService.Person> people = new HashMap<>();
-    final PlannerScopeService scope = new PlannerScopeService(null) {
+    final PlannerScopeService scope = new PlannerScopeService(null, new RosterFakes.Pilot()) {
         @Override boolean companyKnown(UUID tenant, UUID companyId) {
             return COMPANY.equals(companyId) || OTHER_COMPANY.equals(companyId);
         }

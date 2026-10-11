@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
  * later, so every roster, pattern and schedule endpoint asks first and answers 503
  * {@code FEATURE_NOT_READY} while they are missing (the web then shows "Shift planning isn't
  * switched on yet." in the planner tab only). A catalog read; it never fails the request itself.
+ * Before that, {@link #require()} refuses a business outside shift planning's pilot (403
+ * {@code FEATURE_NOT_ENABLED}, {@link RosterPilot}).
  */
 @Component
 public class RosterTables {
@@ -30,11 +32,13 @@ public class RosterTables {
     }
 
     private final JdbcTemplate jdbc;
+    private final RosterPilot pilot;
     /** Once the tables are there they stay: a positive answer is kept, a negative one asked again. */
     private volatile boolean seen;
 
-    public RosterTables(JdbcTemplate jdbc) {
+    public RosterTables(JdbcTemplate jdbc, RosterPilot pilot) {
         this.jdbc = jdbc;
+        this.pilot = pilot;
     }
 
     public boolean ready() {
@@ -47,8 +51,12 @@ public class RosterTables {
         return seen;
     }
 
-    /** Throws {@link FeatureNotReady} while V143.106 is not applied. */
+    /**
+     * The first line of every shift-planning endpoint: 403 {@code FEATURE_NOT_ENABLED} for a business outside the
+     * pilot ({@link RosterPilot#require()}), then {@link FeatureNotReady} while V143.106 is not applied.
+     */
     public void require() {
+        pilot.require();
         if (!ready()) throw new FeatureNotReady();
     }
 }

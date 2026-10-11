@@ -50,9 +50,17 @@ final class RosterFakes {
         return b.build();
     }
 
-    /** Tables always there. */
+    /** Shift planning's pilot without the database: on (the business is on the list) unless switched off. */
+    static final class Pilot extends RosterPilot {
+        boolean on = true;
+        Pilot() { super(null, ""); }
+        Pilot(boolean on) { this(); this.on = on; }
+        @Override public boolean enabled(UUID tenantId) { return on; }
+    }
+
+    /** Tables always there (in a business on the pilot list). */
     static final class Tables extends RosterTables {
-        Tables() { super(null); }
+        Tables() { super(null, new Pilot()); }
         @Override public boolean ready() { return true; }
     }
 

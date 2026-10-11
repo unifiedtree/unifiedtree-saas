@@ -77,6 +77,10 @@ public class TenantModuleGuard implements HandlerInterceptor {
             Map.entry("/v1/attendance",  "attendance"),
             Map.entry("/v1/wfh",         "attendance"),
             Map.entry("/v1/shifts",      "attendance"),
+            // Shift planning (V143.106): rosters (with their Excel import), rotation patterns, the published schedule
+            Map.entry("/v1/rosters",     "attendance"),
+            Map.entry("/v1/rotation-templates", "attendance"),
+            Map.entry("/v1/schedule",    "attendance"),
             // Leave module
             Map.entry("/v1/leave",       "leave"),
             // Payroll module

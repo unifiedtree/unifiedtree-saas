@@ -49,7 +49,7 @@ class RosterFeatureNotReadyTest {
     @Test
     void everyCallIsFeatureNotReadyWhileTheTablesAreMissing() {
         Catalog catalog = new Catalog();
-        RosterTables tables = new RosterTables(catalog);
+        RosterTables tables = new RosterTables(catalog, new RosterFakes.Pilot());
         assertFalse(tables.ready());
         FeatureNotReady e = assertThrows(FeatureNotReady.class, tables::require);
         assertEquals(503, e.getStatus().value());

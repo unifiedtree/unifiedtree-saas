@@ -15,6 +15,7 @@ import com.hrms.api.roster.RosterContract.StaffingIn;
 import com.hrms.api.roster.RosterContract.StaggerMode;
 import com.hrms.api.roster.RosterContract.WeeklyOffMode;
 import com.hrms.api.roster.RosterDrafts;
+import com.hrms.api.roster.RosterPilot;
 import com.hrms.api.roster.RosterPlanning;
 import com.hrms.api.roster.RosterService;
 import com.hrms.api.roster.RosterStore;
@@ -28,11 +29,13 @@ import com.hrms.core.exception.HrmsException;
 import com.unifiedtree.rbac.company.CompanyAccessService;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.oauth2.jwt.Jwt;
 
@@ -211,6 +214,42 @@ class RosterImportServiceTest {
         assertThatThrownBy(() -> service.template(jwt, january)).isInstanceOf(FeatureNotReady.class);
         assertThatThrownBy(() -> service.export(jwt, UUID.randomUUID(), false)).isInstanceOf(FeatureNotReady.class);
         verifyNoInteractions(drafts);
+    }
+
+    // ── shift planning's pilot (test businesses only) ────────────────────────
+
+    /** The real tables check and pilot (the default list), on a database whose answer for this business is {@code subdomain}. */
+    private RosterImportService inBusiness(String subdomain) {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForList("SELECT subdomain FROM platform.tenants WHERE id = ?", String.class, tenant)).thenReturn(List.of(subdomain));
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class))).thenReturn(true);   // the nine tables are there
+        RosterTables real = new RosterTables(jdbc, new RosterPilot(jdbc, RosterPilot.DEFAULT_TENANTS));
+        return new RosterImportService(scope, drafts, rosters, store, real, planning, people, loader);
+    }
+
+    @Test
+    void aBusinessOutsideThePilotIsRefusedOnEveryImportCallAndNothingIsReadOrSaved() {
+        RosterImportService nclever = inBusiness("nclever");
+        List<ThrowingCallable> calls = List.of(
+                () -> nclever.template(jwt, january),
+                () -> nclever.validate(jwt, good(), january, null),
+                () -> nclever.apply(jwt, good(), january, "January", null, null),
+                () -> nclever.export(jwt, UUID.randomUUID(), false));
+        for (ThrowingCallable call : calls) {
+            assertThatThrownBy(call).isInstanceOf(HrmsException.class)
+                    .hasMessage("Shift planning isn't switched on for this business yet.")
+                    .extracting("errorCode", "status").containsExactly("FEATURE_NOT_ENABLED", HttpStatus.FORBIDDEN);
+        }
+        verifyNoInteractions(scope, drafts, rosters, store, planning, people, loader);
+    }
+
+    @Test
+    void aBusinessInThePilotImportsAsBefore() {
+        RosterImportService sri = inBusiness("SRI");
+        assertThat(sri.template(jwt, january).fileName()).isEqualTo("roster-template-2027-01-01-to-2027-01-31.xlsx");
+        assertThat(sri.validate(jwt, good(), january, null).summary().errors()).isZero();
+        assertThat(sri.apply(jwt, good(), january, "January", null, null).created()).isTrue();
+        verify(drafts).create(eq(COMPANY), any(), eq(hr), eq(RosterDrafts.SOURCE_IMPORT));
     }
 
     // ── apply ────────────────────────────────────────────────────────────────

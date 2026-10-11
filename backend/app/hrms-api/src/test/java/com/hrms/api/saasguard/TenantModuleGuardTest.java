@@ -29,6 +29,18 @@ class TenantModuleGuardTest {
         assertEquals("attendance", TenantModuleGuard.moduleForPath("/v1/attendance/reminders"));
     }
 
+    @Test void shiftPlanningNeedsTheAttendanceModuleLikeShifts() {
+        for (String path : new String[]{
+                "/v1/rosters", "/v1/rosters/availability", "/v1/rosters/settings", "/v1/rosters/people", "/v1/rosters/preview",
+                "/v1/rosters/1b52baac-0d42-4dc8-a7d2-4d38cc07b723/publish", "/v1/rosters/import/validate",
+                "/v1/rotation-templates", "/v1/rotation-templates/1b52baac-0d42-4dc8-a7d2-4d38cc07b723",
+                "/v1/schedule/me", "/v1/schedule/team", "/v1/shifts"}) {
+            assertEquals("attendance", TenantModuleGuard.moduleForPath(path), path);
+        }
+        assertNull(TenantModuleGuard.moduleForPath("/v1/rostersx"));
+        assertNull(TenantModuleGuard.moduleForPath("/v1/schedules"));
+    }
+
     @Test void thePersonsOwnAccountPathsAndLookalikesStayOpen() {
         assertNull(TenantModuleGuard.moduleForPath("/v1/me/security"));
         assertNull(TenantModuleGuard.moduleForPath("/v1/me/notification-preferences"));

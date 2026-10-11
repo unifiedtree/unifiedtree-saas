@@ -71,9 +71,10 @@ public class RosterPlanningController {
                                       @RequestParam(value = "branchId", required = false) UUID branchId,
                                       @RequestParam("from") LocalDate from,
                                       @RequestParam("to") LocalDate to) {
-        RosterPlanner.requireValidRange(from, to);
+        // The planner scope first: a business outside shift planning's pilot hears FEATURE_NOT_ENABLED before anything else.
         PlannerScope planners = scope();
         Actor actor = planners.actor(jwt, companyId);
+        RosterPlanner.requireValidRange(from, to);
         Set<UUID> departments = null;
         if (!actor.companyWide()) {
             if (departmentId != null) planners.check(actor, departmentId, List.of());
@@ -88,9 +89,9 @@ public class RosterPlanningController {
     public PlanResponse preview(@AuthenticationPrincipal Jwt jwt,
                                 @RequestParam("companyId") UUID companyId,
                                 @RequestBody PlanRequest body) {
-        RosterPlanner.requireValidRange(body.startDate(), body.endDate());
         PlannerScope planners = scope();
         Actor actor = planners.actor(jwt, companyId);
+        RosterPlanner.requireValidRange(body.startDate(), body.endDate());
         // A department planner previews only rosters of a department they head; people outside it come back as E5.
         if (!actor.companyWide()) planners.check(actor, body.departmentId(), List.of());
         Set<UUID> ids = new LinkedHashSet<>();

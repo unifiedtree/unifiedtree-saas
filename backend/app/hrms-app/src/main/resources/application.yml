@@ -186,6 +186,13 @@ hrms:
 unifiedtree:
   base-domain: ${UNIFIEDTREE_BASE_DOMAIN:unifiedtree.com}
 
+  roster:
+    # Shift planning (phase 1) is switched on only for these businesses: their subdomains, comma-separated
+    # (spaces and case don't matter; empty = nobody). Every other business gets 403 FEATURE_NOT_ENABLED from
+    # every shift-planning endpoint and sees no planner on the web (RosterPilot). The test businesses for now;
+    # real customers only after the owner's OK.
+    pilot-tenants: ${UNIFIEDTREE_ROSTER_PILOT_TENANTS:demo-hrms,demotech,srcai,srcai2026,sri,ionora,unity}
+
   face:
     # EmbeddingCipher is an unconditional @Component and its @PostConstruct
     # rejects anything that does not base64-decode to EXACTLY 32 bytes — even

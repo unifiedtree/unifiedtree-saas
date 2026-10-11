@@ -51,10 +51,13 @@ import java.util.UUID;
  *   POST   /v1/rosters/{id}/publish                     publish                  PublishBody → PublishResult
  *   POST   /v1/rosters/{id}/discard-changes             plan                     {lockVersion} → RosterDetail
  *   GET    /v1/rosters/{id}/history?employeeId=         plan or publish          ScheduleChange[], newest first
+ *   GET    /v1/rosters/availability                     signed in                {enabled}: is the business in the pilot
  * </pre>
  * {@code {id}} is matched as a UUID, so {@code /settings}, {@code /people}, {@code /preview} and
  * {@code /import/*} (the planner's and the import's own controllers) never collide. Every call answers
- * 503 FEATURE_NOT_READY while V143.106 is not applied.
+ * 403 FEATURE_NOT_ENABLED for a business outside shift planning's pilot ({@link RosterPilot}) and
+ * 503 FEATURE_NOT_READY while V143.106 is not applied, except {@code /availability}, which tells the web
+ * whether to show the planner at all.
  */
 @RestController
 @RequestMapping("/v1/rosters")
@@ -72,11 +75,25 @@ public class RosterController {
     private final RosterService rosters;
     private final RosterPublisher publisher;
     private final RosterSettingsService settings;
+    private final RosterPilot pilot;
 
-    public RosterController(RosterService rosters, RosterPublisher publisher, RosterSettingsService settings) {
+    public RosterController(RosterService rosters, RosterPublisher publisher, RosterSettingsService settings, RosterPilot pilot) {
         this.rosters = rosters;
         this.publisher = publisher;
         this.settings = settings;
+        this.pilot = pilot;
+    }
+
+    // ── pilot ─────────────────────────────────────────────────────────────────
+
+    /** Whether shift planning is switched on for the caller's business. */
+    public record Availability(boolean enabled) {}
+
+    @Operation(summary = "Whether shift planning is switched on for this business (the web shows no planner when it isn't)")
+    @GetMapping("/availability")
+    @PreAuthorize("isAuthenticated()")
+    public Availability availability() {
+        return new Availability(pilot.enabled());
     }
 
     // ── settings ──────────────────────────────────────────────────────────────

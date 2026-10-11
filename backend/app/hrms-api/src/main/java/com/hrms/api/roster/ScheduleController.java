@@ -53,8 +53,8 @@ public class ScheduleController {
     @GetMapping("/me")
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public MySchedule me(@AuthenticationPrincipal Jwt jwt, @RequestParam LocalDate from, @RequestParam LocalDate to) {
-        range(from, to);
         tables.require();
+        range(from, to);
         UUID me = RosterAuth.employeeId(jwt);
         if (me == null) throw new ResourceNotFoundException("Your employee record wasn't found.");
         return new MySchedule(me, schedule.days(TenantContext.requireTenantId(), List.of(new EffectiveSchedule.Person(me, null)), from, to));
@@ -65,8 +65,8 @@ public class ScheduleController {
     @PreAuthorize("hasAuthority('attendance.team.read')")
     public List<ScheduleDay> team(@AuthenticationPrincipal Jwt jwt, @RequestParam LocalDate from, @RequestParam LocalDate to,
                                   @RequestParam(required = false) UUID departmentId) {
-        range(from, to);
         tables.require();
+        range(from, to);
         boolean companyWide = RosterAuth.has(jwt, RosterAuth.WORKFORCE_ADMIN);
         List<Employee> people;
         try {

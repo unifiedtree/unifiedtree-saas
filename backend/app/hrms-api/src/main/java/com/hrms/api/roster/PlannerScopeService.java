@@ -32,18 +32,23 @@ import java.util.stream.Collectors;
  * </ul>
  * The company is the {@code companyId} the request names (the company-access filter has checked it),
  * else the company the request runs in ({@code X-Company-Id}), else the caller's own.
+ * A business outside shift planning's pilot is refused first (403 {@code FEATURE_NOT_ENABLED},
+ * {@link RosterPilot}).
  */
 @Service
 public class PlannerScopeService implements PlannerScope {
 
     private final JdbcTemplate jdbc;
+    private final RosterPilot pilot;
 
-    public PlannerScopeService(JdbcTemplate jdbc) {
+    public PlannerScopeService(JdbcTemplate jdbc, RosterPilot pilot) {
         this.jdbc = jdbc;
+        this.pilot = pilot;
     }
 
     @Override
     public Actor actor(Jwt jwt, UUID companyIdIn) {
+        pilot.require();
         boolean plan = RosterAuth.has(jwt, RosterAuth.PLAN);
         boolean publish = RosterAuth.has(jwt, RosterAuth.PUBLISH);
         if (!plan && !publish) throw RosterErrors.scope("You can't plan shift rosters.");
